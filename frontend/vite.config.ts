@@ -33,6 +33,10 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    preview: {
+      host: true,
+      allowedHosts: true,
+    },
   }
 })
 
