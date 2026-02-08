@@ -27,9 +27,9 @@ This guide covers deploying Flowdeck (backend + frontend) on a Linux server. For
 
 ```bash
 cd /opt   # or your deploy path
-sudo git clone https://github.com/TauricResearch/TradingAgents.git
-sudo chown -R $USER:$USER TradingAgents
-cd TradingAgents
+sudo git clone https://github.com/kourgeorge/flowdeck.git
+sudo chown -R $USER:$USER flowdeck
+cd flowdeck
 ```
 
 **Python (backend + agents):**
@@ -68,7 +68,7 @@ SYNC_SCHEDULE_TIME=06:00
 Build with the production API URL so the app talks to your backend:
 
 ```bash
-cd /opt/TradingAgents/frontend
+cd /opt/flowdeck/frontend
 npm ci
 export VITE_API_URL=https://api.your-domain.com   # or https://your-domain.com if same origin
 npm run build
@@ -91,13 +91,13 @@ After=network.target
 Type=simple
 User=www-data
 Group=www-data
-WorkingDirectory=/opt/TradingAgents/backend
+WorkingDirectory=/opt/flowdeck/backend
 
-EnvironmentFile=/opt/TradingAgents/.env
-Environment=PYTHONPATH=/opt/TradingAgents
+EnvironmentFile=/opt/flowdeck/.env
+Environment=PYTHONPATH=/opt/flowdeck
 Environment=PORT=8002
 
-ExecStart=/opt/TradingAgents/venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8002
+ExecStart=/opt/flowdeck/venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8002
 
 Restart=always
 RestartSec=5
@@ -118,8 +118,8 @@ sudo systemctl status flowdeck-backend
 **Permissions:** Ensure the service user can read `.env` and write to `results/`:
 
 ```bash
-sudo chown -R www-data:www-data /opt/TradingAgents/results /opt/TradingAgents/backend
-sudo chmod 640 /opt/TradingAgents/.env
+sudo chown -R www-data:www-data /opt/flowdeck/results /opt/flowdeck/backend
+sudo chmod 640 /opt/flowdeck/.env
 ```
 
 ---
@@ -137,7 +137,7 @@ server {
     listen 80;
     server_name your-domain.com www.your-domain.com;
 
-    root /opt/TradingAgents/frontend/dist;
+    root /opt/flowdeck/frontend/dist;
     index index.html;
     location / {
         try_files $uri $uri/ /index.html;
@@ -214,7 +214,7 @@ Certbot will adjust the Nginx config for HTTPS and renewal.
 
 | Issue | What to check |
 |-------|----------------|
-| Backend won’t start | `sudo journalctl -u flowdeck-backend -f`; ensure `PYTHONPATH=/opt/TradingAgents` and `tradingagents` is importable from `backend/`. |
+| Backend won’t start | `sudo journalctl -u flowdeck-backend -f`; ensure `PYTHONPATH=/opt/flowdeck` and `tradingagents` is importable from `backend/`. |
 | CORS errors | Set `CORS_ORIGINS` to the exact frontend URL(s); restart backend. |
 | Reports not found | `results/` exists and is writable by the service user; `RESULTS_DIR` in `backend/config.py`. |
 | 502 Bad Gateway | Backend running on 8002; Nginx upstream points to `127.0.0.1:8002`. |
@@ -225,7 +225,7 @@ Certbot will adjust the Nginx config for HTTPS and renewal.
 ## 10. Upgrades
 
 ```bash
-cd /opt/TradingAgents
+cd /opt/flowdeck
 git pull origin main
 source venv/bin/activate
 pip install -r requirements.txt
@@ -247,7 +247,7 @@ Instead of (or in addition to) in-process sync, you can call the sync endpoint d
 Or use the script (set `BACKEND_URL` if needed):
 
 ```cron
-0 6 * * * BACKEND_URL=http://127.0.0.1:8002 /opt/TradingAgents/scripts/sync_major_stocks_daily.sh
+0 6 * * * BACKEND_URL=http://127.0.0.1:8002 /opt/flowdeck/scripts/sync_major_stocks_daily.sh
 ```
 
 ---

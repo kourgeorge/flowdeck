@@ -87,9 +87,9 @@ npm --version
 
 ```bash
 cd /opt  # or your preferred deploy path
-sudo git clone https://github.com/TauricResearch/TradingAgents.git
-sudo chown -R $USER:$USER TradingAgents
-cd TradingAgents
+sudo git clone https://github.com/kourgeorge/flowdeck.git
+sudo chown -R $USER:$USER flowdeck
+cd flowdeck
 ```
 
 ---
@@ -99,7 +99,7 @@ cd TradingAgents
 ### Create virtual environment
 
 ```bash
-cd /opt/TradingAgents
+cd /opt/flowdeck
 python3.11 -m venv venv
 source venv/bin/activate
 ```
@@ -150,7 +150,7 @@ Replace `your-domain.com` with your actual domain. If your API is on a subdomain
 ## 5. Frontend Build (Stock Dashboard)
 
 ```bash
-cd /opt/TradingAgents/frontend
+cd /opt/flowdeck/frontend
 cp .env.example .env   # optional; edit for production
 npm ci
 npm run build
@@ -190,17 +190,17 @@ After=network.target
 Type=simple
 User=www-data
 Group=www-data
-WorkingDirectory=/opt/TradingAgents/backend
+WorkingDirectory=/opt/flowdeck/backend
 
 # Load .env from project root
-EnvironmentFile=/opt/TradingAgents/.env
+EnvironmentFile=/opt/flowdeck/.env
 
 # Python path for tradingagents package
-Environment=PYTHONPATH=/opt/TradingAgents
+Environment=PYTHONPATH=/opt/flowdeck
 Environment=PORT=8002
 
 # Bind to loopback only; Nginx reverse proxy handles external traffic
-ExecStart=/opt/TradingAgents/venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8002
+ExecStart=/opt/flowdeck/venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8002
 
 Restart=always
 RestartSec=5
@@ -260,7 +260,7 @@ server {
     # ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
 
     # Frontend static files
-    root /opt/TradingAgents/frontend/dist;
+    root /opt/flowdeck/frontend/dist;
     index index.html;
 
     location / {
@@ -324,7 +324,7 @@ crontab -e
 Add (adjust path to your deploy directory):
 
 ```cron
-0 6 * * * /opt/TradingAgents/scripts/sync_major_stocks_daily.sh
+0 6 * * * /opt/flowdeck/scripts/sync_major_stocks_daily.sh
 ```
 
 The script defaults to `BACKEND_URL=http://127.0.0.1:8002`; that is correct when cron runs on the same server as the backend. Override only if the backend is on another host.
@@ -348,9 +348,9 @@ Ensure the service user can read/write where needed:
 
 ```bash
 # If using www-data
-sudo chown -R www-data:www-data /opt/TradingAgents/results
-sudo chown -R www-data:www-data /opt/TradingAgents/backend
-sudo chmod 640 /opt/TradingAgents/.env
+sudo chown -R www-data:www-data /opt/flowdeck/results
+sudo chown -R www-data:www-data /opt/flowdeck/backend
+sudo chmod 640 /opt/flowdeck/.env
 ```
 
 ---
@@ -385,7 +385,7 @@ sudo chmod 640 /opt/TradingAgents/.env
 ### Backend fails to start
 
 - Check logs: `sudo journalctl -u stock-dashboard-backend -f`
-- Verify `PYTHONPATH` includes `/opt/TradingAgents`
+- Verify `PYTHONPATH` includes `/opt/flowdeck`
 - Ensure `tradingagents` package is importable from the backend directory
 
 ### CORS errors in browser
@@ -409,7 +409,7 @@ sudo chmod 640 /opt/TradingAgents/.env
 ## 15. Upgrade Procedure
 
 ```bash
-cd /opt/TradingAgents
+cd /opt/flowdeck
 git pull origin main
 source venv/bin/activate
 pip install -r requirements.txt
