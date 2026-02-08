@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { createChart, IChartApi, ISeriesApi, CandlestickData, HistogramData, UTCTimestamp } from 'lightweight-charts';
+import { createChart, IChartApi, ISeriesApi, CandlestickData, HistogramData, UTCTimestamp, ColorType } from 'lightweight-charts';
 import { stockApi } from '../services/api';
 
 interface HistoricalPrice {
@@ -99,7 +99,7 @@ export default function PriceTrendWidget({ ticker, period = '6mo', height = 300,
       width,
       height: heightPx,
       layout: {
-        background: { type: 'solid', color: '#1f2937' },
+        background: { type: ColorType.Solid, color: '#1f2937' },
         textColor: '#9ca3af',
         fontFamily: 'system-ui, sans-serif',
         fontSize: 11,
