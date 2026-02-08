@@ -1,6 +1,26 @@
 # Deployment Guidelines for Ubuntu
 
-This guide covers deploying the TradingAgents framework and Stock Dashboard on Ubuntu 22.04 LTS (or 20.04+).
+This guide covers deploying the TradingAgents framework and Stock Dashboard on Ubuntu 22.04 LTS (or 20.04+) in **production**.
+
+---
+
+## Production Configuration Checklist
+
+Before deploying, set these values. Replace `your-domain.com` with your actual domain.
+
+| Variable | Where | Production Value | Notes |
+|----------|-------|------------------|-------|
+| `CORS_ORIGINS` | `backend/.env` | `https://your-domain.com,https://www.your-domain.com` | **Required.** Comma-separated frontend URLs. Do not rely on localhost defaults. |
+| `VITE_API_URL` | Before `npm run build` | `https://your-domain.com` or `''` | If API is at `/api` on same domain, use `''` for same-origin. If API is on `api.your-domain.com`, use full URL. |
+| `BACKEND_URL` | `backend/.env` | `http://127.0.0.1:8002` | Used internally by analysis service and cron on same server. Keep as loopback. |
+| `INFO_SERVICE_URL` | `backend/.env` (optional) | Same as `BACKEND_URL` | Override only if backend is on another host. |
+| `ENABLE_DAILY_SYNC` | `backend/.env` | `true` | Enable in-process daily sync. |
+| `SYNC_SCHEDULE_TIME` | `backend/.env` | `06:00` | Time for daily sync. |
+| `PORT` | `backend/.env` or systemd | `8002` | Backend port (internal; Nginx proxies to it). |
+
+**Important:** `127.0.0.1` is intentional for `BACKEND_URL` when everything runs on the same server. The backend binds to loopback; only Nginx (reverse proxy) is exposed to the internet. Cron and in-process agents call the backend via loopback.
+
+**Config files:** No code changes are required. `backend/config.py` reads `CORS_ORIGINS` and `BACKEND_URL` from the environment; set them in `backend/.env`.
 
 ---
 
@@ -113,20 +133,26 @@ OPENAI_API_KEY=sk-...
 ALPHA_VANTAGE_API_KEY=...
 ```
 
-Create `backend/.env` if needed (backend can inherit from root or use its own):
+Create `backend/.env` for production (backend inherits API keys from root `.env`):
 
 ```bash
 nano backend/.env
 ```
 
 ```env
-# Optional backend-specific
+# Production: required for CORS (do not rely on localhost defaults)
 CORS_ORIGINS=https://your-domain.com,https://www.your-domain.com
-BACKEND_URL=https://api.your-domain.com
+
+# Internal: analysis service and cron call backend via loopback on same server
+BACKEND_URL=http://127.0.0.1:8002
+
+# Daily sync
 ENABLE_DAILY_SYNC=true
 SYNC_SCHEDULE_TIME=06:00
 PORT=8002
 ```
+
+Replace `your-domain.com` with your actual domain. If your API is on a subdomain (e.g. `api.your-domain.com`), add it to `CORS_ORIGINS` as well.
 
 ---
 
@@ -138,7 +164,15 @@ npm ci
 npm run build
 ```
 
-For production, set API URL before build:
+For production, set the API URL before build. If the API is served at `/api` on the same domain as the frontend, use same-origin:
+
+```bash
+# Same-origin (API at https://your-domain.com/api): leave empty
+export VITE_API_URL=
+npm run build
+```
+
+If the API is on a separate subdomain:
 
 ```bash
 export VITE_API_URL=https://api.your-domain.com
@@ -173,6 +207,7 @@ EnvironmentFile=/opt/TradingAgents/.env
 Environment=PYTHONPATH=/opt/TradingAgents
 Environment=PORT=8002
 
+# Bind to loopback only; Nginx reverse proxy handles external traffic
 ExecStart=/opt/TradingAgents/venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8002
 
 Restart=always
@@ -182,7 +217,7 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
-**Important:** Adjust `User`/`Group` and paths to match your setup. Ensure the user has read access to `results/` and `.env`.
+**Important:** Binding to `127.0.0.1` is correct for production—the backend is not exposed directly; Nginx proxies requests. Adjust `User`/`Group` and paths to match your setup. Ensure the user has read access to `results/` and `.env`.
 
 ### Frontend (serve static files via Nginx)
 
@@ -210,12 +245,12 @@ sudo apt install -y nginx
 Create `/etc/nginx/sites-available/stock-dashboard`:
 
 ```nginx
-# Upstream for backend
+# Upstream: backend listens on loopback only (internal)
 upstream backend {
     server 127.0.0.1:8002;
 }
 
-# Redirect HTTP to HTTPS (uncomment when SSL is configured)
+# Redirect HTTP to HTTPS (enable after SSL is configured in section 8)
 # server {
 #     listen 80;
 #     server_name your-domain.com www.your-domain.com;
@@ -224,10 +259,11 @@ upstream backend {
 
 server {
     listen 80;
-    # listen 443 ssl http2;  # Uncomment for HTTPS
+    # Production with SSL: add listen 443 ssl http2; and cert paths, then enable redirect above
+    # listen 443 ssl http2;
     server_name your-domain.com www.your-domain.com;
 
-    # SSL (uncomment when using Let's Encrypt)
+    # SSL (see section 8 for Let's Encrypt)
     # ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
     # ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
 
@@ -274,14 +310,14 @@ sudo systemctl restart nginx
 
 ---
 
-## 8. SSL with Let's Encrypt (Optional)
+## 8. SSL with Let's Encrypt (Recommended for Production)
 
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d your-domain.com -d www.your-domain.com
 ```
 
-Follow prompts. Certbot will configure Nginx for HTTPS and auto-renewal.
+Follow prompts. Certbot will configure Nginx for HTTPS and auto-renewal. After SSL is in place, enable the HTTP→HTTPS redirect in the Nginx config (see comments in section 7).
 
 ---
 
@@ -293,11 +329,13 @@ If you prefer cron over the in-process scheduler:
 crontab -e
 ```
 
-Add (adjust path and BACKEND_URL):
+Add (adjust path to your deploy directory):
 
 ```cron
-0 6 * * * BACKEND_URL=http://127.0.0.1:8002 /opt/TradingAgents/scripts/sync_major_stocks_daily.sh
+0 6 * * * /opt/TradingAgents/scripts/sync_major_stocks_daily.sh
 ```
+
+The script defaults to `BACKEND_URL=http://127.0.0.1:8002`; that is correct when cron runs on the same server as the backend. Override only if the backend is on another host.
 
 ---
 
@@ -327,25 +365,26 @@ sudo chmod 640 /opt/TradingAgents/.env
 
 ## 12. Environment Variables Reference
 
-| Variable | Location | Description |
-|----------|----------|-------------|
-| `OPENAI_API_KEY` | Root `.env` | Required for agents |
-| `ALPHA_VANTAGE_API_KEY` | Root `.env` | Market/fundamental data |
-| `CORS_ORIGINS` | Backend env | Comma-separated allowed origins |
-| `BACKEND_URL` | Backend env | Used by analysis service |
-| `VITE_API_URL` | Build-time | API base URL for frontend |
-| `ENABLE_DAILY_SYNC` | Backend env | Enable in-process daily sync |
-| `SYNC_SCHEDULE_TIME` | Backend env | Time for sync (e.g. `06:00`) |
-| `PORT` | Backend env | Backend port (default 8002) |
+| Variable | Location | Production | Description |
+|----------|----------|------------|-------------|
+| `OPENAI_API_KEY` | Root `.env` | Required | Required for agents |
+| `ALPHA_VANTAGE_API_KEY` | Root `.env` | Required | Market/fundamental data |
+| `CORS_ORIGINS` | Backend `.env` | `https://your-domain.com,...` | **Required.** Comma-separated frontend origins. Do not use localhost. |
+| `BACKEND_URL` | Backend `.env` | `http://127.0.0.1:8002` | Internal URL for analysis service and cron (loopback on same server) |
+| `INFO_SERVICE_URL` | Backend `.env` | Same as `BACKEND_URL` | Override only if backend is on another host |
+| `VITE_API_URL` | Build-time | `''` or `https://api.your-domain.com` | API base URL for frontend (see section 5) |
+| `ENABLE_DAILY_SYNC` | Backend `.env` | `true` | Enable in-process daily sync |
+| `SYNC_SCHEDULE_TIME` | Backend `.env` | `06:00` | Time for sync |
+| `PORT` | Backend `.env` | `8002` | Backend port (internal) |
 
 ---
 
 ## 13. Verify Deployment
 
-1. **Backend health:** `curl http://localhost:8002/health`
-2. **API docs:** `http://your-domain.com/api/docs` (if exposed)
-3. **Frontend:** Open `http://your-domain.com` in a browser
-4. **Generate report:** Search a ticker and trigger analysis
+1. **Backend health (from server):** `curl http://127.0.0.1:8002/health`
+2. **Frontend:** Open `https://your-domain.com` (or `http://` before SSL) in a browser
+3. **API docs:** `https://your-domain.com/api/docs` (or `/api/redoc`) if exposed
+4. **Generate report:** Search a ticker and trigger analysis to confirm end-to-end flow
 
 ---
 
@@ -359,7 +398,8 @@ sudo chmod 640 /opt/TradingAgents/.env
 
 ### CORS errors in browser
 
-- Set `CORS_ORIGINS` to your frontend URL(s)
+- Set `CORS_ORIGINS` to your production frontend URL(s), e.g. `https://your-domain.com`
+- Do not rely on localhost defaults in production
 - Restart the backend after changing env vars
 
 ### Reports not found
@@ -392,11 +432,11 @@ sudo systemctl restart stock-dashboard-backend
 
 - [ ] Ubuntu 22.04+, Python 3.11, Node.js 20
 - [ ] Repository cloned and dependencies installed
-- [ ] `.env` configured with API keys
-- [ ] Frontend built with production `VITE_API_URL`
-- [ ] systemd service for backend
+- [ ] Root `.env` with API keys; `backend/.env` with production `CORS_ORIGINS`, `BACKEND_URL`
+- [ ] Frontend built with production `VITE_API_URL` (or `''` for same-origin)
+- [ ] systemd service for backend (binding to 127.0.0.1)
 - [ ] Nginx configured (reverse proxy + static frontend)
-- [ ] SSL (optional)
-- [ ] Firewall rules
+- [ ] SSL with Let's Encrypt (recommended for production)
+- [ ] Firewall rules (22, 80, 443)
 - [ ] Permissions on `results/` and `.env`
 - [ ] Cron or in-process daily sync (optional)
