@@ -1,0 +1,206 @@
+# TradingAgents — Exact AI Analysis Flow
+
+This document describes the **exact flow** of the AI analysis in TradingAgents: entry points, graph topology, state, and decision output.
+
+---
+
+## 1. Entry points
+
+Analysis can be started from:
+
+| Entry | Where | What happens |
+|-------|--------|----------------|
+| **Dashboard API** | `backend/main.py` → `POST /api/analyses/start` | Calls `AnalysisService.start_analysis()` with ticker, date, analysts, research_depth, llm_provider; runs `_run_analysis()` in a background thread. |
+| **CLI** | `cli/main.py` → `run_analysis()` | Builds config, creates `TradingAgentsGraph`, creates initial state, then `graph.stream(init_agent_state, **args)` (or `invoke` in non-debug). |
+
+In both cases the **core execution** is:
+
+1. **State init**: `graph.propagator.create_initial_state(ticker, trade_date)`
+2. **Graph args**: `graph.propagator.get_graph_args()` → `stream_mode="values"`, `recursion_limit`
+3. **Run**: `graph.graph.stream(init_agent_state, **args)` (or `invoke`)  
+   The `graph` is the **compiled LangGraph** built in `GraphSetup.setup_graph(selected_analysts)`.
+
+---
+
+## 2. Graph topology (exact node order)
+
+The graph is a **StateGraph(AgentState)**. Edges are fixed and conditional as below.
+
+### 2.1 Analyst chain (sequential)
+
+- **START** → **First analyst** (e.g. `Market Analyst` if `selected_analysts = ["market", "news", "fundamentals"]`).
+
+For **each** selected analyst (e.g. `market`, `news`, `fundamentals`):
+
+1. **`{Analyst} Analyst`** (e.g. `Market Analyst`)
+   - Reads state: `company_of_interest`, `trade_date`, `messages`.
+   - Uses LLM + tools (e.g. `get_stock_data`, `get_indicators` for market) to produce a report and score.
+   - Writes: `market_report` / `sentiment_report` / `news_report` / `fundamentals_report` / `technical_report` and corresponding `*_score`.
+   - Conditional edge:
+     - If last message has **tool_calls** → **`tools_{analyst}`**
+     - Else → **`Msg Clear {Analyst}`**
+
+2. **`tools_{analyst}`**
+   - Runs the analyst’s tools (e.g. ToolNode for market: `get_stock_data`, `get_indicators`).
+   - Edge: **back to** **`{Analyst} Analyst`** (analyst can call tools again).
+
+3. **`Msg Clear {Analyst}`**
+   - Cleans messages for that analyst.
+   - Edge:
+     - If not last analyst → **next analyst** (e.g. `News Analyst`).
+     - If last analyst → **Bull Researcher**.
+
+So the **exact analyst flow** is:
+
+```
+START → Analyst_1 ⟷ tools_1 → Msg Clear 1 → Analyst_2 ⟷ tools_2 → … → Msg Clear Last → Bull Researcher
+```
+
+(Each analyst can loop with its tool node until it stops calling tools.)
+
+---
+
+## 3. Investment debate (Bull vs Bear)
+
+After the last analyst’s “Msg Clear”:
+
+- **Bull Researcher**
+  - Inputs: all reports (market, sentiment, news, fundamentals, optional technical), `investment_debate_state` (history, current_response, count).
+  - Outputs: bull argument; updates `investment_debate_state` (history, bull_history, current_response, count).
+  - Conditional edge:
+    - If `count >= 2 * max_debate_rounds` → **Research Manager**
+    - Else if `current_response` starts with `"Bull"` → **Bear Researcher**
+    - Else → **Bull Researcher** (next turn is bull again in practice from setup).
+
+- **Bear Researcher**
+  - Same idea: uses reports + debate history; produces bear argument; updates `investment_debate_state`.
+  - Conditional edge:
+    - If `count >= 2 * max_debate_rounds` → **Research Manager**
+    - Else → **Bull Researcher**.
+
+So the loop is: **Bull Researcher ⇄ Bear Researcher** until `count >= 2 * max_debate_rounds`, then → **Research Manager**.
+
+---
+
+## 4. Research Manager → Trader
+
+- **Research Manager**
+  - Inputs: all reports, full debate `history`, judge memory.
+  - Produces: `investment_plan`, `recommendation_score` (1–10), `expected_return_pct`, `bear_case_return_pct`, `bull_case_return_pct` (optional), and updates `investment_debate_state` (e.g. `judge_decision`).
+  - Edge: **Trader** (fixed).
+
+- **Trader**
+  - Inputs: investment plan, reports, trader memory.
+  - Produces: `trader_investment_plan` (and can set `final_trade_decision` or it’s set later from risk).
+  - Edge: **Risky Analyst** (fixed).
+
+---
+
+## 5. Risk debate (Risky / Safe / Neutral) → Risk Judge
+
+- **Risky Analyst**
+  - Conditional edge:
+    - If `risk_debate_state["count"] >= 3 * max_risk_discuss_rounds` → **Risk Judge**
+    - Else if last speaker was Risky → **Safe Analyst**
+    - Else → **Risky Analyst** (or Safe/Neutral per logic).
+
+- **Safe Analyst** and **Neutral Analyst**
+  - Same pattern: conditional on `count` and `latest_speaker`:
+    - Either continue to the next risk debator (Risky / Safe / Neutral),
+    - Or go to **Risk Judge** when round limit is reached.
+
+- **Risk Judge**
+  - Produces final risk decision and **`final_trade_decision`** (BUY/HOLD/SELL).
+  - Edge: **END**.
+
+So: **Risky Analyst ⇄ Safe Analyst ⇄ Neutral Analyst** (in the order defined by `should_continue_risk_analysis`) until round limit, then → **Risk Judge** → **END**.
+
+---
+
+## 6. State (AgentState) — what flows through
+
+- **Input / identity**: `company_of_interest`, `trade_date`, `messages`.
+- **Analyst outputs**: `market_report`, `market_score`; `sentiment_report`, `sentiment_score`; `news_report`, `news_score`; `fundamentals_report`, `fundamentals_score`; `technical_report`, `technical_score`.
+- **Debate**: `investment_debate_state` (history, bull/bear history, current_response, count, judge_decision).
+- **Research Manager**: `investment_plan`, `recommendation_score`, `expected_return_pct`, `bear_case_return_pct`, `bull_case_return_pct`.
+- **Trader**: `trader_investment_plan`.
+- **Risk**: `risk_debate_state` (risky/safe/neutral history, latest_speaker, count, judge_decision), `investment_plan`, `final_trade_decision`, `risk_score`.
+
+Each node **reads** from this state and **returns** a dict of keys to **update** (LangGraph merges into the single AgentState).
+
+---
+
+## 7. After the graph finishes
+
+- **TradingAgentsGraph.propagate()** (used from CLI or equivalent):
+  - Stores `final_state` in `self.curr_state`.
+  - Logs state to `eval_results/{ticker}/TradingAgentsStrategy_logs/full_states_log_{date}.json`.
+  - Returns `(final_state, self.process_signal(final_state["final_trade_decision"]))`.
+
+- **SignalProcessor.process_signal(full_signal)**:
+  - Takes the **final_trade_decision** text.
+  - Uses the quick-thinking LLM to **extract a single token**: **BUY**, **SELL**, or **HOLD**.
+  - That is the **final actionable output** of the AI analysis.
+
+- **Reflection (optional)**  
+  `reflect_and_remember(returns_losses)` updates bull/bear/trader/judge/risk-manager memories based on outcomes.
+
+---
+
+## 8. Flow summary diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ENTRY: create_initial_state(ticker, date) → graph.stream(state, **args)     │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                        │
+                                        ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ANALYST CHAIN (sequential; each can loop with tools)                        │
+│ START → [Market] Analyst ⇄ tools_market → Msg Clear →                        │
+│         [News] Analyst ⇄ tools_news → Msg Clear →                            │
+│         [Fundamentals] Analyst ⇄ tools_fundamentals → Msg Clear → …          │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                        │
+                                        ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ INVESTMENT DEBATE (until max_debate_rounds)                                  │
+│ Bull Researcher ⇄ Bear Researcher → Research Manager                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                        │
+                                        ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Research Manager → Trader                                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                        │
+                                        ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ RISK DEBATE (until max_risk_discuss_rounds)                                  │
+│ Risky Analyst ⇄ Safe Analyst ⇄ Neutral Analyst → Risk Judge → END            │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                        │
+                                        ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ OUTPUT: final_trade_decision (text) → process_signal() → BUY | SELL | HOLD    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 9. Key files reference
+
+| Concern | File |
+|--------|------|
+| Graph build, nodes, edges | `tradingagents/graph/setup.py` |
+| Initial state, graph args | `tradingagents/graph/propagation.py` |
+| Analyst/tool/debate/risk routing | `tradingagents/graph/conditional_logic.py` |
+| Orchestrator, LLMs, tools, propagate | `tradingagents/graph/trading_graph.py` |
+| Final BUY/SELL/HOLD extraction | `tradingagents/graph/signal_processing.py` |
+| State types | `tradingagents/agents/utils/agent_states.py` |
+| Research Manager (judge + plan) | `tradingagents/agents/managers/research_manager.py` |
+| Analysts | `tradingagents/agents/analysts/*.py` |
+| Bull/Bear researchers | `tradingagents/agents/researchers/*.py` |
+| Dashboard analysis run | `backend/services/analysis_service.py` |
+| API trigger | `backend/main.py` (POST /api/analyses/start) |
+
+This is the **exact flow** of the AI analysis in TradingAgents from request/CLI to final BUY/SELL/HOLD.

@@ -1,0 +1,143 @@
+from typing import Optional, List
+from pydantic import BaseModel, Field
+
+
+class ResearchManagerOutput(BaseModel):
+    """Structured output for research manager including investment plan, recommendation score, and return expectations."""
+    investment_plan: str = Field(
+        description="Comprehensive investment plan including recommendation (Buy/Sell/Hold), rationale, and strategic actions"
+    )
+    recommendation_score: int = Field(
+        ge=1, le=10,
+        description="Recommendation score from 1-10 indicating confidence and strength of the investment recommendation. 1-3: Very weak recommendation/low confidence, 4-5: Moderate recommendation/some confidence, 6-7: Strong recommendation/good confidence, 8-10: Very strong recommendation/high confidence"
+    )
+    bull_summary: List[str] = Field(
+        default_factory=list,
+        description="3-5 bullet points summarizing the bull analyst's key arguments from the debate"
+    )
+    bear_summary: List[str] = Field(
+        default_factory=list,
+        description="3-5 bullet points summarizing the bear analyst's key arguments from the debate"
+    )
+    expected_return_pct: Optional[float] = Field(
+        default=None,
+        description="Expected percentage return from current price over the investment horizon (e.g. 0.64 for +0.64%). Base case."
+    )
+    bear_case_return_pct: Optional[float] = Field(
+        default=None,
+        description="Bear-case percentage return from current price (e.g. -12.87 for -12.87%). Downside scenario."
+    )
+    bull_case_return_pct: Optional[float] = Field(
+        default=None,
+        description="Bull-case percentage return from current price (e.g. 9.41 for +9.41%). Upside scenario."
+    )
+
+
+def create_research_manager(llm, memory):
+    def research_manager_node(state) -> dict:
+        history = state["investment_debate_state"].get("history", "")
+        market_research_report = state["market_report"]
+        sentiment_report = state["sentiment_report"]
+        news_report = state["news_report"]
+        fundamentals_report = state["fundamentals_report"]
+        technical_report = state.get("technical_report", "")
+
+        investment_debate_state = state["investment_debate_state"]
+
+        curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
+        if technical_report:
+            curr_situation += f"\n\n{technical_report}"
+        past_memories = memory.get_memories(curr_situation, n_matches=2)
+
+        past_memory_str = ""
+        for i, rec in enumerate(past_memories, 1):
+            past_memory_str += rec["recommendation"] + "\n\n"
+
+        prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate and make a definitive decision: align with the bear analyst, the bull analyst, or choose Hold only if it is strongly justified based on the arguments presented.
+
+Summarize the key points from both sides concisely, focusing on the most compelling evidence or reasoning. Your recommendation—Buy, Sell, or Hold—must be clear and actionable. Avoid defaulting to Hold simply because both sides have valid points; commit to a stance grounded in the debate's strongest arguments.
+
+Additionally, develop a detailed investment plan for the trader. This should include:
+
+Your Recommendation: A decisive stance supported by the most convincing arguments.
+Rationale: An explanation of why these arguments lead to your conclusion.
+Strategic Actions: Concrete steps for implementing the recommendation.
+Take into account your past mistakes on similar situations. Use these insights to refine your decision-making and ensure you are learning and improving. Present your analysis conversationally, as if speaking naturally.
+
+**Formatting:** Structure the investment plan for readability: use clear paragraphs and subparagraphs, Markdown tables for key data or comparisons (e.g. bull vs bear points, return scenarios), and headings (## or ###) to organize sections. Avoid long unbroken blocks of text so the output is well organized and easy to scan. 
+
+**CRITICAL: You MUST provide a Recommendation Score between 1-10 as part of your structured output.**
+- Scoring guidelines:
+  * 1-3: Very weak recommendation, low confidence, highly mixed signals, unclear direction
+  * 4-5: Moderate recommendation, some confidence, balanced arguments, moderate clarity
+  * 6-7: Strong recommendation, good confidence, clear signals, well-supported decision
+  * 8-10: Very strong recommendation, high confidence, very clear signals, strongly supported decision
+- Base your score on: clarity of signals, strength of arguments, confidence in recommendation, alignment of evidence, and overall conviction
+
+**CRITICAL: You MUST provide bull_summary and bear_summary as lists of 3-5 bullet points each:**
+- bull_summary: Summarize the bull analyst's key arguments in a short list (each item one sentence).
+- bear_summary: Summarize the bear analyst's key arguments in a short list (each item one sentence).
+
+**CRITICAL: You MUST provide numerical return expectations as percentages from current price (e.g. over a 12-month horizon):**
+- expected_return_pct: Base-case expected percentage return (e.g. 0.64 for +0.64%).
+- bear_case_return_pct: Downside scenario percentage return (e.g. -12.87 for -12.87%).
+- bull_case_return_pct: Upside scenario percentage return (e.g. 9.41 for +9.41%).
+Use the debate and your view to estimate these three numbers. They must be numeric (can be negative for bear).
+
+{f"Additional Context - Advanced Technical Analysis: {technical_report}" if technical_report else ""}
+
+Here are your past reflections on mistakes:
+\"{past_memory_str}\"
+
+Here is the debate:
+Debate History:
+{history}"""
+        
+        # Use structured output to get both investment plan, score, and return expectations
+        expected_return_pct = None
+        bear_case_return_pct = None
+        bull_case_return_pct = None
+        try:
+            structured_llm = llm.with_structured_output(ResearchManagerOutput)
+            structured_response = structured_llm.invoke(prompt)
+            investment_plan = structured_response.investment_plan
+            recommendation_score = structured_response.recommendation_score
+            bull_summary = getattr(structured_response, "bull_summary", None) or []
+            bear_summary = getattr(structured_response, "bear_summary", None) or []
+            expected_return_pct = getattr(structured_response, "expected_return_pct", None)
+            bear_case_return_pct = getattr(structured_response, "bear_case_return_pct", None)
+            bull_case_return_pct = getattr(structured_response, "bull_case_return_pct", None)
+
+            # Create a regular response object for compatibility
+            class Response:
+                def __init__(self, content):
+                    self.content = content
+            response = Response(investment_plan)
+        except Exception:
+            response = llm.invoke(prompt)
+            investment_plan = response.content
+            recommendation_score = None
+            bull_summary = []
+            bear_summary = []
+
+        new_investment_debate_state = {
+            "judge_decision": investment_plan,
+            "history": investment_debate_state.get("history", ""),
+            "bear_history": investment_debate_state.get("bear_history", ""),
+            "bull_history": investment_debate_state.get("bull_history", ""),
+            "current_response": investment_plan,
+            "count": investment_debate_state["count"],
+        }
+
+        return {
+            "investment_debate_state": new_investment_debate_state,
+            "investment_plan": investment_plan,
+            "recommendation_score": recommendation_score,
+            "bull_summary": bull_summary,
+            "bear_summary": bear_summary,
+            "expected_return_pct": expected_return_pct,
+            "bear_case_return_pct": bear_case_return_pct,
+            "bull_case_return_pct": bull_case_return_pct,
+        }
+
+    return research_manager_node

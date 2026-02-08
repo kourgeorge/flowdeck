@@ -1,0 +1,100 @@
+# -----------------------------------------------------------------------------
+# Environment & secrets
+# -----------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# -----------------------------------------------------------------------------
+# Python
+# -----------------------------------------------------------------------------
+.venv
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Type checking & linting
+.mypy_cache/
+.dmypy.json
+.ruff_cache/
+
+# -----------------------------------------------------------------------------
+# Node / frontend
+# -----------------------------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.npm
+.yarn-integrity
+*.tsbuildinfo
+
+# Vite / build output
+frontend/dist/
+
+# -----------------------------------------------------------------------------
+# Project-specific
+# -----------------------------------------------------------------------------
+results/
+eval_results/
+eval_data/
+*.csv
+
+# Legacy (uncomment if you want to ignore)
+# src/
+
+# -----------------------------------------------------------------------------
+# OS & editors
+# -----------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+Thumbs.db
+ehthumbs.db
+*.swp
+*.swo
+*~
+
+# -----------------------------------------------------------------------------
+# IDE (uncomment to ignore; remove to share team settings)
+# -----------------------------------------------------------------------------
+.vscode/
+.idea/
+
+# -----------------------------------------------------------------------------
+# Jupyter & misc
+# -----------------------------------------------------------------------------
+.ipynb_checkpoints/
+.cache/
+*.log
+*.bak
