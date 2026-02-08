@@ -119,25 +119,16 @@ pip install -r backend/requirements.txt
 
 ### Environment variables
 
-Create `.env` in project root:
+Create `.env` in project root (for systemd) and `backend/.env`:
 
 ```bash
 cp .env.example .env
+cp backend/.env.example backend/.env
 nano .env
-```
-
-Add (replace placeholders with real values):
-
-```env
-OPENAI_API_KEY=sk-...
-ALPHA_VANTAGE_API_KEY=...
-```
-
-Create `backend/.env` for production (backend inherits API keys from root `.env`):
-
-```bash
 nano backend/.env
 ```
+
+Add real values to both. Root `.env` provides API keys for systemd. `backend/.env` is loaded by the app and should include production settings (see Production Configuration Checklist).
 
 ```env
 # Production: required for CORS (do not rely on localhost defaults)
@@ -160,11 +151,12 @@ Replace `your-domain.com` with your actual domain. If your API is on a subdomain
 
 ```bash
 cd /opt/TradingAgents/frontend
+cp .env.example .env   # optional; edit for production
 npm ci
 npm run build
 ```
 
-For production, set the API URL before build. If the API is served at `/api` on the same domain as the frontend, use same-origin:
+For production, set the API URL before build (in `.env` or inline). If the API is served at `/api` on the same domain as the frontend, use same-origin:
 
 ```bash
 # Same-origin (API at https://your-domain.com/api): leave empty
