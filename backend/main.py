@@ -1,7 +1,12 @@
 """FastAPI application for stock dashboard backend."""
 
+import logging
 import os
 from contextlib import asynccontextmanager
+
+# Ensure backend loggers have sensible defaults (uvicorn configures root; our loggers propagate)
+logging.getLogger("services.analysis_service").setLevel(logging.INFO)
+logging.getLogger("services.report_service").setLevel(logging.INFO)
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional

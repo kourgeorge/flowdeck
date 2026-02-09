@@ -1,8 +1,11 @@
 """Service to read and write reports via SQLite."""
 
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
+
+logger = logging.getLogger(__name__)
 
 from services.key_takeaways import extract_key_takeaways
 from database import SessionLocal
@@ -112,6 +115,7 @@ def save_report(
         if row:
             row.content = content or ""
             row.metadata_json = metadata_json
+            action = "updated"
         else:
             row = Report(
                 ticker=ticker.upper(),
@@ -121,7 +125,18 @@ def save_report(
                 metadata_json=metadata_json,
             )
             db.add(row)
+            action = "inserted"
         db.commit()
+        logger.debug(
+            "Report %s ticker=%s run_id=%s report_type=%s",
+            action, ticker.upper(), run_id, report_type,
+        )
+    except Exception as e:
+        logger.exception(
+            "Failed to save report ticker=%s run_id=%s report_type=%s error=%s",
+            ticker, run_id, report_type, e,
+        )
+        raise
     finally:
         db.close()
 

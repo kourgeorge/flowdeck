@@ -1,7 +1,7 @@
 """Service to trigger TradingAgents analysis."""
 
 import asyncio
-import json
+import logging
 import uuid
 import datetime
 import threading
@@ -9,6 +9,8 @@ import os
 from typing import Dict, Optional, Callable, Any
 from pathlib import Path
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 from services.key_takeaways import extract_key_takeaways
 from services.report_service import save_report
@@ -85,7 +87,11 @@ class AnalysisService:
             return (existing_id, True)
         
         analysis_id = str(uuid.uuid4())
-        
+        logger.info(
+            "Starting analysis analysis_id=%s ticker=%s date=%s analysts=%s",
+            analysis_id, ticker, analysis_date, analysts,
+        )
+
         # Default analysts if not provided
         if analysts is None:
             analysts = ["market", "news", "fundamentals"]
@@ -207,8 +213,10 @@ class AnalysisService:
                 loop.run_until_complete(self._run_analysis(analysis_id, graph, ticker, analysis_date, analysts))
             except Exception as e:
                 import traceback
-                print(f"Error in analysis thread: {e}")
-                traceback.print_exc()
+                logger.exception(
+                    "Analysis failed analysis_id=%s ticker=%s date=%s error=%s",
+                    analysis_id, ticker, analysis_date, e,
+                )
                 analysis_info = self.running_analyses.get(analysis_id)
                 if analysis_info:
                     analysis_info["status"] = "error"
@@ -224,9 +232,20 @@ class AnalysisService:
     
     async def _run_analysis(self, analysis_id: str, graph: TradingAgentsGraph, ticker: str, analysis_date: str, analysts: list):
         """Run the analysis and update status."""
+        analysis_info = self.running_analyses.get(analysis_id)
+        if not analysis_info:
+            logger.warning("Analysis info not found for analysis_id=%s", analysis_id)
+            return
+
+        log_file = analysis_info["log_file"]
+        run_id = analysis_info["run_id"]
+        logger.info(
+            "Analysis run started analysis_id=%s ticker=%s run_id=%s models=%s",
+            analysis_id, ticker, run_id,
+            {"deep": graph.config.get("deep_think_llm"), "quick": graph.config.get("quick_think_llm")},
+        )
+
         try:
-            analysis_info = self.running_analyses[analysis_id]
-            log_file = analysis_info["log_file"]
             
             # Initialize state
             init_agent_state = graph.propagator.create_initial_state(ticker, analysis_date)
@@ -248,16 +267,27 @@ class AnalysisService:
                 return {"metadata": meta, "content": content or ""}
 
             def _write_report(key, content, score, label, **extra):
-                data = _build_report_json(content, score, label, _takeaways(content), **extra)
-                meta = data.get("metadata", {})
-                meta.update({k: v for k, v in data.items() if k not in ("metadata", "content")})
-                save_report(
-                    ticker=analysis_info["ticker"],
-                    run_id=analysis_info["run_id"],
-                    report_type=key,
-                    content=data.get("content", ""),
-                    metadata=meta,
-                )
+                try:
+                    data = _build_report_json(content, score, label, _takeaways(content), **extra)
+                    meta = data.get("metadata", {})
+                    meta.update({k: v for k, v in data.items() if k not in ("metadata", "content")})
+                    save_report(
+                        ticker=analysis_info["ticker"],
+                        run_id=analysis_info["run_id"],
+                        report_type=key,
+                        content=data.get("content", ""),
+                        metadata=meta,
+                    )
+                    logger.info(
+                        "Report saved analysis_id=%s ticker=%s run_id=%s report_type=%s",
+                        analysis_id, analysis_info["ticker"], analysis_info["run_id"], key,
+                    )
+                except Exception as e:
+                    logger.exception(
+                        "Failed to save report analysis_id=%s report_type=%s error=%s",
+                        analysis_id, key, e,
+                    )
+                    raise
 
             # Stream the analysis
             for chunk in graph.graph.stream(init_agent_state, **args):
@@ -391,6 +421,10 @@ class AnalysisService:
             
             # Mark as completed
             analysis_info["status"] = "completed"
+            logger.info(
+                "Analysis completed analysis_id=%s ticker=%s run_id=%s reports=%s",
+                analysis_id, ticker, run_id, list(analysis_info.get("reports", {}).keys()),
+            )
 
             # Notify subscribed users by email (best-effort; do not fail analysis)
             try:
@@ -411,6 +445,10 @@ class AnalysisService:
                     pass
 
         except Exception as e:
+            logger.exception(
+                "Analysis error analysis_id=%s ticker=%s run_id=%s error=%s",
+                analysis_id, ticker, run_id, e,
+            )
             analysis_info = self.running_analyses.get(analysis_id)
             if analysis_info:
                 analysis_info["status"] = "error"

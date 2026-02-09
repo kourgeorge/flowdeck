@@ -3,16 +3,19 @@
 Standalone analysis runner for Node backend. Invoked as:
   python backend/run_analysis_standalone.py --ticker AAPL --analysis-date 2025-02-08 --analysis-id <uuid> --info-service-url http://127.0.0.1:8002 ...
 
-Streams NDJSON progress to stdout. Writes reports to results/{ticker}/{YYYY-MM-DD_HH-MM-SS}/reports/ so multiple runs per day don't overwrite.
+Streams NDJSON progress to stdout. Writes reports to DB via save_report. Logs go to stderr.
 """
 
 import argparse
 import asyncio
 import json
+import logging
 import os
 import sys
 from pathlib import Path
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 # Ensure repo root and backend are on path (script run as python backend/run_analysis_standalone.py)
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -57,6 +60,14 @@ def emit(line: dict) -> None:
 
 
 def main() -> None:
+    # Configure logging to stderr (stdout is used for NDJSON progress)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        stream=sys.stderr,
+    )
+
     parser = argparse.ArgumentParser(description="Run TradingAgents analysis (standalone for Node backend)")
     parser.add_argument("--ticker", required=True, help="Ticker symbol")
     parser.add_argument("--analysis-date", required=True, help="Analysis date YYYY-MM-DD")
@@ -107,6 +118,11 @@ def main() -> None:
             config["deep_think_llm"] = os.getenv("AZURE_DEEP_THINK_MODEL", "gpt-4o-2024-08-06")
 
     init_db()  # Ensure SQLite tables exist
+    logger.info(
+        "Standalone analysis starting analysis_id=%s ticker=%s date=%s run_id=%s models=%s",
+        args.analysis_id, ticker, analysis_date, run_id,
+        {"deep": config.get("deep_think_llm"), "quick": config.get("quick_think_llm")},
+    )
     graph = TradingAgentsGraph(selected_analysts=analysts, config=config, debug=True)
     generated_at = datetime.now(timezone.utc).isoformat()
     models_used = {
@@ -158,16 +174,21 @@ def main() -> None:
         return {"metadata": meta, "content": content or ""}
 
     def _write_report(key, content, score, label, **extra):
-        data = _build_report_json(content, score, label, _takeaways(content), **extra)
-        meta = data.get("metadata", {})
-        meta.update({k: v for k, v in data.items() if k not in ("metadata", "content")})
-        save_report(
-            ticker=ticker,
-            run_id=run_id,
-            report_type=key,
-            content=data.get("content", ""),
-            metadata=meta,
-        )
+        try:
+            data = _build_report_json(content, score, label, _takeaways(content), **extra)
+            meta = data.get("metadata", {})
+            meta.update({k: v for k, v in data.items() if k not in ("metadata", "content")})
+            save_report(
+                ticker=ticker,
+                run_id=run_id,
+                report_type=key,
+                content=data.get("content", ""),
+                metadata=meta,
+            )
+            logger.info("Report saved ticker=%s run_id=%s report_type=%s", ticker, run_id, key)
+        except Exception as e:
+            logger.exception("Failed to save report ticker=%s report_type=%s error=%s", ticker, key, e)
+            raise
 
     async def run() -> None:
         try:
@@ -272,8 +293,10 @@ def main() -> None:
                     },
                 })
 
+            logger.info("Standalone analysis completed ticker=%s run_id=%s reports=%s", ticker, run_id, list(reports.keys()))
             emit({"type": "completed"})
         except Exception as e:
+            logger.exception("Standalone analysis failed ticker=%s run_id=%s error=%s", ticker, run_id, e)
             emit({"type": "error", "error": str(e)})
             raise
 
