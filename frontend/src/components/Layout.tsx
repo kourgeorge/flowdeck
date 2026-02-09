@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { APP_NAME, LOGO_PATH } from '../config';
 import Footer from './Footer';
+import { useAuth } from '../contexts/AuthContext';
+import AuthModal from './AuthModal';
+import SignInPromoBanner from './SignInPromoBanner';
 
 const navItems = [
   { to: '/', label: 'Home' },
@@ -31,6 +34,8 @@ function HamburgerIcon({ open }: { open: boolean }) {
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const { user, logout } = useAuth();
 
   return (
     <div className="flex min-h-screen">
@@ -97,8 +102,35 @@ export default function Layout() {
               </li>
             ))}
           </ul>
+          <div className="p-4 mt-4 border-t border-gray-700">
+            {user ? (
+              <div className="space-y-2">
+                <p className="text-xs text-gray-400 truncate px-2" title={user.email}>
+                  {user.email}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { logout(); setSidebarOpen(false); }}
+                  className="block w-full text-left px-4 py-2 rounded-lg text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                >
+                  Log out
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setAuthModalOpen(true); setSidebarOpen(false); }}
+                className="block w-full text-left px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+              >
+                Log in
+              </button>
+            )}
+          </div>
         </nav>
       </aside>
+      {authModalOpen && (
+        <AuthModal onClose={() => setAuthModalOpen(false)} />
+      )}
 
       {/* Main content area */}
       <div className="flex flex-col flex-1 min-w-0">
@@ -114,6 +146,7 @@ export default function Layout() {
             <HamburgerIcon open={sidebarOpen} />
           </button>
         </div>
+        <SignInPromoBanner onSignInClick={() => setAuthModalOpen(true)} />
         <main className="flex-1 min-w-0">
           <Outlet />
         </main>

@@ -26,6 +26,8 @@ from tradingagents.default_config import DEFAULT_CONFIG
 
 # Backend services for key_takeaways and content extraction
 from services.key_takeaways import extract_key_takeaways
+from services.report_service import save_report
+from database import init_db
 
 try:
     from tradingagents.agents.utils.insight_extraction import extract_key_takeaways_structured
@@ -76,14 +78,14 @@ def main() -> None:
 
     os.environ["INFO_SERVICE_URL"] = args.info_service_url.strip().rstrip("/")
 
+    run_id = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
     results_dir = Path(args.results_dir)
     if not results_dir.is_absolute():
         results_dir = REPO_ROOT / results_dir
-    # Include time in run directory name so multiple runs per day don't overwrite
-    run_dir_name = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
-    report_dir = results_dir / ticker / run_dir_name / "reports"
+    # Include time in run id so multiple runs per day don't overwrite
+    report_dir = results_dir / ticker / run_id / "reports"
     report_dir.mkdir(parents=True, exist_ok=True)
-    log_file = results_dir / ticker / run_dir_name / "message_tool.log"
+    log_file = results_dir / ticker / run_id / "message_tool.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
     log_file.touch(exist_ok=True)
 
@@ -104,6 +106,7 @@ def main() -> None:
         else:
             config["deep_think_llm"] = os.getenv("AZURE_DEEP_THINK_MODEL", "gpt-4o-2024-08-06")
 
+    init_db()  # Ensure SQLite tables exist
     graph = TradingAgentsGraph(selected_analysts=analysts, config=config, debug=True)
     generated_at = datetime.now(timezone.utc).isoformat()
     models_used = {
@@ -156,8 +159,15 @@ def main() -> None:
 
     def _write_report(key, content, score, label, **extra):
         data = _build_report_json(content, score, label, _takeaways(content), **extra)
-        with open(report_dir / f"{key}.json", "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        meta = data.get("metadata", {})
+        meta.update({k: v for k, v in data.items() if k not in ("metadata", "content")})
+        save_report(
+            ticker=ticker,
+            run_id=run_id,
+            report_type=key,
+            content=data.get("content", ""),
+            metadata=meta,
+        )
 
     async def run() -> None:
         try:
@@ -207,8 +217,13 @@ def main() -> None:
                         bear_case_return_pct=chunk.get("bear_case_return_pct"),
                         bull_case_return_pct=chunk.get("bull_case_return_pct"),
                     )
-                    with open(report_dir / "investment_plan.json", "w", encoding="utf-8") as f:
-                        json.dump({**meta, "bull_viewpoint": bull, "bear_viewpoint": bear}, f, indent=2)
+                    save_report(
+                        ticker=ticker,
+                        run_id=run_id,
+                        report_type="investment_plan",
+                        content=content,
+                        metadata={**meta, "bull_viewpoint": bull, "bear_viewpoint": bear},
+                    )
 
                 if chunk.get("trader_investment_plan"):
                     c = chunk["trader_investment_plan"]
@@ -239,8 +254,13 @@ def main() -> None:
                         recommendation=chunk.get("recommendation"),
                         confidence=(rscore / 10.0) if rscore is not None else None,
                     )
-                    with open(report_dir / "final_trade_decision.json", "w", encoding="utf-8") as f:
-                        json.dump({**meta, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral}, f, indent=2)
+                    save_report(
+                        ticker=ticker,
+                        run_id=run_id,
+                        report_type="final_trade_decision",
+                        content=content,
+                        metadata={**meta, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral},
+                    )
 
                 emit({
                     "type": "progress",

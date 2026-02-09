@@ -3,13 +3,17 @@ import StockWidget from '../components/StockWidget';
 import StockListView from '../components/StockListView';
 import StockSearch from '../components/StockSearch';
 import { stockApi, API_BASE_URL } from '../services/api';
+import { subscriptionApi } from '../services/subscriptionApi';
 import type { StockWidget as StockWidgetType } from '../services/types';
 import { APP_NAME, LOGO_PATH } from '../config';
+import { useAuth } from '../contexts/AuthContext';
 
 type ViewMode = 'tile' | 'list';
 
 export default function HomePage() {
+  const { user } = useAuth();
   const [widgets, setWidgets] = useState<StockWidgetType[]>([]);
+  const [subscriptionWidgets, setSubscriptionWidgets] = useState<StockWidgetType[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [tickerToName, setTickerToName] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -45,13 +49,34 @@ export default function HomePage() {
     }
   };
 
+  const loadSubscriptions = async () => {
+    if (!user) {
+      setSubscriptionWidgets([]);
+      return;
+    }
+    try {
+      const subs = await subscriptionApi.list();
+      const tickers = subs.map((s) => s.ticker);
+      if (tickers.length > 0) {
+        const res = await stockApi.getWidgets(tickers);
+        setSubscriptionWidgets(res.widgets);
+      } else {
+        setSubscriptionWidgets([]);
+      }
+    } catch {
+      setSubscriptionWidgets([]);
+    }
+  };
+
   useEffect(() => {
     loadWidgets();
-    
-    // Auto-refresh every 60 seconds
-    const interval = setInterval(loadWidgets, 60000);
+    loadSubscriptions();
+    const interval = setInterval(() => {
+      loadWidgets();
+      loadSubscriptions();
+    }, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [user]);
 
   if (isLoading && widgets.length === 0) {
     return (
@@ -100,6 +125,21 @@ export default function HomePage() {
         {error && (
           <div className="bg-red-500/10 border border-red-500 text-red-400 px-4 py-3 rounded-lg mb-6">
             {error}
+          </div>
+        )}
+
+        {user && subscriptionWidgets.length > 0 && (
+          <div className="mb-10">
+            <h2 className="text-2xl font-semibold text-white mb-4">My Subscriptions</h2>
+            {viewMode === 'tile' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-6">
+                {subscriptionWidgets.map((widget) => (
+                  <StockWidget key={widget.ticker} widget={widget} />
+                ))}
+              </div>
+            ) : (
+              <StockListView widgets={subscriptionWidgets} tickerToName={tickerToName} />
+            )}
           </div>
         )}
 

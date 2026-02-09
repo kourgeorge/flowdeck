@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import HomePage from './pages/HomePage';
 import HowItWorksPage from './pages/HowItWorksPage';
@@ -7,6 +8,7 @@ import TermsOfUsePage from './pages/TermsOfUsePage';
 
 function App() {
   return (
+    <AuthProvider>
     <Router>
       <Routes>
         <Route element={<Layout />}>
@@ -17,6 +19,7 @@ function App() {
         </Route>
       </Routes>
     </Router>
+    </AuthProvider>
   );
 }
 

@@ -32,12 +32,16 @@ from services.news_service import NewsService
 from services.info_fetcher import get_info_fetcher
 from config import MAJOR_STOCKS, CORS_ORIGINS
 from routers.data_api import router as data_router
+from routers.users import router as users_router
+from routers.subscriptions import router as subscriptions_router
 from sync_major_stocks import get_missing_and_skipped, run_analyses_for_tickers
+from database import init_db
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Start optional daily sync scheduler when ENABLE_DAILY_SYNC=true."""
+    """Initialize DB and start optional daily sync scheduler."""
+    init_db()
     scheduler = None
     if os.environ.get("ENABLE_DAILY_SYNC", "true").lower() in ("true", "1", "yes"):
         try:
@@ -87,6 +91,8 @@ news_service = NewsService()
 get_info_fetcher(market_data_service=market_data_service, news_service=news_service)
 # Data API: canonical raw market data for UI and programmatic access
 app.include_router(data_router, prefix="/api/data")
+app.include_router(users_router)
+app.include_router(subscriptions_router)
 
 # WebSocket connections
 active_connections: dict[str, WebSocket] = {}
@@ -235,6 +241,7 @@ def _get_stock_page_sync(ticker: str) -> StockPageData:
                 analysis_date=v.get('analysis_date'),
                 generated_at=v.get('generated_at'),
                 days_ago=v.get('days_ago'),
+                models_used=v.get('models_used'),
                 bull_viewpoint=v.get('bull_viewpoint'),
                 bear_viewpoint=v.get('bear_viewpoint'),
                 risky_viewpoint=v.get('risky_viewpoint'),

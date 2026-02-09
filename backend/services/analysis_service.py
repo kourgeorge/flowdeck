@@ -11,6 +11,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from services.key_takeaways import extract_key_takeaways
+from services.report_service import save_report
+from services.email_service import notify_subscribers_new_report
 
 try:
     from tradingagents.agents.utils.insight_extraction import extract_key_takeaways_structured
@@ -141,9 +143,9 @@ class AnalysisService:
             debug=True
         )
         
-        # Include time in run directory name so multiple runs per day don't overwrite
-        run_dir_name = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
-        results_dir = self.results_dir / ticker.upper() / run_dir_name
+        # Include time in run id so multiple runs per day don't overwrite
+        run_id = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+        results_dir = self.results_dir / ticker.upper() / run_id
         results_dir.mkdir(parents=True, exist_ok=True)
         report_dir = results_dir / "reports"
         report_dir.mkdir(parents=True, exist_ok=True)
@@ -180,6 +182,7 @@ class AnalysisService:
         self.running_analyses[analysis_id] = {
             "ticker": ticker.upper(),
             "date": analysis_date,
+            "run_id": run_id,
             "status": "running",
             "graph": graph,
             "results_dir": results_dir,
@@ -246,8 +249,15 @@ class AnalysisService:
 
             def _write_report(key, content, score, label, **extra):
                 data = _build_report_json(content, score, label, _takeaways(content), **extra)
-                with open(analysis_info["report_dir"] / f"{key}.json", "w", encoding="utf-8") as f:
-                    json.dump(data, f, indent=2)
+                meta = data.get("metadata", {})
+                meta.update({k: v for k, v in data.items() if k not in ("metadata", "content")})
+                save_report(
+                    ticker=analysis_info["ticker"],
+                    run_id=analysis_info["run_id"],
+                    report_type=key,
+                    content=data.get("content", ""),
+                    metadata=meta,
+                )
 
             # Stream the analysis
             for chunk in graph.graph.stream(init_agent_state, **args):
@@ -320,8 +330,14 @@ class AnalysisService:
                         bear_case_return_pct=chunk.get("bear_case_return_pct"),
                         bull_case_return_pct=chunk.get("bull_case_return_pct"))
                     data = {**meta, "bull_viewpoint": bull, "bear_viewpoint": bear}
-                    with open(analysis_info["report_dir"] / "investment_plan.json", "w", encoding="utf-8") as f:
-                        json.dump(data, f, indent=2)
+                    inner = meta.get("metadata", meta)
+                    save_report(
+                        ticker=analysis_info["ticker"],
+                        run_id=analysis_info["run_id"],
+                        report_type="investment_plan",
+                        content=content,
+                        metadata={**inner, "bull_viewpoint": bull, "bear_viewpoint": bear},
+                    )
 
                 if "trader_investment_plan" in chunk and chunk["trader_investment_plan"]:
                     c = chunk["trader_investment_plan"]
@@ -355,9 +371,17 @@ class AnalysisService:
                         recommendation=chunk.get("recommendation"),
                         confidence=(rscore / 10.0) if rscore is not None else None)
                     data = {**meta, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral}
-                    with open(analysis_info["report_dir"] / "final_trade_decision.json", "w", encoding="utf-8") as f:
-                        json.dump(data, f, indent=2)
-                
+                    inner = meta.get("metadata", meta)
+                    save_report(
+                        ticker=analysis_info["ticker"],
+                        run_id=analysis_info["run_id"],
+                        report_type="final_trade_decision",
+                        content=content,
+                        metadata={**inner, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral},
+                    )
+                    analysis_info["recommendation"] = chunk.get("recommendation")
+                    analysis_info["confidence"] = (chunk.get("risk_score") / 10.0) if chunk.get("risk_score") is not None else None
+
                 # Call progress callback if provided
                 if analysis_info["progress_callback"]:
                     try:
@@ -367,14 +391,25 @@ class AnalysisService:
             
             # Mark as completed
             analysis_info["status"] = "completed"
-            
+
+            # Notify subscribed users by email (best-effort; do not fail analysis)
+            try:
+                notify_subscribers_new_report(
+                    ticker=analysis_info["ticker"],
+                    run_id=analysis_info["run_id"],
+                    recommendation=analysis_info.get("recommendation"),
+                    confidence=analysis_info.get("confidence"),
+                )
+            except Exception:
+                pass
+
             # Final callback
             if analysis_info["progress_callback"]:
                 try:
                     analysis_info["progress_callback"]({"type": "completed"}, analysis_info)
                 except Exception:
                     pass
-            
+
         except Exception as e:
             analysis_info = self.running_analyses.get(analysis_id)
             if analysis_info:

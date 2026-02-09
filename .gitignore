@@ -69,6 +69,7 @@ frontend/dist/
 # Project-specific
 # -----------------------------------------------------------------------------
 .flowdeck.pids
+backend/flowdeck.db
 results/
 eval_results/
 eval_data/

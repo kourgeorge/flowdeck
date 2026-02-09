@@ -87,6 +87,13 @@ class HistoricalAnalysis(BaseModel):
     recommendation: Optional[str] = None
 
 
+class ModelsUsed(BaseModel):
+    """AI model names used for this analysis run."""
+    provider: Optional[str] = None
+    deep_think: Optional[str] = None
+    quick_think: Optional[str] = None
+
+
 class ReportData(BaseModel):
     """Report data with optional score and structured insights."""
     content: Optional[str] = None
@@ -96,6 +103,7 @@ class ReportData(BaseModel):
     analysis_date: Optional[str] = None
     generated_at: Optional[str] = None
     days_ago: Optional[int] = None
+    models_used: Optional[ModelsUsed] = None
     bull_viewpoint: Optional[List[str]] = None
     bear_viewpoint: Optional[List[str]] = None
     risky_viewpoint: Optional[List[str]] = None

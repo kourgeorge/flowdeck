@@ -1,12 +1,12 @@
-"""Service to read reports from results directory."""
+"""Service to read and write reports via SQLite."""
 
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional, List, Dict, Any
-from config import RESULTS_DIR
 
 from services.key_takeaways import extract_key_takeaways
+from database import SessionLocal
+from models.db_models import Report
 
 
 def _date_part(run_id_or_date: Optional[str]) -> Optional[str]:
@@ -39,15 +39,24 @@ def _days_ago(report_date: Optional[str], generated_at: Optional[str]) -> Option
     return max(0, (datetime.now(timezone.utc) - ref).days)
 
 
-def _report_data_from_json(data: dict, date: str) -> Dict[str, Any]:
-    meta = data.get("metadata") or {}
-    content = data.get("content", "")
+def _report_row_to_dict(row: Report, date: str) -> Dict[str, Any]:
+    """Convert a Report row to the dict format expected by callers."""
+    meta = {}
+    if row.metadata_json:
+        try:
+            meta = json.loads(row.metadata_json) or {}
+        except Exception:
+            pass
+    content = row.content or ""
     analysis_date = meta.get("analysis_date") or date
+    key_takeaways = meta.get("key_takeaways")
+    if not key_takeaways and content:
+        key_takeaways = extract_key_takeaways(content)
     out = {
         "content": content,
         "score": meta.get("score"),
         "score_label": meta.get("score_label"),
-        "key_takeaways": meta.get("key_takeaways") or (extract_key_takeaways(content) if content else []),
+        "key_takeaways": key_takeaways or [],
         "analysis_date": analysis_date,
         "generated_at": meta.get("generated_at"),
         "days_ago": _days_ago(analysis_date, meta.get("generated_at")) or _days_ago(analysis_date, None),
@@ -58,16 +67,16 @@ def _report_data_from_json(data: dict, date: str) -> Dict[str, Any]:
         "confidence": meta.get("confidence"),
         "models_used": meta.get("models_used"),
     }
-    if "bull_viewpoint" in data:
-        out["bull_viewpoint"] = data["bull_viewpoint"]
-    if "bear_viewpoint" in data:
-        out["bear_viewpoint"] = data["bear_viewpoint"]
-    if "risky_viewpoint" in data:
-        out["risky_viewpoint"] = data["risky_viewpoint"]
-    if "safe_viewpoint" in data:
-        out["safe_viewpoint"] = data["safe_viewpoint"]
-    if "neutral_viewpoint" in data:
-        out["neutral_viewpoint"] = data["neutral_viewpoint"]
+    if meta.get("bull_viewpoint") is not None:
+        out["bull_viewpoint"] = meta["bull_viewpoint"]
+    if meta.get("bear_viewpoint") is not None:
+        out["bear_viewpoint"] = meta["bear_viewpoint"]
+    if meta.get("risky_viewpoint") is not None:
+        out["risky_viewpoint"] = meta["risky_viewpoint"]
+    if meta.get("safe_viewpoint") is not None:
+        out["safe_viewpoint"] = meta["safe_viewpoint"]
+    if meta.get("neutral_viewpoint") is not None:
+        out["neutral_viewpoint"] = meta["neutral_viewpoint"]
     return out
 
 
@@ -79,78 +88,155 @@ _EMPTY = {
 }
 
 
-class ReportService:
-    def __init__(self, results_dir: str = None):
-        self.results_dir = Path(results_dir or RESULTS_DIR)
-        if not self.results_dir.is_absolute():
-            self.results_dir = Path(__file__).parent.parent.parent / self.results_dir  # repo root
+def save_report(
+    ticker: str,
+    run_id: str,
+    report_type: str,
+    content: str = "",
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Save or upsert a report into the database."""
+    meta = metadata or {}
+    metadata_json = json.dumps(meta) if meta else None
+    db = SessionLocal()
+    try:
+        row = (
+            db.query(Report)
+            .filter(
+                Report.ticker == ticker.upper(),
+                Report.run_id == run_id,
+                Report.report_type == report_type,
+            )
+            .first()
+        )
+        if row:
+            row.content = content or ""
+            row.metadata_json = metadata_json
+        else:
+            row = Report(
+                ticker=ticker.upper(),
+                run_id=run_id,
+                report_type=report_type,
+                content=content or "",
+                metadata_json=metadata_json,
+            )
+            db.add(row)
+        db.commit()
+    finally:
+        db.close()
 
-    def _reports_dir(self, ticker: str, run_id: str) -> Path:
-        """run_id is directory name: YYYY-MM-DD or YYYY-MM-DD_HH-MM-SS."""
-        return self.results_dir / ticker.upper() / run_id / "reports"
+
+class ReportService:
+    """Service to read reports from SQLite database."""
+
+    def __init__(self, results_dir: str = None):
+        """results_dir is ignored; kept for backward compatibility with sync_major_stocks etc."""
+        pass
 
     def get_latest_report_date(self, ticker: str) -> Optional[str]:
-        ticker_dir = self.results_dir / ticker.upper()
-        if not ticker_dir.exists():
-            return None
-        dates = sorted(
-            (d.name for d in ticker_dir.iterdir() if d.is_dir() and (d / "reports").exists()),
-            reverse=True,
-        )
-        return dates[0] if dates else None
+        db = SessionLocal()
+        try:
+            row = (
+                db.query(Report.run_id)
+                .filter(Report.ticker == ticker.upper())
+                .order_by(Report.run_id.desc())
+                .first()
+            )
+            return row.run_id if row else None
+        finally:
+            db.close()
 
     def has_report_for_date(self, ticker: str, date: str) -> bool:
         """date can be YYYY-MM-DD (match any run that day) or full run id YYYY-MM-DD_HH-MM-SS (exact)."""
-        ticker_dir = self.results_dir / ticker.upper()
-        if not ticker_dir.exists():
-            return False
-        if "_" in date:
-            rd = self._reports_dir(ticker, date)
-            return rd.exists() and rd.is_dir() and any(rd.glob("*.json"))
-        for d in ticker_dir.iterdir():
-            if d.is_dir() and d.name.startswith(date):
-                rd = d / "reports"
-                if rd.exists() and rd.is_dir() and any(rd.glob("*.json")):
-                    return True
-        return False
+        db = SessionLocal()
+        try:
+            ticker_upper = ticker.upper()
+            if "_" in date:
+                count = (
+                    db.query(Report)
+                    .filter(Report.ticker == ticker_upper, Report.run_id == date)
+                    .limit(1)
+                    .count()
+                )
+                return count > 0
+            # Match any run that starts with date (YYYY-MM-DD)
+            count = (
+                db.query(Report)
+                .filter(
+                    Report.ticker == ticker_upper,
+                    Report.run_id.like(f"{date}%"),
+                )
+                .limit(1)
+                .count()
+            )
+            return count > 0
+        finally:
+            db.close()
 
     def get_tickers_with_reports_for_date(self, date: str) -> List[str]:
         """date can be YYYY-MM-DD (tickers with any run that day) or full run id (exact)."""
-        if not self.results_dir.exists():
-            return []
-        return [p.name for p in self.results_dir.iterdir() if p.is_dir() and self.has_report_for_date(p.name, date)]
+        db = SessionLocal()
+        try:
+            if "_" in date:
+                rows = db.query(Report.ticker).filter(Report.run_id == date).distinct().all()
+            else:
+                rows = db.query(Report.ticker).filter(Report.run_id.like(f"{date}%")).distinct().all()
+            return [r.ticker for r in rows]
+        finally:
+            db.close()
 
     def get_reports_with_scores(self, ticker: str, date: str) -> Dict[str, Dict[str, Any]]:
-        rd = self._reports_dir(ticker, date)
-        if not rd.exists():
-            return {}
-        result = {}
-        for f in rd.glob("*.json"):
-            try:
-                with open(f, "r", encoding="utf-8") as fp:
-                    result[f.stem] = _report_data_from_json(json.load(fp), date)
-            except Exception:
-                result[f.stem] = {**_EMPTY, "analysis_date": date, "days_ago": _days_ago(date, None)}
-        return result
+        """date can be YYYY-MM-DD or full run id. Returns report_type -> dict with content, score, etc."""
+        db = SessionLocal()
+        try:
+            ticker_upper = ticker.upper()
+            run_id = date
+            if "_" not in date:
+                # Find latest run_id that starts with this date
+                latest = (
+                    db.query(Report.run_id)
+                    .filter(Report.ticker == ticker_upper, Report.run_id.like(f"{date}%"))
+                    .order_by(Report.run_id.desc())
+                    .first()
+                )
+                run_id = latest.run_id if latest else date
+            rows = db.query(Report).filter(Report.ticker == ticker_upper, Report.run_id == run_id).all()
+            result = {}
+            for row in rows:
+                result[row.report_type] = _report_row_to_dict(row, row.run_id)
+            return result
+        finally:
+            db.close()
 
     def get_reports_for_date(self, ticker: str, date: str) -> Dict[str, Optional[str]]:
-        return {k: (v.get("content") or "") for k, v in self.get_reports_with_scores(ticker, date).items()}
+        scores = self.get_reports_with_scores(ticker, date)
+        return {k: (v.get("content") or "") for k, v in scores.items()}
 
     def get_latest_reports(self, ticker: str) -> Dict[str, Optional[str]]:
         d = self.get_latest_report_date(ticker)
         return self.get_reports_for_date(ticker, d) if d else {}
 
     def get_historical_analyses(self, ticker: str) -> List[Dict]:
-        ticker_dir = self.results_dir / ticker.upper()
-        if not ticker_dir.exists():
-            return []
-        analyses = [
-            {"date": d.name, "available_reports": sorted(f.stem for f in (d / "reports").glob("*.json"))}
-            for d in ticker_dir.iterdir()
-            if d.is_dir() and (d / "reports").exists()
-        ]
-        analyses.sort(key=lambda x: x["date"], reverse=True)
-        return analyses
+        db = SessionLocal()
+        try:
+            rows = (
+                db.query(Report.run_id, Report.report_type)
+                .filter(Report.ticker == ticker.upper())
+                .all()
+            )
+            by_run: Dict[str, List[str]] = {}
+            for run_id, report_type in rows:
+                if run_id not in by_run:
+                    by_run[run_id] = []
+                by_run[run_id].append(report_type)
+            analyses = [
+                {"date": run_id, "available_reports": sorted(report_types)}
+                for run_id, report_types in by_run.items()
+            ]
+            analyses.sort(key=lambda x: x["date"], reverse=True)
+            return analyses
+        finally:
+            db.close()
 
     def has_reports(self, ticker: str) -> bool:
         return self.get_latest_report_date(ticker) is not None
