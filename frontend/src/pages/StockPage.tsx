@@ -910,6 +910,7 @@ export default function StockPage() {
                     <div>
                       <ReportTabs
                         availableReports={availableReports}
+                        selectedReport={selectedReport}
                         onSelectReport={setSelectedReport}
                         reportScores={reportScores}
                       />

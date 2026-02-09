@@ -1,4 +1,3 @@
-import { useState } from 'react';
 
 interface ReportScore {
   score: number | null;
@@ -7,17 +6,17 @@ interface ReportScore {
 
 interface ReportTabsProps {
   availableReports: string[];
+  selectedReport: string | null;
   onSelectReport: (reportType: string) => void;
   reportScores?: Record<string, ReportScore>;
 }
 
-export default function ReportTabs({ availableReports, onSelectReport, reportScores }: ReportTabsProps) {
-  const [activeTab, setActiveTab] = useState<string | null>(
-    availableReports.length > 0 ? availableReports[0] : null
-  );
+export default function ReportTabs({ availableReports, selectedReport, onSelectReport, reportScores }: ReportTabsProps) {
+  const activeTab = selectedReport && availableReports.includes(selectedReport)
+    ? selectedReport
+    : (availableReports.length > 0 ? availableReports[0] : null);
 
   const handleTabClick = (reportType: string) => {
-    setActiveTab(reportType);
     onSelectReport(reportType);
   };
 
@@ -27,7 +26,7 @@ export default function ReportTabs({ availableReports, onSelectReport, reportSco
     fundamentals_report: 'Fundamentals',
     news_report: 'News',
     investment_plan: 'Research',
-    final_trade_decision: 'Risk & Confidence',
+    final_trade_decision: 'Thesis',
   };
 
   const formatReportName = (name: string) => {
