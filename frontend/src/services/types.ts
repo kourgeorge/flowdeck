@@ -54,6 +54,12 @@ export interface HistoricalAnalysis {
   recommendation: string | null;
 }
 
+export interface ModelsUsed {
+  provider?: string;
+  deep_think?: string;
+  quick_think?: string;
+}
+
 export interface ReportData {
   content: string | null;
   score: number | null;
@@ -62,6 +68,7 @@ export interface ReportData {
   analysis_date?: string | null;
   generated_at?: string | null;
   days_ago?: number | null;
+  models_used?: ModelsUsed | null;
   bull_viewpoint?: string[] | null;
   bear_viewpoint?: string[] | null;
   risky_viewpoint?: string[] | null;

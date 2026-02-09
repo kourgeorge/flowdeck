@@ -12,6 +12,7 @@ import FundamentalCharts from '../components/FundamentalCharts';
 import FundamentalPanes from '../components/FundamentalPanes';
 import NewsWidget from '../components/NewsWidget';
 import AIAnalysisLoadingView from '../components/AIAnalysisLoadingView';
+import { parseReportDate } from '../utils/date';
 
 interface CompanyInfo {
   name: string;
@@ -345,6 +346,10 @@ export default function StockPage() {
       };
     });
   }
+  // Models used for this analysis (same across all reports from one run)
+  const modelsUsed = stockData.reports_with_scores
+    ? (Object.values(stockData.reports_with_scores).find((r) => r.models_used)?.models_used ?? null)
+    : null;
   const quote = refreshedQuote ?? stockData.quote;
 
   // Format last update time
@@ -816,6 +821,9 @@ export default function StockPage() {
             {/* AI Analysis Tab Content */}
             {activeTab === 'ai-analysis' && (
               <div className="space-y-6">
+                <p className="text-sm text-amber-400/90 bg-amber-950/30 border border-amber-700/40 rounded-lg px-4 py-2">
+                  For informational purposes only. Not investment advice.
+                </p>
                 {/* Analysis Summary Header */}
                 {stockData.has_reports && stockData.report_date && (
                   <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 rounded-lg border border-blue-700/50 p-6">
@@ -823,13 +831,11 @@ export default function StockPage() {
                       <div>
                         <div className="text-sm text-gray-400 mb-1">Last Analysis Date</div>
                         <div className="text-lg font-semibold text-white">
-                          {stockData.report_date
-                            ? new Date(stockData.report_date).toLocaleDateString('en-US', {
+                          {parseReportDate(stockData.report_date)?.toLocaleDateString('en-US', {
                                 year: 'numeric',
                                 month: 'long',
                                 day: 'numeric'
-                              })
-                            : 'N/A'}
+                              }) ?? 'N/A'}
                         </div>
                         {stockData.report_days_ago != null && (
                           <div className="text-sm text-gray-400 mt-1">
@@ -837,6 +843,11 @@ export default function StockPage() {
                             {stockData.report_days_ago > 7 && (
                               <span className="text-amber-400/90 ml-1">Consider re-running for fresh insights.</span>
                             )}
+                          </div>
+                        )}
+                        {modelsUsed && (modelsUsed.provider || modelsUsed.deep_think || modelsUsed.quick_think) && (
+                          <div className="text-xs text-gray-500 mt-2">
+                            Models: {[modelsUsed.provider && `${modelsUsed.provider}`, modelsUsed.deep_think && `deep: ${modelsUsed.deep_think}`, modelsUsed.quick_think && `quick: ${modelsUsed.quick_think}`].filter(Boolean).join(' · ')}
                           </div>
                         )}
                       </div>

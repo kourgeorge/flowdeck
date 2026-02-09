@@ -9,6 +9,15 @@ from config import RESULTS_DIR
 from services.key_takeaways import extract_key_takeaways
 
 
+def _date_part(run_id_or_date: Optional[str]) -> Optional[str]:
+    """Extract YYYY-MM-DD from run id (YYYY-MM-DD_HH-MM-SS) or return as-is if already date-only."""
+    if not run_id_or_date:
+        return None
+    if "_" in run_id_or_date:
+        return run_id_or_date.split("_")[0]
+    return run_id_or_date
+
+
 def _days_ago(report_date: Optional[str], generated_at: Optional[str]) -> Optional[int]:
     ref = None
     if generated_at:
@@ -20,7 +29,9 @@ def _days_ago(report_date: Optional[str], generated_at: Optional[str]) -> Option
             pass
     if ref is None and report_date:
         try:
-            ref = datetime.strptime(report_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            date_part = _date_part(report_date)
+            if date_part:
+                ref = datetime.strptime(date_part, "%Y-%m-%d").replace(tzinfo=timezone.utc)
         except Exception:
             pass
     if ref is None:
@@ -45,6 +56,7 @@ def _report_data_from_json(data: dict, date: str) -> Dict[str, Any]:
         "bear_case_return_pct": meta.get("bear_case_return_pct"),
         "bull_case_return_pct": meta.get("bull_case_return_pct"),
         "confidence": meta.get("confidence"),
+        "models_used": meta.get("models_used"),
     }
     if "bull_viewpoint" in data:
         out["bull_viewpoint"] = data["bull_viewpoint"]
@@ -73,8 +85,9 @@ class ReportService:
         if not self.results_dir.is_absolute():
             self.results_dir = Path(__file__).parent.parent.parent / self.results_dir  # repo root
 
-    def _reports_dir(self, ticker: str, date: str) -> Path:
-        return self.results_dir / ticker.upper() / date / "reports"
+    def _reports_dir(self, ticker: str, run_id: str) -> Path:
+        """run_id is directory name: YYYY-MM-DD or YYYY-MM-DD_HH-MM-SS."""
+        return self.results_dir / ticker.upper() / run_id / "reports"
 
     def get_latest_report_date(self, ticker: str) -> Optional[str]:
         ticker_dir = self.results_dir / ticker.upper()
@@ -87,10 +100,22 @@ class ReportService:
         return dates[0] if dates else None
 
     def has_report_for_date(self, ticker: str, date: str) -> bool:
-        rd = self._reports_dir(ticker, date)
-        return rd.exists() and rd.is_dir() and any(rd.glob("*.json"))
+        """date can be YYYY-MM-DD (match any run that day) or full run id YYYY-MM-DD_HH-MM-SS (exact)."""
+        ticker_dir = self.results_dir / ticker.upper()
+        if not ticker_dir.exists():
+            return False
+        if "_" in date:
+            rd = self._reports_dir(ticker, date)
+            return rd.exists() and rd.is_dir() and any(rd.glob("*.json"))
+        for d in ticker_dir.iterdir():
+            if d.is_dir() and d.name.startswith(date):
+                rd = d / "reports"
+                if rd.exists() and rd.is_dir() and any(rd.glob("*.json")):
+                    return True
+        return False
 
     def get_tickers_with_reports_for_date(self, date: str) -> List[str]:
+        """date can be YYYY-MM-DD (tickers with any run that day) or full run id (exact)."""
         if not self.results_dir.exists():
             return []
         return [p.name for p in self.results_dir.iterdir() if p.is_dir() and self.has_report_for_date(p.name, date)]

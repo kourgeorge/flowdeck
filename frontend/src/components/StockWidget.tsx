@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import type { StockWidget as StockWidgetType } from '../services/types';
+import { parseReportDate } from '../utils/date';
 
 interface StockWidgetProps {
   widget: StockWidgetType;
@@ -38,13 +39,9 @@ export default function StockWidget({ widget }: StockWidgetProps) {
   };
 
   const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return 'No report';
-    try {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    } catch {
-      return dateStr;
-    }
+    const date = parseReportDate(dateStr);
+    if (!date) return 'No report';
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   const changeColor = widget.daily_change_percent >= 0 ? 'text-green-400' : 'text-red-400';

@@ -60,7 +60,11 @@ export default function HomePage() {
           <div className="flex flex-col items-center justify-center mb-8">
             <img src={LOGO_PATH} alt="" className="w-40 h-40 object-contain mb-4" />
             <h1 className="text-4xl font-bold text-white">{APP_NAME}</h1>
-            <p className="text-gray-400 mt-2">Real-time market insights and AI-powered analysis</p>
+            <p className="text-gray-400 mt-2 text-center max-w-2xl">
+            Invest with the odds in your favor—an AI committee of specialized agents
+            turns market noise into clear insights, smarter portfolio moves, and
+            confident, data-driven decisions.
+          </p>
           </div>
           <StockSearch />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -84,7 +88,11 @@ export default function HomePage() {
         <div className="flex flex-col items-center justify-center mb-8">
           <img src={LOGO_PATH} alt="" className="w-40 h-40 object-contain mb-4" />
           <h1 className="text-4xl font-bold text-white">{APP_NAME}</h1>
-          <p className="text-gray-400 mt-2">Real-time market insights and AI-powered analysis</p>
+          <p className="text-gray-400 mt-2 text-center max-w-2xl">
+            Invest with the odds in your favor—an AI committee of specialized agents
+            turns market noise into clear insights, smarter portfolio moves, and
+            confident, data-driven decisions.
+          </p>
         </div>
 
         <StockSearch />

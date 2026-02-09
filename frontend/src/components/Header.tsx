@@ -20,6 +20,12 @@ export default function Header() {
             >
               Home
             </Link>
+            <Link
+              to="/how-it-works"
+              className="text-gray-300 hover:text-white text-sm font-medium transition-colors"
+            >
+              How it works
+            </Link>
           </nav>
         </div>
       </div>

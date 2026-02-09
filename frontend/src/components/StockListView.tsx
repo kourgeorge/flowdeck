@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import type { StockWidget as StockWidgetType } from '../services/types';
+import { parseReportDate } from '../utils/date';
 
 interface StockListViewProps {
   widgets: StockWidgetType[];
@@ -47,13 +48,9 @@ function getScoreColor(score: number | null | undefined): string {
 }
 
 function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '—';
-  try {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  } catch {
-    return dateStr;
-  }
+  const date = parseReportDate(dateStr);
+  if (!date) return '—';
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function getRecommendationBadge(rec: string | null, confidence?: number | null) {

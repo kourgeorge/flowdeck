@@ -141,8 +141,9 @@ class AnalysisService:
             debug=True
         )
         
-        # Create result directory
-        results_dir = self.results_dir / ticker.upper() / analysis_date
+        # Include time in run directory name so multiple runs per day don't overwrite
+        run_dir_name = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+        results_dir = self.results_dir / ticker.upper() / run_dir_name
         results_dir.mkdir(parents=True, exist_ok=True)
         report_dir = results_dir / "reports"
         report_dir.mkdir(parents=True, exist_ok=True)
@@ -202,7 +203,9 @@ class AnalysisService:
                 asyncio.set_event_loop(loop)
                 loop.run_until_complete(self._run_analysis(analysis_id, graph, ticker, analysis_date, analysts))
             except Exception as e:
+                import traceback
                 print(f"Error in analysis thread: {e}")
+                traceback.print_exc()
                 analysis_info = self.running_analyses.get(analysis_id)
                 if analysis_info:
                     analysis_info["status"] = "error"
@@ -226,9 +229,14 @@ class AnalysisService:
             init_agent_state = graph.propagator.create_initial_state(ticker, analysis_date)
             args = graph.propagator.get_graph_args()
             generated_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            models_used = {
+                "provider": graph.config.get("llm_provider"),
+                "deep_think": graph.config.get("deep_think_llm"),
+                "quick_think": graph.config.get("quick_think_llm"),
+            }
 
             def _build_report_json(content, score, score_label, key_takeaways_list, **extra):
-                meta = {"score_label": score_label or "Score", "analysis_date": analysis_date, "generated_at": generated_at}
+                meta = {"score_label": score_label or "Score", "analysis_date": analysis_date, "generated_at": generated_at, "models_used": models_used}
                 if score is not None:
                     meta["score"] = score
                 if key_takeaways_list:

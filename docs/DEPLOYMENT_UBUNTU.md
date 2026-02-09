@@ -16,9 +16,9 @@ Before deploying, set these values. Replace `your-domain.com` with your actual d
 | `INFO_SERVICE_URL` | `backend/.env` (optional) | Same as `BACKEND_URL` | Override only if backend is on another host. |
 | `ENABLE_DAILY_SYNC` | `backend/.env` | `true` | Enable in-process daily sync. |
 | `SYNC_SCHEDULE_TIME` | `backend/.env` | `06:00` | Time for daily sync. |
-| `PORT` | `backend/.env` or systemd | `8002` | Backend port (internal; Nginx proxies to it). |
+| `PORT` | `backend/.env` or systemd | `8002` | Backend port (Caddy on gateway proxies to it). |
 
-**Important:** `127.0.0.1` is intentional for `BACKEND_URL` when everything runs on the same server. The backend binds to loopback; only Nginx (reverse proxy) is exposed to the internet. Cron and in-process agents call the backend via loopback.
+**Important:** Caddy runs on the gateway machine; the Flowdeck server runs the backend (8002) and frontend (4173). Cron and in-process agents call the backend via loopback.
 
 **Config files:** No code changes are required. `backend/config.py` reads `CORS_ORIGINS` and `BACKEND_URL` from the environment; set them in `backend/.env`.
 
@@ -70,6 +70,24 @@ pyenv install 3.11
 pyenv global 3.11
 ```
 
+### Optional: Use Miniconda
+
+```bash
+# Download and install Miniconda (Linux x86_64)
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+bash Miniconda3-latest-Linux-x86_64.sh -b -p $HOME/miniconda3
+rm Miniconda3-latest-Linux-x86_64.sh
+
+# Add to PATH (add to ~/.bashrc for persistence)
+export PATH="$HOME/miniconda3/bin:$PATH"
+
+# Create environment with Python 3.11
+conda create -n flowdeck python=3.11 -y
+conda activate flowdeck
+```
+
+When using Miniconda, replace `source venv/bin/activate` with `conda activate flowdeck` in the steps below. For systemd, use the conda Python path (e.g. `$HOME/miniconda3/envs/flowdeck/bin/python`).
+
 ---
 
 ## 2. Install Node.js (for frontend build)
@@ -98,10 +116,20 @@ cd flowdeck
 
 ### Create virtual environment
 
+**Option A: venv (default)**
+
 ```bash
 cd /opt/flowdeck
 python3.11 -m venv venv
 source venv/bin/activate
+```
+
+**Option B: Miniconda** (if you used Miniconda in section 1)
+
+```bash
+cd /opt/flowdeck
+conda activate flowdeck
+# Skip creating venv; use conda env for packages
 ```
 
 ### Install main dependencies (TradingAgents)
@@ -175,6 +203,99 @@ Built assets will be in `frontend/dist/`.
 
 ---
 
+## 5.5. Serve Frontend with npm preview
+
+Caddy on the gateway proxies traffic to this server.
+
+### Run preview (accepts connections from outside)
+
+```bash
+cd /opt/flowdeck/frontend
+npm run preview -- --host
+```
+
+- Listens on **port 4173** by default (or another port if 4173 is in use)
+- `--host` makes it listen on all interfaces (0.0.0.0) so the gateway can reach it
+- `vite.config.ts` includes `allowedHosts: true` so any Host header (e.g. `flowdeck.kour.me`) is accepted
+
+### systemd service for production
+
+Create `/etc/systemd/system/stock-dashboard-frontend.service`:
+
+```ini
+[Unit]
+Description=Stock Dashboard Frontend (Vite preview)
+After=network.target
+
+[Service]
+Type=simple
+User=george
+Group=george
+WorkingDirectory=/opt/flowdeck/frontend
+
+ExecStart=/usr/bin/npm run preview -- --host
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Adjust `User`/`Group` to your deploy user. Enable and start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable stock-dashboard-frontend
+sudo systemctl start stock-dashboard-frontend
+```
+
+### Caddy on gateway
+
+Configure Caddy on the gateway to proxy `/api` and `/ws` to the backend, and everything else to the frontend preview:
+
+```caddy
+flowdeck.kour.me {
+    @api path /api /api/* /ws /ws/*
+    handle @api {
+        reverse_proxy 192.168.1.110:8002
+    }
+    handle {
+        reverse_proxy 192.168.1.110:4173
+    }
+}
+```
+
+Replace `192.168.1.110` with your Flowdeck server IP. Open port **4173** on the Flowdeck server firewall (or your gateway must reach it on the LAN).
+
+---
+
+## 5.6. Optional: Run Backend Manually
+
+To run the backend directly (e.g. for testing before systemd):
+
+```bash
+cd /opt/flowdeck
+source venv/bin/activate   # or: conda activate flowdeck
+cd backend
+python run.py
+```
+
+Or with uvicorn directly:
+
+```bash
+cd /opt/flowdeck
+source venv/bin/activate
+cd backend
+uvicorn main:app --host 127.0.0.1 --port 8002
+```
+
+For production, use `--host 127.0.0.1` so only localhost can reach it. For development with auto-reload: `python run.py` (binds to 0.0.0.0 and enables reload).
+
+Verify: `curl http://127.0.0.1:8002/health`
+
+---
+
 ## 6. Run with systemd (Production)
 
 ### Backend service
@@ -199,8 +320,8 @@ EnvironmentFile=/opt/flowdeck/.env
 Environment=PYTHONPATH=/opt/flowdeck
 Environment=PORT=8002
 
-# Bind to loopback only; Nginx reverse proxy handles external traffic
-ExecStart=/opt/flowdeck/venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8002
+# Bind to all interfaces so Caddy on the gateway can reach it
+ExecStart=/opt/flowdeck/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8002
 
 Restart=always
 RestartSec=5
@@ -209,111 +330,32 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
-**Important:** Binding to `127.0.0.1` is correct for production—the backend is not exposed directly; Nginx proxies requests. Adjust `User`/`Group` and paths to match your setup. Ensure the user has read access to `results/` and `.env`.
+**Important:** Binding to `0.0.0.0` is required so Caddy on the gateway can proxy requests. Adjust `User`/`Group` and paths to match your setup. Ensure the user has read access to `results/` and `.env`.
 
-### Frontend (serve static files via Nginx)
+**Miniconda users:** Replace `ExecStart` with your conda Python path, e.g. `/home/YOUR_USER/miniconda3/envs/flowdeck/bin/python`. Ensure `User` matches the account where Miniconda is installed.
 
-The frontend is a static build; Nginx will serve it. No separate Node process needed in production.
+### Frontend (npm preview)
 
-### Enable and start backend
+The frontend is served by npm preview (section 5.5). Caddy on the gateway proxies to it.
+
+### Enable and start services
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable stock-dashboard-backend
-sudo systemctl start stock-dashboard-backend
-sudo systemctl status stock-dashboard-backend
+sudo systemctl enable stock-dashboard-backend stock-dashboard-frontend
+sudo systemctl start stock-dashboard-backend stock-dashboard-frontend
+sudo systemctl status stock-dashboard-backend stock-dashboard-frontend
 ```
 
 ---
 
-## 7. Nginx Reverse Proxy
+## 7. SSL (Caddy on gateway)
 
-Install Nginx:
-
-```bash
-sudo apt install -y nginx
-```
-
-Create `/etc/nginx/sites-available/stock-dashboard`:
-
-```nginx
-# Upstream: backend listens on loopback only (internal)
-upstream backend {
-    server 127.0.0.1:8002;
-}
-
-# Redirect HTTP to HTTPS (enable after SSL is configured in section 8)
-# server {
-#     listen 80;
-#     server_name your-domain.com www.your-domain.com;
-#     return 301 https://$server_name$request_uri;
-# }
-
-server {
-    listen 80;
-    # Production with SSL: add listen 443 ssl http2; and cert paths, then enable redirect above
-    # listen 443 ssl http2;
-    server_name your-domain.com www.your-domain.com;
-
-    # SSL (see section 8 for Let's Encrypt)
-    # ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
-    # ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
-
-    # Frontend static files
-    root /opt/flowdeck/frontend/dist;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # API and WebSocket
-    location /api {
-        proxy_pass http://backend;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location /ws {
-        proxy_pass http://backend;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-
-    location /health {
-        proxy_pass http://backend;
-    }
-}
-```
-
-Enable site and restart Nginx:
-
-```bash
-sudo ln -s /etc/nginx/sites-available/stock-dashboard /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl restart nginx
-```
+Caddy on the gateway obtains and renews Let's Encrypt certificates automatically. Ensure your domain DNS points to the gateway IP; Caddy will handle HTTPS.
 
 ---
 
-## 8. SSL with Let's Encrypt (Recommended for Production)
-
-```bash
-sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d your-domain.com -d www.your-domain.com
-```
-
-Follow prompts. Certbot will configure Nginx for HTTPS and auto-renewal. After SSL is in place, enable the HTTP→HTTPS redirect in the Nginx config (see comments in section 7).
-
----
-
-## 9. Cron for Daily Sync (Optional)
+## 8. Cron for Daily Sync (Optional)
 
 If you prefer cron over the in-process scheduler:
 
@@ -331,18 +373,22 @@ The script defaults to `BACKEND_URL=http://127.0.0.1:8002`; that is correct when
 
 ---
 
-## 10. Firewall
+## 9. Firewall (Flowdeck server)
+
+On the Flowdeck server, allow SSH and the ports the gateway needs to reach:
 
 ```bash
 sudo ufw allow 22/tcp   # SSH
-sudo ufw allow 80/tcp   # HTTP
-sudo ufw allow 443/tcp  # HTTPS
+sudo ufw allow 8002/tcp # Backend (for Caddy gateway)
+sudo ufw allow 4173/tcp # Frontend preview (for Caddy gateway)
 sudo ufw enable
 ```
 
+Ports 80 and 443 are on the gateway machine; Caddy handles SSL there.
+
 ---
 
-## 11. Directory Permissions
+## 10. Directory Permissions
 
 Ensure the service user can read/write where needed:
 
@@ -355,7 +401,7 @@ sudo chmod 640 /opt/flowdeck/.env
 
 ---
 
-## 12. Environment Variables Reference
+## 11. Environment Variables Reference
 
 | Variable | Location | Production | Description |
 |----------|----------|------------|-------------|
@@ -371,7 +417,7 @@ sudo chmod 640 /opt/flowdeck/.env
 
 ---
 
-## 13. Verify Deployment
+## 12. Verify Deployment
 
 1. **Backend health (from server):** `curl http://127.0.0.1:8002/health`
 2. **Frontend:** Open `https://your-domain.com` (or `http://` before SSL) in a browser
@@ -380,7 +426,7 @@ sudo chmod 640 /opt/flowdeck/.env
 
 ---
 
-## 14. Troubleshooting
+## 13. Troubleshooting
 
 ### Backend fails to start
 
@@ -402,20 +448,21 @@ sudo chmod 640 /opt/flowdeck/.env
 ### 502 Bad Gateway
 
 - Confirm backend is running: `systemctl status stock-dashboard-backend`
-- Check Nginx upstream matches backend port (8002)
+- Confirm frontend is running: `systemctl status stock-dashboard-frontend`
+- Ensure Caddy on the gateway proxies to the correct Flowdeck server IP and ports (8002, 4173)
 
 ---
 
-## 15. Upgrade Procedure
+## 14. Upgrade Procedure
 
 ```bash
 cd /opt/flowdeck
 git pull origin main
-source venv/bin/activate
+source venv/bin/activate   # or: conda activate flowdeck
 pip install -r requirements.txt
 pip install -r backend/requirements.txt
 cd frontend && npm ci && npm run build
-sudo systemctl restart stock-dashboard-backend
+sudo systemctl restart stock-dashboard-backend stock-dashboard-frontend
 ```
 
 ---
@@ -427,8 +474,9 @@ sudo systemctl restart stock-dashboard-backend
 - [ ] Root `.env` with API keys; `backend/.env` with production `CORS_ORIGINS`, `BACKEND_URL`
 - [ ] Frontend built with production `VITE_API_URL` (or `''` for same-origin)
 - [ ] systemd service for backend (binding to 127.0.0.1)
-- [ ] Nginx configured (reverse proxy + static frontend)
-- [ ] SSL with Let's Encrypt (recommended for production)
-- [ ] Firewall rules (22, 80, 443)
+- [ ] Caddy on gateway configured (see section 5.5)
+- [ ] npm preview and backend systemd services running
+- [ ] Caddy on gateway handles SSL automatically
+- [ ] Firewall on Flowdeck server: 22, 8002, 4173
 - [ ] Permissions on `results/` and `.env`
 - [ ] Cron or in-process daily sync (optional)

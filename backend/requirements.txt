@@ -1,9 +1,0 @@
-# Backend dependencies are defined at the repo root.
-# From repo root: pip install -r requirements.txt
-# Or: pip install -r ../../requirements.txt (from this directory)
-#
-# Backend-specific packages (included in root requirements.txt):
-#   fastapi, uvicorn[standard], pydantic, python-multipart, websockets,
-#   python-dotenv, APScheduler
-
--r ../../requirements.txt
