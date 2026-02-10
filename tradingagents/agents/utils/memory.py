@@ -22,10 +22,12 @@ class FinancialSituationMemory:
             
             # For embeddings, Azure uses the same endpoint but with /openai/deployments/{deployment}/embeddings
             # We'll use AzureOpenAI client which handles this properly
+            # Timeout prevents indefinite hang if the API is slow or stuck
             self.client = AzureOpenAI(
                 azure_endpoint=azure_endpoint,
                 api_key=azure_api_key,
-                api_version=azure_api_version
+                api_version=azure_api_version,
+                timeout=120.0,
             )
             # Azure embedding model deployment names use format: text-embedding-3-small-1, text-embedding-3-large-1, etc.
             # Allow override via environment variable, otherwise use Azure deployment name format
@@ -44,7 +46,7 @@ class FinancialSituationMemory:
                     self.embedding = "text-embedding-ada-002-2"
                 # If custom model, keep as is (user should set AZURE_EMBEDDING_DEPLOYMENT)
         else:
-            self.client = OpenAI(base_url=config["backend_url"])
+            self.client = OpenAI(base_url=config["backend_url"], timeout=120.0)
         
         self.chroma_client = chromadb.Client(Settings(allow_reset=True))
         # Handle collection creation/getting - use get_or_create pattern

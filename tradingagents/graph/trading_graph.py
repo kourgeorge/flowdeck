@@ -9,6 +9,7 @@ from typing import Dict, Any, Tuple, List, Optional
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_perplexity import ChatPerplexity
 
 from langgraph.prebuilt import ToolNode
 
@@ -88,6 +89,9 @@ class TradingAgentsGraph:
         elif self.config["llm_provider"].lower() == "google":
             self.deep_thinking_llm = ChatGoogleGenerativeAI(model=self.config["deep_think_llm"])
             self.quick_thinking_llm = ChatGoogleGenerativeAI(model=self.config["quick_think_llm"])
+        elif self.config["llm_provider"].lower() == "perplexity":
+            self.deep_thinking_llm = ChatPerplexity(model=self.config["deep_think_llm"])
+            self.quick_thinking_llm = ChatPerplexity(model=self.config["quick_think_llm"])
         elif self.config["llm_provider"].lower() == "azure":
             from langchain_openai import AzureChatOpenAI
             
@@ -101,19 +105,22 @@ class TradingAgentsGraph:
             # AzureChatOpenAI reads from environment variables:
             # AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, AZURE_OPENAI_API_VERSION
             # The azure_deployment parameter should be the Azure Model ID (deployment name)
+            # request_timeout prevents indefinite hang on slow or stuck API
             self.deep_thinking_llm = AzureChatOpenAI(
                 azure_deployment=self.config["deep_think_llm"],  # Azure Model ID (deployment name)
                 model=self.config["deep_think_llm"],
                 azure_endpoint=azure_endpoint,
                 api_key=azure_api_key,
-                api_version=azure_api_version
+                api_version=azure_api_version,
+                request_timeout=120,
             )
             self.quick_thinking_llm = AzureChatOpenAI(
                 azure_deployment=self.config["quick_think_llm"],  # Azure Model ID (deployment name)
                 model=self.config["quick_think_llm"],
                 azure_endpoint=azure_endpoint,
                 api_key=azure_api_key,
-                api_version=azure_api_version
+                api_version=azure_api_version,
+                request_timeout=120,
             )
         else:
             raise ValueError(f"Unsupported LLM provider: {self.config['llm_provider']}")
