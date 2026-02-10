@@ -32,6 +32,12 @@ from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
 
 
+def _progress_log(msg: str) -> None:
+    """Print a progress line to stderr with timestamp."""
+    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[Progress]:\t {ts} - {msg}", file=sys.stderr, flush=True)
+
+
 def extract_content_string(content):
     """Extract string content from various message formats."""
     if isinstance(content, str):
@@ -293,11 +299,7 @@ class AnalysisService:
                     raise
 
             # Stream the analysis
-            print(
-                f"[PROGRESS] Analysis started analysis_id={analysis_id} ticker={ticker} run_id={run_id}",
-                file=sys.stderr,
-                flush=True,
-            )
+            _progress_log(f"Analysis started analysis_id={analysis_id} ticker={ticker} run_id={run_id}")
             for chunk in graph.graph.stream(init_agent_state, **args):
                 # Process messages
                 if len(chunk.get("messages", [])) > 0:
@@ -343,12 +345,12 @@ class AnalysisService:
                         analysis_info["reports"][key] = c
                         analysis_info["agent_statuses"][agent] = "completed"
                         _write_report(key, c, chunk.get(score_key), label)
-                        print(f"[PROGRESS] {agent} completed → {key} saved", file=sys.stderr, flush=True)
+                        _progress_log(f"{agent} completed → {key} saved")
                         if key == "fundamentals_report":
                             analysis_info["agent_statuses"]["Bull Researcher"] = "in_progress"
                             analysis_info["agent_statuses"]["Bear Researcher"] = "in_progress"
                             analysis_info["agent_statuses"]["Research Manager"] = "in_progress"
-                            print("[PROGRESS] Bull/Bear researchers & Research Manager started", file=sys.stderr, flush=True)
+                            _progress_log("Bull/Bear researchers & Research Manager started")
 
                 if "investment_debate_state" in chunk and chunk["investment_debate_state"]:
                     debate_state = chunk["investment_debate_state"]
@@ -359,7 +361,7 @@ class AnalysisService:
                         analysis_info["agent_statuses"]["Bear Researcher"] = "completed"
                         analysis_info["agent_statuses"]["Research Manager"] = "completed"
                         analysis_info["agent_statuses"]["Trader"] = "in_progress"
-                        print("[PROGRESS] Bull/Bear/Research Manager completed → Trader started", file=sys.stderr, flush=True)
+                        _progress_log("Bull/Bear/Research Manager completed → Trader started")
                 
                 if "investment_plan" in chunk and chunk["investment_plan"]:
                     bull = chunk.get("bull_summary") or []
@@ -379,7 +381,7 @@ class AnalysisService:
                         content=content,
                         metadata={**inner, "bull_viewpoint": bull, "bear_viewpoint": bear},
                     )
-                    print("[PROGRESS] Investment plan ready → saved", file=sys.stderr, flush=True)
+                    _progress_log("Investment plan ready → saved")
 
                 if "trader_investment_plan" in chunk and chunk["trader_investment_plan"]:
                     c = chunk["trader_investment_plan"]
@@ -389,7 +391,7 @@ class AnalysisService:
                     analysis_info["agent_statuses"]["Risky Analyst"] = "in_progress"
                     analysis_info["agent_statuses"]["Safe Analyst"] = "in_progress"
                     analysis_info["agent_statuses"]["Neutral Analyst"] = "in_progress"
-                    print("[PROGRESS] Trader completed → Risk debate (Risky/Safe/Neutral) started", file=sys.stderr, flush=True)
+                    _progress_log("Trader completed → Risk debate (Risky/Safe/Neutral) started")
                 
                 if "risk_debate_state" in chunk and chunk["risk_debate_state"]:
                     risk_state = chunk["risk_debate_state"]
@@ -400,7 +402,7 @@ class AnalysisService:
                         analysis_info["agent_statuses"]["Safe Analyst"] = "completed"
                         analysis_info["agent_statuses"]["Neutral Analyst"] = "completed"
                         analysis_info["agent_statuses"]["Portfolio Manager"] = "in_progress"
-                        print("[PROGRESS] Risk analysts completed → Portfolio Manager started", file=sys.stderr, flush=True)
+                        _progress_log("Risk analysts completed → Portfolio Manager started")
                 
                 if "final_trade_decision" in chunk and chunk["final_trade_decision"]:
                     analysis_info["agent_statuses"]["Portfolio Manager"] = "completed"
@@ -426,7 +428,7 @@ class AnalysisService:
                     analysis_info["recommendation"] = chunk.get("recommendation")
                     analysis_info["confidence"] = (chunk.get("risk_score") / 10.0) if chunk.get("risk_score") is not None else None
                     rec = chunk.get("recommendation", "")
-                    print(f"[PROGRESS] Final trade decision ready → {rec}", file=sys.stderr, flush=True)
+                    _progress_log(f"Final trade decision ready → {rec}")
 
                 # Call progress callback if provided
                 if analysis_info["progress_callback"]:

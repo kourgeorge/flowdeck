@@ -126,6 +126,7 @@ class InfoFetcher:
                 "exchange": info.get("exchange", "N/A"),
                 "country": info.get("country", "N/A"),
                 "website": info.get("website", "N/A"),
+                "quoteType": info.get("quoteType"),
             }
         except Exception:
             return {
@@ -135,6 +136,7 @@ class InfoFetcher:
                 "exchange": "N/A",
                 "country": "N/A",
                 "website": "N/A",
+                "quoteType": None,
             }
 
     def get_extended_info(self, ticker: str) -> Dict[str, Any]:

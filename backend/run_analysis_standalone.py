@@ -42,6 +42,12 @@ except ImportError:
     extract_key_takeaways_structured = None
 
 
+def _progress_log(msg: str) -> None:
+    """Print a progress line to stderr with timestamp."""
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[Progress]:\t {ts} - {msg}", file=sys.stderr, flush=True)
+
+
 def extract_content_string(content):
     if isinstance(content, str):
         return content
@@ -99,8 +105,6 @@ def main() -> None:
     if not results_dir.is_absolute():
         results_dir = REPO_ROOT / results_dir
     # Include time in run id so multiple runs per day don't overwrite
-    report_dir = results_dir / ticker / run_id / "reports"
-    report_dir.mkdir(parents=True, exist_ok=True)
     log_file = results_dir / ticker / run_id / "message_tool.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
     log_file.touch(exist_ok=True)
@@ -218,7 +222,7 @@ def main() -> None:
         try:
             init_agent_state = graph.propagator.create_initial_state(ticker, analysis_date)
             graph_args = graph.propagator.get_graph_args()
-            print(f"[PROGRESS] Analysis started ticker={ticker} run_id={run_id} analysts={analysts}", file=sys.stderr, flush=True)
+            _progress_log(f"Analysis started ticker={ticker} run_id={run_id} analysts={analysts}")
 
             heartbeat_thread = threading.Thread(target=heartbeat_loop, daemon=True)
             heartbeat_thread.start()
@@ -244,19 +248,19 @@ def main() -> None:
                         reports[key] = c
                         agent_statuses[agent] = "completed"
                         _write_report(key, c, chunk.get(score_key), label)
-                        print(f"[PROGRESS] {agent} completed → {key} saved", file=sys.stderr, flush=True)
+                        _progress_log(f"{agent} completed → {key} saved")
                         if key == "fundamentals_report":
                             agent_statuses["Bull Researcher"] = "in_progress"
                             agent_statuses["Bear Researcher"] = "in_progress"
                             agent_statuses["Research Manager"] = "in_progress"
-                            print("[PROGRESS] Bull/Bear researchers & Research Manager started", file=sys.stderr, flush=True)
+                            _progress_log("Bull/Bear researchers & Research Manager started")
 
                 if chunk.get("investment_debate_state") and chunk["investment_debate_state"].get("judge_decision"):
                     agent_statuses["Bull Researcher"] = "completed"
                     agent_statuses["Bear Researcher"] = "completed"
                     agent_statuses["Research Manager"] = "completed"
                     agent_statuses["Trader"] = "in_progress"
-                    print("[PROGRESS] Bull/Bear/Research Manager completed → Trader started", file=sys.stderr, flush=True)
+                    _progress_log("Bull/Bear/Research Manager completed → Trader started")
 
                 if chunk.get("investment_plan"):
                     bull = chunk.get("bull_summary") or []
@@ -276,7 +280,7 @@ def main() -> None:
                         content=content,
                         metadata={**meta, "bull_viewpoint": bull, "bear_viewpoint": bear},
                     )
-                    print("[PROGRESS] Investment plan ready → saved", file=sys.stderr, flush=True)
+                    _progress_log("Investment plan ready → saved")
 
                 if chunk.get("trader_investment_plan"):
                     c = chunk["trader_investment_plan"]
@@ -286,14 +290,14 @@ def main() -> None:
                     agent_statuses["Risky Analyst"] = "in_progress"
                     agent_statuses["Safe Analyst"] = "in_progress"
                     agent_statuses["Neutral Analyst"] = "in_progress"
-                    print("[PROGRESS] Trader completed → Risk debate (Risky/Safe/Neutral) started", file=sys.stderr, flush=True)
+                    _progress_log("Trader completed → Risk debate (Risky/Safe/Neutral) started")
 
                 if chunk.get("risk_debate_state") and chunk["risk_debate_state"].get("judge_decision"):
                     agent_statuses["Risky Analyst"] = "completed"
                     agent_statuses["Safe Analyst"] = "completed"
                     agent_statuses["Neutral Analyst"] = "completed"
                     agent_statuses["Portfolio Manager"] = "in_progress"
-                    print("[PROGRESS] Risk analysts completed → Portfolio Manager started", file=sys.stderr, flush=True)
+                    _progress_log("Risk analysts completed → Portfolio Manager started")
 
                 if chunk.get("final_trade_decision"):
                     agent_statuses["Portfolio Manager"] = "completed"
@@ -319,7 +323,7 @@ def main() -> None:
                         metadata={**meta, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral},
                     )
                     rec = chunk.get("recommendation", "")
-                    print(f"[PROGRESS] Final trade decision ready → {rec}", file=sys.stderr, flush=True)
+                    _progress_log(f"Final trade decision ready → {rec}")
 
                 emit({
                     "type": "progress",
