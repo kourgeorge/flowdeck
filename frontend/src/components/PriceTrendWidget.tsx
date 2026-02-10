@@ -47,6 +47,7 @@ export default function PriceTrendWidget({ ticker, period = '6mo', height = 300,
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
 
   const periods = [
+    { label: '1D', value: '1d' },
     { label: '1W', value: '5d' },
     { label: '1M', value: '1mo' },
     { label: '3M', value: '3mo' },
@@ -63,7 +64,8 @@ export default function PriceTrendWidget({ ticker, period = '6mo', height = 300,
       try {
         setLoading(true);
         setError(null);
-        const historicalData = await stockApi.getHistoricalPrices(ticker, selectedPeriod, '1d');
+        const interval = selectedPeriod === '1d' ? '5m' : '1d';
+        const historicalData = await stockApi.getHistoricalPrices(ticker, selectedPeriod, interval);
         setData(historicalData);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load data');

@@ -24,6 +24,7 @@ interface CompanyInfo {
   exchange: string;
   country: string;
   website: string;
+  quoteType?: string | null;
 }
 
 interface ExtendedInfo {
@@ -65,6 +66,20 @@ export default function StockPage() {
   const [analystRecommendations, setAnalystRecommendations] = useState<any>(null);
   const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false);
   const [fundamentalsSubTab, setFundamentalsSubTab] = useState<'statements' | 'charts'>('charts');
+  const [fundInfo, setFundInfo] = useState<{
+    ticker: string;
+    totalAssets: number | null;
+    yield: number | null;
+    category: string | null;
+    fundInception: number | string | null;
+    expenseRatio: number | null;
+    description: string | null;
+    fund_overview: Record<string, unknown> | null;
+    top_holdings: Array<Record<string, unknown>> | null;
+    sector_weightings: Record<string, number> | null;
+    asset_classes: Record<string, number> | null;
+  } | null>(null);
+  const [isLoadingFundInfo, setIsLoadingFundInfo] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [analysisProgress, setAnalysisProgress] = useState<{
     agent_statuses: Record<string, string>;
@@ -74,6 +89,18 @@ export default function StockPage() {
   const refreshedQuote = useQuoteRefresh(ticker ?? '', 60000);
   const prevPriceRef = useRef<number | null>(null);
   const [priceFlash, setPriceFlash] = useState(false);
+
+  // Derive quote type: from company info (preferred) or fundamentals response; treat missing as equity
+  const quoteType = companyInfo?.quoteType ?? (fundamentalsData && typeof fundamentalsData === 'object' && 'QuoteType' in fundamentalsData ? (fundamentalsData as { QuoteType?: string }).QuoteType : undefined);
+  // Only equities have meaningful fundamentals (financial statements, P/E, revenue, etc.). ETFs/indices do not.
+  const hasFundamentals = quoteType === 'EQUITY' || quoteType == null;
+
+  // When ticker is not an equity and user is on Fundamentals tab, switch to Overview
+  useEffect(() => {
+    if (activeTab === 'fundamentals' && quoteType != null && quoteType !== 'EQUITY') {
+      setActiveTab('overview');
+    }
+  }, [quoteType, activeTab]);
 
   // Flicker price background when quote updates (e.g. from polling)
   useEffect(() => {
@@ -148,19 +175,36 @@ export default function StockPage() {
 
     // Overview data only: fetch in background so overview (including summary pane) can fill in
     if (!ticker) return;
-    stockApi.getCompanyInfo(ticker).then(setCompanyInfo).catch((e) => console.error('Failed to load company info:', e));
+    stockApi.getCompanyInfo(ticker).then((info) => {
+      setCompanyInfo(info);
+      const qt = info.quoteType;
+      // Fetch fundamentals only for equities; not for ETF/index/currency/crypto (no meaningful statements)
+      if (qt === 'EQUITY' || qt == null) {
+        setIsLoadingFundamentals(true);
+        stockApi.getFundamentals(ticker)
+          .then((r) => r && setFundamentalsData(r.fundamentals))
+          .catch((e) => console.error('Failed to load fundamentals:', e))
+          .finally(() => setIsLoadingFundamentals(false));
+      } else {
+        setFundamentalsData(null);
+        setIsLoadingFundamentals(false);
+      }
+      if (qt === 'ETF') {
+        setIsLoadingFundInfo(true);
+        stockApi.getFundInfo(ticker)
+          .then(setFundInfo)
+          .catch((e) => console.error('Failed to load fund info:', e))
+          .finally(() => setIsLoadingFundInfo(false));
+      } else {
+        setFundInfo(null);
+      }
+    }).catch((e) => console.error('Failed to load company info:', e));
     stockApi.getExtendedInfo(ticker).then(setExtendedInfo).catch((e) => console.error('Failed to load extended info:', e));
     setIsLoadingRecommendations(true);
     stockApi.getAnalystRecommendations(ticker)
       .then(setAnalystRecommendations)
       .catch((e) => console.error('Failed to load analyst recommendations:', e))
       .finally(() => setIsLoadingRecommendations(false));
-    // Fundamentals for overview summary pane (not statements/charts — those load on Fundamentals tab)
-    setIsLoadingFundamentals(true);
-    stockApi.getFundamentals(ticker)
-      .then((r) => r && setFundamentalsData(r.fundamentals))
-      .catch((e) => console.error('Failed to load fundamentals:', e))
-      .finally(() => setIsLoadingFundamentals(false));
   };
 
   useEffect(() => {
@@ -168,6 +212,7 @@ export default function StockPage() {
       setNewsData([]);
       setNewsError(null); // Clear news when ticker changes so we don't show previous stock's news
       setFundamentalsSubTab('charts'); // Reset when ticker changes
+      setFundInfo(null);
       setAnalysisProgress(null);
     }
     loadStockData();
@@ -196,9 +241,11 @@ export default function StockPage() {
     return () => clearInterval(interval);
   }, [ticker, stockData?.is_generating]);
 
-  // Load financial statements only when Fundamentals tab is active (on demand; fundamentals for overview are fetched on landing)
+  // Load financial statements only when Fundamentals tab is active and ticker has fundamentals (equity/ETF)
   useEffect(() => {
     if (activeTab !== 'fundamentals' || !ticker || financialStatements) return;
+    const qt = companyInfo?.quoteType;
+    if (qt !== 'EQUITY' && qt != null) return; // Only equities have financial statements
     const loadStatements = () => {
       setIsLoadingFundamentals(true);
       stockApi.getFinancialStatements(ticker, 'all', 'quarterly')
@@ -220,7 +267,7 @@ export default function StockPage() {
     } else {
       loadStatements();
     }
-  }, [activeTab, ticker, fundamentalsData, financialStatements, isLoadingFundamentals]);
+  }, [activeTab, ticker, fundamentalsData, financialStatements, isLoadingFundamentals, companyInfo?.quoteType]);
 
   const fetchNews = useCallback(() => {
     if (!ticker) return;
@@ -432,7 +479,7 @@ export default function StockPage() {
                 {[
                   { id: 'overview', label: 'Overview' },
                   { id: 'ai-analysis', label: 'AI Analysis' },
-                  { id: 'fundamentals', label: 'Fundamentals' },
+                  ...(hasFundamentals ? [{ id: 'fundamentals', label: 'Fundamentals' }] : []),
                   { id: 'news', label: 'News' },
                 ].map((tab) => (
                   <button
@@ -618,17 +665,19 @@ export default function StockPage() {
                               {quote.ask_size != null ? ` ×${quote.ask_size}` : ''}
                             </span>
                           </div>
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-400">Beta</span>
-                              <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
+                          {hasFundamentals && (
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-400">Beta</span>
+                                <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                </svg>
+                              </div>
+                              <span className="text-sm font-semibold text-white">
+                                {extendedInfo?.beta?.toFixed(2) || 'N/A'}
+                              </span>
                             </div>
-                            <span className="text-sm font-semibold text-white">
-                              {extendedInfo?.beta?.toFixed(2) || 'N/A'}
-                            </span>
-                          </div>
+                          )}
                           <div className="flex items-start justify-between">
                             <div className="flex items-center gap-2">
                               <span className="text-sm text-gray-400">Volume</span>
@@ -651,28 +700,32 @@ export default function StockPage() {
                               {extendedInfo?.average_volume ? extendedInfo.average_volume.toLocaleString() : 'N/A'}
                             </span>
                           </div>
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-400">Sector</span>
+                          {hasFundamentals && (
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-400">Sector</span>
+                                <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                </svg>
+                              </div>
+                              <span className="text-sm font-semibold text-white">
+                                {companyInfo?.sector || 'N/A'}
+                              </span>
+                            </div>
+                          )}
+                          {hasFundamentals && (
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-400">Market Cap</span>
                               <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                               </svg>
                             </div>
-                            <span className="text-sm font-semibold text-white">
-                              {companyInfo?.sector || 'N/A'}
-                            </span>
-                          </div>
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-400">Market Cap</span>
-                              <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
+                                <span className="text-sm font-semibold text-white">
+                                  {formatNumber(extendedInfo?.market_cap)}
+                                </span>
                             </div>
-                            <span className="text-sm font-semibold text-white">
-                              {formatNumber(extendedInfo?.market_cap)}
-                            </span>
-                          </div>
+                          )}
                           <div className="flex items-start justify-between">
                             <div className="flex items-center gap-2">
                               <span className="text-sm text-gray-400">52wk Range</span>
@@ -686,50 +739,54 @@ export default function StockPage() {
                                 : 'N/A'}
                             </span>
                           </div>
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-400">Revenue</span>
-                              <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
-                            </div>
-                            <span className="text-sm font-semibold text-white">
-                              {formatNumber(extendedInfo?.revenue)}
-                            </span>
-                          </div>
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-400">Gross Margin</span>
-                              <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
-                            </div>
-                            <span className="text-sm font-semibold text-white">
-                              {formatPercent(extendedInfo?.gross_margin)}
-                            </span>
-                          </div>
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-400">Dividend Yield</span>
-                              <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
-                            </div>
-                            <span className="text-sm font-semibold text-white">
-                              {formatPercent(extendedInfo?.dividend_yield)}
-                            </span>
-                          </div>
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-400">EPS</span>
-                              <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
-                            </div>
-                            <span className="text-sm font-semibold text-white">
-                              {extendedInfo?.trailing_eps?.toFixed(2) || 'N/A'}
-                            </span>
-                          </div>
+                          {hasFundamentals && (
+                            <>
+                              <div className="flex items-start justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm text-gray-400">Revenue</span>
+                                  <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                  </svg>
+                                </div>
+                                <span className="text-sm font-semibold text-white">
+                                  {formatNumber(extendedInfo?.revenue)}
+                                </span>
+                              </div>
+                              <div className="flex items-start justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm text-gray-400">Gross Margin</span>
+                                  <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                  </svg>
+                                </div>
+                                <span className="text-sm font-semibold text-white">
+                                  {formatPercent(extendedInfo?.gross_margin)}
+                                </span>
+                              </div>
+                              <div className="flex items-start justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm text-gray-400">Dividend Yield</span>
+                                  <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                  </svg>
+                                </div>
+                                <span className="text-sm font-semibold text-white">
+                                  {formatPercent(extendedInfo?.dividend_yield)}
+                                </span>
+                              </div>
+                              <div className="flex items-start justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm text-gray-400">EPS</span>
+                                  <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                  </svg>
+                                </div>
+                                <span className="text-sm font-semibold text-white">
+                                  {extendedInfo?.trailing_eps?.toFixed(2) || 'N/A'}
+                                </span>
+                              </div>
+                            </>
+                          )}
                         </>
                       )}
                     </div>
@@ -820,8 +877,122 @@ export default function StockPage() {
                 </div>
               ) : null}
 
-              {/* Summary pane (fundamentals) — data fetched on landing with other overview data */}
-              {isLoadingFundamentals ? (
+              {/* Summary pane: fundamentals for equities; ETF details for ETFs; message for index/currency/crypto */}
+              {quoteType === 'ETF' ? (
+                isLoadingFundInfo ? (
+                  <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+                    <div className="animate-pulse">
+                      <div className="h-6 bg-gray-700 rounded w-48 mb-4"></div>
+                      <div className="h-64 bg-gray-700 rounded"></div>
+                    </div>
+                  </div>
+                ) : fundInfo ? (
+                  <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-6">
+                    <h2 className="text-lg font-semibold text-white">ETF / Fund details</h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {fundInfo.totalAssets != null && (
+                        <div>
+                          <p className="text-sm text-gray-400 mb-1">Assets under management</p>
+                          <p className="text-white font-semibold">{formatNumber(fundInfo.totalAssets)}</p>
+                        </div>
+                      )}
+                      {fundInfo.expenseRatio != null && (
+                        <div>
+                          <p className="text-sm text-gray-400 mb-1">Expense ratio</p>
+                          <p className="text-white font-semibold">{formatPercent(fundInfo.expenseRatio)}</p>
+                        </div>
+                      )}
+                      {fundInfo.category && (
+                        <div>
+                          <p className="text-sm text-gray-400 mb-1">Category</p>
+                          <p className="text-white font-semibold">{fundInfo.category}</p>
+                        </div>
+                      )}
+                      {fundInfo.yield != null && (
+                        <div>
+                          <p className="text-sm text-gray-400 mb-1">Yield</p>
+                          <p className="text-white font-semibold">{formatPercent(fundInfo.yield)}</p>
+                        </div>
+                      )}
+                      {fundInfo.fundInception != null && (
+                        <div>
+                          <p className="text-sm text-gray-400 mb-1">Inception</p>
+                          <p className="text-white font-semibold">
+                            {typeof fundInfo.fundInception === 'number'
+                              ? new Date(fundInfo.fundInception).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+                              : typeof fundInfo.fundInception === 'string' && !Number.isNaN(Date.parse(fundInfo.fundInception))
+                                ? new Date(fundInfo.fundInception).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+                                : String(fundInfo.fundInception)}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    {fundInfo.description && (
+                      <div>
+                        <p className="text-sm text-gray-400 mb-1">Description</p>
+                        <p className="text-gray-300 text-sm leading-relaxed">{fundInfo.description}</p>
+                      </div>
+                    )}
+                    {fundInfo.sector_weightings && Object.keys(fundInfo.sector_weightings).length > 0 && (
+                      <div>
+                        <p className="text-sm text-gray-400 mb-2">Sector weightings</p>
+                        <div className="space-y-1">
+                          {Object.entries(fundInfo.sector_weightings).map(([name, pct]) => (
+                            <div key={name} className="flex items-center gap-2">
+                              <span className="text-gray-300 text-sm w-40 truncate">{name}</span>
+                              <div className="flex-1 h-2 bg-gray-700 rounded overflow-hidden">
+                                <div className="h-full bg-blue-500 rounded" style={{ width: `${Math.min(100, Math.max(0, Number(pct) * 100))}%` }} />
+                              </div>
+                              <span className="text-white text-sm font-medium w-12 text-right">{(Number(pct) * 100).toFixed(1)}%</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {fundInfo.asset_classes && Object.keys(fundInfo.asset_classes).length > 0 && (
+                      <div>
+                        <p className="text-sm text-gray-400 mb-2">Asset allocation</p>
+                        <div className="flex flex-wrap gap-3">
+                          {Object.entries(fundInfo.asset_classes).map(([name, pct]) => (
+                            <span key={name} className="text-gray-300 text-sm">
+                              {name}: <span className="text-white font-medium">{(Number(pct) * 100).toFixed(1)}%</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {fundInfo.top_holdings && fundInfo.top_holdings.length > 0 && (
+                      <div>
+                        <p className="text-sm text-gray-400 mb-2">Top holdings</p>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-left text-gray-400 border-b border-gray-600">
+                                {Object.keys(fundInfo.top_holdings[0]).map((k) => (
+                                  <th key={k} className="py-2 pr-4 capitalize">{k.replace(/_/g, ' ')}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {fundInfo.top_holdings.slice(0, 10).map((row, i) => (
+                                <tr key={i} className="border-b border-gray-700/50">
+                                  {Object.values(row).map((v, j) => (
+                                    <td key={j} className="py-2 pr-4 text-white">{String(v ?? '—')}</td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : null
+              ) : !hasFundamentals ? (
+                <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+                  <p className="text-gray-400 text-sm">Fundamental data and financial metrics are available for equities only.</p>
+                </div>
+              ) : isLoadingFundamentals ? (
                 <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
                   <div className="animate-pulse">
                     <div className="h-6 bg-gray-700 rounded w-48 mb-4"></div>

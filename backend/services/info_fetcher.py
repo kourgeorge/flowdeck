@@ -119,6 +119,10 @@ class InfoFetcher:
         ticker = ticker.upper()
         try:
             info = yf.Ticker(ticker).info
+            quote_type = info.get("quoteType")
+            # Yahoo often omits quoteType for indices; infer INDEX when symbol starts with ^
+            if quote_type is None and ticker.startswith("^"):
+                quote_type = "INDEX"
             return {
                 "name": info.get("longName") or info.get("shortName") or ticker,
                 "sector": info.get("sector", "N/A"),
@@ -126,9 +130,11 @@ class InfoFetcher:
                 "exchange": info.get("exchange", "N/A"),
                 "country": info.get("country", "N/A"),
                 "website": info.get("website", "N/A"),
-                "quoteType": info.get("quoteType"),
+                "quoteType": quote_type,
             }
         except Exception:
+            # Infer index for ^ tickers even on error
+            quote_type = "INDEX" if ticker.startswith("^") else None
             return {
                 "name": ticker,
                 "sector": "N/A",
@@ -136,7 +142,7 @@ class InfoFetcher:
                 "exchange": "N/A",
                 "country": "N/A",
                 "website": "N/A",
-                "quoteType": None,
+                "quoteType": quote_type,
             }
 
     def get_extended_info(self, ticker: str) -> Dict[str, Any]:
@@ -223,6 +229,51 @@ class InfoFetcher:
                 "latest_date": None,
                 "error": str(e),
             }
+
+    def get_fund_info(self, ticker: str) -> Dict[str, Any]:
+        """Get ETF/fund-specific data (AUM, expense ratio, category, holdings, sector weightings, etc.)."""
+        import yfinance as yf
+        ticker = ticker.upper()
+        out: Dict[str, Any] = {
+            "ticker": ticker,
+            "totalAssets": None,
+            "yield": None,
+            "category": None,
+            "fundInception": None,
+            "expenseRatio": None,
+            "description": None,
+            "fund_overview": None,
+            "top_holdings": None,
+            "sector_weightings": None,
+            "asset_classes": None,
+        }
+        try:
+            t = yf.Ticker(ticker)
+            info = t.info
+            # From ticker.info (Yahoo often has these for ETFs)
+            out["totalAssets"] = info.get("totalAssets")
+            out["yield"] = info.get("yield")
+            out["category"] = info.get("category")
+            out["fundInception"] = info.get("fundInception")
+            out["expenseRatio"] = info.get("expenseRatio")
+            # funds_data (top holdings, sector weightings, etc.)
+            try:
+                fd = t.funds_data
+                if fd is not None:
+                    out["description"] = getattr(fd, "description", None)
+                    out["fund_overview"] = getattr(fd, "fund_overview", None)
+                    # DataFrames -> list of dicts for JSON
+                    th = getattr(fd, "top_holdings", None)
+                    if th is not None and hasattr(th, "to_dict"):
+                        out["top_holdings"] = th.to_dict(orient="records")
+                    # Dicts (sector_weightings, asset_classes) are JSON-serializable
+                    out["sector_weightings"] = getattr(fd, "sector_weightings", None)
+                    out["asset_classes"] = getattr(fd, "asset_classes", None)
+            except Exception:
+                pass
+            return out
+        except Exception:
+            return out
 
 
 # Singleton used by the API router (injected with services from main.py when needed)

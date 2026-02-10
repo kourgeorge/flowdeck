@@ -407,6 +407,7 @@ def get_fundamentals_core(
         # Map yfinance info fields to frontend expected field names
         fundamentals_dict = {
             # Basic company info
+            "QuoteType": info.get("quoteType"),
             "Symbol": info.get("symbol", ticker.upper()),
             "Name": info.get("longName") or info.get("shortName"),
             "Description": info.get("longBusinessSummary"),

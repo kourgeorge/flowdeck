@@ -47,6 +47,7 @@ export const stockApi = {
     exchange: string;
     country: string;
     website: string;
+    quoteType?: string;
   }> => {
     const response = await api.get(`/api/data/company/${ticker}`);
     return response.data;
@@ -95,6 +96,24 @@ export const stockApi = {
   // Get fundamental data (raw market data via /api/data)
   getFundamentals: async (ticker: string): Promise<{ ticker: string; date: string; fundamentals: string | object }> => {
     const response = await api.get(`/api/data/fundamentals/${ticker}`);
+    return response.data;
+  },
+
+  // Get ETF/fund-specific data (AUM, expense ratio, category, holdings, sector weightings)
+  getFundInfo: async (ticker: string): Promise<{
+    ticker: string;
+    totalAssets: number | null;
+    yield: number | null;
+    category: string | null;
+    fundInception: number | string | null;
+    expenseRatio: number | null;
+    description: string | null;
+    fund_overview: Record<string, unknown> | null;
+    top_holdings: Array<Record<string, unknown>> | null;
+    sector_weightings: Record<string, number> | null;
+    asset_classes: Record<string, number> | null;
+  }> => {
+    const response = await api.get(`/api/data/fund-info/${ticker}`);
     return response.data;
   },
 

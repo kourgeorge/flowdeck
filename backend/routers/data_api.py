@@ -57,6 +57,12 @@ async def data_extended(ticker: str):
     return await asyncio.to_thread(_engine().get_extended_info, ticker)
 
 
+@router.get("/fund-info/{ticker}")
+async def data_fund_info(ticker: str):
+    """Get ETF/fund-specific data (AUM, expense ratio, category, holdings, sector weightings)."""
+    return await asyncio.to_thread(_engine().get_fund_info, ticker)
+
+
 @router.get("/fundamentals/{ticker}")
 async def data_fundamentals(ticker: str):
     """Get fundamental data for a ticker."""

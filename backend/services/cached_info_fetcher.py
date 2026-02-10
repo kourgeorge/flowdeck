@@ -17,6 +17,7 @@ from config import (
     DATA_CACHE_TTL_FINANCIAL_CHARTS,
     DATA_CACHE_TTL_FINANCIAL_STATEMENTS,
     DATA_CACHE_TTL_FUNDAMENTALS,
+    DATA_CACHE_TTL_FUND_INFO,
     DATA_CACHE_TTL_HISTORICAL,
     DATA_CACHE_TTL_NEWS,
     DATA_CACHE_TTL_QUOTE,
@@ -152,4 +153,12 @@ class CachedInfoFetcher:
             key,
             DATA_CACHE_TTL_ANALYST,
             lambda: self._fetcher.get_analyst_recommendations(ticker),
+        )
+
+    def get_fund_info(self, ticker: str) -> Dict[str, Any]:
+        key = f"fund_info:{ticker.upper()}"
+        return get_cached(
+            key,
+            DATA_CACHE_TTL_FUND_INFO,
+            lambda: self._fetcher.get_fund_info(ticker),
         )
