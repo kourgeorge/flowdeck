@@ -19,6 +19,7 @@ email-validator>=2.0.0
 langchain-openai>=0.3.23
 langchain-anthropic>=0.3.15
 langchain-google-genai>=2.1.5
+langchain-perplexity>=1.0.0
 langchain-experimental>=0.3.4
 langgraph>=0.4.8
 chromadb>=1.0.12
