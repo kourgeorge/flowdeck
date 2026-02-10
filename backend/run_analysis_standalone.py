@@ -27,9 +27,10 @@ for p in (str(REPO_ROOT), str(BACKEND_DIR)):
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
 
-# Backend services for key_takeaways and content extraction
+# Backend services for key_takeaways, report saving, and email notifications
 from services.key_takeaways import extract_key_takeaways
 from services.report_service import save_report
+from services.email_service import notify_subscribers_new_report
 from database import init_db
 
 try:
@@ -79,6 +80,7 @@ def main() -> None:
     parser.add_argument("--info-service-url", required=True, help="Node backend URL for /api/data")
     parser.add_argument("--shallow-thinker", default="", help="Azure quick-thinking model (optional)")
     parser.add_argument("--deep-thinker", default="", help="Azure deep-thinking model (optional)")
+    parser.add_argument("--initiator-email", default="", help="Email of user who started the analysis (notified when done)")
     args = parser.parse_args()
 
     ticker = args.ticker.upper()
@@ -155,6 +157,9 @@ def main() -> None:
         agent_statuses["Fundamentals Analyst"] = "in_progress"
 
     reports: dict = {}
+    final_recommendation = None
+    final_confidence = None
+    initiator_email = (args.initiator_email or "").strip() or None
 
     def _takeaways(content):
         if extract_key_takeaways_structured and graph:
@@ -269,6 +274,8 @@ def main() -> None:
                     neutral = chunk.get("neutral_summary") or []
                     reports["final_trade_decision"] = content
                     rscore = chunk.get("risk_score")
+                    final_recommendation = chunk.get("recommendation")
+                    final_confidence = (rscore / 10.0) if rscore is not None else None
                     kt = (chunk.get("final_report_key_takeaways") or [])[:5] or extract_key_takeaways(content)
                     meta = _build_report_json(
                         content, rscore, "Confidence", kt,
@@ -294,6 +301,16 @@ def main() -> None:
                 })
 
             logger.info("Standalone analysis completed ticker=%s run_id=%s reports=%s", ticker, run_id, list(reports.keys()))
+            try:
+                notify_subscribers_new_report(
+                    ticker=ticker,
+                    run_id=run_id,
+                    recommendation=final_recommendation,
+                    confidence=final_confidence,
+                    initiator_email=initiator_email,
+                )
+            except Exception as e:
+                logger.warning("Failed to send report notification emails: %s", e)
             emit({"type": "completed"})
         except Exception as e:
             logger.exception("Standalone analysis failed ticker=%s run_id=%s error=%s", ticker, run_id, e)

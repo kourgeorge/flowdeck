@@ -78,7 +78,8 @@ class AnalysisService:
         backend_url: Optional[str] = None,
         shallow_thinker: Optional[str] = None,
         deep_thinker: Optional[str] = None,
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable] = None,
+        initiator_email: Optional[str] = None,
     ) -> tuple[str, bool]:
         """Start a new analysis and return (analysis_id, existing). existing=True if already running for (ticker, date)."""
         ticker = ticker.upper()
@@ -200,7 +201,8 @@ class AnalysisService:
             "reports": {},
             "analysts": analysts,
             "messages": [],
-            "tool_calls": []
+            "tool_calls": [],
+            "initiator_email": initiator_email,
         }
         
         # Start analysis in background
@@ -426,13 +428,14 @@ class AnalysisService:
                 analysis_id, ticker, run_id, list(analysis_info.get("reports", {}).keys()),
             )
 
-            # Notify subscribed users by email (best-effort; do not fail analysis)
+            # Notify subscribed users and initiator by email (best-effort; do not fail analysis)
             try:
                 notify_subscribers_new_report(
                     ticker=analysis_info["ticker"],
                     run_id=analysis_info["run_id"],
                     recommendation=analysis_info.get("recommendation"),
                     confidence=analysis_info.get("confidence"),
+                    initiator_email=analysis_info.get("initiator_email"),
                 )
             except Exception:
                 pass

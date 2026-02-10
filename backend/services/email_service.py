@@ -104,10 +104,8 @@ def _build_report_email_bodies(
     recommendation: Optional[str] = None,
     confidence: Optional[float] = None,
 ) -> tuple[str, str, str]:
-    """Return (subject, text_body, html_body)."""
+    """Return (subject, text_body, html_body). Link is to the stock page only, not a specific report."""
     report_url = f"{_get_frontend_url()}/stocks/{ticker.upper()}"
-    if run_id:
-        report_url += f"?date={run_id}"
     subject = f"Flowdeck: New report for {ticker.upper()}"
     summary_lines = []
     if recommendation:
@@ -219,17 +217,46 @@ def send_report_notification(
     return False
 
 
+# Admin email to notify when a user subscribes
+ADMIN_SUBSCRIBE_NOTIFY_EMAIL = "kourgeorge@gmail.com"
+
+
+def notify_admin_new_subscription(user_email: str, ticker: str) -> None:
+    """
+    Send a notification to the admin (kourgeorge@gmail.com) when a user subscribes.
+    No-op if AgentMail is not configured.
+    """
+    subject = f"Flowdeck: New subscription to {ticker.upper()}"
+    text_body = f"A user subscribed to {ticker.upper()}.\n\nUser: {user_email}\nTicker: {ticker.upper()}"
+    html_body = (
+        f"<p>A user subscribed to <strong>{ticker.upper()}</strong>.</p>"
+        f"<p><strong>User:</strong> {user_email}<br><strong>Ticker:</strong> {ticker.upper()}</p>"
+    )
+    to_emails = [ADMIN_SUBSCRIBE_NOTIFY_EMAIL]
+    if _get_smtp_password():
+        if _send_via_smtp(to_emails, subject, text_body, html_body):
+            return
+    if _get_api_key():
+        _send_via_api(to_emails, subject, text_body, html_body)
+
+
 def notify_subscribers_new_report(
     ticker: str,
     run_id: str,
     recommendation: Optional[str] = None,
     confidence: Optional[float] = None,
+    initiator_email: Optional[str] = None,
 ) -> None:
     """
-    Get all subscribers for the ticker and send them a report notification email.
-    No-op if AgentMail is not configured or there are no subscribers.
+    Get all subscribers for the ticker (and optionally the initiator) and send report notification emails.
+    initiator_email: if set, the user who ran the analysis is also notified (in addition to subscribers).
+    No-op if email is not configured or there are no recipients.
     """
-    emails = get_subscriber_emails_for_ticker(ticker)
+    emails = list(get_subscriber_emails_for_ticker(ticker))
+    if initiator_email and initiator_email.strip() and "@" in initiator_email:
+        initiator_email = initiator_email.strip().lower()
+        if initiator_email not in [e.lower() for e in emails]:
+            emails.append(initiator_email)
     if not emails:
         return
     send_report_notification(

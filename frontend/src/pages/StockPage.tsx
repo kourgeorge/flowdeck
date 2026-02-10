@@ -4,9 +4,11 @@ import { stockApi } from '../services/api';
 import { WebSocketClient } from '../services/websocket';
 import type { StockPageData } from '../services/types';
 import { useQuoteRefresh } from '../hooks/useQuoteRefresh';
+import { useAuth } from '../contexts/AuthContext';
 import ReportTabs from '../components/ReportTabs';
 import ReportViewer from '../components/ReportViewer';
 import SubscribeButton from '../components/SubscribeButton';
+import AuthModal from '../components/AuthModal';
 import PriceTrendWidget from '../components/PriceTrendWidget';
 import FinancialStatementViewer from '../components/FinancialStatementViewer';
 import FundamentalCharts from '../components/FundamentalCharts';
@@ -44,6 +46,9 @@ interface ExtendedInfo {
 export default function StockPage() {
   const { ticker } = useParams<{ ticker: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalMessage, setAuthModalMessage] = useState('Please sign in to run a fresh analysis.');
   const [stockData, setStockData] = useState<StockPageData | null>(null);
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
   const [extendedInfo, setExtendedInfo] = useState<ExtendedInfo | null>(null);
@@ -242,9 +247,17 @@ export default function StockPage() {
     }
   }, [activeTab, ticker, fetchNews]);
 
-  const handleGenerateReport = async () => {
+  const handleGenerateReport = async (source: 'fresh' | 'generate' = 'fresh') => {
     if (!ticker) return;
-    
+    if (!user) {
+      setAuthModalMessage(
+        source === 'generate'
+          ? 'Please sign in to generate an analysis report.'
+          : 'Please sign in to run a fresh analysis.'
+      );
+      setAuthModalOpen(true);
+      return;
+    }
     try {
       await stockApi.startAnalysis(ticker);
       await loadStockData();
@@ -366,6 +379,7 @@ export default function StockPage() {
     : '';
 
   return (
+    <>
     <div className="min-h-screen p-8 min-w-0">
       <div className="w-full min-w-0 px-6">
         <div className="w-full max-w-6xl mx-auto space-y-6 min-w-0">
@@ -904,7 +918,7 @@ export default function StockPage() {
                     <h2 className="text-xl font-semibold text-white">AI Analysis Reports</h2>
                     {stockData.has_reports && !stockData.is_generating && (
                       <button
-                        onClick={handleGenerateReport}
+                        onClick={() => handleGenerateReport('fresh')}
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -942,7 +956,7 @@ export default function StockPage() {
                     <div className="text-center py-8">
                       <p className="text-gray-400 mb-4">No analysis reports available yet.</p>
                       <button
-                        onClick={handleGenerateReport}
+                        onClick={() => handleGenerateReport('generate')}
                         className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
                       >
                         Generate Analysis Report →
@@ -992,5 +1006,12 @@ export default function StockPage() {
         </div>
       </div>
     </div>
+    {authModalOpen && (
+      <AuthModal
+        onClose={() => setAuthModalOpen(false)}
+        message={authModalMessage}
+      />
+    )}
+    </>
   );
 }

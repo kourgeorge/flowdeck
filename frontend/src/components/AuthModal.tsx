@@ -3,9 +3,11 @@ import { useAuth } from '../contexts/AuthContext';
 
 interface AuthModalProps {
   onClose: () => void;
+  /** Optional message shown above the form (e.g. "Please sign in to run a fresh analysis.") */
+  message?: string;
 }
 
-export default function AuthModal({ onClose }: AuthModalProps) {
+export default function AuthModal({ onClose, message }: AuthModalProps) {
   const { login, register } = useAuth();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
@@ -48,6 +50,10 @@ export default function AuthModal({ onClose }: AuthModalProps) {
             ✕
           </button>
         </div>
+
+        {message && (
+          <p className="text-gray-300 mb-4">{message}</p>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

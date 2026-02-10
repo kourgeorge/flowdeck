@@ -4,6 +4,7 @@ import type {
   StockPageData,
   StockQuote,
 } from './types';
+import { getStoredToken, getStoredUser } from './authApi';
 
 // Base URL for API requests. Set VITE_API_URL in .env (e.g. https://api.example.com).
 // In dev with proxy: use '' so Vite proxies /api to backend. In production: use VITE_API_URL or '' for same-origin.
@@ -57,12 +58,23 @@ export const stockApi = {
     return response.data;
   },
 
-  // Start analysis
+  // Start analysis (requires signed-in user; initiator is emailed when report is done)
   startAnalysis: async (ticker: string, analysisDate?: string): Promise<{ analysis_id: string; ticker: string; date: string; existing?: boolean }> => {
-    const response = await api.post('/api/analyses/start', {
-      ticker,
-      analysis_date: analysisDate,
-    });
+    const token = getStoredToken();
+    const user = getStoredUser();
+    const response = await api.post(
+      '/api/analyses/start',
+      {
+        ticker,
+        analysis_date: analysisDate,
+        ...(user?.email && { initiator_email: user.email }),
+      },
+      {
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      }
+    );
     return response.data;
   },
 

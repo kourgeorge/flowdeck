@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 # Ensure backend loggers have sensible defaults (uvicorn configures root; our loggers propagate)
 logging.getLogger("services.analysis_service").setLevel(logging.INFO)
 logging.getLogger("services.report_service").setLevel(logging.INFO)
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Request, BackgroundTasks
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Request, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 from datetime import datetime
@@ -41,6 +41,7 @@ from routers.users import router as users_router
 from routers.subscriptions import router as subscriptions_router
 from sync_major_stocks import get_missing_and_skipped, run_analyses_for_tickers
 from database import init_db
+from auth import get_current_user
 
 
 @asynccontextmanager
@@ -380,8 +381,8 @@ async def get_stock_page(ticker: str):
 
 
 @app.post("/api/analyses/start")
-async def start_analysis(request: Request, background_tasks: BackgroundTasks):
-    """Start a new analysis."""
+async def start_analysis(request: Request, background_tasks: BackgroundTasks, current_user=Depends(get_current_user)):
+    """Start a new analysis. Requires signed-in user; initiator is notified by email when the report is done."""
     try:
         body = await request.json()
         ticker = body.get("ticker", "").upper()
@@ -392,6 +393,7 @@ async def start_analysis(request: Request, background_tasks: BackgroundTasks):
         analysts = body.get("analysts", ["market", "news", "fundamentals"])
         research_depth = body.get("research_depth", 5)
         llm_provider = body.get("llm_provider", "azure")  # Default to Azure
+        initiator_email = (current_user.email or "").strip() or None
         
         def progress_callback(chunk, analysis_info):
             """Send progress updates via WebSocket."""
@@ -434,7 +436,8 @@ async def start_analysis(request: Request, background_tasks: BackgroundTasks):
             analysts=analysts,
             research_depth=research_depth,
             llm_provider=llm_provider,
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
+            initiator_email=initiator_email,
         )
         
         return {"analysis_id": analysis_id, "ticker": ticker, "date": analysis_date, "existing": existing}
