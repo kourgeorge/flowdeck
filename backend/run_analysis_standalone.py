@@ -12,8 +12,11 @@ import json
 import logging
 import os
 import sys
+import threading
 from pathlib import Path
 from datetime import datetime, timezone
+
+HEARTBEAT_INTERVAL_SEC = 5
 
 logger = logging.getLogger(__name__)
 
@@ -196,10 +199,29 @@ def main() -> None:
             raise
 
     async def run() -> None:
+        stop_heartbeat = threading.Event()
+        heartbeat_thread = None
+
+        def heartbeat_loop() -> None:
+            while not stop_heartbeat.wait(timeout=HEARTBEAT_INTERVAL_SEC):
+                emit({
+                    "type": "progress",
+                    "data": {
+                        "agent_statuses": dict(agent_statuses),
+                        "current_agent": None,
+                        "reports": dict(reports),
+                        "status": "running",
+                        "heartbeat": True,
+                    },
+                })
+
         try:
             init_agent_state = graph.propagator.create_initial_state(ticker, analysis_date)
             graph_args = graph.propagator.get_graph_args()
             print(f"[PROGRESS] Analysis started ticker={ticker} run_id={run_id} analysts={analysts}", file=sys.stderr, flush=True)
+
+            heartbeat_thread = threading.Thread(target=heartbeat_loop, daemon=True)
+            heartbeat_thread.start()
 
             for chunk in graph.graph.stream(init_agent_state, **graph_args):
                 if chunk.get("messages"):
@@ -327,6 +349,10 @@ def main() -> None:
             logger.exception("Standalone analysis failed ticker=%s run_id=%s error=%s", ticker, run_id, e)
             emit({"type": "error", "error": str(e)})
             raise
+        finally:
+            stop_heartbeat.set()
+            if heartbeat_thread is not None:
+                heartbeat_thread.join(timeout=HEARTBEAT_INTERVAL_SEC + 1)
 
     asyncio.run(run())
 
