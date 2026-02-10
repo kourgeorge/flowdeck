@@ -199,6 +199,7 @@ def main() -> None:
         try:
             init_agent_state = graph.propagator.create_initial_state(ticker, analysis_date)
             graph_args = graph.propagator.get_graph_args()
+            print(f"[PROGRESS] Analysis started ticker={ticker} run_id={run_id} analysts={analysts}", file=sys.stderr, flush=True)
 
             for chunk in graph.graph.stream(init_agent_state, **graph_args):
                 if chunk.get("messages"):
@@ -221,16 +222,19 @@ def main() -> None:
                         reports[key] = c
                         agent_statuses[agent] = "completed"
                         _write_report(key, c, chunk.get(score_key), label)
+                        print(f"[PROGRESS] {agent} completed → {key} saved", file=sys.stderr, flush=True)
                         if key == "fundamentals_report":
                             agent_statuses["Bull Researcher"] = "in_progress"
                             agent_statuses["Bear Researcher"] = "in_progress"
                             agent_statuses["Research Manager"] = "in_progress"
+                            print("[PROGRESS] Bull/Bear researchers & Research Manager started", file=sys.stderr, flush=True)
 
                 if chunk.get("investment_debate_state") and chunk["investment_debate_state"].get("judge_decision"):
                     agent_statuses["Bull Researcher"] = "completed"
                     agent_statuses["Bear Researcher"] = "completed"
                     agent_statuses["Research Manager"] = "completed"
                     agent_statuses["Trader"] = "in_progress"
+                    print("[PROGRESS] Bull/Bear/Research Manager completed → Trader started", file=sys.stderr, flush=True)
 
                 if chunk.get("investment_plan"):
                     bull = chunk.get("bull_summary") or []
@@ -250,6 +254,7 @@ def main() -> None:
                         content=content,
                         metadata={**meta, "bull_viewpoint": bull, "bear_viewpoint": bear},
                     )
+                    print("[PROGRESS] Investment plan ready → saved", file=sys.stderr, flush=True)
 
                 if chunk.get("trader_investment_plan"):
                     c = chunk["trader_investment_plan"]
@@ -259,12 +264,14 @@ def main() -> None:
                     agent_statuses["Risky Analyst"] = "in_progress"
                     agent_statuses["Safe Analyst"] = "in_progress"
                     agent_statuses["Neutral Analyst"] = "in_progress"
+                    print("[PROGRESS] Trader completed → Risk debate (Risky/Safe/Neutral) started", file=sys.stderr, flush=True)
 
                 if chunk.get("risk_debate_state") and chunk["risk_debate_state"].get("judge_decision"):
                     agent_statuses["Risky Analyst"] = "completed"
                     agent_statuses["Safe Analyst"] = "completed"
                     agent_statuses["Neutral Analyst"] = "completed"
                     agent_statuses["Portfolio Manager"] = "in_progress"
+                    print("[PROGRESS] Risk analysts completed → Portfolio Manager started", file=sys.stderr, flush=True)
 
                 if chunk.get("final_trade_decision"):
                     agent_statuses["Portfolio Manager"] = "completed"
@@ -289,6 +296,8 @@ def main() -> None:
                         content=content,
                         metadata={**meta, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral},
                     )
+                    rec = chunk.get("recommendation", "")
+                    print(f"[PROGRESS] Final trade decision ready → {rec}", file=sys.stderr, flush=True)
 
                 emit({
                     "type": "progress",
@@ -301,6 +310,7 @@ def main() -> None:
                 })
 
             logger.info("Standalone analysis completed ticker=%s run_id=%s reports=%s", ticker, run_id, list(reports.keys()))
+            print(f"[ANALYSIS COMPLETED] ticker={ticker} run_id={run_id} reports={list(reports.keys())}", file=sys.stderr, flush=True)
             try:
                 notify_subscribers_new_report(
                     ticker=ticker,
@@ -313,6 +323,7 @@ def main() -> None:
                 logger.warning("Failed to send report notification emails: %s", e)
             emit({"type": "completed"})
         except Exception as e:
+            print(f"\n[ANALYSIS STOPPED - EXCEPTION] ticker={ticker} run_id={run_id}\n  {type(e).__name__}: {e}\n", file=sys.stderr, flush=True)
             logger.exception("Standalone analysis failed ticker=%s run_id=%s error=%s", ticker, run_id, e)
             emit({"type": "error", "error": str(e)})
             raise
