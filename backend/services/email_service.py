@@ -26,16 +26,13 @@ _TEXT_DARK = "#134e4a"       # teal-900
 _TEXT_MUTED = "#64748b"      # slate-500, readable on white
 _FONT_FAMILY = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
 
-
-def _get_logo_url() -> str:
-    """Absolute URL for the logo image (for use in HTML emails)."""
-    base = _get_frontend_url()
-    return f"{base}/logo.png"
-
-
-def _html_email_wrapper(title: str, inner_body: str, preheader: Optional[str] = None) -> str:
-    """Wrap email content in a consistent Flowdeck layout with logo and footer."""
-    logo_url = _get_logo_url()
+def _html_email_wrapper(
+    title: str,
+    inner_body: str,
+    preheader: Optional[str] = None,
+    logo_only: bool = False,
+) -> str:
+    """Wrap email content in a consistent Flowdeck layout; content centered, no header."""
     preheader_html = ""
     if preheader:
         preheader_html = f'<div style="display:none;max-height:0;overflow:hidden;">{preheader}</div>'
@@ -45,28 +42,19 @@ def _html_email_wrapper(title: str, inner_body: str, preheader: Optional[str] = 
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{title}</title>
 </head>
-<body style="margin:0;padding:0;background:#e2e8f0;font-family:{_FONT_FAMILY};">
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:{_FONT_FAMILY};">
   {preheader_html}
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#e2e8f0;">
-    <tr><td style="padding:32px 16px;">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;box-shadow:0 4px 6px rgba(0,0,0,0.07);">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f1f5f9;">
+    <tr><td style="padding:40px 20px;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;margin:0 auto;background:#ffffff;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
         <tr>
-          <td style="padding:32px 32px 24px;text-align:center;border-bottom:1px solid #e2e8f0;">
-            <a href="{_get_frontend_url()}" style="text-decoration:none;">
-              <img src="{logo_url}" alt="Flowdeck" width="120" height="120" style="display:block;margin:0 auto;object-fit:contain;" />
-            </a>
-            <p style="margin:8px 0 0;font-size:13px;color:{_TEXT_MUTED};letter-spacing:0.5px;">AI-Powered Stock Analysis</p>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:28px 32px 32px;">
+          <td style="padding:32px 40px;text-align:center;">
             {inner_body}
           </td>
         </tr>
         <tr>
-          <td style="padding:20px 32px;background:{_BRAND_BG};border-radius:0 0 12px 12px;text-align:center;">
+          <td style="padding:20px 40px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;">
             <p style="margin:0;font-size:12px;color:#64748b;">
               You received this email because you use <strong>Flowdeck</strong>.
             </p>
@@ -315,18 +303,18 @@ def notify_admin_new_subscription(user_email: str, ticker: str) -> None:
         f"User: {user_email}\nTicker: {ticker_upper}\n\n"
         f"Dashboard: {_get_frontend_url()}"
     )
+    frontend_url = _get_frontend_url()
+    safe_email = user_email.replace("@", "&#64;")
     inner = f"""
-    <h2 style="margin:0 0 8px;font-size:18px;color:{_TEXT_DARK};font-weight:600;">New subscription</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:#64748b;">Someone subscribed to a ticker on Flowdeck.</p>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
-      <tr><td style="padding:12px 16px;background:{_BRAND_BG};font-size:12px;color:#64748b;font-weight:600;">User</td><td style="padding:12px 16px;background:#fff;font-size:14px;color:{_TEXT_DARK};">{user_email.replace("@", "&#64;")}</td></tr>
-      <tr><td style="padding:12px 16px;background:{_BRAND_BG};font-size:12px;color:#64748b;font-weight:600;">Ticker</td><td style="padding:12px 16px;background:#fff;font-size:14px;color:{_TEXT_DARK};font-weight:600;">{ticker_upper}</td></tr>
-    </table>
-    <p style="margin:20px 0 0;">
-      <a href="{_get_frontend_url()}" style="display:inline-block;padding:10px 20px;background:{_BRAND_PRIMARY};color:#ffffff !important;text-decoration:none;font-weight:600;font-size:14px;border-radius:8px;">Open Flowdeck</a>
-    </p>
+    <p style="margin:0 0 16px;font-size:18px;color:{_TEXT_DARK};font-weight:600;">New subscription</p>
+    <p style="margin:0 0 12px;font-size:15px;color:#475569;line-height:1.6;"><strong>User:</strong> {safe_email}</p>
+    <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.6;"><strong>Ticker:</strong> {ticker_upper}</p>
+    <p style="margin:0;"><a href="{frontend_url}" style="display:inline-block;padding:12px 24px;background:{_BRAND_PRIMARY};color:#ffffff !important;text-decoration:none;font-weight:600;font-size:14px;border-radius:8px;">Open Flowdeck</a></p>
     """
-    html_body = _html_email_wrapper(title="New subscription", inner_body=inner)
+    html_body = _html_email_wrapper(
+        title="New subscription",
+        inner_body=inner,
+    )
     to_emails = [ADMIN_SUBSCRIBE_NOTIFY_EMAIL]
     if _get_smtp_password():
         if _send_via_smtp(to_emails, subject, text_body, html_body):
@@ -385,9 +373,9 @@ def send_subscription_confirmation(user_email: str, ticker: str) -> bool:
         return True
     ticker_upper = ticker.upper()
     stock_url = f"{_get_frontend_url()}/stocks/{ticker_upper}"
-    subject = f"You're subscribed to {ticker_upper} — Flowdeck"
+    subject = "Subscription confirmed — Flowdeck"
     text_body = (
-        f"You're subscribed to {ticker_upper} on Flowdeck.\n\n"
+        f"Your subscription is confirmed.\n\n"
         f"What you get:\n"
         f"• We'll email you when a new analysis report is ready for {ticker_upper}\n"
         f"• You can view the latest report and run new analyses anytime on the stock page\n"
@@ -395,24 +383,21 @@ def send_subscription_confirmation(user_email: str, ticker: str) -> bool:
         f"View {ticker_upper}: {stock_url}\n\n"
         f"— The Flowdeck team"
     )
+    # Simple HTML so content always shows (no heavy tables); small message so it is not clipped
     inner = f"""
-    <h2 style="margin:0 0 12px;font-size:22px;color:{_TEXT_DARK};font-weight:600;">You're subscribed to {ticker_upper}</h2>
-    <p style="margin:0 0 20px;font-size:16px;color:#475569;line-height:1.5;">Here's what your subscription gives you:</p>
-    <ul style="margin:0 0 24px;padding-left:20px;color:#475569;font-size:15px;line-height:1.8;">
-      <li><strong>Email when new reports are ready</strong> — We'll notify you whenever a new analysis report is published for {ticker_upper}.</li>
-      <li><strong>View the latest report anytime</strong> — Open the stock page to read the full analysis, key takeaways, and recommendation.</li>
-      <li><strong>Run new analyses</strong> — Trigger a fresh deep-dive (market, news, fundamentals) whenever you want.</li>
-      <li><strong>Unsubscribe anytime</strong> — You can manage or remove subscriptions from your Flowdeck account.</li>
-    </ul>
-    <p style="margin:24px 0 0;">
-      <a href="{stock_url}" style="display:inline-block;padding:14px 28px;background:{_BRAND_PRIMARY};color:#ffffff !important;text-decoration:none;font-weight:600;font-size:15px;border-radius:8px;">View {ticker_upper} on Flowdeck</a>
-    </p>
-    <p style="margin:20px 0 0;font-size:13px;color:#94a3b8;">Ticker: <strong>{ticker_upper}</strong></p>
+    <p style="margin:0 0 12px;font-size:18px;color:{_TEXT_DARK};font-weight:600;">Your subscription is confirmed.</p>
+    <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;">We will email you when a new analysis report is ready for <strong>{ticker_upper}</strong>.</p>
+    <p style="margin:0 0 8px;font-size:15px;color:#334155;line-height:1.6;">&bull; View the latest report and key takeaways on the stock page.</p>
+    <p style="margin:0 0 8px;font-size:15px;color:#334155;line-height:1.6;">&bull; Run a new deep-dive analysis whenever you want.</p>
+    <p style="margin:0 0 24px;font-size:15px;color:#334155;line-height:1.6;">&bull; Manage or remove this subscription from your account at any time.</p>
+    <p style="margin:0 0 8px;"><a href="{stock_url}" style="display:inline-block;padding:12px 24px;background:{_BRAND_PRIMARY};color:#ffffff !important;text-decoration:none;font-weight:600;font-size:15px;border-radius:8px;">View {ticker_upper} on Flowdeck</a></p>
+    <p style="margin:20px 0 0;font-size:13px;color:#64748b;"><a href="{stock_url}" style="color:{_BRAND_PRIMARY_LIGHT};text-decoration:none;">{stock_url}</a></p>
     """
     html_body = _html_email_wrapper(
-        title=f"Subscribed to {ticker_upper}",
+        title="Subscription confirmed",
         inner_body=inner,
         preheader=f"You'll get an email when new {ticker_upper} reports are ready.",
+        logo_only=True,
     )
     to_emails = [user_email]
     if _get_smtp_password() and _send_via_smtp(to_emails, subject, text_body, html_body):
