@@ -31,10 +31,11 @@ def _html_email_wrapper(
     inner_body: str,
     preheader: Optional[str] = None,
 ) -> str:
-    """Wrap email content in a consistent Flowdeck layout; content centered, no header."""
+    """Wrap email content in a consistent Flowdeck layout; content centered, with Flowdeck title."""
     preheader_html = ""
     if preheader:
         preheader_html = f'<div style="display:none;max-height:0;overflow:hidden;">{preheader}</div>'
+    brand_title = f'<p style="margin:0 0 12px;font-size:26px;font-weight:700;color:{_BRAND_PRIMARY};letter-spacing:0.05em;">Flowdeck</p>'
     return f"""
 <!DOCTYPE html>
 <html>
@@ -45,15 +46,16 @@ def _html_email_wrapper(
 <body style="margin:0;padding:0;background:#f1f5f9;font-family:{_FONT_FAMILY};">
   {preheader_html}
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f1f5f9;">
-    <tr><td style="padding:40px 20px;">
+    <tr><td style="padding:12px 20px;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;margin:0 auto;background:#ffffff;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
         <tr>
-          <td style="padding:32px 40px;text-align:center;">
+          <td style="padding:16px 40px 20px;text-align:center;">
+            {brand_title}
             {inner_body}
           </td>
         </tr>
         <tr>
-          <td style="padding:20px 40px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;">
+          <td style="padding:14px 40px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;">
             <p style="margin:0;font-size:12px;color:#64748b;">
               You received this email because you use <strong>Flowdeck</strong>.
             </p>
@@ -382,16 +384,14 @@ def send_subscription_confirmation(user_email: str, ticker: str) -> bool:
         f"View {ticker_upper}: {stock_url}\n\n"
         f"— The Flowdeck team"
     )
-    # Simple HTML so content always shows (no heavy tables); small message so it is not clipped
-    inner = f"""
-    <p style="margin:0 0 12px;font-size:18px;color:{_TEXT_DARK};font-weight:600;">Your subscription is confirmed.</p>
-    <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;">We will email you when a new analysis report is ready for <strong>{ticker_upper}</strong>.</p>
-    <p style="margin:0 0 8px;font-size:15px;color:#334155;line-height:1.6;">&bull; View the latest report and key takeaways on the stock page.</p>
-    <p style="margin:0 0 8px;font-size:15px;color:#334155;line-height:1.6;">&bull; Run a new deep-dive analysis whenever you want.</p>
-    <p style="margin:0 0 24px;font-size:15px;color:#334155;line-height:1.6;">&bull; Manage or remove this subscription from your account at any time.</p>
-    <p style="margin:0 0 8px;"><a href="{stock_url}" style="display:inline-block;padding:12px 24px;background:{_BRAND_PRIMARY};color:#ffffff !important;text-decoration:none;font-weight:600;font-size:15px;border-radius:8px;">View {ticker_upper} on Flowdeck</a></p>
-    <p style="margin:20px 0 0;font-size:13px;color:#64748b;"><a href="{stock_url}" style="color:{_BRAND_PRIMARY_LIGHT};text-decoration:none;">{stock_url}</a></p>
-    """
+    # Compact spacing so the email doesn't show excessive empty lines
+    inner = f"""<p style="margin:0 0 6px;font-size:18px;color:{_TEXT_DARK};font-weight:600;">Your subscription is confirmed.</p>
+<p style="margin:0 0 10px;font-size:15px;color:#475569;line-height:1.5;">We will email you when a new analysis report is ready for <strong>{ticker_upper}</strong>.</p>
+<p style="margin:0 0 4px;font-size:15px;color:#334155;line-height:1.5;">&bull; View the latest report and key takeaways on the stock page.</p>
+<p style="margin:0 0 4px;font-size:15px;color:#334155;line-height:1.5;">&bull; Run a new deep-dive analysis whenever you want.</p>
+<p style="margin:0 0 14px;font-size:15px;color:#334155;line-height:1.5;">&bull; Manage or remove this subscription from your account at any time.</p>
+<p style="margin:0 0 6px;"><a href="{stock_url}" style="display:inline-block;padding:12px 24px;background:{_BRAND_PRIMARY};color:#ffffff !important;text-decoration:none;font-weight:600;font-size:15px;border-radius:8px;">View {ticker_upper} on Flowdeck</a></p>
+<p style="margin:12px 0 0;font-size:13px;color:#64748b;"><a href="{stock_url}" style="color:{_BRAND_PRIMARY_LIGHT};text-decoration:none;">{stock_url}</a></p>"""
     html_body = _html_email_wrapper(
         title="Subscription confirmed",
         inner_body=inner,
