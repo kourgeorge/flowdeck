@@ -1,4 +1,4 @@
-"""Send report notification emails via AgentMail (SMTP or HTTP API)."""
+"""Send report notification, welcome, and admin emails via AgentMail (SMTP or HTTP API)."""
 
 import os
 import smtplib
@@ -17,6 +17,69 @@ from models.db_models import Subscription, User
 _env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=_env_path)
 load_dotenv(dotenv_path=_env_path.parent.parent / ".env")
+
+# Brand colors and layout (email-safe inline styles)
+_BRAND_PRIMARY = "#0f766e"   # teal-700
+_BRAND_PRIMARY_LIGHT = "#0d9488"  # teal-600
+_BRAND_BG = "#f0fdfa"        # teal-50
+_TEXT_DARK = "#134e4a"       # teal-900
+_TEXT_MUTED = "#64748b"      # slate-500, readable on white
+_FONT_FAMILY = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
+
+
+def _get_logo_url() -> str:
+    """Absolute URL for the logo image (for use in HTML emails)."""
+    base = _get_frontend_url()
+    return f"{base}/logo.png"
+
+
+def _html_email_wrapper(title: str, inner_body: str, preheader: Optional[str] = None) -> str:
+    """Wrap email content in a consistent Flowdeck layout with logo and footer."""
+    logo_url = _get_logo_url()
+    preheader_html = ""
+    if preheader:
+        preheader_html = f'<div style="display:none;max-height:0;overflow:hidden;">{preheader}</div>'
+    return f"""
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{title}</title>
+</head>
+<body style="margin:0;padding:0;background:#e2e8f0;font-family:{_FONT_FAMILY};">
+  {preheader_html}
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#e2e8f0;">
+    <tr><td style="padding:32px 16px;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;box-shadow:0 4px 6px rgba(0,0,0,0.07);">
+        <tr>
+          <td style="padding:32px 32px 24px;text-align:center;border-bottom:1px solid #e2e8f0;">
+            <a href="{_get_frontend_url()}" style="text-decoration:none;">
+              <img src="{logo_url}" alt="Flowdeck" width="120" height="120" style="display:block;margin:0 auto;object-fit:contain;" />
+            </a>
+            <p style="margin:8px 0 0;font-size:13px;color:{_TEXT_MUTED};letter-spacing:0.5px;">AI-Powered Stock Analysis</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:28px 32px 32px;">
+            {inner_body}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:20px 32px;background:{_BRAND_BG};border-radius:0 0 12px 12px;text-align:center;">
+            <p style="margin:0;font-size:12px;color:#64748b;">
+              You received this email because you use <strong>Flowdeck</strong>.
+            </p>
+            <p style="margin:6px 0 0;font-size:11px;color:#94a3b8;">
+              &copy; Flowdeck. All rights reserved.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
 
 
 def _get_api_key() -> Optional[str]:
@@ -50,6 +113,7 @@ def _get_smtp_user() -> str:
 
 
 def _get_frontend_url() -> str:
+    """Public frontend base URL (web app users open in the browser). Used for all links in emails — dashboard, stock pages, etc. Set FRONTEND_URL in .env (e.g. https://your-domain.com); never use the backend API URL here."""
     return (os.environ.get("FRONTEND_URL") or "http://localhost:5173").rstrip("/")
 
 
@@ -106,7 +170,8 @@ def _build_report_email_bodies(
 ) -> tuple[str, str, str]:
     """Return (subject, text_body, html_body). Link is to the stock page only, not a specific report."""
     report_url = f"{_get_frontend_url()}/stocks/{ticker.upper()}"
-    subject = f"Flowdeck: New report for {ticker.upper()}"
+    ticker_upper = ticker.upper()
+    subject = f"Your {ticker_upper} report is ready — Flowdeck"
     summary_lines = []
     if recommendation:
         summary_lines.append(f"Recommendation: {recommendation}")
@@ -116,17 +181,34 @@ def _build_report_email_bodies(
     summary_lines.append(f"View full report: {report_url}")
     text_body = "\n".join(summary_lines)
     if not summary_lines or summary_lines == [""]:
-        text_body = f"View your report: {report_url}"
+        text_body = f"Your analysis report for {ticker_upper} is ready.\n\nView your report: {report_url}"
 
     def safe(s: str) -> str:
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-    parts = [f"<p>{safe(line)}</p>" for line in summary_lines if line]
-    if not parts:
-        parts = [f'<p><a href="{report_url}">View your report</a></p>']
-    else:
-        parts.append(f'<p><a href="{report_url}">View full report</a></p>')
-    html_body = "\n".join(parts)
+    rec_html = ""
+    if recommendation:
+        rec_html = f'<p style="margin:0 0 12px;font-size:15px;color:{_TEXT_DARK};"><strong>Recommendation:</strong> <span style="display:inline-block;padding:4px 10px;background:{_BRAND_BG};color:{_BRAND_PRIMARY};border-radius:6px;font-weight:600;">{safe(recommendation)}</span></p>'
+    conf_html = ""
+    if confidence is not None:
+        conf_html = f'<p style="margin:0 0 20px;font-size:14px;color:#64748b;">Confidence: <strong>{confidence:.1f}/10</strong></p>'
+    inner = f"""
+    <h2 style="margin:0 0 20px;font-size:22px;color:{_TEXT_DARK};font-weight:600;">Your report is ready</h2>
+    <p style="margin:0 0 16px;font-size:16px;color:#475569;line-height:1.5;">We've completed a new analysis for <strong>{safe(ticker_upper)}</strong>.</p>
+    {rec_html}
+    {conf_html}
+    <p style="margin:24px 0 0;">
+      <a href="{report_url}" style="display:inline-block;padding:14px 28px;background:{_BRAND_PRIMARY};color:#ffffff !important;text-decoration:none;font-weight:600;font-size:15px;border-radius:8px;">View full report</a>
+    </p>
+    <p style="margin:20px 0 0;font-size:13px;color:#94a3b8;">
+      <a href="{report_url}" style="color:{_BRAND_PRIMARY_LIGHT};text-decoration:none;">{report_url}</a>
+    </p>
+    """
+    html_body = _html_email_wrapper(
+        title=f"Report for {ticker_upper}",
+        inner_body=inner,
+        preheader=f"New analysis for {ticker_upper}. " + (f"Recommendation: {recommendation}." if recommendation else "View your report."),
+    )
     return subject, text_body, html_body
 
 
@@ -223,21 +305,121 @@ ADMIN_SUBSCRIBE_NOTIFY_EMAIL = "kourgeorge@gmail.com"
 
 def notify_admin_new_subscription(user_email: str, ticker: str) -> None:
     """
-    Send a notification to the admin (kourgeorge@gmail.com) when a user subscribes.
+    Send a notification to the admin when a user subscribes.
     No-op if AgentMail is not configured.
     """
-    subject = f"Flowdeck: New subscription to {ticker.upper()}"
-    text_body = f"A user subscribed to {ticker.upper()}.\n\nUser: {user_email}\nTicker: {ticker.upper()}"
-    html_body = (
-        f"<p>A user subscribed to <strong>{ticker.upper()}</strong>.</p>"
-        f"<p><strong>User:</strong> {user_email}<br><strong>Ticker:</strong> {ticker.upper()}</p>"
+    ticker_upper = ticker.upper()
+    subject = f"New subscriber: {user_email} → {ticker_upper}"
+    text_body = (
+        f"A user just subscribed to {ticker_upper} on Flowdeck.\n\n"
+        f"User: {user_email}\nTicker: {ticker_upper}\n\n"
+        f"Dashboard: {_get_frontend_url()}"
     )
+    inner = f"""
+    <h2 style="margin:0 0 8px;font-size:18px;color:{_TEXT_DARK};font-weight:600;">New subscription</h2>
+    <p style="margin:0 0 20px;font-size:14px;color:#64748b;">Someone subscribed to a ticker on Flowdeck.</p>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+      <tr><td style="padding:12px 16px;background:{_BRAND_BG};font-size:12px;color:#64748b;font-weight:600;">User</td><td style="padding:12px 16px;background:#fff;font-size:14px;color:{_TEXT_DARK};">{user_email.replace("@", "&#64;")}</td></tr>
+      <tr><td style="padding:12px 16px;background:{_BRAND_BG};font-size:12px;color:#64748b;font-weight:600;">Ticker</td><td style="padding:12px 16px;background:#fff;font-size:14px;color:{_TEXT_DARK};font-weight:600;">{ticker_upper}</td></tr>
+    </table>
+    <p style="margin:20px 0 0;">
+      <a href="{_get_frontend_url()}" style="display:inline-block;padding:10px 20px;background:{_BRAND_PRIMARY};color:#ffffff !important;text-decoration:none;font-weight:600;font-size:14px;border-radius:8px;">Open Flowdeck</a>
+    </p>
+    """
+    html_body = _html_email_wrapper(title="New subscription", inner_body=inner)
     to_emails = [ADMIN_SUBSCRIBE_NOTIFY_EMAIL]
     if _get_smtp_password():
         if _send_via_smtp(to_emails, subject, text_body, html_body):
             return
     if _get_api_key():
         _send_via_api(to_emails, subject, text_body, html_body)
+
+
+def send_welcome_email(user_email: str) -> bool:
+    """
+    Send a welcome email to a newly registered user.
+    Returns True if sent successfully (or email not configured).
+    """
+    subject = "Welcome to Flowdeck — you're all set"
+    dashboard_url = _get_frontend_url()
+    text_body = (
+        f"Welcome to Flowdeck!\n\n"
+        f"You're all set. Sign in and start exploring AI-powered stock analysis.\n\n"
+        f"Get started: {dashboard_url}\n\n"
+        f"— The Flowdeck team"
+    )
+    inner = f"""
+    <h2 style="margin:0 0 12px;font-size:22px;color:{_TEXT_DARK};font-weight:600;">Welcome to Flowdeck</h2>
+    <p style="margin:0 0 16px;font-size:16px;color:#475569;line-height:1.5;">Thanks for signing up. You're all set to use AI-powered stock analysis.</p>
+    <ul style="margin:16px 0 24px;padding-left:20px;color:#475569;font-size:15px;line-height:1.7;">
+      <li>Search any ticker and run deep-dive analyses</li>
+      <li>Subscribe to tickers to get new reports by email</li>
+      <li>Read market, news, and fundamentals insights in one place</li>
+    </ul>
+    <p style="margin:24px 0 0;">
+      <a href="{dashboard_url}" style="display:inline-block;padding:14px 28px;background:{_BRAND_PRIMARY};color:#ffffff !important;text-decoration:none;font-weight:600;font-size:15px;border-radius:8px;">Go to Flowdeck</a>
+    </p>
+    <p style="margin:28px 0 0;font-size:14px;color:#94a3b8;">If you didn't create an account, you can ignore this email.</p>
+    """
+    html_body = _html_email_wrapper(
+        title="Welcome to Flowdeck",
+        inner_body=inner,
+        preheader="You're all set. Start exploring AI-powered stock analysis.",
+    )
+    to_emails = [user_email]
+    if not to_emails or "@" not in (to_emails[0] or ""):
+        return True
+    if _get_smtp_password() and _send_via_smtp(to_emails, subject, text_body, html_body):
+        return True
+    if _get_api_key() and _send_via_api(to_emails, subject, text_body, html_body):
+        return True
+    return False
+
+
+def send_subscription_confirmation(user_email: str, ticker: str) -> bool:
+    """
+    Send the user an email confirming their subscription and explaining what they get.
+    Returns True if sent successfully (or email not configured).
+    """
+    if not user_email or "@" not in user_email:
+        return True
+    ticker_upper = ticker.upper()
+    stock_url = f"{_get_frontend_url()}/stocks/{ticker_upper}"
+    subject = f"You're subscribed to {ticker_upper} — Flowdeck"
+    text_body = (
+        f"You're subscribed to {ticker_upper} on Flowdeck.\n\n"
+        f"What you get:\n"
+        f"• We'll email you when a new analysis report is ready for {ticker_upper}\n"
+        f"• You can view the latest report and run new analyses anytime on the stock page\n"
+        f"• Unsubscribe anytime from your Flowdeck account\n\n"
+        f"View {ticker_upper}: {stock_url}\n\n"
+        f"— The Flowdeck team"
+    )
+    inner = f"""
+    <h2 style="margin:0 0 12px;font-size:22px;color:{_TEXT_DARK};font-weight:600;">You're subscribed to {ticker_upper}</h2>
+    <p style="margin:0 0 20px;font-size:16px;color:#475569;line-height:1.5;">Here's what your subscription gives you:</p>
+    <ul style="margin:0 0 24px;padding-left:20px;color:#475569;font-size:15px;line-height:1.8;">
+      <li><strong>Email when new reports are ready</strong> — We'll notify you whenever a new analysis report is published for {ticker_upper}.</li>
+      <li><strong>View the latest report anytime</strong> — Open the stock page to read the full analysis, key takeaways, and recommendation.</li>
+      <li><strong>Run new analyses</strong> — Trigger a fresh deep-dive (market, news, fundamentals) whenever you want.</li>
+      <li><strong>Unsubscribe anytime</strong> — You can manage or remove subscriptions from your Flowdeck account.</li>
+    </ul>
+    <p style="margin:24px 0 0;">
+      <a href="{stock_url}" style="display:inline-block;padding:14px 28px;background:{_BRAND_PRIMARY};color:#ffffff !important;text-decoration:none;font-weight:600;font-size:15px;border-radius:8px;">View {ticker_upper} on Flowdeck</a>
+    </p>
+    <p style="margin:20px 0 0;font-size:13px;color:#94a3b8;">Ticker: <strong>{ticker_upper}</strong></p>
+    """
+    html_body = _html_email_wrapper(
+        title=f"Subscribed to {ticker_upper}",
+        inner_body=inner,
+        preheader=f"You'll get an email when new {ticker_upper} reports are ready.",
+    )
+    to_emails = [user_email]
+    if _get_smtp_password() and _send_via_smtp(to_emails, subject, text_body, html_body):
+        return True
+    if _get_api_key() and _send_via_api(to_emails, subject, text_body, html_body):
+        return True
+    return False
 
 
 def notify_subscribers_new_report(

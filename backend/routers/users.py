@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
+from auth import create_access_token, hash_password, verify_password
 from database import get_db
 from models.db_models import User
-from auth import hash_password, verify_password, create_access_token
+from services.email_service import send_welcome_email
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -49,6 +50,10 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
+    try:
+        send_welcome_email(user.email)
+    except Exception:
+        pass  # Don't fail registration if welcome email fails
     token = create_access_token(str(user.id))
     return TokenResponse(access_token=token, user_id=user.id, email=user.email)
 

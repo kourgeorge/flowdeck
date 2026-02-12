@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models.db_models import User, Subscription
 from auth import get_current_user
-from services.email_service import notify_admin_new_subscription
+from services.email_service import notify_admin_new_subscription, send_subscription_confirmation
 
 router = APIRouter(prefix="/api/subscriptions", tags=["subscriptions"])
 
@@ -70,12 +70,17 @@ def subscribe(
     db.add(sub)
     db.commit()
     db.refresh(sub)
-    # Notify admin when a user subscribes (best-effort; do not fail the request)
+    # Notify admin and send user a confirmation email (best-effort; do not fail the request)
     try:
         notify_admin_new_subscription(
             user_email=current_user.email or "(no email)",
             ticker=ticker,
         )
+    except Exception:
+        pass
+    try:
+        if current_user.email:
+            send_subscription_confirmation(user_email=current_user.email, ticker=ticker)
     except Exception:
         pass
     return SubscriptionResponse(
