@@ -66,12 +66,12 @@ function getRecommendationBadge(rec: string | null, confidence?: number | null) 
       ? `${Math.round(confidence * 100)}%`
       : null;
   return (
-    <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-1">
-      <span className={`px-2 py-0.5 rounded text-xs font-semibold border ${c}`}>
+    <span className="inline-flex items-center gap-x-1.5 whitespace-nowrap max-w-full min-w-0">
+      <span className={`px-2 py-0.5 rounded text-xs font-semibold border shrink-0 ${c}`}>
         {rec.toUpperCase()}
       </span>
       {confidencePct != null && (
-        <span className="text-gray-400 text-xs font-medium">Confidence: {confidencePct}</span>
+        <span className="text-gray-400 text-xs font-medium truncate">Confidence: {confidencePct}</span>
       )}
     </span>
   );
@@ -90,16 +90,16 @@ export default function StockListView({ widgets, tickerToName }: StockListViewPr
   );
 
   return (
-    <div className="w-full min-w-0 max-w-full overflow-x-auto rounded-lg border border-gray-700 bg-gray-800/80">
-      <table className="w-full table-fixed text-left">
+    <div className="w-full min-w-0 max-w-full overflow-x-auto overflow-y-visible rounded-lg border border-gray-700 bg-gray-800/80" role="region" aria-label="Stock list table - scroll horizontally on small screens">
+      <table className="table-fixed text-left w-full min-w-[960px]" style={{ tableLayout: 'fixed' }}>
         <colgroup>
           <col className="w-[7%]" />
           <col className="w-[16%]" />
-          <col className="w-[7%]" />
-          <col className="w-[7%]" />
-          <col className="w-[14%]" />
-          <col className="w-[39%]" />
-          <col className="w-[10%]" />
+          <col className="w-[8%]" />
+          <col className="w-[8%]" />
+          <col className="w-[15%]" />
+          <col className="w-[38%]" />
+          <col className="w-[8%]" />
         </colgroup>
         <thead>
           <tr className="border-b border-gray-700 text-gray-400 text-sm">
@@ -107,7 +107,7 @@ export default function StockListView({ widgets, tickerToName }: StockListViewPr
             <th className="py-3 px-2 font-semibold truncate" title="Name">Name</th>
             <th className="py-3 px-2 font-semibold text-right whitespace-nowrap">Price</th>
             <th className="py-3 px-2 font-semibold text-right whitespace-nowrap">Change</th>
-            <th className="py-3 px-2 font-semibold min-w-0">Recommendation</th>
+            <th className="py-3 px-2 font-semibold whitespace-nowrap">Recommendation</th>
             <th className="py-3 px-2 font-semibold min-w-0">AI analysis scores</th>
             <th className="py-3 px-2 font-semibold whitespace-nowrap">Report date</th>
           </tr>

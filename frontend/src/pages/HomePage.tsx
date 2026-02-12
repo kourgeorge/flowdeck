@@ -80,8 +80,8 @@ export default function HomePage() {
 
   if (isLoading && widgets.length === 0) {
     return (
-      <div className="min-h-screen p-8">
-        <div className="max-w-layout mx-auto min-w-0 w-full">
+      <div className="min-h-screen px-4 py-6 sm:p-6 lg:p-8">
+        <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
           <div className="flex flex-col items-center justify-center mb-8">
             <img src={LOGO_PATH} alt="" className="w-40 h-40 object-contain mb-4" />
             <h1 className="text-4xl font-bold text-white">{APP_NAME}</h1>
@@ -108,8 +108,8 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen p-8">
-      <div className="max-w-layout mx-auto min-w-0 w-full">
+    <div className="min-h-screen px-4 py-6 sm:p-6 lg:p-8">
+      <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
         <div className="flex flex-col items-center justify-center mb-8">
           <img src={LOGO_PATH} alt="" className="w-40 h-40 object-contain mb-4" />
           <h1 className="text-4xl font-bold text-white">{APP_NAME}</h1>
