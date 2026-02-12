@@ -26,41 +26,15 @@ _TEXT_DARK = "#134e4a"       # teal-900
 _TEXT_MUTED = "#64748b"      # slate-500, readable on white
 _FONT_FAMILY = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
 
-_LOGO_DATA_URI_CACHE: Optional[str] = None
-
-
-def _get_logo_data_uri() -> str:
-    """Load logo as data URI from services/email_logo_b64.txt; cached after first read."""
-    global _LOGO_DATA_URI_CACHE
-    if _LOGO_DATA_URI_CACHE is not None:
-        return _LOGO_DATA_URI_CACHE
-    logo_path = Path(__file__).resolve().parent / "email_logo_b64.txt"
-    try:
-        if logo_path.is_file():
-            b64 = logo_path.read_text(encoding="utf-8").strip()
-            if b64:
-                _LOGO_DATA_URI_CACHE = f"data:image/png;base64,{b64}"
-                return _LOGO_DATA_URI_CACHE
-    except Exception:
-        pass
-    _LOGO_DATA_URI_CACHE = ""
-    return ""
-
-
 def _html_email_wrapper(
     title: str,
     inner_body: str,
     preheader: Optional[str] = None,
-    logo_only: bool = False,
 ) -> str:
     """Wrap email content in a consistent Flowdeck layout; content centered, no header."""
     preheader_html = ""
     if preheader:
         preheader_html = f'<div style="display:none;max-height:0;overflow:hidden;">{preheader}</div>'
-    logo_uri = _get_logo_data_uri()
-    logo_html = ""
-    if logo_uri:
-        logo_html = f'<p style="margin:0 0 24px;"><img src="{logo_uri}" alt="Flowdeck" style="max-width:180px;height:auto;display:inline-block;" width="180" /></p>'
     return f"""
 <!DOCTYPE html>
 <html>
@@ -75,7 +49,6 @@ def _html_email_wrapper(
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;margin:0 auto;background:#ffffff;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
         <tr>
           <td style="padding:32px 40px;text-align:center;">
-            {logo_html}
             {inner_body}
           </td>
         </tr>
@@ -423,7 +396,6 @@ def send_subscription_confirmation(user_email: str, ticker: str) -> bool:
         title="Subscription confirmed",
         inner_body=inner,
         preheader=f"You'll get an email when new {ticker_upper} reports are ready.",
-        logo_only=True,
     )
     to_emails = [user_email]
     if _get_smtp_password() and _send_via_smtp(to_emails, subject, text_body, html_body):
