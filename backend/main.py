@@ -227,7 +227,19 @@ def _get_stock_page_sync(ticker: str) -> StockPageData:
             detail=f"Ticker '{ticker}' not found. Check the symbol and try again.",
         )
 
-    latest_date = report_service.get_latest_report_date(ticker)
+    # When analysis is generating, use the in-progress run_id so reports count increments 1→2→…→7
+    # instead of switching from the previous run (e.g. 5 reports) to the new run (1 report).
+    is_generating = False
+    generation_analysis_id = None
+    generating_run_id = None
+    for aid, info in analysis_service.running_analyses.items():
+        if info["ticker"] == ticker and info["status"] == "running":
+            is_generating = True
+            generation_analysis_id = aid
+            generating_run_id = info.get("run_id")
+            break
+
+    latest_date = generating_run_id if is_generating and generating_run_id else report_service.get_latest_report_date(ticker)
     latest_reports = {}
     latest_reports_with_scores = {}
     latest_reports_with_scores_raw = {}
@@ -308,14 +320,6 @@ def _get_stock_page_sync(ticker: str) -> StockPageData:
             available_reports=h["available_reports"],
             recommendation=rec
         ))
-
-    is_generating = False
-    generation_analysis_id = None
-    for aid, info in analysis_service.running_analyses.items():
-        if info["ticker"] == ticker and info["status"] == "running":
-            is_generating = True
-            generation_analysis_id = aid
-            break
 
     investment_plan_meta = latest_reports_with_scores_raw.get("investment_plan") or {}
     expected_return_pct = investment_plan_meta.get("expected_return_pct")
