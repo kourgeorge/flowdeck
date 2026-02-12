@@ -84,7 +84,7 @@ export default function SubscribeButton({ ticker, onSubscribed, onUnsubscribed, 
             : 'bg-blue-600 text-white hover:bg-blue-700'
         } ${className}`}
       >
-        {loading ? '...' : isSubscribed ? 'Unsubscribe' : 'Subscribe'}
+        {loading ? (isSubscribed ? 'Unsubscribing...' : 'Subscribing...') : isSubscribed ? 'Unsubscribe' : 'Subscribe'}
       </button>
       {authModalOpen && <AuthModal onClose={() => setAuthModalOpen(false)} />}
     </>
