@@ -395,7 +395,7 @@ async def start_analysis(request: Request, background_tasks: BackgroundTasks, cu
         
         analysis_date = body.get("analysis_date") or datetime.now().strftime("%Y-%m-%d")
         analysts = body.get("analysts", ["market", "news", "fundamentals"])
-        research_depth = body.get("research_depth", 5)
+        research_depth = body.get("research_depth", 2)
         llm_provider = body.get("llm_provider", "azure")  # Default to Azure
         initiator_email = (current_user.email or "").strip() or None
         
