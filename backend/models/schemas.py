@@ -128,4 +128,7 @@ class StockPageData(BaseModel):
     expected_return_pct: Optional[float] = None
     bear_case_return_pct: Optional[float] = None
     bull_case_return_pct: Optional[float] = None
+    # Token economy: unique view count and tokens earned for this report run
+    report_view_count: Optional[int] = None
+    report_earned_tokens: Optional[int] = None
 

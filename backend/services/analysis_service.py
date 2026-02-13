@@ -87,6 +87,7 @@ class AnalysisService:
         deep_thinker: Optional[str] = None,
         progress_callback: Optional[Callable] = None,
         initiator_email: Optional[str] = None,
+        run_id: Optional[str] = None,
     ) -> tuple[str, bool]:
         """Start a new analysis and return (analysis_id, existing). existing=True if already running for (ticker, date)."""
         ticker = ticker.upper()
@@ -157,8 +158,9 @@ class AnalysisService:
             debug=True
         )
         
-        # Include time in run id so multiple runs per day don't overwrite
-        run_id = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+        # Include time in run id so multiple runs per day don't overwrite (or use provided run_id from API)
+        if run_id is None:
+            run_id = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
         results_dir = self.results_dir / ticker.upper() / run_id
         results_dir.mkdir(parents=True, exist_ok=True)
         report_dir = results_dir / "reports"

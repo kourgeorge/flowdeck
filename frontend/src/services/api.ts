@@ -27,9 +27,14 @@ export const stockApi = {
     return response.data;
   },
 
-  // Get stock page data
+  // Get stock page data (sends auth when logged in so views count for creator rewards)
   getStockPage: async (ticker: string): Promise<StockPageData> => {
-    const response = await api.get<StockPageData>(`/api/stocks/${ticker}`);
+    const token = getStoredToken();
+    const response = await api.get<StockPageData>(`/api/stocks/${ticker}`, {
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
     return response.data;
   },
 

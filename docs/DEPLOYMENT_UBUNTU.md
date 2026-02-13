@@ -461,9 +461,12 @@ git pull origin main
 source venv/bin/activate   # or: conda activate flowdeck
 pip install -r requirements.txt
 pip install -r backend/requirements.txt
+python backend/scripts/migrate_token_economy.py   # run if new DB schema (e.g. token economy) was added
 cd frontend && npm ci && npm run build
 sudo systemctl restart stock-dashboard-backend stock-dashboard-frontend
 ```
+
+**Database migrations:** When an upgrade adds new tables or columns, run the migration script before restarting the backend. Full details: [DATABASE_MIGRATION.md](DATABASE_MIGRATION.md).
 
 ---
 

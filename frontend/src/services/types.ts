@@ -92,5 +92,8 @@ export interface StockPageData {
   expected_return_pct?: number | null;
   bear_case_return_pct?: number | null;
   bull_case_return_pct?: number | null;
+  /** Token economy: unique view count and tokens earned for this report run */
+  report_view_count?: number | null;
+  report_earned_tokens?: number | null;
 }
 

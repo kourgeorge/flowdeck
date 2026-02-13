@@ -1081,6 +1081,20 @@ export default function StockPage() {
                         )}
                       </div>
                     )}
+                    {(stockData.report_view_count != null || stockData.report_earned_tokens != null) && (
+                      <div className="mt-4 pt-4 border-t border-gray-600/50 flex flex-wrap gap-6 text-sm text-gray-400">
+                        {stockData.report_view_count != null && (
+                          <span title="Unique authenticated views of this report">
+                            {stockData.report_view_count} unique view{stockData.report_view_count !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                        {stockData.report_earned_tokens != null && (
+                          <span title="Tokens earned by the report creator from views (max 400 per report)">
+                            {stockData.report_earned_tokens} tokens earned
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 

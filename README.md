@@ -44,6 +44,7 @@ stock-dashboard/
 
 - **[Setup & run](docs/STOCK_DASHBOARD.md)** — Local development and running the app.
 - **[Deployment guide](docs/DEPLOYMENT.md)** — Production deploy (systemd, Nginx, SSL).
+- **[Database migrations](docs/DATABASE_MIGRATION.md)** — How to run migrations (e.g. token economy schema).
 
 ---
 

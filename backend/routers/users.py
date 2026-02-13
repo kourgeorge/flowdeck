@@ -46,6 +46,7 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
     user = User(
         email=req.email.lower(),
         hashed_password=hash_password(req.password),
+        token_balance=1000,
     )
     db.add(user)
     db.commit()

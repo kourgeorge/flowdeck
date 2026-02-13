@@ -230,9 +230,12 @@ git pull origin main
 source venv/bin/activate
 pip install -r requirements.txt
 pip install -r backend/requirements.txt
+python backend/scripts/migrate_token_economy.py   # if token economy / new DB schema was added
 cd frontend && npm ci && npm run build   # set VITE_API_URL if needed
 sudo systemctl restart flowdeck-backend
 ```
+
+**Database migrations:** If the upgrade adds new tables or columns, run the migration script before restarting. See [DATABASE_MIGRATION.md](DATABASE_MIGRATION.md) for details.
 
 ---
 
