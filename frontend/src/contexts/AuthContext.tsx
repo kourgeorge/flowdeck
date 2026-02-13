@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { authApi } from '../services/authApi';
+import { authApi, profileApi } from '../services/authApi';
 import {
   getStoredToken,
   setStoredAuth,
@@ -10,6 +10,7 @@ import {
 interface User {
   email: string;
   userId: number;
+  is_admin?: boolean;
 }
 
 interface AuthContextValue {
@@ -33,7 +34,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const u = getStoredUser();
     if (t && u) {
       setToken(t);
-      setUser(u);
+      setUser({ ...u, is_admin: u.is_admin });
+      profileApi.getMe().then((me) => {
+        setStoredAuth(t, me.email, me.user_id, me.is_admin);
+        setUser((prev) => (prev ? { ...prev, is_admin: me.is_admin } : null));
+      }).catch(() => { /* keep stored user as-is */ });
     }
     setIsReady(true);
   }, []);
@@ -42,14 +47,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await authApi.login(email, password);
     setStoredAuth(data.access_token, data.email, data.user_id);
     setToken(data.access_token);
-    setUser({ email: data.email, userId: data.user_id });
+    const profile = await profileApi.getMe();
+    setStoredAuth(data.access_token, profile.email, profile.user_id, profile.is_admin);
+    setUser({ email: profile.email, userId: profile.user_id, is_admin: profile.is_admin });
   }, []);
 
   const register = useCallback(async (email: string, password: string) => {
     const data = await authApi.register(email, password);
     setStoredAuth(data.access_token, data.email, data.user_id);
     setToken(data.access_token);
-    setUser({ email: data.email, userId: data.user_id });
+    const profile = await profileApi.getMe();
+    setStoredAuth(data.access_token, profile.email, profile.user_id, profile.is_admin);
+    setUser({ email: profile.email, userId: profile.user_id, is_admin: profile.is_admin });
   }, []);
 
   const logout = useCallback(() => {

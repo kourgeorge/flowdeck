@@ -9,8 +9,9 @@ logging.getLogger("services.analysis_service").setLevel(logging.INFO)
 logging.getLogger("services.report_service").setLevel(logging.INFO)
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Request, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import asyncio
 import json
 from pathlib import Path
@@ -39,9 +40,13 @@ from config import MAJOR_STOCKS, CORS_ORIGINS
 from routers.data_api import router as data_router
 from routers.users import router as users_router
 from routers.subscriptions import router as subscriptions_router
+from routers.admin import router as admin_router
 from sync_major_stocks import get_missing_and_skipped, run_analyses_for_tickers
-from database import init_db
-from auth import get_current_user
+from database import init_db, get_db
+from models.db_models import User
+from auth import get_current_user, get_current_user_optional, get_current_admin_user, hash_password, verify_password
+from sqlalchemy.orm import Session
+from services import token_service
 
 
 @asynccontextmanager
@@ -99,6 +104,7 @@ get_info_fetcher(market_data_service=market_data_service, news_service=news_serv
 app.include_router(data_router, prefix="/api/data")
 app.include_router(users_router)
 app.include_router(subscriptions_router)
+app.include_router(admin_router)
 
 # WebSocket connections
 active_connections: dict[str, WebSocket] = {}
@@ -354,6 +360,82 @@ async def health():
     return {"status": "healthy", "service": "tradingagents-api"}
 
 
+class MeResponse(BaseModel):
+    user_id: int
+    email: str
+    name: Optional[str] = None
+    token_balance: int
+    is_admin: bool = False
+
+
+class UpdateProfileRequest(BaseModel):
+    name: Optional[str] = None
+    current_password: Optional[str] = None
+    new_password: Optional[str] = None
+
+
+class TopUpRequest(BaseModel):
+    amount: int
+
+
+@app.get("/api/me", response_model=MeResponse)
+async def get_me(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Return current user profile and token balance."""
+    balance = token_service.get_balance(current_user.id, db)
+    return MeResponse(
+        user_id=current_user.id,
+        email=current_user.email,
+        name=getattr(current_user, "name", None) or None,
+        token_balance=balance,
+        is_admin=getattr(current_user, "is_admin", False),
+    )
+
+
+@app.patch("/api/me", response_model=MeResponse)
+async def update_me(
+    body: UpdateProfileRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update name and/or password. If new_password is provided, current_password is required."""
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if body.new_password is not None:
+        if not body.current_password:
+            raise HTTPException(status_code=400, detail="Current password is required to set a new password")
+        if not verify_password(body.current_password, user.hashed_password):
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
+        if len(body.new_password) < 6:
+            raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+        user.hashed_password = hash_password(body.new_password)
+    if body.name is not None:
+        user.name = (body.name or "").strip() or None
+    db.commit()
+    db.refresh(user)
+    balance = token_service.get_balance(user.id, db)
+    return MeResponse(
+        user_id=user.id,
+        email=user.email,
+        name=getattr(user, "name", None) or None,
+        token_balance=balance,
+        is_admin=getattr(user, "is_admin", False),
+    )
+
+
+@app.post("/api/tokens/top-up")
+async def top_up_tokens(
+    body: TopUpRequest,
+    current_user=Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Add tokens to a user's balance (admin only). Use positive amount for credit."""
+    if body.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be positive")
+    token_service.top_up(current_user.id, body.amount, db)
+    return {"token_balance": token_service.get_balance(current_user.id, db)}
+
+
 @app.get("/api/stocks/widgets", response_model=WidgetsResponse)
 async def get_stock_widgets(
     tickers: Optional[str] = Query(None, description="Comma-separated list of tickers"),
@@ -370,11 +452,31 @@ async def get_stock_widgets(
 
 
 @app.get("/api/stocks/{ticker}", response_model=StockPageData)
-async def get_stock_page(ticker: str):
-    """Get complete stock page data. Runs in thread pool (non-blocking)."""
+async def get_stock_page(
+    ticker: str,
+    current_user=Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+):
+    """Get complete stock page data. Runs in thread pool (non-blocking). Authenticated views are recorded for creator rewards."""
     ticker = ticker.upper()
     try:
-        return await asyncio.to_thread(_get_stock_page_sync, ticker)
+        result = await asyncio.to_thread(_get_stock_page_sync, ticker)
+        if current_user and result.report_date:
+            try:
+                token_service.record_view(ticker, result.report_date, current_user.id, db)
+            except Exception:
+                pass  # Don't fail the response if view recording fails
+        if result.report_date:
+            try:
+                result = result.model_copy(
+                    update={
+                        "report_view_count": token_service.get_view_count(ticker, result.report_date, db),
+                        "report_earned_tokens": token_service.get_run_earned_tokens(ticker, result.report_date, db),
+                    }
+                )
+            except Exception:
+                pass
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -385,8 +487,13 @@ async def get_stock_page(ticker: str):
 
 
 @app.post("/api/analyses/start")
-async def start_analysis(request: Request, background_tasks: BackgroundTasks, current_user=Depends(get_current_user)):
-    """Start a new analysis. Requires signed-in user; initiator is notified by email when the report is done."""
+async def start_analysis(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Start a new analysis. Requires signed-in user; initiator is notified by email when the report is done. Costs 200 tokens."""
     try:
         body = await request.json()
         ticker = body.get("ticker", "").upper()
@@ -398,6 +505,17 @@ async def start_analysis(request: Request, background_tasks: BackgroundTasks, cu
         research_depth = body.get("research_depth", 2)
         llm_provider = body.get("llm_provider", "azure")  # Default to Azure
         initiator_email = (current_user.email or "").strip() or None
+
+        existing_id = analysis_service.get_running_analysis_id(ticker, analysis_date)
+        if existing_id is not None:
+            return {"analysis_id": existing_id, "ticker": ticker, "date": analysis_date, "existing": True}
+
+        run_id = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+        if not token_service.deduct_for_analysis(current_user.id, ticker, run_id, db):
+            raise HTTPException(
+                status_code=402,
+                detail="Insufficient token balance. Need 200 tokens to create a report.",
+            )
         
         def progress_callback(chunk, analysis_info):
             """Send progress updates via WebSocket."""
@@ -442,7 +560,10 @@ async def start_analysis(request: Request, background_tasks: BackgroundTasks, cu
             llm_provider=llm_provider,
             progress_callback=progress_callback,
             initiator_email=initiator_email,
+            run_id=run_id,
         )
+        if existing:
+            token_service.refund_for_analysis(current_user.id, ticker, run_id, db)
         
         return {"analysis_id": analysis_id, "ticker": ticker, "date": analysis_date, "existing": existing}
     except json.JSONDecodeError:
@@ -517,9 +638,13 @@ def _run_sync_major_stocks_background(analysis_date: str) -> None:
 
 
 @app.post("/api/sync/major-stocks")
-async def sync_major_stocks(request: Request, background_tasks: BackgroundTasks):
+async def sync_major_stocks(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    _user=Depends(get_current_admin_user),
+):
     """
-    Ensure each major stock has a report for today (or the given date).
+    Ensure each major stock has a report for today (or the given date). Admin only.
     Returns immediately with which tickers were triggered vs skipped; analyses run in background.
     """
     body = {}

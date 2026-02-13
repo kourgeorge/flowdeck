@@ -101,6 +101,22 @@ export default function Layout() {
                 </NavLink>
               </li>
             ))}
+            {user?.is_admin && (
+              <li>
+                <NavLink
+                  to="/admin"
+                  className={({ isActive }) =>
+                    `block px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                    }`
+                  }
+                >
+                  Admin
+                </NavLink>
+              </li>
+            )}
           </ul>
           <div className="p-4 mt-4 border-t border-gray-700">
             {user ? (
@@ -108,6 +124,17 @@ export default function Layout() {
                 <p className="text-xs text-gray-400 truncate px-2" title={user.email}>
                   {user.email}
                 </p>
+                <NavLink
+                  to="/profile"
+                  onClick={() => setSidebarOpen(false)}
+                  className={({ isActive }) =>
+                    `block px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      isActive ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                    }`
+                  }
+                >
+                  Profile
+                </NavLink>
                 <button
                   type="button"
                   onClick={() => { logout(); setSidebarOpen(false); }}

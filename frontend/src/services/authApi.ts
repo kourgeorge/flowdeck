@@ -32,9 +32,17 @@ export function getStoredToken(): string | null {
   return localStorage.getItem(AUTH_KEY);
 }
 
-export function setStoredAuth(token: string, email: string, userId: number): void {
+export function setStoredAuth(
+  token: string,
+  email: string,
+  userId: number,
+  isAdmin?: boolean,
+): void {
   localStorage.setItem(AUTH_KEY, token);
-  localStorage.setItem(USER_KEY, JSON.stringify({ email, userId }));
+  localStorage.setItem(
+    USER_KEY,
+    JSON.stringify({ email, userId, is_admin: isAdmin ?? false }),
+  );
 }
 
 export function clearStoredAuth(): void {
@@ -42,12 +50,54 @@ export function clearStoredAuth(): void {
   localStorage.removeItem(USER_KEY);
 }
 
-export function getStoredUser(): { email: string; userId: number } | null {
+export function getStoredUser(): {
+  email: string;
+  userId: number;
+  name?: string | null;
+  is_admin?: boolean;
+} | null {
   const raw = localStorage.getItem(USER_KEY);
   if (!raw) return null;
   try {
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return {
+      ...parsed,
+      is_admin: parsed.is_admin === true,
+    };
   } catch {
     return null;
   }
 }
+
+export interface MeProfile {
+  user_id: number;
+  email: string;
+  name: string | null;
+  token_balance: number;
+  is_admin?: boolean;
+}
+
+export interface UpdateProfileBody {
+  name?: string | null;
+  current_password?: string;
+  new_password?: string;
+}
+
+export const profileApi = {
+  getMe: async (): Promise<MeProfile> => {
+    const token = getStoredToken();
+    if (!token) throw new Error('Not authenticated');
+    const res = await api.get<MeProfile>('/api/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.data;
+  },
+  updateProfile: async (body: UpdateProfileBody): Promise<MeProfile> => {
+    const token = getStoredToken();
+    if (!token) throw new Error('Not authenticated');
+    const res = await api.patch<MeProfile>('/api/me', body, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.data;
+  },
+};
