@@ -241,7 +241,7 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
             h3: ({ node, ...props }) => <h3 className="text-xl font-semibold text-white mb-2 mt-4" {...props} />,
             p: ({ node, ...props }) => <p className="text-slate-300 mb-4 leading-relaxed" {...props} />,
             ul: ({ node, ...props }) => <ul className="list-disc list-inside text-slate-300 mb-4 space-y-2" {...props} />,
-            ol: ({ node, ...props }) => <ol className="list-decimal list-inside text-slate-300 mb-4 space-y-2" {...props} />,
+            ol: ({ node, ...props }) => <ol className="list-decimal list-outside pl-6 text-slate-300 mb-4 space-y-2" {...props} />,
             li: ({ node, ...props }) => <li className="text-slate-300" {...props} />,
             strong: ({ node, ...props }) => <strong className="font-semibold text-white" {...props} />,
             code: ({ node, ...props }) => (
