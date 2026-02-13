@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 /** Report keys in pipeline order (matches server writing order). */
 const REPORT_ORDER = [
   'market_report',
-  'sentiment_report',
+  // 'sentiment_report',
   'news_report',
   'fundamentals_report',
   'investment_plan',
@@ -14,8 +14,8 @@ const REPORT_ORDER = [
 
 /** Short “doing” label per report (from server JSON files). */
 const REPORT_LABELS: Record<string, string> = {
-  market_report: 'Analyzing market and indicators…',
-  sentiment_report: 'Gathering sentiment…',
+  market_report: 'Analyzing Market...',
+  sentiment_report: 'Analyzing indicators…',
   news_report: 'Reviewing news…',
   fundamentals_report: 'Evaluating fundamentals…',
   investment_plan: 'Running bull vs bear debate…',

@@ -83,7 +83,7 @@ def main() -> None:
     parser.add_argument("--analysis-date", required=True, help="Analysis date YYYY-MM-DD")
     parser.add_argument("--analysis-id", required=True, help="Analysis UUID from Node")
     parser.add_argument("--analysts", default="market,news,fundamentals", help="Comma-separated analysts")
-    parser.add_argument("--research-depth", type=int, default=5, help="Max debate rounds")
+    parser.add_argument("--research-depth", type=int, default=2, help="Max debate rounds")
     parser.add_argument("--llm-provider", default="azure", help="LLM provider")
     parser.add_argument("--results-dir", default="results", help="Results directory (absolute or relative to repo)")
     parser.add_argument("--info-service-url", required=True, help="Node backend URL for /api/data")

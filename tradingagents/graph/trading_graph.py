@@ -121,6 +121,7 @@ class TradingAgentsGraph:
                 api_key=azure_api_key,
                 api_version=azure_api_version,
                 request_timeout=120,
+                temperature=0.0,
             )
         else:
             raise ValueError(f"Unsupported LLM provider: {self.config['llm_provider']}")
@@ -135,8 +136,11 @@ class TradingAgentsGraph:
         # Create tool nodes
         self.tool_nodes = self._create_tool_nodes()
 
-        # Initialize components
-        self.conditional_logic = ConditionalLogic()
+        # Initialize components (pass config so research_depth / max_debate_rounds / max_risk_discuss_rounds apply)
+        self.conditional_logic = ConditionalLogic(
+            max_debate_rounds=self.config.get("max_debate_rounds", 1),
+            max_risk_discuss_rounds=self.config.get("max_risk_discuss_rounds", 1),
+        )
         self.graph_setup = GraphSetup(
             self.quick_thinking_llm,
             self.deep_thinking_llm,
