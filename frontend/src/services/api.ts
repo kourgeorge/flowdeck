@@ -185,6 +185,23 @@ export const stockApi = {
     });
     return response.data;
   },
+
+  // Get SEC EDGAR filings (10-K, 10-Q) for a ticker (US companies only)
+  getEdgarFilings: async (ticker: string): Promise<{
+    cik: string;
+    company_name: string | null;
+    filings: Array<{
+      form: string;
+      filing_date: string;
+      accession_number: string;
+      url: string;
+      description: string;
+    }>;
+    error: string | null;
+  }> => {
+    const response = await api.get(`/api/data/edgar-filings/${ticker}`);
+    return response.data;
+  },
 };
 
 export default stockApi;

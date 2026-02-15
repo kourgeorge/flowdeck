@@ -40,6 +40,12 @@ const REPORT_METADATA: Record<string, { title: string; contains: string; aspects
     aspects: 'Company overview, balance sheet, cash flow, income statement, valuation ratios, 52-week range, moving averages, profitability trends, revenue growth, debt levels, and financial stability. When data is sparse (e.g. for indices), the report reflects what is available and any limitations.',
     methodology: 'Runs in the analyst chain. The Fundamentals Analyst reviews financial statements and key metrics, evaluates financial health and sustainability, and produces a report. For indices or thinly covered securities, the analysis is limited to available data.',
   },
+  sec_report: {
+    title: 'SEC / Regulatory',
+    contains: 'Analysis of SEC EDGAR filings (10-K/10-Q): risk factors, management\'s discussion and analysis (MD&A), and competition. Assigns an SEC Score (1–10) reflecting regulatory and disclosure risk.',
+    aspects: 'Risk Factors (Item 1A), Management\'s Discussion and Analysis (Item 7 or Part I Item 2), Competition subsection from Business (Item 1), and optionally legal proceedings and market risk disclosures. Focus is on implications for traders.',
+    methodology: 'Runs in the analyst chain when the SEC analyst is selected. The backend fetches the filing from SEC EDGAR, extracts sections via LLM, and the SEC Analyst summarizes management, competition, and risk into a report. For non-US companies, no SEC content is available.',
+  },
   technical_report: {
     title: 'Technical Analysis',
     contains: 'An advanced technical report on regime, support/resistance, and divergences. Provides actionable recommendations with specific price levels.',

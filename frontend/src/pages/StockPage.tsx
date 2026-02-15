@@ -81,10 +81,25 @@ export default function StockPage() {
   } | null>(null);
   const [isLoadingFundInfo, setIsLoadingFundInfo] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisProgress, setAnalysisProgress] = useState<{
     agent_statuses: Record<string, string>;
     current_agent?: string | null;
   } | null>(null);
+  const [edgarFilings, setEdgarFilings] = useState<{
+    cik: string;
+    company_name: string | null;
+    filings: Array<{
+      form: string;
+      filing_date: string;
+      accession_number: string;
+      url: string;
+      description: string;
+    }>;
+    error: string | null;
+  } | null>(null);
+  const [edgarFilingsError, setEdgarFilingsError] = useState<string | null>(null);
+  const [isLoadingEdgar, setIsLoadingEdgar] = useState(false);
 
   const refreshedQuote = useQuoteRefresh(ticker ?? '', 60000);
   const prevPriceRef = useRef<number | null>(null);
@@ -94,6 +109,10 @@ export default function StockPage() {
   const quoteType = companyInfo?.quoteType ?? (fundamentalsData && typeof fundamentalsData === 'object' && 'QuoteType' in fundamentalsData ? (fundamentalsData as { QuoteType?: string }).QuoteType : undefined);
   // Only equities have meaningful fundamentals (financial statements, P/E, revenue, etc.). ETFs/indices do not.
   const hasFundamentals = quoteType === 'EQUITY' || quoteType == null;
+
+  // American companies have SEC EDGAR filings (10-K, 10-Q)
+  const isUSCompany =
+    companyInfo?.country === 'United States' || companyInfo?.country === 'USA';
 
   // When ticker is not an equity and user is on Fundamentals tab, switch to Overview
   useEffect(() => {
@@ -214,6 +233,8 @@ export default function StockPage() {
       setFundamentalsSubTab('charts'); // Reset when ticker changes
       setFundInfo(null);
       setAnalysisProgress(null);
+      setEdgarFilings(null);
+      setEdgarFilingsError(null);
     }
     loadStockData();
 
@@ -294,8 +315,38 @@ export default function StockPage() {
     }
   }, [activeTab, ticker, fetchNews]);
 
+  // Load SEC EDGAR filings when SEC Filings tab is active (US companies only)
+  useEffect(() => {
+    if (activeTab !== 'sec-filings' || !ticker) return;
+    let cancelled = false;
+    setIsLoadingEdgar(true);
+    setEdgarFilingsError(null);
+    stockApi
+      .getEdgarFilings(ticker)
+      .then((data) => {
+        if (!cancelled) {
+          setEdgarFilings(data);
+          if (data.error) setEdgarFilingsError(data.error);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          const message = err.response?.data?.detail ?? err.message ?? 'Unable to load SEC filings.';
+          setEdgarFilingsError(message);
+          setEdgarFilings(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingEdgar(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, ticker]);
+
   const handleGenerateReport = async (source: 'fresh' | 'generate' = 'fresh') => {
     if (!ticker) return;
+    setAnalysisError(null);
     if (!user) {
       setAuthModalMessage(
         source === 'generate'
@@ -307,10 +358,20 @@ export default function StockPage() {
     }
     try {
       await stockApi.startAnalysis(ticker);
+      setAnalysisError(null);
       await loadStockData();
-    } catch (error) {
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { status?: number; data?: { detail?: string | string[] } } };
+      const detail = axiosError.response?.data?.detail;
+      const message = typeof detail === 'string'
+        ? detail
+        : Array.isArray(detail) && detail.length > 0
+          ? String(detail[0])
+          : axiosError.response?.status === 402
+            ? 'Insufficient token balance. Need 200 tokens to create a report.'
+            : 'Failed to start analysis. Please try again.';
+      setAnalysisError(message);
       console.error('Failed to start analysis:', error);
-      alert('Failed to start analysis. Please try again.');
     }
   };
 
@@ -374,6 +435,7 @@ export default function StockPage() {
     'sentiment_report',
     'news_report',
     'fundamentals_report',
+    'sec_report',
     'technical_report',
     'investment_plan',
     'final_trade_decision',
@@ -480,6 +542,7 @@ export default function StockPage() {
                   { id: 'overview', label: 'Overview' },
                   { id: 'ai-analysis', label: 'AI Analysis' },
                   ...(hasFundamentals ? [{ id: 'fundamentals', label: 'Fundamentals' }] : []),
+                  ...(isUSCompany ? [{ id: 'sec-filings', label: 'SEC Filings' }] : []),
                   { id: 'news', label: 'News' },
                 ].map((tab) => (
                   <button
@@ -1011,6 +1074,24 @@ export default function StockPage() {
                 <p className="text-sm text-amber-400/90 bg-amber-950/30 border border-amber-700/40 rounded-lg px-4 py-2">
                   For informational purposes only. Not investment advice.
                 </p>
+                {analysisError && (
+                  <div className="flex items-center gap-3 rounded-lg border border-red-800 bg-red-950/50 px-4 py-3 text-red-200" role="alert">
+                    <svg className="h-5 w-5 shrink-0 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>{analysisError}</span>
+                    <button
+                      type="button"
+                      onClick={() => setAnalysisError(null)}
+                      className="ml-auto rounded p-1 text-red-300 hover:bg-red-900/50 hover:text-red-100"
+                      aria-label="Dismiss"
+                    >
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
                 {/* Analysis Summary Header */}
                 {stockData.has_reports && stockData.report_date && (
                   <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 rounded-lg border border-blue-700/50 p-6">
@@ -1182,6 +1263,64 @@ export default function StockPage() {
                       isLoading={isLoadingNews}
                       errorMessage={newsError}
                     />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* SEC Filings Tab Content (US companies only) */}
+            {activeTab === 'sec-filings' && (
+              <div className="space-y-6">
+                <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+                  <h2 className="text-xl font-semibold text-white mb-4">SEC EDGAR Filings</h2>
+                  <p className="text-sm text-gray-400 mb-4">
+                    Quarterly (10-Q) and annual (10-K) reports filed with the U.S. Securities and Exchange Commission.
+                  </p>
+                  {isLoadingEdgar ? (
+                    <div className="animate-pulse">
+                      <div className="h-6 bg-gray-700 rounded w-48 mb-4"></div>
+                      <div className="h-64 bg-gray-700 rounded"></div>
+                    </div>
+                  ) : edgarFilingsError ? (
+                    <p className="text-amber-400 text-sm">{edgarFilingsError}</p>
+                  ) : edgarFilings && edgarFilings.filings.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-600 text-gray-400">
+                            <th className="py-2 pr-4 font-medium">Form</th>
+                            <th className="py-2 pr-4 font-medium">Filing Date</th>
+                            <th className="py-2 font-medium">Filing</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {edgarFilings.filings.map((f) => (
+                            <tr key={f.accession_number} className="border-b border-gray-700">
+                              <td className="py-3 pr-4">
+                                <span className="font-medium text-white">{f.form}</span>
+                              </td>
+                              <td className="py-3 pr-4 text-gray-300">{f.filing_date}</td>
+                              <td className="py-3">
+                                {f.url ? (
+                                  <a
+                                    href={f.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-400 hover:text-blue-300 underline"
+                                  >
+                                    View on SEC.gov
+                                  </a>
+                                ) : (
+                                  <span className="text-gray-500">{f.description}</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-gray-400 text-sm">No SEC filings found for this symbol.</p>
                   )}
                 </div>
               </div>

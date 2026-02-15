@@ -25,6 +25,7 @@ export default function ReportTabs({ availableReports, selectedReport, onSelectR
     market_report: 'Market',
     fundamentals_report: 'Fundamentals',
     news_report: 'News',
+    sec_report: 'SEC',
     investment_plan: 'Research',
     final_trade_decision: 'Thesis',
   };
