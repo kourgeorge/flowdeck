@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 
 from services.info_fetcher import get_info_fetcher
+from services.edgar_service import get_edgar_service
 
 router = APIRouter(tags=["Data API"])
 
@@ -116,3 +117,21 @@ async def data_stock_data(
 async def data_analyst_recommendations(ticker: str):
     """Get analyst recommendations from Yahoo Finance."""
     return await asyncio.to_thread(_engine().get_analyst_recommendations, ticker)
+
+
+@router.get("/edgar-filings/{ticker}")
+async def data_edgar_filings(ticker: str):
+    """Get recent 10-K and 10-Q SEC EDGAR filings for a ticker. Returns empty filings if not in EDGAR or on error."""
+    engine = get_edgar_service()
+    return await asyncio.to_thread(engine.get_filings, ticker)
+
+
+@router.get("/edgar-filing-content/{ticker}")
+async def data_edgar_filing_content(
+    ticker: str,
+    form: Optional[str] = Query(None, description="10-K or 10-Q"),
+    limit: int = Query(1, ge=1, le=5, description="Max number of filings"),
+):
+    """Get extracted SEC EDGAR sections (risk factors, MD&A, competition) for a ticker. Requires LLM (OpenAI or Azure)."""
+    engine = get_edgar_service()
+    return await asyncio.to_thread(engine.get_filing_content, ticker, form, limit)
