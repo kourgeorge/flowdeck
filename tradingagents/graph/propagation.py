@@ -39,6 +39,8 @@ class Propagator:
             "market_score": None,
             "fundamentals_report": "",
             "fundamentals_score": None,
+            "sec_report": "",
+            "sec_score": None,
             "sentiment_report": "",
             "sentiment_score": None,
             "news_report": "",

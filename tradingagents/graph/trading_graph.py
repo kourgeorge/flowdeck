@@ -36,6 +36,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_insider_transactions,
     get_global_news
 )
+from tradingagents.agents.utils.edgar_tools import get_edgar_filing_content
 
 from .conditional_logic import ConditionalLogic
 from .setup import GraphSetup
@@ -206,6 +207,7 @@ class TradingAgentsGraph:
                     get_income_statement,
                 ]
             ),
+            "sec": ToolNode([get_edgar_filing_content]),
             "technical": ToolNode(
                 [
                     # Core stock data tools
@@ -268,6 +270,8 @@ class TradingAgentsGraph:
             "news_score": final_state.get("news_score"),
             "fundamentals_report": final_state["fundamentals_report"],
             "fundamentals_score": final_state.get("fundamentals_score"),
+            "sec_report": final_state.get("sec_report", ""),
+            "sec_score": final_state.get("sec_score"),
             "technical_report": final_state.get("technical_report", ""),
             "technical_score": final_state.get("technical_score"),
             "investment_debate_state": {

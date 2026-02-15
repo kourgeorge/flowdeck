@@ -49,6 +49,7 @@ class GraphSetup:
                 - "news": News analyst
                 - "fundamentals": Fundamentals analyst
                 - "technical": Technical analyst (advanced pattern recognition)
+                - "sec": SEC/Regulatory analyst (EDGAR risk factors, MD&A, competition)
         """
         if len(selected_analysts) == 0:
             raise ValueError("Trading Agents Graph Setup Error: no analysts selected!")
@@ -92,6 +93,11 @@ class GraphSetup:
             )
             delete_nodes["technical"] = create_msg_delete()
             tool_nodes["technical"] = self.tool_nodes["technical"]
+
+        if "sec" in selected_analysts:
+            analyst_nodes["sec"] = create_sec_analyst(self.quick_thinking_llm)
+            delete_nodes["sec"] = create_msg_delete()
+            tool_nodes["sec"] = self.tool_nodes["sec"]
 
         # Create researcher and manager nodes
         bull_researcher_node = create_bull_researcher(

@@ -154,6 +154,48 @@ def get_financial_charts(
         return None
 
 
+def get_edgar_filing_content(
+    ticker: str,
+    form: Optional[str] = None,
+    limit: int = 1,
+    base_url: Optional[str] = None,
+) -> str:
+    """Fetch extracted SEC EDGAR sections (risk factors, MD&A, competition) from info service. Returns formatted string for analyst."""
+    base_url = base_url or _get_info_service_base_url()
+    if not base_url:
+        raise ValueError("Info service URL not configured (set INFO_SERVICE_URL or config info_service_url)")
+    params: Dict[str, Any] = {"limit": limit}
+    if form:
+        params["form"] = form
+    try:
+        data = _get(None, base_url, f"/api/data/edgar-filing-content/{ticker.upper()}", params=params)
+    except Exception as e:
+        return f"Unable to load SEC filing content for {ticker.upper()}: {e}"
+    if not isinstance(data, dict):
+        return f"No EDGAR filing content available for {ticker.upper()}."
+    if data.get("error"):
+        return f"No EDGAR filing content available for {ticker.upper()}. {data['error']}"
+    filings = data.get("filings") or []
+    if not filings:
+        return f"No EDGAR filing content available for {ticker.upper()}."
+    parts = []
+    for f in filings:
+        form_type = f.get("form", "")
+        filing_date = f.get("filing_date", "")
+        sections = f.get("sections") or {}
+        parts.append(f"## {form_type} filed {filing_date}")
+        parts.append("\n### Risk Factors\n" + (sections.get("risk_factors") or "(none extracted)"))
+        parts.append("\n### Management Discussion and Analysis\n" + (sections.get("management_mda") or "(none extracted)"))
+        parts.append("\n### Competition\n" + (sections.get("competition") or "(none extracted)"))
+        if sections.get("business_overview"):
+            parts.append("\n### Business Overview\n" + sections["business_overview"])
+        if sections.get("legal_proceedings"):
+            parts.append("\n### Legal Proceedings\n" + sections["legal_proceedings"])
+        if sections.get("market_risk_disclosures"):
+            parts.append("\n### Market Risk Disclosures\n" + sections["market_risk_disclosures"])
+    return "\n".join(parts)
+
+
 def is_configured() -> bool:
     """Return True if info service URL is set."""
     return _get_info_service_base_url() is not None

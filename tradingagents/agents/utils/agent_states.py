@@ -64,6 +64,8 @@ class AgentState(MessagesState):
     news_score: Annotated[Optional[int], "News score from 1-10 indicating news impact outlook"]
     fundamentals_report: Annotated[str, "Report from the Fundamentals Researcher"]
     fundamentals_score: Annotated[Optional[int], "Fundamentals score from 1-10 indicating company financial health and fundamental strength"]
+    sec_report: Annotated[str, "Report from the SEC/Regulatory Analyst"]
+    sec_score: Annotated[Optional[int], "SEC/regulatory score from 1-10"]
     technical_report: Annotated[str, "Report from the Technical Analyst with advanced pattern recognition"]
     technical_score: Annotated[Optional[int], "Technical analysis score from 1-10 indicating stock performance"]
 
