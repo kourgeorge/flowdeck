@@ -103,7 +103,7 @@ class AnalysisService:
 
         # Default analysts if not provided
         if analysts is None:
-            analysts = ["market", "news", "fundamentals"]
+            analysts = ["market", "news", "fundamentals", "sec"]
         
         # Create config
         config = DEFAULT_CONFIG.copy()
@@ -174,6 +174,7 @@ class AnalysisService:
             "Social Analyst": "pending",
             "News Analyst": "pending",
             "Fundamentals Analyst": "pending",
+            "SEC Analyst": "pending",
             "Bull Researcher": "pending",
             "Bear Researcher": "pending",
             "Research Manager": "pending",
@@ -193,6 +194,8 @@ class AnalysisService:
             agent_statuses["News Analyst"] = "in_progress"
         elif "fundamentals" in analysts:
             agent_statuses["Fundamentals Analyst"] = "in_progress"
+        elif "sec" in analysts:
+            agent_statuses["SEC Analyst"] = "in_progress"
         
         # Store analysis info
         self.running_analyses[analysis_id] = {
@@ -302,7 +305,9 @@ class AnalysisService:
 
             # Stream the analysis
             _progress_log(f"Analysis started analysis_id={analysis_id} ticker={ticker} run_id={run_id}")
+            last_chunk = None
             for chunk in graph.graph.stream(init_agent_state, **args):
+                last_chunk = chunk
                 # Process messages
                 if len(chunk.get("messages", [])) > 0:
                     last_message = chunk["messages"][-1]
@@ -340,6 +345,7 @@ class AnalysisService:
                     ("sentiment_report", "sentiment_report", "sentiment_score", "Sentiment Score", "Social Analyst"),
                     ("news_report", "news_report", "news_score", "News Score", "News Analyst"),
                     ("fundamentals_report", "fundamentals_report", "fundamentals_score", "Fundamentals Score", "Fundamentals Analyst"),
+                    ("sec_report", "sec_report", "sec_score", "SEC Score", "SEC Analyst"),
                 ]
                 for key, chunk_key, score_key, label, agent in _reports:
                     if chunk_key in chunk and chunk[chunk_key]:
@@ -438,6 +444,23 @@ class AnalysisService:
                         analysis_info["progress_callback"](chunk, analysis_info)
                     except Exception:
                         pass
+
+            # Fallback: ensure sec_report is saved if SEC analyst ran but was missed in stream chunks
+            if last_chunk and "sec" in analysts and "sec_report" not in analysis_info.get("reports", {}):
+                sec_content = last_chunk.get("sec_report")
+                if sec_content:
+                    try:
+                        _write_report(
+                            "sec_report",
+                            sec_content,
+                            last_chunk.get("sec_score"),
+                            "SEC Score",
+                        )
+                        analysis_info["reports"]["sec_report"] = sec_content
+                        analysis_info["agent_statuses"]["SEC Analyst"] = "completed"
+                        _progress_log("SEC report saved (from final state)")
+                    except Exception as e:
+                        logger.warning("Failed to save sec_report from final state: %s", e)
             
             # Mark as completed
             analysis_info["status"] = "completed"
