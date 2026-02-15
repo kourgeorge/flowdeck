@@ -112,4 +112,16 @@ export const adminApi = {
     });
     return res.data;
   },
+
+  addTokensToUser: async (
+    userId: number,
+    amount: number,
+  ): Promise<{ token_balance: number }> => {
+    const res = await api.post<{ token_balance: number }>(
+      `/api/admin/users/${userId}/tokens`,
+      { amount },
+      { headers: authHeaders() },
+    );
+    return res.data;
+  },
 };

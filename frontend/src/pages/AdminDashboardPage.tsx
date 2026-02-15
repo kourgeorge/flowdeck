@@ -35,6 +35,9 @@ export default function AdminDashboardPage() {
   const [subscriptionsTotal, setSubscriptionsTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [addingForUserId, setAddingForUserId] = useState<number | null>(null);
+  const [addTokensError, setAddTokensError] = useState<string | null>(null);
+  const [addAmountByUser, setAddAmountByUser] = useState<Record<number, string>>({});
 
   useEffect(() => {
     if (!user?.is_admin) return;
@@ -152,8 +155,21 @@ export default function AdminDashboardPage() {
         {/* Customers */}
         <section className="mb-10">
           <h2 className="text-lg font-semibold text-white mb-4">Customers ({usersTotal})</h2>
+          {addTokensError && (
+            <div className="mb-3 rounded-lg border border-red-800 bg-red-950/50 px-4 py-2 text-sm text-red-200">
+              {addTokensError}
+              <button
+                type="button"
+                onClick={() => setAddTokensError(null)}
+                className="ml-2 text-red-400 hover:text-red-100"
+                aria-label="Dismiss"
+              >
+                ×
+              </button>
+            </div>
+          )}
           <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-800/80">
-            <table className="w-full min-w-[600px] text-left text-sm">
+            <table className="w-full min-w-[700px] text-left text-sm">
               <thead>
                 <tr className="border-b border-gray-700">
                   <th className="px-4 py-3 text-gray-400 font-medium">Email</th>
@@ -161,18 +177,66 @@ export default function AdminDashboardPage() {
                   <th className="px-4 py-3 text-gray-400 font-medium">Tokens</th>
                   <th className="px-4 py-3 text-gray-400 font-medium">Subscriptions</th>
                   <th className="px-4 py-3 text-gray-400 font-medium">Created</th>
+                  <th className="px-4 py-3 text-gray-400 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {users.map((u) => (
-                  <tr key={u.id} className="border-b border-gray-700/50">
-                    <td className="px-4 py-3 text-gray-300">{u.email}</td>
-                    <td className="px-4 py-3 text-gray-300">{u.name ?? '—'}</td>
-                    <td className="px-4 py-3 text-white">{u.token_balance.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-gray-300">{u.subscription_count}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatDate(u.created_at)}</td>
-                  </tr>
-                ))}
+                {users.map((u) => {
+                  const amountStr = addAmountByUser[u.id] ?? '200';
+                  const amount = Math.max(1, parseInt(amountStr, 10) || 0);
+                  const isAdding = addingForUserId === u.id;
+                  return (
+                    <tr key={u.id} className="border-b border-gray-700/50">
+                      <td className="px-4 py-3 text-gray-300">{u.email}</td>
+                      <td className="px-4 py-3 text-gray-300">{u.name ?? '—'}</td>
+                      <td className="px-4 py-3 text-white">{u.token_balance.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-gray-300">{u.subscription_count}</td>
+                      <td className="px-4 py-3 text-gray-400">{formatDate(u.created_at)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={1}
+                            max={10000}
+                            value={amountStr}
+                            onChange={(e) =>
+                              setAddAmountByUser((prev) => ({ ...prev, [u.id]: e.target.value }))
+                            }
+                            className="w-20 rounded border border-gray-600 bg-gray-700 px-2 py-1 text-white text-right"
+                            disabled={isAdding}
+                            aria-label={`Tokens to add for ${u.email}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setAddTokensError(null);
+                              setAddingForUserId(u.id);
+                              try {
+                                const res = await adminApi.addTokensToUser(u.id, amount);
+                                setUsers((prev) =>
+                                  prev.map((x) =>
+                                    x.id === u.id ? { ...x, token_balance: res.token_balance } : x,
+                                  ),
+                                );
+                              } catch (err: unknown) {
+                                const ax = err as { response?: { data?: { detail?: string } } };
+                                setAddTokensError(
+                                  ax.response?.data?.detail ?? 'Failed to add tokens',
+                                );
+                              } finally {
+                                setAddingForUserId(null);
+                              }
+                            }}
+                            disabled={isAdding || amount < 1}
+                            className="rounded bg-blue-600 px-2 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            {isAdding ? '…' : 'Add tokens'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
