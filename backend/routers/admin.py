@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from auth import get_current_admin_user
 from database import get_db
 from models.db_models import User, Report, AnalysisRun, ReportView, Subscription
+from services import token_service
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -82,6 +83,14 @@ class AdminSubscriptionItem(BaseModel):
 class AdminSubscriptionsResponse(BaseModel):
     subscriptions: list[AdminSubscriptionItem]
     total: int
+
+
+class AdminAddTokensBody(BaseModel):
+    amount: int
+
+
+class AdminAddTokensResponse(BaseModel):
+    token_balance: int
 
 
 # --- Endpoints ---
@@ -165,6 +174,23 @@ def get_admin_users(
         for u in rows
     ]
     return AdminUsersResponse(users=items, total=total)
+
+
+@router.post("/users/{user_id}/tokens", response_model=AdminAddTokensResponse)
+def admin_add_tokens_to_user(
+    user_id: int,
+    body: AdminAddTokensBody,
+    _user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Add tokens to a user's balance. Admin only. Use positive amount."""
+    if body.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be positive")
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    token_service.top_up(user_id, body.amount, db)
+    return AdminAddTokensResponse(token_balance=token_service.get_balance(user_id, db))
 
 
 @router.get("/reports", response_model=AdminReportsResponse)
