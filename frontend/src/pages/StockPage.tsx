@@ -660,23 +660,13 @@ export default function StockPage() {
                       {quote && (
                         <>
                           <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-400">Current Price</span>
-                              <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
-                            </div>
+                            <span className="text-sm text-gray-400">Current Price</span>
                             <span className="text-sm font-semibold text-white">
                               ${quote.current_price.toFixed(2)}
                             </span>
                           </div>
                           <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-400">Daily Change</span>
-                              <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
-                            </div>
+                            <span className="text-sm text-gray-400">Daily Change</span>
                             <span className={`text-sm font-semibold ${
                               quote.daily_change_percent >= 0 ? 'text-green-400' : 'text-red-400'
                             }`}>
@@ -685,57 +675,32 @@ export default function StockPage() {
                             </span>
                           </div>
                           <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-400">Day's Range</span>
-                              <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
-                            </div>
+                            <span className="text-sm text-gray-400">Day's Range</span>
                             <span className="text-sm font-semibold text-white">
                               ${quote.day_low?.toFixed(2) || 'N/A'} - ${quote.day_high?.toFixed(2) || 'N/A'}
                             </span>
                           </div>
                           <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-400">Previous Close</span>
-                              <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
-                            </div>
+                            <span className="text-sm text-gray-400">Previous Close</span>
                             <span className="text-sm font-semibold text-white">
                               ${quote.previous_close?.toFixed(2) || 'N/A'}
                             </span>
                           </div>
                           <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-400">Open</span>
-                              <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
-                            </div>
+                            <span className="text-sm text-gray-400">Open</span>
                             <span className="text-sm font-semibold text-white">
                               ${quote.current_price.toFixed(2)}
                             </span>
                           </div>
                           <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-400">Bid</span>
-                              <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
-                            </div>
+                            <span className="text-sm text-gray-400">Bid</span>
                             <span className="text-sm font-semibold text-white">
                               {quote.bid_price != null ? `$${quote.bid_price.toFixed(2)}` : 'N/A'}
                               {quote.bid_size != null ? ` ×${quote.bid_size}` : ''}
                             </span>
                           </div>
                           <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-400">Ask</span>
-                              <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
-                            </div>
+                            <span className="text-sm text-gray-400">Ask</span>
                             <span className="text-sm font-semibold text-white">
                               {quote.ask_price != null ? `$${quote.ask_price.toFixed(2)}` : 'N/A'}
                               {quote.ask_size != null ? ` ×${quote.ask_size}` : ''}
@@ -743,47 +708,27 @@ export default function StockPage() {
                           </div>
                           {hasFundamentals && (
                             <div className="flex items-start justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm text-gray-400">Beta</span>
-                                <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                                </svg>
-                              </div>
+                              <span className="text-sm text-gray-400">Beta</span>
                               <span className="text-sm font-semibold text-white">
                                 {extendedInfo?.beta?.toFixed(2) || 'N/A'}
                               </span>
                             </div>
                           )}
                           <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-400">Volume</span>
-                              <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
-                            </div>
+                            <span className="text-sm text-gray-400">Volume</span>
                             <span className="text-sm font-semibold text-white">
                               {quote.volume ? quote.volume.toLocaleString() : 'N/A'}
                             </span>
                           </div>
                           <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-400">Average Volume</span>
-                              <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
-                            </div>
+                            <span className="text-sm text-gray-400">Average Volume</span>
                             <span className="text-sm font-semibold text-white">
                               {extendedInfo?.average_volume ? extendedInfo.average_volume.toLocaleString() : 'N/A'}
                             </span>
                           </div>
                           {hasFundamentals && (
                             <div className="flex items-start justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm text-gray-400">Sector</span>
-                                <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                                </svg>
-                              </div>
+                              <span className="text-sm text-gray-400">Sector</span>
                               <span className="text-sm font-semibold text-white">
                                 {companyInfo?.sector || 'N/A'}
                               </span>
@@ -791,24 +736,14 @@ export default function StockPage() {
                           )}
                           {hasFundamentals && (
                             <div className="flex items-start justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm text-gray-400">Market Cap</span>
-                              <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
-                            </div>
+                              <span className="text-sm text-gray-400">Market Cap</span>
                                 <span className="text-sm font-semibold text-white">
                                   {formatNumber(extendedInfo?.market_cap)}
                                 </span>
                             </div>
                           )}
                           <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-400">52wk Range</span>
-                              <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                              </svg>
-                            </div>
+                            <span className="text-sm text-gray-400">52wk Range</span>
                             <span className="text-sm font-semibold text-white">
                               {quote.fifty_two_week_low && quote.fifty_two_week_high
                                 ? `$${quote.fifty_two_week_low.toFixed(2)} - $${quote.fifty_two_week_high.toFixed(2)}`
@@ -818,45 +753,25 @@ export default function StockPage() {
                           {hasFundamentals && (
                             <>
                               <div className="flex items-start justify-between">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm text-gray-400">Revenue</span>
-                                  <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                                  </svg>
-                                </div>
+                                <span className="text-sm text-gray-400">Revenue</span>
                                 <span className="text-sm font-semibold text-white">
                                   {formatNumber(extendedInfo?.revenue)}
                                 </span>
                               </div>
                               <div className="flex items-start justify-between">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm text-gray-400">Gross Margin</span>
-                                  <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                                  </svg>
-                                </div>
+                                <span className="text-sm text-gray-400">Gross Margin</span>
                                 <span className="text-sm font-semibold text-white">
                                   {formatPercent(extendedInfo?.gross_margin)}
                                 </span>
                               </div>
                               <div className="flex items-start justify-between">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm text-gray-400">Dividend Yield</span>
-                                  <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                                  </svg>
-                                </div>
+                                <span className="text-sm text-gray-400">Dividend Yield</span>
                                 <span className="text-sm font-semibold text-white">
                                   {formatPercent(extendedInfo?.dividend_yield)}
                                 </span>
                               </div>
                               <div className="flex items-start justify-between">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm text-gray-400">EPS</span>
-                                  <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                                  </svg>
-                                </div>
+                                <span className="text-sm text-gray-400">EPS</span>
                                 <span className="text-sm font-semibold text-white">
                                   {extendedInfo?.trailing_eps?.toFixed(2) || 'N/A'}
                                 </span>
