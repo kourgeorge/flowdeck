@@ -6,30 +6,24 @@ import type { StockWidget as StockWidgetType } from '../services/types';
 const SPARKLINE_WIDTH = 88;
 const SPARKLINE_HEIGHT = 20;
 
-function TileSparkline({ ticker, isPositive }: { ticker: string; isPositive: boolean }) {
-  const [chartData, setChartData] = useState<{ closes: number[]; openPrice: number } | null>(null);
+/** Sparkline data for the same period as the delta (e.g. 1 month). */
+export type SparklineData = { closes: number[]; openPrice: number };
 
-  useEffect(() => {
-    let cancelled = false;
-    stockApi
-      .getHistoricalPrices(ticker, '1mo', '1d')
-      .then((res: { data?: Array<{ open: number; close: number }> }) => {
-        if (cancelled || !res?.data?.length) return;
-        const closes = res.data.map((d) => d.close).filter((c) => c > 0);
-        const firstOpen = res.data[0]?.open;
-        if (closes.length > 0) {
-          setChartData({
-            closes,
-            openPrice: firstOpen != null && firstOpen > 0 ? firstOpen : closes[0],
-          });
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [ticker]);
+/** Compute 1-month % change from sparkline data: (lastClose - openPrice) / openPrice * 100 */
+function oneMonthChangePercent(data: SparklineData): number | null {
+  const { closes, openPrice } = data;
+  if (closes.length === 0 || openPrice <= 0) return null;
+  const lastClose = closes[closes.length - 1];
+  return ((lastClose - openPrice) / openPrice) * 100;
+}
 
+function TileSparkline({
+  chartData,
+  isPositive,
+}: {
+  chartData: SparklineData | null;
+  isPositive: boolean;
+}) {
   if (!chartData || chartData.closes.length < 2) return <div className="h-5 w-[88px] shrink-0 bg-gray-700/50 rounded" />;
 
   const { closes: points, openPrice } = chartData;
@@ -93,6 +87,81 @@ const SUBSCRIBED_TILE_CLASS =
 const RECENTLY_ANALYZED_TILE_CLASS =
   'bg-blue-500/15 border-blue-500/50 hover:bg-blue-500/25 hover:border-blue-500/70';
 
+function DashboardTile({
+  w,
+  tileClass,
+  onNavigate,
+}: {
+  w: StockWidgetType;
+  tileClass: string;
+  onNavigate: (ticker: string) => void;
+}) {
+  const [chartData, setChartData] = useState<SparklineData | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    stockApi
+      .getHistoricalPrices(w.ticker, '1mo', '1d')
+      .then((res: { data?: Array<{ open: number; close: number }> }) => {
+        if (cancelled || !res?.data?.length) return;
+        const closes = res.data.map((d) => d.close).filter((c) => c > 0);
+        const firstOpen = res.data[0]?.open;
+        if (closes.length > 0) {
+          setChartData({
+            closes,
+            openPrice: firstOpen != null && firstOpen > 0 ? firstOpen : closes[0],
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [w.ticker]);
+
+  const periodChangePercent = chartData != null ? oneMonthChangePercent(chartData) : null;
+  const up = periodChangePercent != null ? periodChangePercent >= 0 : w.daily_change_percent >= 0;
+  const changeColor = up ? 'text-green-400' : 'text-red-400';
+  const recColors = getRecColors(w.recommendation);
+  const displayPercent =
+    periodChangePercent != null ? periodChangePercent : w.daily_change_percent;
+  const showPercent = periodChangePercent != null || w.current_price > 0;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onNavigate(w.ticker)}
+      className={`flex flex-col items-start gap-0.5 px-3 py-2 rounded-lg border transition-colors text-left shrink-0 min-w-[100px] max-w-[140px] ${tileClass}`}
+    >
+      <div className="flex items-center justify-between w-full gap-2">
+        <span className="font-semibold text-white text-sm truncate">{w.ticker}</span>
+        {w.has_report && w.recommendation && (
+          <span
+            className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${recColors.bg} ${recColors.text} ${recColors.border}`}
+          >
+            {w.recommendation.toUpperCase()}
+          </span>
+        )}
+      </div>
+      <div className="flex items-baseline gap-1.5 flex-wrap">
+        <span className="text-gray-200 text-sm tabular-nums font-medium">
+          {w.current_price > 0 ? `$${w.current_price.toFixed(2)}` : '—'}
+        </span>
+        {showPercent && (
+          <span className={`text-xs tabular-nums ${changeColor}`} title={periodChangePercent != null ? '1 month change' : "Today's change"}>
+            {up ? '+' : ''}{displayPercent.toFixed(2)}%{periodChangePercent != null ? ' (1M)' : ''}
+          </span>
+        )}
+      </div>
+      <TileSparkline chartData={chartData} isPositive={up} />
+      {w.has_report && w.confidence != null && (
+        <div className="text-[10px] text-gray-500">
+          AI confidence {(w.confidence * 100).toFixed(0)}%
+        </div>
+      )}
+    </button>
+  );
+}
+
 export default function DashboardTopTiles({
   subscribedWidgets,
   recentAnalyzedWidgets,
@@ -105,52 +174,6 @@ export default function DashboardTopTiles({
 
   if (!hasSubscribed && !hasRecent) return null;
 
-  function Tile({
-    w,
-    tileClass,
-  }: {
-    w: StockWidgetType;
-    tileClass: string;
-  }) {
-    const up = w.daily_change_percent >= 0;
-    const changeColor = up ? 'text-green-400' : 'text-red-400';
-    const recColors = getRecColors(w.recommendation);
-    return (
-      <button
-        type="button"
-        onClick={() => navigate(`/stocks/${w.ticker}`)}
-        className={`flex flex-col items-start gap-0.5 px-3 py-2 rounded-lg border transition-colors text-left shrink-0 min-w-[100px] max-w-[140px] ${tileClass}`}
-      >
-                <div className="flex items-center justify-between w-full gap-2">
-                  <span className="font-semibold text-white text-sm truncate">{w.ticker}</span>
-                  {w.has_report && w.recommendation && (
-                    <span
-                      className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${recColors.bg} ${recColors.text} ${recColors.border}`}
-                    >
-                      {w.recommendation.toUpperCase()}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-baseline gap-1.5 flex-wrap">
-                  <span className="text-gray-200 text-sm tabular-nums font-medium">
-                    {w.current_price > 0 ? `$${w.current_price.toFixed(2)}` : '—'}
-                  </span>
-                  {w.current_price > 0 && (
-                    <span className={`text-xs tabular-nums ${changeColor}`}>
-                      {up ? '+' : ''}{w.daily_change_percent.toFixed(2)}%
-                    </span>
-                  )}
-                </div>
-                <TileSparkline ticker={w.ticker} isPositive={up} />
-                {w.has_report && w.confidence != null && (
-                  <div className="text-[10px] text-gray-500">
-                    AI confidence {(w.confidence * 100).toFixed(0)}%
-                  </div>
-                )}
-      </button>
-    );
-  }
-
   return (
     <div className="w-full border-y border-gray-700 bg-gray-800/80 shrink-0 mb-6 overflow-hidden">
       <div className="flex items-stretch gap-2 py-2 px-2 w-max animate-tiles-scroll">
@@ -159,14 +182,14 @@ export default function DashboardTopTiles({
             {hasSubscribed && (
               <div className="flex items-stretch gap-2 shrink-0 border-r border-gray-700 pr-2">
                 {subscribedWidgets.map((w) => (
-                  <Tile key={`${copy}-sub-${w.ticker}`} w={w} tileClass={SUBSCRIBED_TILE_CLASS} />
+                  <DashboardTile key={`${copy}-sub-${w.ticker}`} w={w} tileClass={SUBSCRIBED_TILE_CLASS} onNavigate={(t) => navigate(`/stocks/${t}`)} />
                 ))}
               </div>
             )}
             {hasRecent && (
               <div className="flex items-stretch gap-2 shrink-0">
                 {recentOnly.map((w) => (
-                  <Tile key={`${copy}-recent-${w.ticker}`} w={w} tileClass={RECENTLY_ANALYZED_TILE_CLASS} />
+                  <DashboardTile key={`${copy}-recent-${w.ticker}`} w={w} tileClass={RECENTLY_ANALYZED_TILE_CLASS} onNavigate={(t) => navigate(`/stocks/${t}`)} />
                 ))}
               </div>
             )}

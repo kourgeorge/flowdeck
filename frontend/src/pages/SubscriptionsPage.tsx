@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import StockListView from '../components/StockListView';
+import StockSearch from '../components/StockSearch';
 import DashboardNewsSection from '../components/DashboardNewsSection';
 import DashboardTopTiles from '../components/DashboardTopTiles';
 import { stockApi } from '../services/api';
@@ -110,7 +111,6 @@ export default function SubscriptionsPage() {
     return (
       <div className="min-h-[60vh] px-4 py-6 sm:p-6 lg:p-8 flex items-center justify-center">
         <div className="max-w-md text-center">
-          <h1 className="text-2xl font-semibold text-white mb-2">Dashboard</h1>
           <p className="text-gray-400 mb-6">
             Sign in to view and manage your subscribed stocks.
           </p>
@@ -129,8 +129,8 @@ export default function SubscriptionsPage() {
     return (
       <div className="min-h-[60vh] px-4 py-6 sm:p-6 lg:p-8">
         <div className="max-w-layout mx-auto min-w-0 w-full">
-          <h1 className="text-2xl font-semibold text-white mb-4">Dashboard</h1>
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 text-center">
+          <StockSearch />
+          <div className="mt-6 bg-gray-800 rounded-lg border border-gray-700 p-8 text-center">
             <p className="text-gray-400">Loading subscribed stocks…</p>
           </div>
         </div>
@@ -142,11 +142,11 @@ export default function SubscriptionsPage() {
     return (
       <div className="min-h-[60vh] px-4 py-6 sm:p-6 lg:p-8">
         <div className="max-w-layout mx-auto min-w-0 w-full">
-          <h1 className="text-2xl font-semibold text-white mb-6">Dashboard</h1>
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-12 text-center">
+          <StockSearch />
+          <div className="mt-6 bg-gray-800 rounded-lg border border-gray-700 p-12 text-center">
             <p className="text-gray-400 mb-4">You haven’t subscribed to any stocks yet.</p>
             <p className="text-gray-500 text-sm mb-6">
-              Add stocks from Home or Search to build your dashboard.
+              Add stocks from the search above or browse on Home to build your dashboard.
             </p>
             <Link
               to="/"
@@ -167,6 +167,7 @@ export default function SubscriptionsPage() {
           subscribedWidgets={widgets}
           recentAnalyzedWidgets={recentAnalyzedWidgets}
         />
+        <StockSearch />
 
         <div className="mt-6 flex flex-col lg:flex-row gap-6 lg:gap-8 lg:items-stretch">
           <div className="flex-1 min-w-0 flex flex-col">
