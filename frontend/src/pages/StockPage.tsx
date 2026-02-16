@@ -857,9 +857,11 @@ export default function StockPage() {
                 </div>
 
                 {/* Price Chart: fills all remaining space */}
-                <div className="flex-1 min-w-0 min-h-[33vh]">
+                <div className="flex-1 min-w-0 min-h-[33vh] flex flex-col">
                   {quote && (
-                    <PriceTrendWidget ticker={stockData.ticker} fillTile />
+                    <div className="flex-1 min-h-0 flex flex-col">
+                      <PriceTrendWidget ticker={stockData.ticker} fillTile />
+                    </div>
                   )}
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import HomePage from './pages/HomePage';
@@ -18,7 +18,8 @@ function App() {
           <Route index element={<HomePage />} />
           <Route path="stocks/:ticker" element={<StockPage />} />
           <Route path="profile" element={<ProfilePage />} />
-          <Route path="subscriptions" element={<SubscriptionsPage />} />
+          <Route path="dashboard" element={<SubscriptionsPage />} />
+          <Route path="subscriptions" element={<Navigate to="/dashboard" replace />} />
           <Route path="admin" element={<AdminDashboardPage />} />
           <Route path="how-it-works" element={<HowItWorksPage />} />
           <Route path="terms" element={<TermsOfUsePage />} />

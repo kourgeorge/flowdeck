@@ -2,14 +2,40 @@ import { useNavigate } from 'react-router-dom';
 import type { StockWidget as StockWidgetType } from '../services/types';
 import { parseReportDate } from '../utils/date';
 
-interface StockWidgetProps {
-  widget: StockWidgetType;
+const DASHBOARD_TILE_COLORS = [
+  'bg-red-500/15 border-red-500/40',
+  'bg-blue-500/15 border-blue-500/40',
+  'bg-orange-500/15 border-orange-500/40',
+  'bg-gray-500/15 border-gray-500/40',
+  'bg-green-500/15 border-green-500/40',
+  'bg-indigo-500/15 border-indigo-500/40',
+];
+
+function getDashboardTileColor(ticker: string): string {
+  let hash = 0;
+  for (let i = 0; i < ticker.length; i++) {
+    hash = (hash << 5) - hash + ticker.charCodeAt(i);
+    hash |= 0;
+  }
+  const index = Math.abs(hash) % DASHBOARD_TILE_COLORS.length;
+  return DASHBOARD_TILE_COLORS[index];
 }
 
-export default function StockWidget({ widget }: StockWidgetProps) {
+interface StockWidgetProps {
+  widget: StockWidgetType;
+  /** Dashboard variant: larger tile with company name and distinct accent color */
+  variant?: 'default' | 'dashboard';
+  /** Company name for dashboard variant (e.g. from stocks.json) */
+  companyName?: string;
+}
+
+export default function StockWidget({ widget, variant = 'default', companyName }: StockWidgetProps) {
   const navigate = useNavigate();
 
   const getRecommendationColor = (rec: string | null) => {
+    if (variant === 'dashboard') {
+      return getDashboardTileColor(widget.ticker);
+    }
     if (!rec) return 'border-gray-600 bg-gray-800';
     switch (rec.toUpperCase()) {
       case 'BUY':
@@ -47,27 +73,38 @@ export default function StockWidget({ widget }: StockWidgetProps) {
   const changeColor = widget.daily_change_percent >= 0 ? 'text-green-400' : 'text-red-400';
   const changeIcon = widget.daily_change_percent >= 0 ? '▲' : '▼';
 
+  const isDashboard = variant === 'dashboard';
   return (
     <div
       onClick={() => navigate(`/stocks/${widget.ticker}`)}
       className={`
-        bg-gray-800 rounded-lg border-2 p-6 cursor-pointer
-        transition-all duration-200 hover:scale-105 hover:shadow-lg
+        rounded-lg border-2 cursor-pointer
+        transition-all duration-200 hover:scale-[1.02] hover:shadow-lg
         ${getRecommendationColor(widget.recommendation)}
+        ${isDashboard ? 'p-6 min-h-[140px]' : 'bg-gray-800 p-6'}
       `}
     >
-      <div className="flex items-start justify-between mb-4">
-        <h3 className="text-2xl font-bold text-white">{widget.ticker}</h3>
+      <div className="flex items-start justify-between mb-2">
+        <div>
+          <h3 className={`font-bold text-white ${isDashboard ? 'text-2xl' : 'text-2xl'}`}>
+            {widget.ticker}
+          </h3>
+          {isDashboard && companyName && (
+            <p className="text-sm text-gray-400 mt-0.5 truncate max-w-[200px]" title={companyName}>
+              {companyName}
+            </p>
+          )}
+        </div>
         {widget.has_report && widget.recommendation && getRecommendationBadge(widget.recommendation)}
       </div>
 
-      <div className="mb-4">
+      <div className={isDashboard ? 'mb-2' : 'mb-4'}>
         {widget.current_price > 0 ? (
           <>
-            <div className="text-4xl font-bold text-white mb-1">
+            <div className={`font-bold text-white mb-1 ${isDashboard ? 'text-3xl' : 'text-4xl'}`}>
               ${widget.current_price.toFixed(2)}
             </div>
-            <div className={`text-lg font-semibold ${changeColor}`}>
+            <div className={`font-semibold ${changeColor} ${isDashboard ? 'text-base' : 'text-lg'}`}>
               {widget.daily_change >= 0 ? '+' : ''}{widget.daily_change.toFixed(2)} ({widget.daily_change_percent >= 0 ? '+' : ''}{widget.daily_change_percent.toFixed(2)}%) {changeIcon}
             </div>
           </>
@@ -76,10 +113,13 @@ export default function StockWidget({ widget }: StockWidgetProps) {
         )}
       </div>
 
-      <div className="pt-4 border-t border-gray-700">
+      <div className={`pt-3 border-t border-gray-700/80 ${!isDashboard ? 'pt-4' : ''}`}>
         {widget.has_report ? (
           <div className="text-sm text-gray-400">
             Report: {formatDate(widget.report_date)}
+            {isDashboard && widget.confidence != null && (
+              <span className="ml-2">· Confidence {(widget.confidence * 100).toFixed(0)}%</span>
+            )}
           </div>
         ) : (
           <div className="text-sm text-gray-500">

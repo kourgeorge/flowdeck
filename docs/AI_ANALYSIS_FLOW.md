@@ -35,7 +35,7 @@ For **each** selected analyst (e.g. `market`, `news`, `fundamentals`):
 1. **`{Analyst} Analyst`** (e.g. `Market Analyst`)
    - Reads state: `company_of_interest`, `trade_date`, `messages`.
    - Uses LLM + tools (e.g. `get_stock_data`, `get_indicators` for market) to produce a report and score.
-   - Writes: `market_report` / `sentiment_report` / `news_report` / `fundamentals_report` / `technical_report` and corresponding `*_score`.
+   - Writes: `market_report` / `sentiment_report` / `news_report` / `fundamentals_report` / `sec_report` / `technical_report` and corresponding `*_score`.
    - Conditional edge:
      - If last message has **tool_calls** → **`tools_{analyst}`**
      - Else → **`Msg Clear {Analyst}`**
@@ -58,6 +58,10 @@ START → Analyst_1 ⟷ tools_1 → Msg Clear 1 → Analyst_2 ⟷ tools_2 → �
 
 (Each analyst can loop with its tool node until it stops calling tools.)
 
+#### SEC Analyst (optional)
+
+When `"sec"` is in `selected_analysts`, the **SEC Analyst** runs in the analyst chain. It uses the `get_edgar_filing_content` tool, which calls the backend `GET /api/data/edgar-filing-content/{ticker}`. The backend fetches the filing from SEC EDGAR, converts HTML to text, and uses an LLM to extract structured sections (Risk Factors, MD&A, Competition). The SEC analyst receives that formatted content and produces `sec_report` and `sec_score` (1–10). The risk manager includes `sec_report` in its context and factors regulatory and disclosure risk into the final decision.
+
 ---
 
 ## 3. Investment debate (Bull vs Bear)
@@ -65,7 +69,7 @@ START → Analyst_1 ⟷ tools_1 → Msg Clear 1 → Analyst_2 ⟷ tools_2 → �
 After the last analyst’s “Msg Clear”:
 
 - **Bull Researcher**
-  - Inputs: all reports (market, sentiment, news, fundamentals, optional technical), `investment_debate_state` (history, current_response, count).
+  - Inputs: all reports (market, sentiment, news, fundamentals, optional sec, optional technical), `investment_debate_state` (history, current_response, count).
   - Outputs: bull argument; updates `investment_debate_state` (history, bull_history, current_response, count).
   - Conditional edge:
     - If `count >= 2 * max_debate_rounds` → **Research Manager**
@@ -85,7 +89,7 @@ So the loop is: **Bull Researcher ⇄ Bear Researcher** until `count >= 2 * max_
 ## 4. Research Manager → Trader
 
 - **Research Manager**
-  - Inputs: all reports, full debate `history`, judge memory.
+  - Inputs: all reports (including sec_report when SEC analyst ran), full debate `history`, judge memory.
   - Produces: `investment_plan`, `recommendation_score` (1–10), `expected_return_pct`, `bear_case_return_pct`, `bull_case_return_pct` (optional), and updates `investment_debate_state` (e.g. `judge_decision`).
   - Edge: **Trader** (fixed).
 
@@ -120,7 +124,7 @@ So: **Risky Analyst ⇄ Safe Analyst ⇄ Neutral Analyst** (in the order defined
 ## 6. State (AgentState) — what flows through
 
 - **Input / identity**: `company_of_interest`, `trade_date`, `messages`.
-- **Analyst outputs**: `market_report`, `market_score`; `sentiment_report`, `sentiment_score`; `news_report`, `news_score`; `fundamentals_report`, `fundamentals_score`; `technical_report`, `technical_score`.
+- **Analyst outputs**: `market_report`, `market_score`; `sentiment_report`, `sentiment_score`; `news_report`, `news_score`; `fundamentals_report`, `fundamentals_score`; `sec_report`, `sec_score`; `technical_report`, `technical_score`.
 - **Debate**: `investment_debate_state` (history, bull/bear history, current_response, count, judge_decision).
 - **Research Manager**: `investment_plan`, `recommendation_score`, `expected_return_pct`, `bear_case_return_pct`, `bull_case_return_pct`.
 - **Trader**: `trader_investment_plan`.
@@ -159,7 +163,8 @@ Each node **reads** from this state and **returns** a dict of keys to **update**
 │ ANALYST CHAIN (sequential; each can loop with tools)                        │
 │ START → [Market] Analyst ⇄ tools_market → Msg Clear →                        │
 │         [News] Analyst ⇄ tools_news → Msg Clear →                            │
-│         [Fundamentals] Analyst ⇄ tools_fundamentals → Msg Clear → …          │
+│         [Fundamentals] Analyst ⇄ tools_fundamentals → Msg Clear →           │
+│         [SEC] Analyst ⇄ tools_sec → Msg Clear (if "sec" selected) → …        │
 └─────────────────────────────────────────────────────────────────────────────┘
                                         │
                                         ▼

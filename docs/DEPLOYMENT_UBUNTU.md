@@ -39,7 +39,7 @@ The system has two main components:
 
 - Ubuntu 22.04 LTS (or 20.04+)
 - 2+ CPU cores, 4 GB RAM minimum (8 GB recommended for AI analysis)
-- Internet access for API calls (OpenAI, Alpha Vantage, yfinance)
+- Internet access for API calls (OpenAI, Alpha Vantage, yfinance, SEC EDGAR)
 - Optional: Domain name and SSL for production
 
 ### Install System Dependencies
@@ -132,18 +132,16 @@ conda activate flowdeck
 # Skip creating venv; use conda env for packages
 ```
 
-### Install main dependencies (TradingAgents)
+### Install Python dependencies
+
+All backend, TradingAgents, and EDGAR dependencies are in the repo root:
 
 ```bash
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### Install backend dependencies
-
-```bash
-pip install -r backend/requirements.txt
-```
+There is no separate `backend/requirements.txt`; use the root `requirements.txt` only.
 
 ### Environment variables
 
@@ -423,6 +421,7 @@ sudo chmod 640 /opt/flowdeck/.env
 2. **Frontend:** Open `https://your-domain.com` (or `http://` before SSL) in a browser
 3. **API docs:** `https://your-domain.com/api/docs` (or `/api/redoc`) if exposed
 4. **Generate report:** Search a ticker and trigger analysis to confirm end-to-end flow
+5. **SEC EDGAR (optional):** For US tickers, the SEC Filings tab and SEC analyst use SEC.gov (no API key). Rate limit: 10 requests/second. Extracted sections (risk factors, MD&A) use the same LLM as analysis (OpenAI/Azure).
 
 ---
 
@@ -460,7 +459,6 @@ cd /opt/flowdeck
 git pull origin main
 source venv/bin/activate   # or: conda activate flowdeck
 pip install -r requirements.txt
-pip install -r backend/requirements.txt
 python backend/scripts/migrate_token_economy.py   # run if new DB schema (e.g. token economy) was added
 cd frontend && npm ci && npm run build
 sudo systemctl restart stock-dashboard-backend stock-dashboard-frontend
@@ -476,7 +474,7 @@ sudo systemctl restart stock-dashboard-backend stock-dashboard-frontend
 - [ ] Repository cloned and dependencies installed
 - [ ] Root `.env` with API keys; `backend/.env` with production `CORS_ORIGINS`, `BACKEND_URL`
 - [ ] Frontend built with production `VITE_API_URL` (or `''` for same-origin)
-- [ ] systemd service for backend (binding to 127.0.0.1)
+- [ ] systemd service for backend (bind to 0.0.0.0 when gateway is on another host)
 - [ ] Caddy on gateway configured (see section 5.5)
 - [ ] npm preview and backend systemd services running
 - [ ] Caddy on gateway handles SSL automatically

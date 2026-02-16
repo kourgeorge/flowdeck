@@ -8,7 +8,8 @@ A modern, investor-focused stock analysis website featuring real-time market dat
 - **Individual Stock Pages**: Comprehensive analysis pages with:
   - Real-time market data (price, bid/ask, volume, 52-week range, today's range)
   - AI-powered recommendations (BUY/SELL/HOLD)
-  - Detailed analysis reports (market, news, fundamentals, technical, sentiment, investment plan)
+  - Detailed analysis reports (market, news, fundamentals, SEC/regulatory, technical, sentiment, investment plan)
+  - SEC Filings tab (US companies): 10-K/10-Q list with links to SEC.gov
   - Historical reports archive
 - **Stock Search**: Search for any ticker and generate reports on-demand
 - **Real-time Updates**: Live price updates and WebSocket support for report generation
@@ -164,6 +165,25 @@ The backend reads reports from the `results/` directory. Make sure the path in `
 RESULTS_DIR = "results"  # Resolved to repo root (TradingAgents/results)
 ```
 
+## How analysis works
+
+When you **Generate Report** for a ticker, the backend runs the TradingAgents pipeline:
+
+1. **Analyst chain** — A sequence of specialist analysts runs (each can call data tools):
+   - **Market** — Price action, indicators, regime.
+   - **News** — Recent headlines and impact.
+   - **Fundamentals** — Financials, ratios, cash flow.
+   - **SEC (US companies only)** — SEC EDGAR 10-K/10-Q content: risk factors, management discussion (MD&A), and competition. The backend fetches filings from SEC.gov, extracts sections with an LLM, and the SEC analyst produces a regulatory/disclosure report and a score (1–10). This is included in the default analysis for US tickers.
+   - Optional: technical, sentiment (when enabled).
+
+2. **Bull vs Bear debate** — Researchers argue bull and bear cases using all reports (including the SEC report when present).
+
+3. **Research Manager → Trader** — A single investment plan and trading plan are produced.
+
+4. **Risk debate** — Risky, Safe, and Neutral analysts debate; the Risk Judge uses all reports (including SEC/regulatory) to decide **BUY**, **SELL**, or **HOLD**.
+
+The **SEC report** appears in the report tabs and is factored into the final recommendation. Non-US tickers skip SEC analysis; the **SEC Filings** tab on the stock page (US only) shows the raw 10-K/10-Q list and links to SEC.gov. For full graph details, see [AI_ANALYSIS_FLOW.md](AI_ANALYSIS_FLOW.md).
+
 ## Usage
 
 1. **View Homepage**: Open `http://localhost:3003` to see stock widgets
@@ -184,6 +204,8 @@ RESULTS_DIR = "results"  # Resolved to repo root (TradingAgents/results)
 - `GET /api/data/financial-charts/{ticker}` - Chart time series
 - `GET /api/data/historical/{ticker}` - Historical OHLCV
 - `GET /api/data/analyst-recommendations/{ticker}` - Analyst recommendations
+- `GET /api/data/edgar-filings/{ticker}` - SEC EDGAR 10-K/10-Q filings list (US companies)
+- `GET /api/data/edgar-filing-content/{ticker}` - Extracted SEC sections (risk factors, MD&A, competition) for AI analysis
 
 **Stocks API** (UI views):
 - `GET /api/stocks/widgets?tickers=...` - Widget data for stocks
@@ -220,6 +242,7 @@ TradingAgents/
 │   │   │   │   ├── market_report.json
 │   │   │   │   ├── news_report.json
 │   │   │   │   ├── fundamentals_report.json
+│   │   │   │   ├── sec_report.json
 │   │   │   │   └── ...
 │   │   │   └── message_tool.log
 │   │   └── 2025-12-18/

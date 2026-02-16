@@ -78,8 +78,9 @@ class StockWidget(BaseModel):
 
 
 class WidgetsResponse(BaseModel):
-    """Response containing multiple stock widgets."""
+    """Response containing multiple stock widgets. total is set when using only_date with limit (paginated)."""
     widgets: List[StockWidget]
+    total: Optional[int] = None
 
 
 class HistoricalAnalysis(BaseModel):

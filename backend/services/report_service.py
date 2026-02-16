@@ -200,6 +200,35 @@ class ReportService:
         finally:
             db.close()
 
+    def get_tickers_with_reports_for_date_paginated(
+        self, date: str, limit: int, offset: int = 0
+    ) -> tuple[List[str], int]:
+        """Tickers with reports for date, ordered by recency (newest first). Returns (ticker_list, total_count)."""
+        db = SessionLocal()
+        try:
+            if "_" in date:
+                rows = db.query(Report.ticker).filter(Report.run_id == date).distinct().all()
+                tickers = [r.ticker for r in rows]
+                return (tickers[offset : offset + limit], len(tickers))
+            rows = (
+                db.query(Report.ticker, Report.run_id)
+                .filter(Report.run_id.like(f"{date}%"))
+                .order_by(Report.run_id.desc())
+                .all()
+            )
+            seen: set[str] = set()
+            ordered_tickers: List[str] = []
+            for r in rows:
+                t = r.ticker.upper()
+                if t not in seen:
+                    seen.add(t)
+                    ordered_tickers.append(t)
+            total = len(ordered_tickers)
+            tickers = ordered_tickers[offset : offset + limit]
+            return (tickers, total)
+        finally:
+            db.close()
+
     def get_reports_with_scores(self, ticker: str, date: str) -> Dict[str, Dict[str, Any]]:
         """date can be YYYY-MM-DD or full run id. Returns report_type -> dict with content, score, etc."""
         db = SessionLocal()

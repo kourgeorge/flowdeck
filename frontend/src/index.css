@@ -62,6 +62,19 @@ body {
   animation: price-flash 0.6s ease-out;
 }
 
+@keyframes tiles-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-tiles-scroll {
+  animation: tiles-scroll 60s linear infinite;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 8px;

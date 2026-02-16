@@ -112,13 +112,12 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, []);
 
+  const MAJOR_STOCKS_LIMIT = 10;
   const hasMajorFlag = widgets.some((w) => w.is_major === true || w.is_major === false);
-  const majorWidgets = hasMajorFlag
+  const majorFiltered = hasMajorFlag
     ? widgets.filter((w) => w.is_major === true)
     : widgets;
-  const recentAnalyzedWidgets = hasMajorFlag
-    ? widgets.filter((w) => w.is_major === false)
-    : [];
+  const majorWidgets = majorFiltered.slice(0, MAJOR_STOCKS_LIMIT);
 
   if (isLoading && widgets.length === 0) {
     return (
@@ -181,27 +180,14 @@ export default function HomePage() {
             </button>
           </div>
         ) : (
-          <>
-            {/* Major Stocks: only widgets with is_major === true (when API provides it) */}
-            <Section
-              title="Major Stocks"
-              widgets={majorWidgets}
-              viewMode={viewMode}
-              setViewMode={setViewMode}
-              tickerToName={tickerToName}
-              emptyMessage="No major stock data available."
-            />
-
-            {/* Recently Analyzed: non-major stocks that have reports */}
-            <Section
-              title="Recently Analyzed"
-              widgets={recentAnalyzedWidgets}
-              viewMode={viewMode}
-              setViewMode={setViewMode}
-              tickerToName={tickerToName}
-              emptyMessage="No other analyzed stocks for this date."
-            />
-          </>
+          <Section
+            title="Major Stocks"
+            widgets={majorWidgets}
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+            tickerToName={tickerToName}
+            emptyMessage="No major stock data available."
+          />
         )}
       </div>
     </div>

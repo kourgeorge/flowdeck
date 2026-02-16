@@ -1,10 +1,20 @@
+import type { RefObject } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { StockWidget as StockWidgetType } from '../services/types';
 import { parseReportDate } from '../utils/date';
 
+/** Fixed height for all stock tables; overflow scrolls inside. */
+const STOCK_TABLE_HEIGHT = '420px';
+
 interface StockListViewProps {
   widgets: StockWidgetType[];
   tickerToName: Record<string, string>;
+  /** Optional ref for the scroll container (e.g. for load-more). */
+  scrollRef?: RefObject<HTMLDivElement | null>;
+  /** Optional scroll handler (e.g. for infinite load). */
+  onScroll?: () => void;
+  /** Optional content rendered below the table inside the scroll area. */
+  footer?: React.ReactNode;
 }
 
 const REPORT_LABELS: Record<string, string> = {
@@ -85,15 +95,21 @@ function getConfidenceValue(widget: StockWidgetType): number {
   return -1;
 }
 
-export default function StockListView({ widgets, tickerToName }: StockListViewProps) {
+export default function StockListView({ widgets, tickerToName, scrollRef, onScroll, footer }: StockListViewProps) {
   const navigate = useNavigate();
   const sortedWidgets = [...widgets].sort(
     (a, b) => getConfidenceValue(b) - getConfidenceValue(a)
   );
 
   return (
-    <div className="w-full min-w-0 max-w-full overflow-x-auto overflow-y-visible rounded-lg border border-gray-700 bg-gray-800/80" role="region" aria-label="Stock list table - scroll horizontally on small screens">
-      <table className="table-fixed text-left w-full min-w-[960px]" style={{ tableLayout: 'fixed' }}>
+    <div className="w-full min-w-0 max-w-full rounded-lg border border-gray-700 bg-gray-800/80" role="region" aria-label="Stock list table">
+      <div
+        ref={scrollRef}
+        onScroll={onScroll}
+        className="overflow-auto min-h-0 w-full"
+        style={{ height: STOCK_TABLE_HEIGHT }}
+      >
+        <table className="table-fixed text-left w-full min-w-[960px]" style={{ tableLayout: 'fixed' }}>
         <colgroup>
           <col className="w-[7%]" />
           <col className="w-[16%]" />
@@ -103,7 +119,7 @@ export default function StockListView({ widgets, tickerToName }: StockListViewPr
           <col className="w-[38%]" />
           <col className="w-[8%]" />
         </colgroup>
-        <thead>
+        <thead className="sticky top-0 z-10 bg-gray-800 shadow-[0_1px_0_0_rgba(55,65,81,1)]">
           <tr className="border-b border-gray-700 text-gray-400 text-sm">
             <th className="py-3 px-2 font-semibold whitespace-nowrap">Ticker</th>
             <th className="py-3 px-2 font-semibold truncate" title="Name">Name</th>
@@ -173,6 +189,8 @@ export default function StockListView({ widgets, tickerToName }: StockListViewPr
           })}
         </tbody>
       </table>
+        {footer}
+      </div>
     </div>
   );
 }

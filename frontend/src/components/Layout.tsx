@@ -8,7 +8,7 @@ import SignInPromoBanner from './SignInPromoBanner';
 
 const navItems: { to: string; label: string; authOnly?: boolean }[] = [
   { to: '/', label: 'Home' },
-  { to: '/subscriptions', label: 'Subscriptions', authOnly: true },
+  { to: '/dashboard', label: 'Dashboard', authOnly: true },
 ];
 
 function HamburgerIcon({ open }: { open: boolean }) {

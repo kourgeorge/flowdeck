@@ -77,11 +77,12 @@ flowchart TB
 |------|----|------|
 | **UI** | Backend | Raw market data via `/api/data/*` (quote, news, fundamentals, statements, charts, historical, analyst recs). UI views via `/api/stocks/*` (widgets, full page). Start/status via `/api/analyses/*`. |
 | **Backend** | Yahoo (yfinance) | All market data via InfoFetcher: quotes, news, company info, extended info, historical OHLCV, financial statements, financial charts, fundamentals, analyst recommendations. |
+| **Backend** | SEC EDGAR | EDGAR service: company tickers→CIK, 10-K/10-Q filings list, filing HTML; LLM extraction of risk factors, MD&A, competition for `/api/data/edgar-filing-content`. |
 | **Backend** | FS | **Read**: `results/<TICKER>/<DATE>/reports/*.json` for report content and recommendations. |
-| **Agents** (when `INFO_SERVICE_URL` set) | Backend | Data via `/api/data/*`: quote, news, stock-data, fundamentals, financial-statements, financial-charts, etc. |
+| **Agents** (when `INFO_SERVICE_URL` set) | Backend | Data via `/api/data/*`: quote, news, stock-data, fundamentals, financial-statements, financial-charts, edgar-filing-content (SEC), etc. |
 | **Agents** (when `INFO_SERVICE_URL` not set) | Yahoo / vendors | Data via `route_to_vendor` (yfinance, Alpha Vantage, local, etc.). |
 | **Backend** (analysis) | Agents | `AnalysisService` runs `TradingAgentsGraph`; graph uses tools that call backend `/api/data/*` (config sets `info_service_url`). |
-| **Agents / CLI** | FS | **Write**: `results/<TICKER>/<DATE>/reports/*.json` (market, news, fundamentals, technical, sentiment, investment_plan, final_trade_decision, etc.). |
+| **Agents / CLI** | FS | **Write**: `results/<TICKER>/<DATE>/reports/*.json` (market, news, fundamentals, sec, technical, sentiment, investment_plan, final_trade_decision, etc.). |
 
 ---
 
@@ -89,7 +90,7 @@ flowchart TB
 
 | Path | Role | Endpoints |
 |------|------|-----------|
-| `/api/data/*` | **Canonical raw market data** (single source) | quote, news, company, extended-info, fundamentals, financial-statements, financial-charts, historical, stock-data, analyst-recommendations |
+| `/api/data/*` | **Canonical raw market data** (single source) | quote, news, company, extended-info, fundamentals, financial-statements, financial-charts, historical, stock-data, analyst-recommendations, edgar-filings, edgar-filing-content |
 | `/api/stocks/*` | **UI views** (aggregated) | widgets, `{ticker}` (full page with reports, recommendations) |
 | `/api/analyses/*` | **AI analysis** | start, status, WebSocket |
 

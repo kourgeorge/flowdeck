@@ -2,33 +2,18 @@
 
 import os
 
-# Default list of major stocks to show on homepage
+# Default list of major stocks to show on homepage (10 major stocks)
 MAJOR_STOCKS = [
-    "SPY",   # S&P 500 ETF
     "AAPL",  # Apple
     "MSFT",  # Microsoft
-    "GOOGL", # Google
-    "TSLA",  # Tesla
-    "IBM",   # IBM
-    "META",  # Meta
-    "NVDA",  # NVIDIA
+    "GOOGL", # Alphabet (Google)
     "AMZN",  # Amazon
-    "JPM",   # JPMorgan
+    "NVDA",  # NVIDIA
+    "META",  # Meta
+    "TSLA",  # Tesla
     "BRK-B", # Berkshire Hathaway
+    "JPM",   # JPMorgan Chase
     "V",     # Visa
-    # 12 additional major stocks
-    "JNJ",   # Johnson & Johnson
-    "WMT",   # Walmart
-    "PG",    # Procter & Gamble
-    "UNH",   # UnitedHealth
-    "HD",    # Home Depot
-    "DIS",   # Walt Disney
-    "XOM",   # Exxon Mobil
-    "BAC",   # Bank of America
-    "MA",    # Mastercard
-    "KO",    # Coca-Cola
-    "PEP",   # PepsiCo
-    "NFLX",  # Netflix
 ]
 
 # Results directory path (in repo root; relative to backend or absolute)

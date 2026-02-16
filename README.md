@@ -2,6 +2,8 @@
 
 **Flowdeck** is a stock analysis web app with AI-powered reports, real-time market data, and multi-agent analysis. It is built on the TradingAgents framework: LLM-powered analysts (fundamentals, news, technical, sentiment), researchers, and risk management that collaborate to produce trading insights.
 
+A separate **Stock Deep Research** agent can produce comprehensive company reports by autonomously searching the web and (optionally) SEC EDGAR. It does not output BUY/SELL/HOLD; see [docs/STOCK_DEEP_RESEARCH.md](docs/STOCK_DEEP_RESEARCH.md) and `scripts/run_stock_deep_research.py`.
+
 A modern, investor-focused stock analysis website featuring real-time market data, AI-powered analysis reports, and beautiful widget-based interface.
 
 ## Features

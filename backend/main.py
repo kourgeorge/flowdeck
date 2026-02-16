@@ -113,18 +113,32 @@ active_connections: dict[str, WebSocket] = {}
 def _get_stock_widgets_sync(
     tickers: Optional[str],
     date: Optional[str],
+    only_date: bool = False,
+    limit: Optional[int] = None,
+    offset: int = 0,
 ) -> WidgetsResponse:
-    """Sync implementation of widget data (runs in thread pool to avoid blocking event loop)."""
+    """Sync implementation of widget data (runs in thread pool to avoid blocking event loop).
+    When only_date=True and tickers is None, returns only tickers that have reports for the given date (no major-stocks list).
+    When only_date=True and limit is set, uses pagination and returns total count."""
     use_major_split = False
     major_set: set[str] = set()
+    total_count: Optional[int] = None
     if tickers:
         ticker_list = [t.strip().upper() for t in tickers.split(",")]
     else:
         report_date = date or datetime.now().strftime("%Y-%m-%d")
-        tickers_for_date = report_service.get_tickers_with_reports_for_date(report_date)
-        major_set = {t.upper() for t in MAJOR_STOCKS}
-        ticker_list = list(MAJOR_STOCKS) + [t for t in tickers_for_date if t.upper() not in major_set]
-        use_major_split = True
+        if only_date and limit is not None:
+            ticker_list, total_count = report_service.get_tickers_with_reports_for_date_paginated(
+                report_date, limit, offset
+            )
+        else:
+            tickers_for_date = report_service.get_tickers_with_reports_for_date(report_date)
+            if only_date:
+                ticker_list = [t.upper() for t in tickers_for_date]
+            else:
+                major_set = {t.upper() for t in MAJOR_STOCKS}
+                ticker_list = list(MAJOR_STOCKS) + [t for t in tickers_for_date if t.upper() not in major_set]
+                use_major_split = True
 
     widgets = []
     cached_fetcher = get_info_fetcher()
@@ -225,7 +239,7 @@ def _get_stock_widgets_sync(
 
         widgets.append(widget)
 
-    return WidgetsResponse(widgets=widgets)
+    return WidgetsResponse(widgets=widgets, total=total_count)
 
 
 def _get_stock_page_sync(ticker: str) -> StockPageData:
@@ -446,10 +460,13 @@ async def top_up_tokens(
 async def get_stock_widgets(
     tickers: Optional[str] = Query(None, description="Comma-separated list of tickers"),
     date: Optional[str] = Query(None, description="Date (YYYY-MM-DD) for report filter; default today"),
+    only_date: bool = Query(False, description="When set with no tickers: return only tickers with reports for the given date (no major-stocks list)"),
+    limit: Optional[int] = Query(None, description="When only_date: max number of widgets to return (paginated)"),
+    offset: int = Query(0, description="When only_date and limit: pagination offset"),
 ):
     """Get widget data for stocks. Uses cached batch quote fetch for speed. Runs in thread pool (non-blocking)."""
     try:
-        return await asyncio.to_thread(_get_stock_widgets_sync, tickers, date)
+        return await asyncio.to_thread(_get_stock_widgets_sync, tickers, date, only_date, limit, offset)
     except Exception as e:
         print(f"Error in get_stock_widgets: {e}")
         import traceback

@@ -22,6 +22,8 @@ export interface StockWidget {
 
 export interface WidgetsResponse {
   widgets: StockWidget[];
+  /** Set when using only_date with limit (paginated recently analyzed). */
+  total?: number;
 }
 
 export interface StockQuote {
