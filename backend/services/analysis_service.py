@@ -32,6 +32,20 @@ from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
 
 
+def _is_us_company_with_sec(ticker: str) -> bool:
+    """Return True only for US-listed companies that have SEC EDGAR filings (excludes crypto, forex, indices)."""
+    try:
+        from services.info_fetcher import get_info_fetcher
+        info = get_info_fetcher().get_company_info(ticker)
+        country = (info.get("country") or "N/A").strip()
+        quote_type = (str(info.get("quoteType") or "").strip().upper())
+        if quote_type in ("CRYPTOCURRENCY", "CURRENCY", "INDEX"):
+            return False
+        return country in ("United States", "USA")
+    except Exception:
+        return False
+
+
 def _progress_log(msg: str) -> None:
     """Print a progress line to stderr with timestamp."""
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -104,7 +118,11 @@ class AnalysisService:
         # Default analysts if not provided
         if analysts is None:
             analysts = ["market", "news", "fundamentals", "sec"]
-        
+        # Exclude SEC analyst for non-US tickers (crypto, forex, non-US stocks, indices)
+        if "sec" in analysts and not _is_us_company_with_sec(ticker):
+            analysts = [a for a in analysts if a != "sec"]
+            logger.info("SEC analyst excluded for non-US ticker ticker=%s", ticker)
+
         # Create config
         config = DEFAULT_CONFIG.copy()
         config["max_debate_rounds"] = research_depth
