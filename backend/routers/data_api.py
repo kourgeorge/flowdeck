@@ -119,6 +119,12 @@ async def data_analyst_recommendations(ticker: str):
     return await asyncio.to_thread(_engine().get_analyst_recommendations, ticker)
 
 
+@router.get("/future-events/{ticker}")
+async def data_future_events(ticker: str):
+    """Get upcoming earnings and ex-dividend dates (Yahoo Finance)."""
+    return await asyncio.to_thread(_engine().get_future_events, ticker)
+
+
 @router.get("/edgar-filings/{ticker}")
 async def data_edgar_filings(ticker: str):
     """Get recent 10-K and 10-Q SEC EDGAR filings for a ticker. Returns empty filings if not in EDGAR or on error."""

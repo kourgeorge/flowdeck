@@ -10,7 +10,7 @@ interface StockListViewProps {
   widgets: StockWidgetType[];
   tickerToName: Record<string, string>;
   /** Optional ref for the scroll container (e.g. for load-more). */
-  scrollRef?: RefObject<HTMLDivElement | null>;
+  scrollRef?: RefObject<HTMLDivElement>;
   /** Optional scroll handler (e.g. for infinite load). */
   onScroll?: () => void;
   /** Optional content rendered below the table inside the scroll area. */

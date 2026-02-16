@@ -166,6 +166,22 @@ export const stockApi = {
     return response.data;
   },
 
+  // Get upcoming earnings and ex-dividend dates (Yahoo Finance)
+  getFutureEvents: async (ticker: string): Promise<{
+    ticker: string;
+    events: Array<{
+      date: string;
+      type: 'earnings' | 'ex_dividend';
+      label: string;
+      eps_estimate?: number;
+    }>;
+    count: number;
+    error?: string;
+  }> => {
+    const response = await api.get(`/api/data/future-events/${ticker}`);
+    return response.data;
+  },
+
   // Get analyst recommendations from Yahoo (raw market data via /api/data)
   getAnalystRecommendations: async (ticker: string): Promise<{
     ticker: string;

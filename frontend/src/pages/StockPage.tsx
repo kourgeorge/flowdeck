@@ -100,6 +100,13 @@ export default function StockPage() {
   } | null>(null);
   const [edgarFilingsError, setEdgarFilingsError] = useState<string | null>(null);
   const [isLoadingEdgar, setIsLoadingEdgar] = useState(false);
+  const [futureEvents, setFutureEvents] = useState<{
+    ticker: string;
+    events: Array<{ date: string; type: string; label: string; eps_estimate?: number }>;
+    count: number;
+    error?: string;
+  } | null>(null);
+  const [isLoadingFutureEvents, setIsLoadingFutureEvents] = useState(false);
 
   const refreshedQuote = useQuoteRefresh(ticker ?? '', 60000);
   const prevPriceRef = useRef<number | null>(null);
@@ -224,6 +231,11 @@ export default function StockPage() {
       .then(setAnalystRecommendations)
       .catch((e) => console.error('Failed to load analyst recommendations:', e))
       .finally(() => setIsLoadingRecommendations(false));
+    setIsLoadingFutureEvents(true);
+    stockApi.getFutureEvents(ticker)
+      .then(setFutureEvents)
+      .catch((e) => console.error('Failed to load future events:', e))
+      .finally(() => setIsLoadingFutureEvents(false));
   };
 
   useEffect(() => {
@@ -235,6 +247,7 @@ export default function StockPage() {
       setAnalysisProgress(null);
       setEdgarFilings(null);
       setEdgarFilingsError(null);
+      setFutureEvents(null);
     }
     loadStockData();
 
@@ -865,6 +878,40 @@ export default function StockPage() {
                   )}
                 </div>
               </div>
+
+              {/* Future Events */}
+              {isLoadingFutureEvents ? (
+                <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+                  <div className="animate-pulse">
+                    <div className="h-6 bg-gray-700 rounded w-40 mb-4"></div>
+                    <div className="h-24 bg-gray-700 rounded"></div>
+                  </div>
+                </div>
+              ) : futureEvents && (futureEvents.events?.length ?? 0) > 0 ? (
+                <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+                  <h2 className="text-lg font-semibold text-white mb-4">Upcoming Events (Yahoo Finance)</h2>
+                  <ul className="space-y-3">
+                    {futureEvents.events.map((evt, i) => (
+                      <li key={`${evt.date}-${evt.type}-${i}`} className="flex items-center justify-between py-2 border-b border-gray-700 last:border-0">
+                        <div className="flex items-center gap-3">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium ${
+                            evt.type === 'earnings' ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'
+                          }`}>
+                            {evt.type === 'earnings' ? 'Earnings' : 'Ex-dividend'}
+                          </span>
+                          <span className="text-gray-300">{evt.label}</span>
+                        </div>
+                        <span className="text-white font-medium">{new Date(evt.date).toLocaleDateString(undefined, { dateStyle: 'medium' })}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : futureEvents && (futureEvents.events?.length === 0 || !futureEvents.events) ? (
+                <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+                  <h2 className="text-lg font-semibold text-white mb-2">Upcoming Events (Yahoo Finance)</h2>
+                  <p className="text-gray-400 text-sm">No upcoming earnings or ex-dividend dates available.</p>
+                </div>
+              ) : null}
 
               {/* Analyst Recommendations */}
               {isLoadingRecommendations ? (

@@ -230,6 +230,91 @@ class InfoFetcher:
                 "error": str(e),
             }
 
+    def get_future_events(self, ticker: str) -> Dict[str, Any]:
+        """Get upcoming earnings and ex-dividend dates from Yahoo Finance (yfinance)."""
+        import yfinance as yf
+        ticker = ticker.upper()
+        today = datetime.now().date()
+        events: List[Dict[str, Any]] = []
+        try:
+            t = yf.Ticker(ticker)
+            info = t.info
+            # Next ex-dividend date (Unix timestamp; only include if in the future)
+            ex_ts = info.get("exDividendDate")
+            if ex_ts is not None:
+                try:
+                    from datetime import timezone
+                    ex_date = datetime.fromtimestamp(ex_ts, tz=timezone.utc).date()
+                except Exception:
+                    ex_date = datetime.fromtimestamp(ex_ts).date()
+                if ex_date >= today:
+                    events.append({
+                        "date": ex_date.strftime("%Y-%m-%d"),
+                        "type": "ex_dividend",
+                        "label": "Ex-dividend date",
+                    })
+            # Earnings dates (DataFrame: index = date, optional columns like EPS Estimate)
+            try:
+                ed = t.get_earnings_dates(limit=12)
+                if ed is not None and not ed.empty:
+                    for idx, row in ed.iterrows():
+                        d = idx
+                        if hasattr(d, "tz_localize") and d.tzinfo is not None:
+                            d = d.tz_localize(None)
+                        if hasattr(d, "date"):
+                            d = d.date()
+                        if d < today:
+                            continue
+                        date_str = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)
+                        eps_est = row.get("EPS Estimate")
+                        label = "Earnings"
+                        if eps_est is not None and not (isinstance(eps_est, float) and eps_est != eps_est):
+                            try:
+                                label = f"Earnings (EPS est. ${float(eps_est):.2f})"
+                            except Exception:
+                                pass
+                        events.append({
+                            "date": date_str,
+                            "type": "earnings",
+                            "label": label,
+                            "eps_estimate": float(eps_est) if eps_est is not None and not (isinstance(eps_est, float) and eps_est != eps_est) else None,
+                        })
+            except Exception:
+                pass
+            # Optional: calendar dict (Yahoo sometimes has Earnings/Dividend keys)
+            try:
+                cal = t.calendar
+                if isinstance(cal, dict):
+                    for key in ("Earnings", "Earnings Date", "Dividend Date"):
+                        val = cal.get(key)
+                        if val is None:
+                            continue
+                        if isinstance(val, (int, float)):
+                            try:
+                                from datetime import timezone
+                                dt = datetime.fromtimestamp(val, tz=timezone.utc).date()
+                            except Exception:
+                                dt = datetime.fromtimestamp(val).date()
+                            if dt >= today and not any(e.get("date") == dt.strftime("%Y-%m-%d") and e.get("type") == ("ex_dividend" if "Dividend" in key else "earnings") for e in events):
+                                events.append({
+                                    "date": dt.strftime("%Y-%m-%d"),
+                                    "type": "ex_dividend" if "Dividend" in key else "earnings",
+                                    "label": "Ex-dividend date" if "Dividend" in key else "Earnings",
+                                })
+            except Exception:
+                pass
+            # Dedupe by (date, type) and sort by date
+            seen = set()
+            unique: List[Dict[str, Any]] = []
+            for e in sorted(events, key=lambda x: x["date"]):
+                k = (e["date"], e["type"])
+                if k not in seen:
+                    seen.add(k)
+                    unique.append(e)
+            return {"ticker": ticker, "events": unique, "count": len(unique)}
+        except Exception as e:
+            return {"ticker": ticker, "events": [], "count": 0, "error": str(e)}
+
     def get_fund_info(self, ticker: str) -> Dict[str, Any]:
         """Get ETF/fund-specific data (AUM, expense ratio, category, holdings, sector weightings, etc.)."""
         import yfinance as yf
