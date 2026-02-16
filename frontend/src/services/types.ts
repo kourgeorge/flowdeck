@@ -16,6 +16,8 @@ export interface StockWidget {
   market_status: string;
   /** AI analysis scores by report type (e.g. investment_plan, final_trade_decision) for list view */
   report_scores?: Record<string, ReportScoreSummary> | null;
+  /** True when ticker is in the major-stocks list (only set when widgets requested without explicit tickers) */
+  is_major?: boolean | null;
 }
 
 export interface WidgetsResponse {

@@ -6,8 +6,9 @@ import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
 import SignInPromoBanner from './SignInPromoBanner';
 
-const navItems = [
+const navItems: { to: string; label: string; authOnly?: boolean }[] = [
   { to: '/', label: 'Home' },
+  { to: '/subscriptions', label: 'Subscriptions', authOnly: true },
 ];
 
 function HamburgerIcon({ open }: { open: boolean }) {
@@ -80,27 +81,34 @@ export default function Layout() {
           </button>
         </div>
         <nav
-          className="flex-1 p-4"
+          className="flex-1 p-4 overflow-y-auto"
           aria-label="Main navigation"
           onClick={() => setSidebarOpen(false)}
         >
+          {user && (
+            <p className="text-xs text-gray-400 truncate px-4 py-1 mb-2" title={user.email}>
+              {user.email}
+            </p>
+          )}
           <ul className="space-y-1">
-            {navItems.map(({ to, label }) => (
-              <li key={to}>
-                <NavLink
-                  to={to}
-                  className={({ isActive }) =>
-                    `block px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      isActive
-                        ? 'bg-blue-600 text-white'
-                        : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                    }`
-                  }
-                >
-                  {label}
-                </NavLink>
-              </li>
-            ))}
+            {navItems
+              .filter((item) => !('authOnly' in item && item.authOnly) || user)
+              .map(({ to, label }) => (
+                <li key={to}>
+                  <NavLink
+                    to={to}
+                    className={({ isActive }) =>
+                      `block px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                      }`
+                    }
+                  >
+                    {label}
+                  </NavLink>
+                </li>
+              ))}
             {user?.is_admin && (
               <li>
                 <NavLink
@@ -117,16 +125,10 @@ export default function Layout() {
                 </NavLink>
               </li>
             )}
-          </ul>
-          <div className="p-4 mt-4 border-t border-gray-700">
-            {user ? (
-              <div className="space-y-2">
-                <p className="text-xs text-gray-400 truncate px-2" title={user.email}>
-                  {user.email}
-                </p>
+            {user && (
+              <li>
                 <NavLink
                   to="/profile"
-                  onClick={() => setSidebarOpen(false)}
                   className={({ isActive }) =>
                     `block px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                       isActive ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'
@@ -135,6 +137,10 @@ export default function Layout() {
                 >
                   Profile
                 </NavLink>
+              </li>
+            )}
+            <li>
+              {user ? (
                 <button
                   type="button"
                   onClick={() => { logout(); setSidebarOpen(false); }}
@@ -142,17 +148,17 @@ export default function Layout() {
                 >
                   Log out
                 </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => { setAuthModalOpen(true); setSidebarOpen(false); }}
-                className="block w-full text-left px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors"
-              >
-                Log in
-              </button>
-            )}
-          </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => { setAuthModalOpen(true); setSidebarOpen(false); }}
+                  className="block w-full text-left px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                >
+                  Log in
+                </button>
+              )}
+            </li>
+          </ul>
         </nav>
       </aside>
       {authModalOpen && (

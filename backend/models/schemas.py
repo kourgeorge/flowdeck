@@ -73,6 +73,8 @@ class StockWidget(BaseModel):
     market_status: str = "UNKNOWN"
     # AI analysis scores by report type (e.g. investment_plan, final_trade_decision) for list view
     report_scores: Optional[Dict[str, ReportScoreSummary]] = None
+    # True when ticker is in MAJOR_STOCKS (only set when widgets requested without explicit tickers)
+    is_major: Optional[bool] = None
 
 
 class WidgetsResponse(BaseModel):

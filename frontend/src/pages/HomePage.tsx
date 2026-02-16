@@ -3,17 +3,74 @@ import StockWidget from '../components/StockWidget';
 import StockListView from '../components/StockListView';
 import StockSearch from '../components/StockSearch';
 import { stockApi, API_BASE_URL } from '../services/api';
-import { subscriptionApi } from '../services/subscriptionApi';
 import type { StockWidget as StockWidgetType } from '../services/types';
 import { APP_NAME, LOGO_PATH } from '../config';
-import { useAuth } from '../contexts/AuthContext';
 
 type ViewMode = 'tile' | 'list';
 
+function Section({
+  title,
+  widgets,
+  viewMode,
+  setViewMode,
+  tickerToName,
+  emptyMessage,
+}: {
+  title: string;
+  widgets: StockWidgetType[];
+  viewMode: ViewMode;
+  setViewMode: (m: ViewMode) => void;
+  tickerToName: Record<string, string>;
+  emptyMessage: string;
+}) {
+  return (
+    <div className="mb-10">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+        <h2 className="text-2xl font-semibold text-white">{title}</h2>
+        <div className="flex rounded-lg border border-gray-600 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setViewMode('tile')}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              viewMode === 'tile'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            Tiles
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('list')}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              viewMode === 'list'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            List
+          </button>
+        </div>
+      </div>
+      {widgets.length === 0 ? (
+        <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 text-center">
+          <p className="text-gray-400 text-sm">{emptyMessage}</p>
+        </div>
+      ) : viewMode === 'tile' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {widgets.map((widget) => (
+            <StockWidget key={widget.ticker} widget={widget} />
+          ))}
+        </div>
+      ) : (
+        <StockListView widgets={widgets} tickerToName={tickerToName} />
+      )}
+    </div>
+  );
+}
+
 export default function HomePage() {
-  const { user } = useAuth();
   const [widgets, setWidgets] = useState<StockWidgetType[]>([]);
-  const [subscriptionWidgets, setSubscriptionWidgets] = useState<StockWidgetType[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [tickerToName, setTickerToName] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -49,34 +106,19 @@ export default function HomePage() {
     }
   };
 
-  const loadSubscriptions = async () => {
-    if (!user) {
-      setSubscriptionWidgets([]);
-      return;
-    }
-    try {
-      const subs = await subscriptionApi.list();
-      const tickers = subs.map((s) => s.ticker);
-      if (tickers.length > 0) {
-        const res = await stockApi.getWidgets(tickers);
-        setSubscriptionWidgets(res.widgets);
-      } else {
-        setSubscriptionWidgets([]);
-      }
-    } catch {
-      setSubscriptionWidgets([]);
-    }
-  };
-
   useEffect(() => {
     loadWidgets();
-    loadSubscriptions();
-    const interval = setInterval(() => {
-      loadWidgets();
-      loadSubscriptions();
-    }, 60000);
+    const interval = setInterval(loadWidgets, 60000);
     return () => clearInterval(interval);
-  }, [user]);
+  }, []);
+
+  const hasMajorFlag = widgets.some((w) => w.is_major === true || w.is_major === false);
+  const majorWidgets = hasMajorFlag
+    ? widgets.filter((w) => w.is_major === true)
+    : widgets;
+  const recentAnalyzedWidgets = hasMajorFlag
+    ? widgets.filter((w) => w.is_major === false)
+    : [];
 
   if (isLoading && widgets.length === 0) {
     return (
@@ -128,51 +170,8 @@ export default function HomePage() {
           </div>
         )}
 
-        {user && subscriptionWidgets.length > 0 && (
-          <div className="mb-10">
-            <h2 className="text-2xl font-semibold text-white mb-4">My Subscriptions</h2>
-            {viewMode === 'tile' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-6">
-                {subscriptionWidgets.map((widget) => (
-                  <StockWidget key={widget.ticker} widget={widget} />
-                ))}
-              </div>
-            ) : (
-              <StockListView widgets={subscriptionWidgets} tickerToName={tickerToName} />
-            )}
-          </div>
-        )}
-
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <h2 className="text-2xl font-semibold text-white">Major Stocks</h2>
-          <div className="flex rounded-lg border border-gray-600 overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setViewMode('tile')}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
-                viewMode === 'tile'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              Tiles
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('list')}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
-                viewMode === 'list'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              List
-            </button>
-          </div>
-        </div>
-
         {widgets.length === 0 ? (
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-12 text-center">
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-12 text-center mb-10">
             <p className="text-gray-400 mb-4">No stock data available</p>
             <button
               onClick={loadWidgets}
@@ -181,14 +180,28 @@ export default function HomePage() {
               Retry
             </button>
           </div>
-        ) : viewMode === 'tile' ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {widgets.map((widget) => (
-              <StockWidget key={widget.ticker} widget={widget} />
-            ))}
-          </div>
         ) : (
-          <StockListView widgets={widgets} tickerToName={tickerToName} />
+          <>
+            {/* Major Stocks: only widgets with is_major === true (when API provides it) */}
+            <Section
+              title="Major Stocks"
+              widgets={majorWidgets}
+              viewMode={viewMode}
+              setViewMode={setViewMode}
+              tickerToName={tickerToName}
+              emptyMessage="No major stock data available."
+            />
+
+            {/* Recently Analyzed: non-major stocks that have reports */}
+            <Section
+              title="Recently Analyzed"
+              widgets={recentAnalyzedWidgets}
+              viewMode={viewMode}
+              setViewMode={setViewMode}
+              tickerToName={tickerToName}
+              emptyMessage="No other analyzed stocks for this date."
+            />
+          </>
         )}
       </div>
     </div>

@@ -115,6 +115,8 @@ def _get_stock_widgets_sync(
     date: Optional[str],
 ) -> WidgetsResponse:
     """Sync implementation of widget data (runs in thread pool to avoid blocking event loop)."""
+    use_major_split = False
+    major_set: set[str] = set()
     if tickers:
         ticker_list = [t.strip().upper() for t in tickers.split(",")]
     else:
@@ -122,6 +124,7 @@ def _get_stock_widgets_sync(
         tickers_for_date = report_service.get_tickers_with_reports_for_date(report_date)
         major_set = {t.upper() for t in MAJOR_STOCKS}
         ticker_list = list(MAJOR_STOCKS) + [t for t in tickers_for_date if t.upper() not in major_set]
+        use_major_split = True
 
     widgets = []
     cached_fetcher = get_info_fetcher()
@@ -190,6 +193,7 @@ def _get_stock_widgets_sync(
         except Exception as e:
             print(f"Warning: Failed to get reports for {ticker}: {e}")
 
+        is_major = (ticker.upper() in major_set) if use_major_split else None
         if quote:
             widget = StockWidget(
                 ticker=ticker,
@@ -202,6 +206,7 @@ def _get_stock_widgets_sync(
                 has_report=latest_date is not None,
                 market_status=quote.market_status,
                 report_scores=report_scores,
+                is_major=is_major,
             )
         else:
             widget = StockWidget(
@@ -215,6 +220,7 @@ def _get_stock_widgets_sync(
                 has_report=latest_date is not None,
                 market_status="UNKNOWN",
                 report_scores=report_scores,
+                is_major=is_major,
             )
 
         widgets.append(widget)
