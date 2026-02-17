@@ -144,8 +144,7 @@ def save_report(
 class ReportService:
     """Service to read reports from SQLite database."""
 
-    def __init__(self, results_dir: str = None):
-        """results_dir is ignored; kept for backward compatibility with sync_major_stocks etc."""
+    def __init__(self) -> None:
         pass
 
     def get_latest_report_date(self, ticker: str) -> Optional[str]:

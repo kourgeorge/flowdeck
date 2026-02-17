@@ -18,7 +18,7 @@ def get_missing_and_skipped(
     """
     if analysis_date is None:
         analysis_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    report_service = ReportService(results_dir=RESULTS_DIR)
+    report_service = ReportService()
     triggered: List[str] = []
     skipped: List[str] = []
     for ticker in MAJOR_STOCKS:
