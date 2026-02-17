@@ -29,6 +29,13 @@ export default function Footer() {
               Terms of Use
             </Link>
             <span>·</span>
+            <Link
+              to="/contact"
+              className="hover:text-white transition-colors"
+            >
+              Contact
+            </Link>
+            <span>·</span>
             <span>© {currentYear}</span>
           </div>
           <div className="flex items-center gap-6 text-sm">

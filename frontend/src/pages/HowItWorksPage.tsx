@@ -94,7 +94,7 @@ export default function HowItWorksPage() {
           </section>
         </div>
 
-        <div className="mt-12 pt-8 border-t border-gray-700 flex gap-6">
+        <div className="mt-12 pt-8 border-t border-gray-700 flex flex-wrap gap-6">
           <Link
             to="/"
             className="inline-flex items-center text-sm text-gray-400 hover:text-white transition-colors"
@@ -106,6 +106,12 @@ export default function HowItWorksPage() {
             className="inline-flex items-center text-sm text-gray-400 hover:text-white transition-colors"
           >
             Terms of Use →
+          </Link>
+          <Link
+            to="/contact"
+            className="inline-flex items-center text-sm text-gray-400 hover:text-white transition-colors"
+          >
+            Contact →
           </Link>
         </div>
       </div>

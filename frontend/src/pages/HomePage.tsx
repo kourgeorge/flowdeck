@@ -24,8 +24,8 @@ function Section({
   emptyMessage: string;
 }) {
   return (
-    <div className="mb-10">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+    <div className="mb-6">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-4">
         <h2 className="text-2xl font-semibold text-white">{title}</h2>
         <div className="flex rounded-lg border border-gray-600 overflow-hidden">
           <button
@@ -123,10 +123,10 @@ export default function HomePage() {
     return (
       <div className="min-h-screen px-4 py-6 sm:p-6 lg:p-8">
         <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
-          <div className="flex flex-col items-center justify-center mb-8">
-            <img src={LOGO_PATH} alt="" className="w-40 h-40 object-contain mb-4" />
-            <h1 className="text-4xl font-bold text-white">{APP_NAME}</h1>
-            <p className="text-gray-400 mt-2 text-center max-w-2xl">
+          <div className="flex flex-col items-center justify-center mb-4">
+            <img src={LOGO_PATH} alt="" className="w-32 h-32 object-contain mb-2" />
+            <h1 className="text-3xl font-bold text-white">{APP_NAME}</h1>
+            <p className="text-gray-400 mt-1 text-center max-w-2xl text-sm">
             Invest with the odds in your favor—an AI committee of specialized agents
             turns market noise into clear insights, smarter portfolio moves, and
             confident, data-driven decisions.
@@ -151,10 +151,10 @@ export default function HomePage() {
   return (
     <div className="min-h-screen px-4 py-6 sm:p-6 lg:p-8">
       <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
-        <div className="flex flex-col items-center justify-center mb-8">
-          <img src={LOGO_PATH} alt="" className="w-40 h-40 object-contain mb-4" />
-          <h1 className="text-4xl font-bold text-white">{APP_NAME}</h1>
-          <p className="text-gray-400 mt-2 text-center max-w-2xl">
+        <div className="flex flex-col items-center justify-center mb-4">
+          <img src={LOGO_PATH} alt="" className="w-32 h-32 object-contain mb-2" />
+          <h1 className="text-3xl font-bold text-white">{APP_NAME}</h1>
+          <p className="text-gray-400 mt-1 text-center max-w-2xl text-sm">
             Invest with the odds in your favor—an AI committee of specialized agents
             turns market noise into clear insights, smarter portfolio moves, and
             confident, data-driven decisions.

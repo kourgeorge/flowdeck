@@ -4,7 +4,7 @@ import type { StockWidget as StockWidgetType } from '../services/types';
 import { parseReportDate } from '../utils/date';
 
 /** Fixed height for all stock tables; overflow scrolls inside. */
-const STOCK_TABLE_HEIGHT = '420px';
+const STOCK_TABLE_HEIGHT = '700px';
 
 interface StockListViewProps {
   widgets: StockWidgetType[];

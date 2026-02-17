@@ -6,6 +6,7 @@ import HowItWorksPage from './pages/HowItWorksPage';
 import ProfilePage from './pages/ProfilePage';
 import StockPage from './pages/StockPage';
 import TermsOfUsePage from './pages/TermsOfUsePage';
+import ContactUsPage from './pages/ContactUsPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import SubscriptionsPage from './pages/SubscriptionsPage';
 
@@ -23,6 +24,7 @@ function App() {
           <Route path="admin" element={<AdminDashboardPage />} />
           <Route path="how-it-works" element={<HowItWorksPage />} />
           <Route path="terms" element={<TermsOfUsePage />} />
+          <Route path="contact" element={<ContactUsPage />} />
         </Route>
       </Routes>
     </Router>

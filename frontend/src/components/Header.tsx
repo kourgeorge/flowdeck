@@ -26,6 +26,12 @@ export default function Header() {
             >
               How it works
             </Link>
+            <Link
+              to="/contact"
+              className="text-gray-300 hover:text-white text-sm font-medium transition-colors"
+            >
+              Contact
+            </Link>
           </nav>
         </div>
       </div>
