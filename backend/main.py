@@ -134,12 +134,13 @@ def _get_stock_widgets_sync(
                 report_date, limit, offset
             )
         else:
-            tickers_for_date = report_service.get_tickers_with_reports_for_date(report_date)
             if only_date:
+                tickers_for_date = report_service.get_tickers_with_reports_for_date(report_date)
                 ticker_list = [t.upper() for t in tickers_for_date]
             else:
+                # Home page: only fetch major stocks (UI shows at most 10); avoid loading all tickers with reports for date
                 major_set = {t.upper() for t in MAJOR_STOCKS}
-                ticker_list = list(MAJOR_STOCKS) + [t for t in tickers_for_date if t.upper() not in major_set]
+                ticker_list = list(MAJOR_STOCKS)
                 use_major_split = True
 
     widgets = []
