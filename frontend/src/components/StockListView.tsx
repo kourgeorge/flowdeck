@@ -3,8 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import type { StockWidget as StockWidgetType } from '../services/types';
 import { parseReportDate } from '../utils/date';
 
-/** Fixed height for all stock tables; overflow scrolls inside. */
-const STOCK_TABLE_HEIGHT = '700px';
+/** Min and max number of visible stock rows; table height is dynamic within these limits. */
+const MIN_VISIBLE_ROWS = 3;
+const MAX_VISIBLE_ROWS = 12;
+const ROW_HEIGHT_PX = 52;
+const TABLE_HEADER_HEIGHT_PX = 52;
+
+function getTableHeightPx(rowCount: number): number {
+  const visibleRows = Math.min(MAX_VISIBLE_ROWS, Math.max(MIN_VISIBLE_ROWS, rowCount));
+  return TABLE_HEADER_HEIGHT_PX + visibleRows * ROW_HEIGHT_PX;
+}
 
 interface StockListViewProps {
   widgets: StockWidgetType[];
@@ -100,14 +108,15 @@ export default function StockListView({ widgets, tickerToName, scrollRef, onScro
   const sortedWidgets = [...widgets].sort(
     (a, b) => getConfidenceValue(b) - getConfidenceValue(a)
   );
+  const tableHeightPx = getTableHeightPx(sortedWidgets.length);
 
   return (
     <div className="w-full min-w-0 max-w-full rounded-lg border border-gray-700 bg-gray-800/80" role="region" aria-label="Stock list table">
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className="overflow-auto min-h-0 w-full"
-        style={{ height: STOCK_TABLE_HEIGHT }}
+        className="overflow-y-auto overflow-x-hidden min-h-0 w-full"
+        style={{ height: `${tableHeightPx}px` }}
       >
         <table className="table-fixed text-left w-full min-w-[960px]" style={{ tableLayout: 'fixed' }}>
         <colgroup>

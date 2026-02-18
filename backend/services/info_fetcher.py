@@ -9,7 +9,7 @@ Used by both the dashboard HTTP API and (via info service client) by AI agents.
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -72,19 +72,36 @@ class InfoFetcher:
         period: str = "6mo",
         interval: str = "1d",
     ) -> Dict[str, Any]:
-        """Get historical OHLCV data. Uses yfinance in-engine; can be overridden."""
+        """Get historical OHLCV data. Uses yfinance in-engine; can be overridden.
+        When period=1d and interval is intraday (1m, 2m, 5m, 15m, 30m, 60m), returns
+        the last trading day's intraday data (not today's partial day)."""
         import yfinance as yf
         ticker = ticker.upper()
         ticker_obj = yf.Ticker(ticker)
-        hist = ticker_obj.history(period=period, interval=interval)
+        intraday_intervals = ("1m", "2m", "5m", "15m", "30m", "60m")
+        use_last_trading_day = period == "1d" and interval in intraday_intervals
+        if use_last_trading_day:
+            today = date.today()
+            if today.weekday() == 0:  # Monday -> last trading day is Friday
+                last_close = today - timedelta(days=3)
+            else:
+                last_close = today - timedelta(days=1)
+            start = last_close.strftime("%Y-%m-%d")
+            end = (last_close + timedelta(days=1)).strftime("%Y-%m-%d")
+            hist = ticker_obj.history(start=start, end=end, interval=interval)
+        else:
+            hist = ticker_obj.history(period=period, interval=interval)
         if hist.empty:
             return {"ticker": ticker, "period": period, "interval": interval, "data": [], "count": 0}
         data = []
-        for date, row in hist.iterrows():
-            d = date
+        for date_idx, row in hist.iterrows():
+            d = date_idx
             if hasattr(d, "tz_localize") and d.tzinfo is not None:
                 d = d.tz_localize(None)
-            date_str = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)
+            if use_last_trading_day and hasattr(d, "strftime"):
+                date_str = d.strftime("%Y-%m-%dT%H:%M:%S")
+            else:
+                date_str = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)
             adj_close = row.get("Close")
             if "Adj Close" in row:
                 adj_close = row["Adj Close"]

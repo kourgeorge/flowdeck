@@ -17,6 +17,8 @@ interface DashboardNewsSectionProps {
   tickers: string[];
   /** Refresh interval in ms; 0 = no auto refresh */
   refreshIntervalMs?: number;
+  /** When true, grow to fill container height (e.g. to span alongside left column) */
+  fillHeight?: boolean;
 }
 
 const NEWS_WIDGET_HEIGHT = 960;
@@ -25,6 +27,7 @@ const PAGE_SIZE = 20;
 export default function DashboardNewsSection({
   tickers,
   refreshIntervalMs = 120000,
+  fillHeight = false,
 }: DashboardNewsSectionProps) {
   const [articles, setArticles] = useState<NewsArticleWithTicker[]>([]);
   const [filterTicker, setFilterTicker] = useState<string | null>(null);
@@ -108,8 +111,12 @@ export default function DashboardNewsSection({
 
   return (
     <div
-      className="bg-gray-800 rounded-lg border border-gray-700 flex flex-col shrink-0"
-      style={{ height: NEWS_WIDGET_HEIGHT, maxHeight: NEWS_WIDGET_HEIGHT }}
+      className={`bg-gray-800 rounded-lg border border-gray-700 flex flex-col ${fillHeight ? 'min-h-0 flex-1 overflow-hidden' : 'shrink-0'}`}
+      style={
+        fillHeight
+          ? { maxHeight: 'min(calc(100vh - 12rem), 960px)' }
+          : { height: NEWS_WIDGET_HEIGHT, maxHeight: NEWS_WIDGET_HEIGHT }
+      }
     >
       <div className="p-4 border-b border-gray-700 shrink-0">
         <div className="flex items-center justify-between gap-2 mb-3">

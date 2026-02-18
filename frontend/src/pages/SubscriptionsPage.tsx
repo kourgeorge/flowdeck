@@ -4,6 +4,7 @@ import StockListView from '../components/StockListView';
 import StockSearch from '../components/StockSearch';
 import DashboardNewsSection from '../components/DashboardNewsSection';
 import DashboardTopTiles from '../components/DashboardTopTiles';
+import DashboardPriceTrendsChart from '../components/DashboardPriceTrendsChart';
 import { stockApi } from '../services/api';
 import { subscriptionApi } from '../services/subscriptionApi';
 import type { StockWidget as StockWidgetType } from '../services/types';
@@ -171,10 +172,17 @@ export default function SubscriptionsPage() {
 
         <div className="mt-6 flex flex-col lg:flex-row gap-6 lg:gap-8 lg:items-stretch">
           <div className="flex-1 min-w-0 flex flex-col">
-            <div className="shrink-0">
+            {tickers.length > 0 && (
+              <div className="shrink-0 min-h-[340px]">
+                <DashboardPriceTrendsChart tickers={tickers} period="6mo" height={340} />
+              </div>
+            )}
+
+            <div className="shrink-0 mt-6">
               <h2 className="text-lg font-semibold text-white mb-4">Subscribed stocks</h2>
               <StockListView widgets={widgets} tickerToName={tickerToName} />
             </div>
+
             <div className="flex-1 flex flex-col min-h-0 mt-8">
               <h2 className="text-lg font-semibold text-white mb-4 shrink-0">Recently Analyzed</h2>
               {recentAnalyzedWidgets.length === 0 ? (
@@ -203,12 +211,16 @@ export default function SubscriptionsPage() {
               )}
             </div>
           </div>
-          <aside className="w-full lg:w-[360px] shrink-0 flex flex-col min-h-[400px]">
-            <DashboardNewsSection
-              tickers={tickers}
-              refreshIntervalMs={120000}
-            />
-          </aside>
+
+          {tickers.length > 0 && (
+            <aside className="w-full lg:w-[360px] shrink-0 flex flex-col self-stretch min-h-0">
+              <DashboardNewsSection
+                tickers={tickers}
+                refreshIntervalMs={120000}
+                fillHeight
+              />
+            </aside>
+          )}
         </div>
       </div>
     </div>
