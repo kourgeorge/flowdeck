@@ -1,6 +1,34 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { contactApi } from '../services/api';
 
 export default function ContactUsPage() {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [message, setMessage] = useState('');
+  const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+  const [errorDetail, setErrorDetail] = useState('');
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setStatus('sending');
+    setErrorDetail('');
+    try {
+      await contactApi.submit({ name, email, message });
+      setStatus('success');
+      setName('');
+      setEmail('');
+      setMessage('');
+    } catch (err: unknown) {
+      setStatus('error');
+      const msg =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          : '';
+      setErrorDetail(typeof msg === 'string' ? msg : 'Failed to send. Please try again or email us directly.');
+    }
+  }
+
   return (
     <div className="min-h-screen p-8">
       <div className="max-w-3xl mx-auto text-gray-300">
@@ -20,26 +48,13 @@ export default function ContactUsPage() {
           <section>
             <h2 className="text-lg font-semibold text-white mb-3">Get in touch</h2>
             <p className="mb-4">
-              For general inquiries, product feedback, or partnership opportunities, reach out using the form below or email us directly.
-            </p>
-            <p>
-              <a
-                href="mailto:support@flowdeck.com"
-                className="text-blue-400 hover:text-blue-300 transition-colors"
-              >
-                support@flowdeck.com
-              </a>
+              For general inquiries, product feedback, or partnership opportunities, reach out using the form below.
             </p>
           </section>
 
           <section className="bg-gray-800/50 rounded-lg border border-gray-700 p-6">
             <h2 className="text-lg font-semibold text-white mb-4">Send a message</h2>
-            <form
-              action="mailto:support@flowdeck.com"
-              method="get"
-              className="space-y-4"
-            >
-              <input type="hidden" name="subject" value="Flowdeck – Contact form" />
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label htmlFor="contact-name" className="block text-gray-400 text-xs font-medium mb-1">
                   Name
@@ -49,6 +64,8 @@ export default function ContactUsPage() {
                   name="name"
                   type="text"
                   placeholder="Your name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   className="w-full px-4 py-2 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
@@ -62,6 +79,8 @@ export default function ContactUsPage() {
                   type="email"
                   placeholder="you@example.com"
                   required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="w-full px-4 py-2 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
@@ -71,26 +90,28 @@ export default function ContactUsPage() {
                 </label>
                 <textarea
                   id="contact-message"
-                  name="body"
+                  name="message"
                   rows={4}
                   placeholder="How can we help?"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
                   className="w-full px-4 py-2 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
                 />
               </div>
+              {status === 'success' && (
+                <p className="text-green-400 text-sm">Message sent successfully. We'll get back to you soon.</p>
+              )}
+              {status === 'error' && (
+                <p className="text-red-400 text-sm">{errorDetail}</p>
+              )}
               <button
                 type="submit"
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                disabled={status === 'sending'}
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
               >
-                Send message
+                {status === 'sending' ? 'Sending…' : 'Send message'}
               </button>
             </form>
-            <p className="text-gray-500 text-xs mt-3">
-              Submitting will open your email client. For a direct link, use{' '}
-              <a href="mailto:support@flowdeck.com" className="text-blue-400 hover:text-blue-300">
-                support@flowdeck.com
-              </a>
-              .
-            </p>
           </section>
         </div>
 

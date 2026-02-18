@@ -324,6 +324,46 @@ def notify_admin_new_subscription(user_email: str, ticker: str) -> None:
         _send_via_api(to_emails, subject, text_body, html_body)
 
 
+# Contact form submissions are sent to the same admin address
+CONTACT_FORM_RECIPIENT = "kourgeorge@gmail.com"
+
+
+def send_contact_form_email(name: str, email: str, message: str) -> bool:
+    """
+    Send the contact form submission to the admin (kourgeorge@gmail.com).
+    Returns True if sent successfully; False if email is not configured or send failed.
+    """
+    subject = "Flowdeck – Contact form"
+    text_body = (
+        f"Contact form submission from Flowdeck.\n\n"
+        f"Name: {name or '(not provided)'}\n"
+        f"Email: {email or '(not provided)'}\n\n"
+        f"Message:\n{message or '(empty)'}\n\n"
+        f"Dashboard: {_get_frontend_url()}"
+    )
+
+    def safe(s: str) -> str:
+        return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("@", "&#64;")
+
+    inner = f"""
+    <p style="margin:0 0 16px;font-size:18px;color:{_TEXT_DARK};font-weight:600;">Contact form submission</p>
+    <p style="margin:0 0 12px;font-size:15px;color:#475569;line-height:1.6;"><strong>Name:</strong> {safe(name) or '(not provided)'}</p>
+    <p style="margin:0 0 12px;font-size:15px;color:#475569;line-height:1.6;"><strong>Email:</strong> {safe(email) or '(not provided)'}</p>
+    <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.6;white-space:pre-wrap;">{safe(message) or '(empty)'}</p>
+    <p style="margin:0;"><a href="{_get_frontend_url()}" style="display:inline-block;padding:12px 24px;background:{_BRAND_PRIMARY};color:#ffffff !important;text-decoration:none;font-weight:600;font-size:14px;border-radius:8px;">Open Flowdeck</a></p>
+    """
+    html_body = _html_email_wrapper(
+        title="Contact form",
+        inner_body=inner,
+    )
+    to_emails = [CONTACT_FORM_RECIPIENT]
+    if _get_smtp_password() and _send_via_smtp(to_emails, subject, text_body, html_body):
+        return True
+    if _get_api_key() and _send_via_api(to_emails, subject, text_body, html_body):
+        return True
+    return False
+
+
 def send_welcome_email(user_email: str) -> bool:
     """
     Send a welcome email to a newly registered user.

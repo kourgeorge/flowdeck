@@ -231,5 +231,12 @@ export const stockApi = {
   },
 };
 
+export const contactApi = {
+  submit: async (data: { name: string; email: string; message: string }) => {
+    const res = await api.post<{ ok: boolean; message: string }>('/api/contact', data);
+    return res.data;
+  },
+};
+
 export default stockApi;
 
