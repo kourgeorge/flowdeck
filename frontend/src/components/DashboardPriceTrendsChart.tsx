@@ -80,8 +80,26 @@ export default function DashboardPriceTrendsChart({
 }: DashboardPriceTrendsChartProps) {
   const [selectedPeriod, setSelectedPeriod] = useState(initialPeriod);
   const [seriesByTicker, setSeriesByTicker] = useState<Record<string, { date: string; pct: number }[]>>({});
+  const [visibleTickers, setVisibleTickers] = useState<Set<string>>(() => new Set(tickers));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Reset visible tickers when tickers change; default all visible
+  useEffect(() => {
+    setVisibleTickers(new Set(tickers));
+  }, [tickers.join(',')]);
+
+  const toggleTicker = (ticker: string) => {
+    setVisibleTickers((prev) => {
+      const next = new Set(prev);
+      if (next.has(ticker)) {
+        next.delete(ticker);
+      } else {
+        next.add(ticker);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (tickers.length === 0) {
@@ -282,9 +300,35 @@ export default function DashboardPriceTrendsChart({
             />
             <Legend
               wrapperStyle={{ fontSize: 12 }}
-              formatter={(value) => <span style={{ color: chartTheme.text }}>{value}</span>}
               iconType="line"
               iconSize={10}
+              content={({ payload }) => (
+                <div className="flex flex-wrap gap-x-4 gap-y-1 justify-center mt-2">
+                  {payload?.map((entry) => {
+                    const ticker = String(entry.value ?? '');
+                    const visible = visibleTickers.has(ticker);
+                    return (
+                      <button
+                        key={ticker}
+                        type="button"
+                        onClick={() => toggleTicker(ticker)}
+                        className="inline-flex items-center gap-1.5 text-xs transition-opacity hover:opacity-100"
+                        style={{
+                          color: entry.color ?? chartTheme.text,
+                          opacity: visible ? 1 : 0.4,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <span
+                          className="w-3 h-0.5 shrink-0 rounded"
+                          style={{ backgroundColor: entry.color ?? chartTheme.text }}
+                        />
+                        {ticker}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             />
             {tickerList.map((ticker, i) => (
               <Line
@@ -297,6 +341,7 @@ export default function DashboardPriceTrendsChart({
                 dot={false}
                 connectNulls
                 isAnimationActive={true}
+                hide={!visibleTickers.has(ticker)}
               />
             ))}
           </LineChart>
