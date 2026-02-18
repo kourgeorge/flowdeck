@@ -2,7 +2,7 @@
 
 import os
 
-# Default list of major stocks to show on homepage (10 major stocks)
+# Default list of major stocks to show on homepage
 MAJOR_STOCKS = [
     "AAPL",  # Apple
     "MSFT",  # Microsoft
@@ -11,9 +11,6 @@ MAJOR_STOCKS = [
     "NVDA",  # NVIDIA
     "META",  # Meta
     "TSLA",  # Tesla
-    "BRK-B", # Berkshire Hathaway
-    "JPM",   # JPMorgan Chase
-    "V",     # Visa
 ]
 
 # Results directory path (in repo root; relative to backend or absolute)
