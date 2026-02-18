@@ -115,7 +115,7 @@ export default function StockListView({ widgets, tickerToName, scrollRef, onScro
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className="overflow-y-auto overflow-x-hidden min-h-0 w-full"
+        className="overflow-auto min-h-0 w-full scrollbar-hide-x"
         style={{ height: `${tableHeightPx}px` }}
       >
         <table className="table-fixed text-left w-full min-w-[960px]" style={{ tableLayout: 'fixed' }}>

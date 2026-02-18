@@ -94,3 +94,9 @@ body {
   background: #64748b;
 }
 
+/* Hide horizontal scrollbar only; scrolling still works (touch, trackpad, wheel) */
+.scrollbar-hide-x::-webkit-scrollbar:horizontal {
+  height: 0;
+  display: none;
+}
+
