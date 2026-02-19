@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
-from auth import create_access_token, hash_password, verify_password
+from auth import create_access_token, get_current_user, hash_password, verify_password
 from database import get_db
 from models.db_models import User
 from services.email_service import send_welcome_email
@@ -19,6 +19,10 @@ class RegisterRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     email: EmailStr
+    password: str
+
+
+class DeleteAccountRequest(BaseModel):
     password: str
 
 
@@ -70,3 +74,20 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
         )
     token = create_access_token(str(user.id))
     return TokenResponse(access_token=token, user_id=user.id, email=user.email)
+
+
+@router.delete("/account", status_code=status.HTTP_204_NO_CONTENT)
+def delete_account(
+    req: DeleteAccountRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete the current user's account. Requires password confirmation. Irreversible."""
+    if not verify_password(req.password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid password",
+        )
+    db.delete(current_user)
+    db.commit()
+    return None

@@ -3,8 +3,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { profileApi, type MeProfile } from '../services/authApi';
 
+const DELETE_CONFIRM_TEXT = 'DELETE';
+
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user, deleteAccount } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<MeProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -21,6 +23,12 @@ export default function ProfilePage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+
+  // Delete account
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -91,6 +99,29 @@ export default function ProfilePage() {
       setPasswordMessage(typeof msg === 'string' ? msg : 'Failed to update password');
     } finally {
       setPasswordSaving(false);
+    }
+  };
+
+  const handleDeleteAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDeleteError(null);
+    if (deleteConfirmText !== DELETE_CONFIRM_TEXT) {
+      setDeleteError(`Type ${DELETE_CONFIRM_TEXT} to confirm.`);
+      return;
+    }
+    if (!deletePassword.trim()) {
+      setDeleteError('Enter your password to confirm.');
+      return;
+    }
+    setDeleteLoading(true);
+    try {
+      await deleteAccount(deletePassword);
+      navigate('/', { replace: true });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setDeleteError(typeof msg === 'string' ? msg : 'Failed to delete account');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -259,6 +290,54 @@ export default function ProfilePage() {
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
             >
               {passwordSaving ? 'Updating…' : 'Change password'}
+            </button>
+          </form>
+        </section>
+
+        {/* Delete account */}
+        <section className="bg-gray-800 border border-red-900/50 rounded-xl p-6 mt-8">
+          <h2 className="text-lg font-semibold text-red-400 mb-2">Delete account</h2>
+          <p className="text-sm text-gray-400 mb-4">
+            This will permanently delete your account and all associated data (subscriptions, etc.). This cannot be undone.
+          </p>
+          <form onSubmit={handleDeleteAccount} className="space-y-4">
+            <div>
+              <label htmlFor="delete-password" className="block text-sm font-medium text-gray-300 mb-1">
+                Your password
+              </label>
+              <input
+                id="delete-password"
+                type="password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                placeholder="••••••••"
+                autoComplete="current-password"
+              />
+            </div>
+            <div>
+              <label htmlFor="delete-confirm-text" className="block text-sm font-medium text-gray-300 mb-1">
+                Type {DELETE_CONFIRM_TEXT} to confirm
+              </label>
+              <input
+                id="delete-confirm-text"
+                type="text"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                placeholder={DELETE_CONFIRM_TEXT}
+                autoComplete="off"
+              />
+            </div>
+            {deleteError && (
+              <p className="text-sm text-red-400">{deleteError}</p>
+            )}
+            <button
+              type="submit"
+              disabled={deleteLoading || deleteConfirmText !== DELETE_CONFIRM_TEXT || !deletePassword.trim()}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              {deleteLoading ? 'Deleting…' : 'Delete my account'}
             </button>
           </form>
         </section>

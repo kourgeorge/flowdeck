@@ -23,6 +23,14 @@ export const authApi = {
     const res = await api.post<TokenResponse>('/api/auth/login', { email, password });
     return res.data;
   },
+  deleteAccount: async (password: string): Promise<void> => {
+    const token = getStoredToken();
+    if (!token) throw new Error('Not authenticated');
+    await api.delete('/api/auth/account', {
+      data: { password },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  },
 };
 
 const AUTH_KEY = 'flowdeck_token';
