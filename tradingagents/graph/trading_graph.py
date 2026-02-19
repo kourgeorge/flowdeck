@@ -6,15 +6,11 @@ import json
 from datetime import date
 from typing import Dict, Any, Tuple, List, Optional
 
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_perplexity import ChatPerplexity
-
 from langgraph.prebuilt import ToolNode
 
 from tradingagents.agents import *
 from tradingagents.default_config import DEFAULT_CONFIG
+from flowdeck_ai import LLMProvider
 from tradingagents.agents.utils.memory import FinancialSituationMemory
 from tradingagents.agents.utils.agent_states import (
     AgentState,
@@ -80,52 +76,10 @@ class TradingAgentsGraph:
             exist_ok=True,
         )
 
-        # Initialize LLMs
-        if self.config["llm_provider"].lower() == "openai" or self.config["llm_provider"] == "ollama" or self.config["llm_provider"] == "openrouter":
-            self.deep_thinking_llm = ChatOpenAI(model=self.config["deep_think_llm"], base_url=self.config["backend_url"])
-            self.quick_thinking_llm = ChatOpenAI(model=self.config["quick_think_llm"], base_url=self.config["backend_url"])
-        elif self.config["llm_provider"].lower() == "anthropic":
-            self.deep_thinking_llm = ChatAnthropic(model=self.config["deep_think_llm"], base_url=self.config["backend_url"])
-            self.quick_thinking_llm = ChatAnthropic(model=self.config["quick_think_llm"], base_url=self.config["backend_url"])
-        elif self.config["llm_provider"].lower() == "google":
-            self.deep_thinking_llm = ChatGoogleGenerativeAI(model=self.config["deep_think_llm"])
-            self.quick_thinking_llm = ChatGoogleGenerativeAI(model=self.config["quick_think_llm"])
-        elif self.config["llm_provider"].lower() == "perplexity":
-            self.deep_thinking_llm = ChatPerplexity(model=self.config["deep_think_llm"])
-            self.quick_thinking_llm = ChatPerplexity(model=self.config["quick_think_llm"])
-        elif self.config["llm_provider"].lower() == "azure":
-            from langchain_openai import AzureChatOpenAI
-            
-            azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-            azure_api_key = os.getenv("AZURE_OPENAI_API_KEY")
-            azure_api_version = os.getenv("OPENAI_API_VERSION", "2024-08-01-preview")
-            
-            if not azure_endpoint or not azure_api_key:
-                raise ValueError("AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY environment variables must be set for Azure provider")
-            
-            # AzureChatOpenAI reads from environment variables:
-            # AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, AZURE_OPENAI_API_VERSION
-            # The azure_deployment parameter should be the Azure Model ID (deployment name)
-            # request_timeout prevents indefinite hang on slow or stuck API
-            self.deep_thinking_llm = AzureChatOpenAI(
-                azure_deployment=self.config["deep_think_llm"],  # Azure Model ID (deployment name)
-                model=self.config["deep_think_llm"],
-                azure_endpoint=azure_endpoint,
-                api_key=azure_api_key,
-                api_version=azure_api_version,
-                request_timeout=120,
-            )
-            self.quick_thinking_llm = AzureChatOpenAI(
-                azure_deployment=self.config["quick_think_llm"],  # Azure Model ID (deployment name)
-                model=self.config["quick_think_llm"],
-                azure_endpoint=azure_endpoint,
-                api_key=azure_api_key,
-                api_version=azure_api_version,
-                request_timeout=120,
-                temperature=0.0,
-            )
-        else:
-            raise ValueError(f"Unsupported LLM provider: {self.config['llm_provider']}")
+        # Initialize LLMs via provider (deep thinker + quick thinking model)
+        llm_provider = LLMProvider(self.config)
+        self.deep_thinking_llm = llm_provider.get_deep_llm(request_timeout=120)
+        self.quick_thinking_llm = llm_provider.get_quick_llm(request_timeout=120)
         
         # Initialize memories
         self.bull_memory = FinancialSituationMemory("bull_memory", self.config)
