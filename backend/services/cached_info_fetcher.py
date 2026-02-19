@@ -162,3 +162,12 @@ class CachedInfoFetcher:
             DATA_CACHE_TTL_FUND_INFO,
             lambda: self._fetcher.get_fund_info(ticker),
         )
+
+    def get_future_events(self, ticker: str) -> Dict[str, Any]:
+        """Get upcoming earnings and ex-dividend dates (cached)."""
+        key = f"future_events:{ticker.upper()}"
+        return get_cached(
+            key,
+            DATA_CACHE_TTL_ANALYST,
+            lambda: self._fetcher.get_future_events(ticker),
+        )

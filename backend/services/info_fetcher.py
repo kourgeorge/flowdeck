@@ -9,6 +9,7 @@ Used by both the dashboard HTTP API and (via info service client) by AI agents.
 from __future__ import annotations
 
 import json
+import math
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -256,6 +257,8 @@ class InfoFetcher:
         try:
             t = yf.Ticker(ticker)
             info = t.info
+            if info is None:
+                info = {}
             # Next ex-dividend date (Unix timestamp; only include if in the future)
             ex_ts = info.get("exDividendDate")
             if ex_ts is not None:
@@ -285,16 +288,20 @@ class InfoFetcher:
                         date_str = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)
                         eps_est = row.get("EPS Estimate")
                         label = "Earnings"
-                        if eps_est is not None and not (isinstance(eps_est, float) and eps_est != eps_est):
+                        eps_estimate_val = None
+                        if eps_est is not None:
                             try:
-                                label = f"Earnings (EPS est. ${float(eps_est):.2f})"
-                            except Exception:
+                                fval = float(eps_est)
+                                if not math.isnan(fval):
+                                    eps_estimate_val = fval
+                                    label = f"Earnings (EPS est. ${fval:.2f})"
+                            except (TypeError, ValueError):
                                 pass
                         events.append({
                             "date": date_str,
                             "type": "earnings",
                             "label": label,
-                            "eps_estimate": float(eps_est) if eps_est is not None and not (isinstance(eps_est, float) and eps_est != eps_est) else None,
+                            "eps_estimate": eps_estimate_val,
                         })
             except Exception:
                 pass

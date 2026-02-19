@@ -10,14 +10,14 @@ Analysis can be started from:
 
 | Entry | Where | What happens |
 |-------|--------|----------------|
-| **Dashboard API** | `backend/main.py` → `POST /api/analyses/start` | Calls `AnalysisService.start_analysis()` with ticker, date, analysts, research_depth, llm_provider; runs `_run_analysis()` in a background thread. |
+| **Dashboard API** | `backend/main.py` → `POST /api/analyses/start` | Calls `AnalysisService.start_analysis()` with ticker, analysis_date, analysts (default `["market", "news", "fundamentals", "sec"]`), research_depth, llm_provider, progress_callback, initiator_email; runs analysis in a background thread. |
 | **CLI** | `cli/main.py` → `run_analysis()` | Builds config, creates `TradingAgentsGraph`, creates initial state, then `graph.stream(init_agent_state, **args)` (or `invoke` in non-debug). |
 
 In both cases the **core execution** is:
 
 1. **State init**: `graph.propagator.create_initial_state(ticker, trade_date)`
-2. **Graph args**: `graph.propagator.get_graph_args()` → `stream_mode="values"`, `recursion_limit`
-3. **Run**: `graph.graph.stream(init_agent_state, **args)` (or `invoke`)  
+2. **Graph args**: `graph.propagator.get_graph_args()` → `stream_mode="values"`, `config={"recursion_limit": ...}`
+3. **Run**: `graph.graph.stream(init_agent_state, **args)` (or `invoke` in non-debug)  
    The `graph` is the **compiled LangGraph** built in `GraphSetup.setup_graph(selected_analysts)`.
 
 ---
@@ -30,12 +30,15 @@ The graph is a **StateGraph(AgentState)**. Edges are fixed and conditional as be
 
 - **START** → **First analyst** (e.g. `Market Analyst` if `selected_analysts = ["market", "news", "fundamentals"]`).
 
-For **each** selected analyst (e.g. `market`, `news`, `fundamentals`):
+Analyst types (in selection order): **market**, **social**, **news**, **fundamentals**, **technical**, **sec**.  
+Graph default is `["market", "social", "news", "fundamentals"]`; Dashboard API default is `["market", "news", "fundamentals", "sec"]`.
 
-1. **`{Analyst} Analyst`** (e.g. `Market Analyst`)
+For **each** selected analyst (e.g. `market`, `social`, `news`, `fundamentals`):
+
+1. **`{Analyst} Analyst`** (e.g. `Market Analyst`, `Social Analyst`, `News Analyst`, …)
    - Reads state: `company_of_interest`, `trade_date`, `messages`.
-   - Uses LLM + tools (e.g. `get_stock_data`, `get_indicators` for market) to produce a report and score.
-   - Writes: `market_report` / `sentiment_report` / `news_report` / `fundamentals_report` / `sec_report` / `technical_report` and corresponding `*_score`.
+   - Uses LLM + tools (e.g. `get_stock_data`, `get_indicators` for market; social uses `get_insider_sentiment`, `get_insider_transactions`, `get_global_news`) to produce a report and score.
+   - Writes: `market_report`, `sentiment_report` (Social), `news_report`, `fundamentals_report`, `sec_report`, `technical_report` and corresponding `*_score`.
    - Conditional edge:
      - If last message has **tool_calls** → **`tools_{analyst}`**
      - Else → **`Msg Clear {Analyst}`**
@@ -57,6 +60,14 @@ START → Analyst_1 ⟷ tools_1 → Msg Clear 1 → Analyst_2 ⟷ tools_2 → �
 ```
 
 (Each analyst can loop with its tool node until it stops calling tools.)
+
+#### Social Analyst
+
+When `"social"` is in `selected_analysts`, the **Social (Media) Analyst** runs in the analyst chain. It produces `sentiment_report` and `sentiment_score` (1–10) using tools such as `get_insider_sentiment`, `get_insider_transactions`, `get_global_news`.
+
+#### Technical Analyst (optional)
+
+When `"technical"` is in `selected_analysts`, the **Technical Analyst** runs with tools including `get_stock_data`, `get_indicators`, and advanced tools (`detect_divergence`, `detect_regime`, `detect_support_resistance`). It produces `technical_report` and `technical_score` (1–10).
 
 #### SEC Analyst (optional)
 
@@ -114,21 +125,22 @@ So the loop is: **Bull Researcher ⇄ Bear Researcher** until `count >= 2 * max_
     - Or go to **Risk Judge** when round limit is reached.
 
 - **Risk Judge**
-  - Produces final risk decision and **`final_trade_decision`** (BUY/HOLD/SELL).
+  - Produces final risk decision, **`final_trade_decision`** (text), and optionally **`recommendation`** (BUY/HOLD/SELL), **`risk_score`**, **`risky_summary`**, **`safe_summary`**, **`neutral_summary`**, **`final_report_key_takeaways`**.
   - Edge: **END**.
 
-So: **Risky Analyst ⇄ Safe Analyst ⇄ Neutral Analyst** (in the order defined by `should_continue_risk_analysis`) until round limit, then → **Risk Judge** → **END**.
+So: **Risky Analyst → Safe Analyst → Neutral Analyst → Risky Analyst → …** (round-robin via `should_continue_risk_analysis`) until `count >= 3 * max_risk_discuss_rounds`, then → **Risk Judge** → **END**.
 
 ---
 
 ## 6. State (AgentState) — what flows through
 
-- **Input / identity**: `company_of_interest`, `trade_date`, `messages`.
+- **Input / identity**: `company_of_interest`, `trade_date`, `messages`, `sender`.
 - **Analyst outputs**: `market_report`, `market_score`; `sentiment_report`, `sentiment_score`; `news_report`, `news_score`; `fundamentals_report`, `fundamentals_score`; `sec_report`, `sec_score`; `technical_report`, `technical_score`.
-- **Debate**: `investment_debate_state` (history, bull/bear history, current_response, count, judge_decision).
-- **Research Manager**: `investment_plan`, `recommendation_score`, `expected_return_pct`, `bear_case_return_pct`, `bull_case_return_pct`.
+- **Investment debate**: `investment_debate_state` (`history`, `bull_history`, `bear_history`, `current_response`, `count`, `judge_decision`).
+- **Research Manager**: `investment_plan`, `recommendation_score`, `expected_return_pct`, `bear_case_return_pct`, `bull_case_return_pct`, `bull_summary`, `bear_summary`.
 - **Trader**: `trader_investment_plan`.
-- **Risk**: `risk_debate_state` (risky/safe/neutral history, latest_speaker, count, judge_decision), `investment_plan`, `final_trade_decision`, `risk_score`.
+- **Risk debate**: `risk_debate_state` (`risky_history`, `safe_history`, `neutral_history`, `history`, `latest_speaker`, `current_risky_response`, `current_safe_response`, `current_neutral_response`, `count`, `judge_decision`).
+- **Risk Judge**: `final_trade_decision`, `recommendation` (BUY/SELL/HOLD), `risk_score`, `risky_summary`, `safe_summary`, `neutral_summary`, `final_report_key_takeaways`.
 
 Each node **reads** from this state and **returns** a dict of keys to **update** (LangGraph merges into the single AgentState).
 
@@ -142,9 +154,9 @@ Each node **reads** from this state and **returns** a dict of keys to **update**
   - Returns `(final_state, self.process_signal(final_state["final_trade_decision"]))`.
 
 - **SignalProcessor.process_signal(full_signal)**:
-  - Takes the **final_trade_decision** text.
+  - Takes the **final_trade_decision** text (or equivalent).
   - Uses the quick-thinking LLM to **extract a single token**: **BUY**, **SELL**, or **HOLD**.
-  - That is the **final actionable output** of the AI analysis.
+  - That is the **final actionable output** of the AI analysis. (The Risk Judge may also set **`recommendation`** directly; the dashboard can use either.)
 
 - **Reflection (optional)**  
   `reflect_and_remember(returns_losses)` updates bull/bear/trader/judge/risk-manager memories based on outcomes.
@@ -162,9 +174,10 @@ Each node **reads** from this state and **returns** a dict of keys to **update**
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ ANALYST CHAIN (sequential; each can loop with tools)                        │
 │ START → [Market] Analyst ⇄ tools_market → Msg Clear →                        │
+│         [Social] Analyst ⇄ tools_social → Msg Clear →                        │
 │         [News] Analyst ⇄ tools_news → Msg Clear →                            │
-│         [Fundamentals] Analyst ⇄ tools_fundamentals → Msg Clear →           │
-│         [SEC] Analyst ⇄ tools_sec → Msg Clear (if "sec" selected) → …        │
+│         [Fundamentals] Analyst ⇄ tools_fundamentals → Msg Clear →             │
+│         [Technical]/[SEC] … (if selected) → … → Bull Researcher              │
 └─────────────────────────────────────────────────────────────────────────────┘
                                         │
                                         ▼
@@ -180,13 +193,14 @@ Each node **reads** from this state and **returns** a dict of keys to **update**
                                         │
                                         ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ RISK DEBATE (until max_risk_discuss_rounds)                                  │
-│ Risky Analyst ⇄ Safe Analyst ⇄ Neutral Analyst → Risk Judge → END            │
+│ RISK DEBATE (round-robin until 3 * max_risk_discuss_rounds)                 │
+│ Risky Analyst → Safe Analyst → Neutral Analyst → (loop) → Risk Judge → END   │
 └─────────────────────────────────────────────────────────────────────────────┘
                                         │
                                         ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ OUTPUT: final_trade_decision (text) → process_signal() → BUY | SELL | HOLD    │
+│ OUTPUT: final_trade_decision → process_signal() → BUY | SELL | HOLD          │
+│         (or recommendation from Risk Judge if set)                           │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 

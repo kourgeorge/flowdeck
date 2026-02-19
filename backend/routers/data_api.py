@@ -122,7 +122,10 @@ async def data_analyst_recommendations(ticker: str):
 @router.get("/future-events/{ticker}")
 async def data_future_events(ticker: str):
     """Get upcoming earnings and ex-dividend dates (Yahoo Finance)."""
-    return await asyncio.to_thread(_engine().get_future_events, ticker)
+    try:
+        return await asyncio.to_thread(_engine().get_future_events, ticker)
+    except Exception as e:
+        return {"ticker": ticker.upper(), "events": [], "count": 0, "error": str(e)}
 
 
 @router.get("/edgar-filings/{ticker}")

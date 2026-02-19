@@ -51,7 +51,19 @@ Volatility Indicators:
 Volume-Based Indicators:
 - vwma: VWMA: A moving average weighted by volume. Usage: Confirm trends by integrating price action with volume data. Tips: Watch for skewed results from volume spikes; use in combination with other volume analyses.
 
-- Select indicators that provide diverse and complementary information. Avoid redundancy (e.g., do not select both rsi and stochrsi). Also briefly explain why they are suitable for the given market context. When you tool call, please use the exact name of the indicators provided above as they are defined parameters, otherwise your call will fail. Please make sure to call get_stock_data first to retrieve the CSV that is needed to generate indicators. Then use get_indicators with the specific indicator names. Write a very detailed and nuanced report of the trends you observe. Do not simply state the trends are mixed, provide detailed and finegrained analysis and insights that may help traders make decisions."""
+- Select indicators that provide diverse and complementary information. Avoid redundancy (e.g., do not select both rsi and stochrsi). Also briefly explain why they are suitable for the given market context. When you tool call, please use the exact name of the indicators provided above as they are defined parameters, otherwise your call will fail. Please make sure to call get_stock_data first to retrieve the CSV that is needed to generate indicators. Then use get_indicators with the specific indicator names. Write a very detailed and nuanced report of the trends you observe. Do not simply state the trends are mixed, provide detailed and finegrained analysis and insights that may help traders make decisions.
+
+**CRITICAL - Indicator Values Table:** You MUST include a Markdown table with the **actual numeric values** for each indicator you analyze. Extract the most recent (latest date) value from each get_indicators tool response. Place this table at the start of your Indicator Analysis section. Use this format:
+
+| Indicator | Current Value | Interpretation |
+|-----------|---------------|----------------|
+| 50 SMA | $XX.XX | [brief interpretation] |
+| 200 SMA | $XX.XX | [brief interpretation] |
+| RSI | XX | [e.g. Overbought/Oversold/Neutral] |
+| MACD | X.XX | [brief interpretation] |
+| ... | ... | ... |
+
+Include the exact numbers from the tool responses—do not use placeholders. For price-based indicators (SMA, EMA, Bollinger Bands), include the dollar value. For RSI, MACD, ATR, etc., use the raw numeric value. This table gives traders the concrete data they need to make decisions."""
             + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
             + """ **CRITICAL: You MUST provide a Market Score between 1-10 as part of your structured output.**
             - Scoring guidelines:
