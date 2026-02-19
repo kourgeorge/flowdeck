@@ -4,8 +4,8 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
-from tradingagents.dataflows.interface import route_to_vendor
-from tradingagents.dataflows.config import get_config
+from ...dataflows.interface import route_to_vendor
+from ...dataflows.config import get_config
 import yfinance as yf
 import os
 

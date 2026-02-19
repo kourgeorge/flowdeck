@@ -70,7 +70,7 @@ The script prints the report to stdout and saves it to `results/stock_deep_resea
 
 ```python
 from langchain_core.messages import HumanMessage
-from stock_deep_research.graph import stock_researcher_graph
+from ai_engine.stock_deep_research.graph import stock_researcher_graph
 
 config = {
     "configurable": {

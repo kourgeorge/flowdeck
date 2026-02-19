@@ -60,7 +60,7 @@ config["data_vendors"] = {
 ### Option 2: Use Directly in Code
 
 ```python
-from tradingagents.dataflows.local import (
+from ai_engine.tradingagents.dataflows.local import (
     get_reddit_global_news_online,
     get_reddit_company_news_online
 )

@@ -2,10 +2,10 @@ from langchain_core.tools import tool
 from typing import Annotated
 import json
 
-from tradingagents.dataflows.interface import route_to_vendor
+from ...dataflows.interface import route_to_vendor
 
 try:
-    from tradingagents.dataflows.info_service_client import (
+    from ...dataflows.info_service_client import (
         get_fundamentals as get_fundamentals_via_service,
         get_financial_statements,
         is_configured as info_service_configured,

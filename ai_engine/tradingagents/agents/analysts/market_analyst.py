@@ -1,6 +1,6 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from pydantic import BaseModel, Field
-from tradingagents.agents.utils.agent_utils import get_stock_data, get_indicators
+from ..utils.agent_utils import get_stock_data, get_indicators
 
 
 class MarketAnalysisOutput(BaseModel):

@@ -3,7 +3,7 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from pydantic import BaseModel, Field
 
-from tradingagents.agents.utils.edgar_tools import get_edgar_filing_content
+from ..utils.edgar_tools import get_edgar_filing_content
 
 
 class SecAnalysisOutput(BaseModel):

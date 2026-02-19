@@ -1,7 +1,7 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from pydantic import BaseModel, Field
-from tradingagents.agents.utils.agent_utils import get_stock_data, get_indicators
-from tradingagents.agents.utils.advanced_technical_tools import (
+from ..utils.agent_utils import get_stock_data, get_indicators
+from ..utils.advanced_technical_tools import (
     detect_divergence,
     detect_regime,
     detect_support_resistance

@@ -1,6 +1,6 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from pydantic import BaseModel, Field
-from tradingagents.agents.utils.agent_utils import get_news, get_global_news
+from ..utils.agent_utils import get_news, get_global_news
 
 
 class NewsAnalysisOutput(BaseModel):

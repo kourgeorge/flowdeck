@@ -19,14 +19,14 @@ import os
 import sys
 from pathlib import Path
 
-# Add repo root so stock_deep_research and tradingagents are importable
+# Add repo root so ai_engine (stock_deep_research, tradingagents) is importable
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from langchain_core.messages import HumanMessage
 
-from stock_deep_research.graph import stock_researcher_graph
+from ai_engine.stock_deep_research.graph import stock_researcher_graph
 
 
 def main():

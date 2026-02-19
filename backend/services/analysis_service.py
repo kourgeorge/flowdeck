@@ -18,7 +18,7 @@ from services.report_service import save_report
 from services.email_service import notify_subscribers_new_report
 
 try:
-    from tradingagents.agents.utils.insight_extraction import extract_key_takeaways_structured
+    from ai_engine.tradingagents.agents.utils.insight_extraction import extract_key_takeaways_structured
 except ImportError:
     extract_key_takeaways_structured = None
 
@@ -28,8 +28,8 @@ load_dotenv(dotenv_path=env_path)
 # Also load from repo root when running from backend
 load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / '.env')
 
-from tradingagents.graph.trading_graph import TradingAgentsGraph
-from tradingagents.default_config import DEFAULT_CONFIG
+from ai_engine.tradingagents.graph.trading_graph import TradingAgentsGraph
+from ai_engine.tradingagents.default_config import DEFAULT_CONFIG
 
 
 def _is_us_company_with_sec(ticker: str) -> bool:

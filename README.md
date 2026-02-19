@@ -82,8 +82,8 @@ cd frontend && npm install && npm run dev   # App on http://localhost:3003
 Flowdeck’s backend uses the `tradingagents` package. You can run the same graph in your own scripts:
 
 ```python
-from tradingagents.graph.trading_graph import TradingAgentsGraph
-from tradingagents.default_config import DEFAULT_CONFIG
+from ai_engine.tradingagents.graph.trading_graph import TradingAgentsGraph
+from ai_engine.tradingagents.default_config import DEFAULT_CONFIG
 
 config = DEFAULT_CONFIG.copy()
 # config["deep_think_llm"] = "gpt-4o-mini"

@@ -1,10 +1,10 @@
 from langchain_core.tools import tool
 from typing import Annotated
 
-from tradingagents.dataflows.interface import route_to_vendor
+from ...dataflows.interface import route_to_vendor
 
 try:
-    from tradingagents.dataflows.info_service_client import get_stock_data as get_stock_data_via_service, is_configured as info_service_configured
+    from ...dataflows.info_service_client import get_stock_data as get_stock_data_via_service, is_configured as info_service_configured
 except ImportError:
     get_stock_data_via_service = None
     info_service_configured = lambda: False

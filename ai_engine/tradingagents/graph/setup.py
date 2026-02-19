@@ -6,8 +6,8 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langgraph.graph import END, StateGraph, START
 from langgraph.prebuilt import ToolNode
 
-from tradingagents.agents import *
-from tradingagents.agents.utils.agent_states import AgentState
+from ..agents import *
+from ..agents.utils.agent_states import AgentState
 
 from .conditional_logic import ConditionalLogic
 

@@ -25,7 +25,7 @@ def _get_info_service_base_url() -> Optional[str]:
     if url:
         return url.rstrip("/")
     try:
-        from tradingagents.dataflows.config import get_config
+        from .config import get_config
         cfg = get_config()
         url = (cfg.get("info_service_url") or "").strip()
         return url.rstrip("/") if url else None

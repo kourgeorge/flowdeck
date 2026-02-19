@@ -8,19 +8,19 @@ from typing import Dict, Any, Tuple, List, Optional
 
 from langgraph.prebuilt import ToolNode
 
-from tradingagents.agents import *
-from tradingagents.default_config import DEFAULT_CONFIG
+from ..agents import *
+from ..default_config import DEFAULT_CONFIG
 from ai_engine import LLMProvider
-from tradingagents.agents.utils.memory import FinancialSituationMemory
-from tradingagents.agents.utils.agent_states import (
+from ..agents.utils.memory import FinancialSituationMemory
+from ..agents.utils.agent_states import (
     AgentState,
     InvestDebateState,
     RiskDebateState,
 )
-from tradingagents.dataflows.config import set_config
+from ..dataflows.config import set_config
 
 # Import the new abstract tool methods from agent_utils
-from tradingagents.agents.utils.agent_utils import (
+from ..agents.utils.agent_utils import (
     get_stock_data,
     get_indicators,
     get_fundamentals,
@@ -32,7 +32,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_insider_transactions,
     get_global_news
 )
-from tradingagents.agents.utils.edgar_tools import get_edgar_filing_content
+from ..agents.utils.edgar_tools import get_edgar_filing_content
 
 from .conditional_logic import ConditionalLogic
 from .setup import GraphSetup
@@ -64,7 +64,7 @@ class TradingAgentsGraph:
         set_config(self.config)
         
         # Import advanced technical tools for tool nodes
-        from tradingagents.agents.utils.advanced_technical_tools import (
+        from ..agents.utils.advanced_technical_tools import (
             detect_divergence,
             detect_regime,
             detect_support_resistance
@@ -122,7 +122,7 @@ class TradingAgentsGraph:
 
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:
         """Create tool nodes for different data sources using abstract methods."""
-        from tradingagents.agents.utils.advanced_technical_tools import (
+        from ..agents.utils.advanced_technical_tools import (
             detect_divergence,
             detect_regime,
             detect_support_resistance

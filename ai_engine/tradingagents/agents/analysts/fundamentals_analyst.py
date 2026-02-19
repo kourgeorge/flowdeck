@@ -1,6 +1,6 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from pydantic import BaseModel, Field
-from tradingagents.agents.utils.agent_utils import get_fundamentals, get_balance_sheet, get_cashflow, get_income_statement
+from ..utils.agent_utils import get_fundamentals, get_balance_sheet, get_cashflow, get_income_statement
 
 
 class FundamentalsAnalysisOutput(BaseModel):

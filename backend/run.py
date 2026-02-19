@@ -10,7 +10,7 @@ backend_dir = Path(__file__).parent.absolute()
 # Change working directory to backend directory
 os.chdir(backend_dir)
 
-# Add repo root to path so we can import tradingagents (backend is now at repo root)
+# Add repo root to path so we can import ai_engine (tradingagents, stock_deep_research, etc.)
 project_root = backend_dir.parent
 sys.path.insert(0, str(project_root))
 

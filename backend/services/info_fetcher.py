@@ -21,7 +21,7 @@ def _tradingagents_route_to_vendor():
     tradingagents_dir = backend_dir.parent  # repo root (backend is at root)
     if str(tradingagents_dir) not in sys.path:
         sys.path.insert(0, str(tradingagents_dir))
-    from tradingagents.dataflows.interface import route_to_vendor
+    from ai_engine.tradingagents.dataflows.interface import route_to_vendor
     return route_to_vendor
 
 
@@ -205,7 +205,7 @@ class InfoFetcher:
         curr_date = datetime.now().strftime("%Y-%m-%d")
         try:
             _tradingagents_route_to_vendor()  # ensure path
-            from tradingagents.dataflows.y_finance import get_fundamentals_core
+            from ai_engine.tradingagents.dataflows.y_finance import get_fundamentals_core
             fundamentals_data = get_fundamentals_core(ticker, curr_date)
         except Exception as e:
             return {"ticker": ticker, "date": curr_date, "fundamentals": {}, "error": str(e)}
@@ -235,7 +235,7 @@ class InfoFetcher:
         """Get analyst recommendations from yfinance."""
         try:
             _tradingagents_route_to_vendor()  # ensure path
-            from tradingagents.dataflows.y_finance import get_analyst_recommendations as get_rec
+            from ai_engine.tradingagents.dataflows.y_finance import get_analyst_recommendations as get_rec
             return get_rec(ticker.upper())
         except Exception as e:
             return {

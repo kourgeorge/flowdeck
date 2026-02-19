@@ -27,8 +27,8 @@ for p in (str(REPO_ROOT), str(BACKEND_DIR)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from tradingagents.graph.trading_graph import TradingAgentsGraph
-from tradingagents.default_config import DEFAULT_CONFIG
+from ai_engine.tradingagents.graph.trading_graph import TradingAgentsGraph
+from ai_engine.tradingagents.default_config import DEFAULT_CONFIG
 
 # Backend services for key_takeaways, report saving, and email notifications
 from services.key_takeaways import extract_key_takeaways
@@ -37,7 +37,7 @@ from services.email_service import notify_subscribers_new_report
 from database import init_db
 
 try:
-    from tradingagents.agents.utils.insight_extraction import extract_key_takeaways_structured
+    from ai_engine.tradingagents.agents.utils.insight_extraction import extract_key_takeaways_structured
 except ImportError:
     extract_key_takeaways_structured = None
 
