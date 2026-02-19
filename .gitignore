@@ -74,6 +74,7 @@ results/
 eval_results/
 eval_data/
 *.csv
+watchlist_consulting/out/
 
 # Legacy (uncomment if you want to ignore)
 # src/
