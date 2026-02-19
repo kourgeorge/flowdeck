@@ -42,7 +42,7 @@ stock-dashboard/
 |------|-------------|
 | `frontend/` | TypeScript/React app (Vite) |
 | `backend/` | Python FastAPI API |
-| `tradingagents/` | Agents package (dataflows, graph) |
+| `ai_engine/` | AI packages: `tradingagents/`, `watchlist_consulting/`, `stock_deep_research/` |
 
 - **[Setup & run](docs/STOCK_DASHBOARD.md)** — Local development and running the app.
 - **[Deployment guide](docs/DEPLOYMENT.md)** — Production deploy (systemd, Nginx, SSL).
@@ -93,7 +93,7 @@ _, decision = ta.propagate("NVDA", "2024-05-10")
 print(decision)
 ```
 
-Configuration options: `tradingagents/default_config.py`.
+Configuration options: `ai_engine/tradingagents/default_config.py`.
 
 ---
 

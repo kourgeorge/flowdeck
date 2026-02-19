@@ -28,11 +28,83 @@ CONFIG_QUICK_THINK_LLM = "quick_think_llm"
 CONFIG_BACKEND_URL = "backend_url"
 
 
+def get_config_from_env(overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Build config dict for get_llm(role, config) from environment variables.
+    Use this so all consumers (portfolio deep research, watchlist, etc.) share one place for provider/model resolution.
+    overrides: optional dict (e.g. from RunnableConfig configurable) to override env; keys: llm_provider, deep_think_llm, quick_think_llm, backend_url.
+    """
+    overrides = overrides or {}
+    cfg: Dict[str, Any] = {}
+    provider = (
+        overrides.get("llm_provider")
+        or os.environ.get("LLM_PROVIDER")
+        or ""
+    ).strip().lower()
+    azure_endpoint = (
+        overrides.get("backend_url")
+        or os.environ.get("AZURE_OPENAI_ENDPOINT")
+        or ""
+    ).strip()
+    azure_key = (os.environ.get("AZURE_OPENAI_API_KEY") or "").strip()
+    if provider == "azure" or (not provider and azure_endpoint and azure_key):
+        cfg["llm_provider"] = "azure"
+        cfg["deep_think_llm"] = (
+            overrides.get("deep_think_llm")
+            or os.environ.get("AZURE_DEEP_THINK_MODEL")
+            or os.environ.get("PORTFOLIO_DEEP_MODEL")
+            or "gpt-4o"
+        )
+        cfg["quick_think_llm"] = (
+            overrides.get("quick_think_llm")
+            or os.environ.get("AZURE_QUICK_THINK_MODEL")
+            or os.environ.get("PORTFOLIO_QUICK_MODEL")
+            or os.environ.get("WATCHLIST_REPORT_LLM_MODEL")
+            or "gpt-4o-mini"
+        )
+    else:
+        cfg["llm_provider"] = provider or "openai"
+        cfg["deep_think_llm"] = (
+            overrides.get("deep_think_llm")
+            or os.environ.get("PORTFOLIO_DEEP_MODEL")
+            or "gpt-4o"
+        )
+        cfg["quick_think_llm"] = (
+            overrides.get("quick_think_llm")
+            or os.environ.get("PORTFOLIO_QUICK_MODEL")
+            or os.environ.get("WATCHLIST_REPORT_LLM_MODEL")
+            or "gpt-4o-mini"
+        )
+    if overrides.get("backend_url"):
+        cfg["backend_url"] = overrides["backend_url"]
+    return cfg
+
+
 def _model_for_role(role: LLMRole, config: Dict[str, Any]) -> str:
     """Resolve model name from config for the given role."""
     if role == "deep":
         return config.get(CONFIG_DEEP_THINK_LLM) or config.get("deep_think_llm") or "gpt-4o"
     return config.get(CONFIG_QUICK_THINK_LLM) or config.get("quick_think_llm") or "gpt-4o-mini"
+
+
+# Models that reject the 'temperature' parameter (e.g. OpenAI o1/o3 reasoning models)
+_MODELS_NO_TEMPERATURE = frozenset(
+    {"o1", "o1-mini", "o1-preview", "o3", "o3-mini", "o4-mini"}
+)
+
+
+def _model_supports_temperature(model: str) -> bool:
+    """Return False if this model is known to reject the temperature parameter."""
+    base = (model or "").strip().lower()
+    if not base:
+        return True
+    # Check exact and prefix (e.g. "o1-2024-..." or deployment names)
+    if base in _MODELS_NO_TEMPERATURE:
+        return False
+    for no_temp in _MODELS_NO_TEMPERATURE:
+        if base.startswith(no_temp + "-") or base.startswith(no_temp + "."):
+            return False
+    return True
 
 
 def get_llm(
@@ -64,23 +136,24 @@ def get_llm(
     base_url = config.get(CONFIG_BACKEND_URL) or config.get("backend_url")
     timeout = request_timeout if request_timeout is not None else 120
     temp = temperature if temperature is not None else (0.0 if role == "deep" else 0.3)
+    # Skip temperature if model doesn't support it, or config explicitly disables it
+    use_temp = (
+        config.get("use_temperature", True)
+        and _model_supports_temperature(model)
+    )
 
     if provider in ("openai", "ollama", "openrouter"):
         from langchain_openai import ChatOpenAI
-        return ChatOpenAI(
-            model=model,
-            base_url=base_url,
-            temperature=temp,
-            request_timeout=timeout,
-        )
+        kwargs = dict(model=model, base_url=base_url, request_timeout=timeout)
+        if use_temp:
+            kwargs["temperature"] = temp
+        return ChatOpenAI(**kwargs)
     if provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(
-            model=model,
-            base_url=base_url,
-            temperature=temp,
-            request_timeout=timeout,
-        )
+        kwargs = dict(model=model, base_url=base_url, request_timeout=timeout)
+        if use_temp:
+            kwargs["temperature"] = temp
+        return ChatAnthropic(**kwargs)
     if provider == "google":
         from langchain_google_genai import ChatGoogleGenerativeAI
         return ChatGoogleGenerativeAI(model=model, temperature=temp)
@@ -96,15 +169,17 @@ def get_llm(
             raise ValueError(
                 "AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY environment variables must be set for Azure provider"
             )
-        return AzureChatOpenAI(
+        kwargs = dict(
             azure_deployment=model,
             model=model,
             azure_endpoint=azure_endpoint,
             api_key=azure_api_key,
             api_version=azure_api_version,
             request_timeout=timeout,
-            temperature=temp,
         )
+        if use_temp:
+            kwargs["temperature"] = temp
+        return AzureChatOpenAI(**kwargs)
     raise ValueError(f"Unsupported LLM provider: {config.get(CONFIG_LLM_PROVIDER)}")
 
 
