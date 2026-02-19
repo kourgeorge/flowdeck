@@ -57,6 +57,7 @@ export interface AdminSubscriptionItem {
   user_id: number;
   user_email: string;
   ticker: string;
+  email_updates: boolean;
   created_at: string;
 }
 

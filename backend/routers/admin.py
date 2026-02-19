@@ -77,6 +77,7 @@ class AdminSubscriptionItem(BaseModel):
     user_id: int
     user_email: str
     ticker: str
+    email_updates: bool
     created_at: datetime
 
 
@@ -273,6 +274,7 @@ def get_admin_subscriptions(
             user_id=s.user_id,
             user_email=email or "",
             ticker=s.ticker,
+            email_updates=getattr(s, "email_updates", True),
             created_at=s.created_at,
         )
         for s, email in rows

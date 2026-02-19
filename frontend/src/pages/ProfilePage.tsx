@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { profileApi, type MeProfile } from '../services/authApi';
+import { subscriptionApi, type Subscription } from '../services/subscriptionApi';
 
 const DELETE_CONFIRM_TEXT = 'DELETE';
 
@@ -29,6 +30,40 @@ export default function ProfilePage() {
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Subscriptions (email preferences)
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [subscriptionsLoading, setSubscriptionsLoading] = useState(false);
+  const [togglingTicker, setTogglingTicker] = useState<string | null>(null);
+
+  const loadSubscriptions = useCallback(async () => {
+    if (!user) return;
+    setSubscriptionsLoading(true);
+    try {
+      const list = await subscriptionApi.list();
+      setSubscriptions(list);
+    } catch {
+      setSubscriptions([]);
+    } finally {
+      setSubscriptionsLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    loadSubscriptions();
+  }, [loadSubscriptions]);
+
+  const handleEmailUpdatesToggle = async (ticker: string, email_updates: boolean) => {
+    setTogglingTicker(ticker);
+    try {
+      const updated = await subscriptionApi.updateEmailPreference(ticker, email_updates);
+      setSubscriptions((prev) =>
+        prev.map((s) => (s.ticker === updated.ticker ? updated : s))
+      );
+    } finally {
+      setTogglingTicker(null);
+    }
+  };
 
   useEffect(() => {
     if (!user) {
@@ -194,6 +229,45 @@ export default function ProfilePage() {
             <p className="text-xs text-gray-500 mt-1">Email cannot be changed here.</p>
           </section>
         )}
+
+        {/* Subscription email preferences */}
+        <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
+          <h2 className="text-lg font-semibold text-white mb-2">Subscription email preferences</h2>
+          <p className="text-sm text-gray-400 mb-4">
+            Choose whether to receive an email when a new analysis report is ready for each subscribed stock.
+          </p>
+          {subscriptionsLoading ? (
+            <p className="text-gray-400 text-sm">Loading subscriptions…</p>
+          ) : subscriptions.length === 0 ? (
+            <p className="text-gray-400 text-sm">You have no subscriptions. Subscribe to stocks from a stock page or the dashboard.</p>
+          ) : (
+            <ul className="space-y-3">
+              {subscriptions.map((s) => (
+                <li
+                  key={s.id}
+                  className="flex items-center justify-between gap-4 py-2 border-b border-gray-700/50 last:border-0"
+                >
+                  <Link
+                    to={`/stocks/${s.ticker}`}
+                    className="text-blue-400 hover:text-blue-300 font-medium shrink-0"
+                  >
+                    {s.ticker}
+                  </Link>
+                  <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                    <span className="text-sm text-gray-400">Email updates</span>
+                    <input
+                      type="checkbox"
+                      checked={s.email_updates}
+                      disabled={togglingTicker === s.ticker}
+                      onChange={(e) => handleEmailUpdatesToggle(s.ticker, e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
+                    />
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
         {/* Name */}
         <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">

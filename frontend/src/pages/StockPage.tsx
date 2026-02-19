@@ -5,6 +5,7 @@ import { WebSocketClient } from '../services/websocket';
 import type { StockPageData } from '../services/types';
 import { useQuoteRefresh } from '../hooks/useQuoteRefresh';
 import { useAuth } from '../contexts/AuthContext';
+import { subscriptionApi, type Subscription } from '../services/subscriptionApi';
 import ReportTabs from '../components/ReportTabs';
 import ReportViewer from '../components/ReportViewer';
 import SubscribeButton from '../components/SubscribeButton';
@@ -107,6 +108,8 @@ export default function StockPage() {
     error?: string;
   } | null>(null);
   const [isLoadingFutureEvents, setIsLoadingFutureEvents] = useState(false);
+  const [subscriptionForTicker, setSubscriptionForTicker] = useState<Subscription | null>(null);
+  const [emailPreferenceToggling, setEmailPreferenceToggling] = useState(false);
 
   const refreshedQuote = useQuoteRefresh(ticker ?? '', 60000);
   const prevPriceRef = useRef<number | null>(null);
@@ -321,6 +324,39 @@ export default function StockPage() {
       });
   }, [ticker]);
 
+  // Load subscription for this ticker (for email preference toggle)
+  const refreshSubscriptionForTicker = useCallback(async () => {
+    if (!user || !ticker) {
+      setSubscriptionForTicker(null);
+      return;
+    }
+    try {
+      const list = await subscriptionApi.list();
+      const sub = list.find((s) => s.ticker.toUpperCase() === ticker.toUpperCase()) ?? null;
+      setSubscriptionForTicker(sub);
+    } catch {
+      setSubscriptionForTicker(null);
+    }
+  }, [user, ticker]);
+
+  useEffect(() => {
+    refreshSubscriptionForTicker();
+  }, [refreshSubscriptionForTicker]);
+
+  const handleEmailUpdatesToggle = useCallback(
+    async (email_updates: boolean) => {
+      if (!ticker) return;
+      setEmailPreferenceToggling(true);
+      try {
+        const updated = await subscriptionApi.updateEmailPreference(ticker, email_updates);
+        setSubscriptionForTicker(updated);
+      } finally {
+        setEmailPreferenceToggling(false);
+      }
+    },
+    [ticker]
+  );
+
   // Load news data when news tab is active
   useEffect(() => {
     if (activeTab === 'news' && ticker && !isLoadingNews) {
@@ -520,7 +556,27 @@ export default function StockPage() {
                   <h1 className="text-xl sm:text-2xl font-semibold text-white mb-1 break-words">
                     {companyInfo?.name || stockData.ticker} ({stockData.ticker})
                   </h1>
-                  {ticker && <SubscribeButton ticker={ticker} />}
+                  <div className="flex flex-wrap items-center gap-3 shrink-0">
+                    {ticker && (
+                      <SubscribeButton
+                        ticker={ticker}
+                        onSubscribed={refreshSubscriptionForTicker}
+                        onUnsubscribed={() => setSubscriptionForTicker(null)}
+                      />
+                    )}
+                    {subscriptionForTicker && (
+                      <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-400">
+                        <span>Email updates</span>
+                        <input
+                          type="checkbox"
+                          checked={subscriptionForTicker.email_updates}
+                          disabled={emailPreferenceToggling}
+                          onChange={(e) => handleEmailUpdatesToggle(e.target.checked)}
+                          className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
+                        />
+                      </label>
+                    )}
+                  </div>
                 </div>
                   {quote && (
                     <>
@@ -1206,28 +1262,30 @@ export default function StockPage() {
 
             {/* News Tab Content */}
             {activeTab === 'news' && (
-              <div className="space-y-6">
-                {/* News Section */}
-                <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-                  <h2 className="text-xl font-semibold text-white mb-4">Latest News</h2>
-                  {isLoadingNews ? (
-                    <div className="animate-pulse">
-                      <div className="h-6 bg-gray-700 rounded w-48 mb-4"></div>
-                      <div className="space-y-4">
-                        {[1, 2, 3].map((i) => (
-                          <div key={i} className="h-24 bg-gray-700 rounded"></div>
-                        ))}
+              <div className="space-y-6 min-h-[100vh] flex flex-col">
+                {/* News Section - longer pane with internal scroll */}
+                <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 flex-1 min-h-0 flex flex-col overflow-hidden">
+                  <h2 className="text-xl font-semibold text-white mb-4 shrink-0">Latest News</h2>
+                  <div className="flex-1 min-h-0 overflow-y-auto">
+                    {isLoadingNews ? (
+                      <div className="animate-pulse">
+                        <div className="h-6 bg-gray-700 rounded w-48 mb-4"></div>
+                        <div className="space-y-4">
+                          {[1, 2, 3].map((i) => (
+                            <div key={i} className="h-24 bg-gray-700 rounded"></div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <NewsWidget
-                      articles={newsData}
-                      ticker={stockData.ticker}
-                      onRetry={fetchNews}
-                      isLoading={isLoadingNews}
-                      errorMessage={newsError}
-                    />
-                  )}
+                    ) : (
+                      <NewsWidget
+                        articles={newsData}
+                        ticker={stockData.ticker}
+                        onRetry={fetchNews}
+                        isLoading={isLoadingNews}
+                        errorMessage={newsError}
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
             )}

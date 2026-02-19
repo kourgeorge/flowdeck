@@ -142,7 +142,7 @@ def get_subscriber_emails_for_ticker(ticker: str) -> List[str]:
         rows = (
             db.query(User.email)
             .join(Subscription, Subscription.user_id == User.id)
-            .filter(Subscription.ticker == ticker_upper)
+            .filter(Subscription.ticker == ticker_upper, Subscription.email_updates == True)
             .distinct()
             .all()
         )

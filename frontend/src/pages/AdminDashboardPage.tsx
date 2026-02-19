@@ -321,6 +321,7 @@ export default function AdminDashboardPage() {
                 <tr className="border-b border-gray-700">
                   <th className="px-4 py-3 text-gray-400 font-medium">User email</th>
                   <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
+                  <th className="px-4 py-3 text-gray-400 font-medium">Email updates</th>
                   <th className="px-4 py-3 text-gray-400 font-medium">Created</th>
                 </tr>
               </thead>
@@ -336,6 +337,7 @@ export default function AdminDashboardPage() {
                         {s.ticker}
                       </Link>
                     </td>
+                    <td className="px-4 py-3 text-gray-400">{s.email_updates ? 'Yes' : 'No'}</td>
                     <td className="px-4 py-3 text-gray-400">{formatDate(s.created_at)}</td>
                   </tr>
                 ))}

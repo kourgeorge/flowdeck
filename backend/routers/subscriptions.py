@@ -14,12 +14,18 @@ router = APIRouter(prefix="/api/subscriptions", tags=["subscriptions"])
 
 class SubscribeRequest(BaseModel):
     ticker: str
+    email_updates: bool = True
 
 
 class SubscriptionResponse(BaseModel):
     id: int
     ticker: str
+    email_updates: bool
     created_at: str
+
+
+class PatchSubscriptionRequest(BaseModel):
+    email_updates: bool
 
 
 class SubscriptionsListResponse(BaseModel):
@@ -38,6 +44,7 @@ def list_subscriptions(
             SubscriptionResponse(
                 id=s.id,
                 ticker=s.ticker,
+                email_updates=getattr(s, "email_updates", True),
                 created_at=s.created_at.isoformat(),
             )
             for s in rows
@@ -64,9 +71,14 @@ def subscribe(
         return SubscriptionResponse(
             id=existing.id,
             ticker=existing.ticker,
+            email_updates=getattr(existing, "email_updates", True),
             created_at=existing.created_at.isoformat(),
         )
-    sub = Subscription(user_id=current_user.id, ticker=ticker)
+    sub = Subscription(
+        user_id=current_user.id,
+        ticker=ticker,
+        email_updates=req.email_updates,
+    )
     db.add(sub)
     db.commit()
     db.refresh(sub)
@@ -86,6 +98,37 @@ def subscribe(
     return SubscriptionResponse(
         id=sub.id,
         ticker=sub.ticker,
+        email_updates=sub.email_updates,
+        created_at=sub.created_at.isoformat(),
+    )
+
+
+@router.patch("/{ticker}", response_model=SubscriptionResponse)
+def update_subscription(
+    ticker: str,
+    req: PatchSubscriptionRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update email_updates preference for a subscription."""
+    ticker_upper = ticker.strip().upper()
+    sub = (
+        db.query(Subscription)
+        .filter(
+            Subscription.user_id == current_user.id,
+            Subscription.ticker == ticker_upper,
+        )
+        .first()
+    )
+    if not sub:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    sub.email_updates = req.email_updates
+    db.commit()
+    db.refresh(sub)
+    return SubscriptionResponse(
+        id=sub.id,
+        ticker=sub.ticker,
+        email_updates=sub.email_updates,
         created_at=sub.created_at.isoformat(),
     )
 

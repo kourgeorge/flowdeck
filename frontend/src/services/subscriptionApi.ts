@@ -21,6 +21,7 @@ function createAuthClient() {
 export interface Subscription {
   id: number;
   ticker: string;
+  email_updates: boolean;
   created_at: string;
 }
 
@@ -29,8 +30,18 @@ export const subscriptionApi = {
     const res = await createAuthClient().get<{ subscriptions: Subscription[] }>('/api/subscriptions');
     return res.data.subscriptions;
   },
-  subscribe: async (ticker: string): Promise<Subscription> => {
-    const res = await createAuthClient().post<Subscription>('/api/subscriptions', { ticker: ticker.toUpperCase() });
+  subscribe: async (ticker: string, email_updates = true): Promise<Subscription> => {
+    const res = await createAuthClient().post<Subscription>('/api/subscriptions', {
+      ticker: ticker.toUpperCase(),
+      email_updates,
+    });
+    return res.data;
+  },
+  updateEmailPreference: async (ticker: string, email_updates: boolean): Promise<Subscription> => {
+    const res = await createAuthClient().patch<Subscription>(
+      `/api/subscriptions/${encodeURIComponent(ticker.toUpperCase())}`,
+      { email_updates }
+    );
     return res.data;
   },
   unsubscribe: async (ticker: string): Promise<void> => {
