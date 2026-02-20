@@ -3,9 +3,9 @@
 CLI to run the Stock Deep Research agent.
 
 Usage:
-  python scripts/run_stock_deep_research.py "Research Amazon (AMZN)"
-  python scripts/run_stock_deep_research.py "Full report on Microsoft, focus on cloud and competition"
-  INFO_SERVICE_URL=http://localhost:8000 python scripts/run_stock_deep_research.py "Competitive analysis of Apple"
+  python run_stock_deep_research.py "Research Amazon (AMZN)"
+  python run_stock_deep_research.py "Full report on Microsoft, focus on cloud and competition"
+  INFO_SERVICE_URL=http://localhost:8002 python run_stock_deep_research.py "Competitive analysis of Apple"
 
 Requires:
   - OPENAI_API_KEY (or ANTHROPIC_API_KEY / GOOGLE_API_KEY for other models)
@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 # Add repo root so ai_engine (stock_deep_research, tradingagents) is importable
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 

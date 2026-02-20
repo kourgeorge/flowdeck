@@ -1,21 +1,28 @@
 """
-Data API: canonical REST API for raw market data.
+Data API: canonical REST API for raw market data and report access.
 
 Single source of truth for all market/fundamental data. Used by:
 - Dashboard UI (via /api/data/*)
 - AI agents (via /api/data/*)
 
-All data flows through InfoFetcher. No AI reports or UI-specific aggregations.
+All data flows through InfoFetcher. Report endpoints expose ReportService for agents.
 Blocking engine calls run in thread pool (non-blocking event loop).
 """
 
 import asyncio
 
 from fastapi import APIRouter, HTTPException, Query
-from typing import Optional
+from pydantic import BaseModel
+from typing import List, Optional
 
-from services.info_fetcher import get_info_fetcher
 from services.edgar_service import get_edgar_service
+from services.info_fetcher import get_info_fetcher
+from services.report_service import ReportService
+
+
+class ReportsBatchBody(BaseModel):
+    tickers: List[str] = []
+
 
 router = APIRouter(tags=["Data API"])
 
@@ -144,3 +151,42 @@ async def data_edgar_filing_content(
     """Get extracted SEC EDGAR sections (risk factors, MD&A, competition) for a ticker. Requires LLM (OpenAI or Azure)."""
     engine = get_edgar_service()
     return await asyncio.to_thread(engine.get_filing_content, ticker, form, limit)
+
+
+# --- Report access for AI agents (portfolio deep research, etc.) ---
+
+_report_service: Optional[ReportService] = None
+
+
+def _get_report_service() -> ReportService:
+    global _report_service
+    if _report_service is None:
+        _report_service = ReportService()
+    return _report_service
+
+
+@router.get("/reports/{ticker}")
+async def data_reports_ticker(ticker: str):
+    """Get latest reports for one ticker. Returns report_date and reports dict (report_type -> content, score, key_takeaways, etc.)."""
+    svc = _get_report_service()
+    report_date = await asyncio.to_thread(svc.get_latest_report_date, ticker.upper())
+    if not report_date:
+        return {"report_date": None, "reports": {}}
+    reports = await asyncio.to_thread(svc.get_reports_with_scores, ticker.upper(), report_date)
+    return {"report_date": report_date, "reports": reports}
+
+
+@router.post("/reports/batch")
+async def data_reports_batch(body: ReportsBatchBody):
+    """Get latest reports for multiple tickers. Body: { \"tickers\": [\"AAPL\", \"MSFT\", ...] }. Returns tickers -> { report_date, reports }."""
+    tickers = [str(t).upper() for t in (body.tickers or []) if t][:50]
+    svc = _get_report_service()
+    result = {}
+    for t in tickers:
+        report_date = await asyncio.to_thread(svc.get_latest_report_date, t)
+        if not report_date:
+            result[t] = {"report_date": None, "reports": {}}
+        else:
+            reports = await asyncio.to_thread(svc.get_reports_with_scores, t, report_date)
+            result[t] = {"report_date": report_date, "reports": reports}
+    return {"tickers": result}
