@@ -3,9 +3,9 @@
 CLI to run the Stock Deep Research agent.
 
 Usage:
-  python run_stock_deep_research.py "Research Amazon (AMZN)"
-  python run_stock_deep_research.py "Full report on Microsoft, focus on cloud and competition"
-  INFO_SERVICE_URL=http://localhost:8002 python run_stock_deep_research.py "Competitive analysis of Apple"
+  python backend/run_stock_deep_research.py "Research Amazon (AMZN)"
+  python backend/run_stock_deep_research.py "Full report on Microsoft, focus on cloud and competition"
+  INFO_SERVICE_URL=http://localhost:8002 python backend/run_stock_deep_research.py "Competitive analysis of Apple"
 
 Requires:
   - OPENAI_API_KEY (or ANTHROPIC_API_KEY / GOOGLE_API_KEY for other models)
@@ -14,13 +14,12 @@ Requires:
 """
 
 import asyncio
-import json
 import os
 import sys
 from pathlib import Path
 
 # Add repo root so ai_engine (stock_deep_research, tradingagents) is importable
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -31,8 +30,8 @@ from ai_engine.stock_deep_research.graph import stock_researcher_graph
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python run_stock_deep_research.py \"<research question>\"", file=sys.stderr)
-        print("Example: python run_stock_deep_research.py \"Research Amazon AMZN\"", file=sys.stderr)
+        print("Usage: python backend/run_stock_deep_research.py \"<research question>\"", file=sys.stderr)
+        print("Example: python backend/run_stock_deep_research.py \"Research Amazon AMZN\"", file=sys.stderr)
         sys.exit(1)
 
     question = " ".join(sys.argv[1:]).strip()

@@ -3,8 +3,8 @@
 CLI to run the Portfolio Deep Research agent.
 
 Usage:
-  python scripts/run_portfolio_deep_research.py --tickers AAPL,MSFT,GOOGL --query "Compare growth and risks"
-  python scripts/run_portfolio_deep_research.py --tickers NVDA,AMD "Deep dive on semiconductor exposure"
+  python backend/run_portfolio_deep_research.py --tickers AAPL,MSFT,GOOGL --query "Compare growth and risks"
+  python backend/run_portfolio_deep_research.py --tickers NVDA,AMD "Deep dive on semiconductor exposure"
 
 API keys are loaded from backend/.env (SERPAPI_KEY, LLM provider keys, INFO_SERVICE_URL).
 Requires: SERPAPI_KEY for web search; OPENAI_API_KEY or Azure keys for LLM.
@@ -105,23 +105,6 @@ def main():
             print(f"[HTML saved to {html_path}]", file=sys.stderr)
         else:
             print("[No HTML generated (use INFO_SERVICE_URL and watchlist deps for figures)]", file=sys.stderr)
-
-        # Optional: persist to backend DB as portfolio_deep_research report
-        ticker_label = "PORTFOLIO_" + "_".join(tickers[:3])
-        if len(tickers) > 3:
-            ticker_label += f"_and_{len(tickers)-3}more"
-        try:
-            from services.report_service import save_report
-            save_report(
-                ticker=ticker_label,
-                run_id=run_id,
-                report_type="portfolio_deep_research",
-                content=final_answer,
-                metadata={"tickers": tickers, "query": query},
-            )
-            print(f"[Saved to DB as {ticker_label} / {run_id}]", file=sys.stderr)
-        except Exception:
-            pass
 
     asyncio.run(run())
 
