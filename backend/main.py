@@ -507,6 +507,9 @@ async def start_analysis(
         analysts = body.get("analysts", ["market", "news", "fundamentals", "sec"])
         research_depth = body.get("research_depth", 2)
         llm_provider = body.get("llm_provider", "azure")  # Default to Azure
+        backend_url = body.get("backend_url")
+        shallow_thinker = body.get("shallow_thinker")
+        deep_thinker = body.get("deep_thinker")
         initiator_email = (current_user.email or "").strip() or None
 
         existing_id = analysis_service.get_running_analysis_id(ticker, analysis_date)
@@ -561,6 +564,9 @@ async def start_analysis(
             analysts=analysts,
             research_depth=research_depth,
             llm_provider=llm_provider,
+            backend_url=backend_url,
+            shallow_thinker=shallow_thinker,
+            deep_thinker=deep_thinker,
             progress_callback=progress_callback,
             initiator_email=initiator_email,
             run_id=run_id,

@@ -30,6 +30,7 @@ load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / '.env')
 
 from ai_engine.tradingagents.graph.trading_graph import TradingAgentsGraph
 from ai_engine.tradingagents.default_config import DEFAULT_CONFIG
+from ai_engine.llm_provider import get_config_from_env
 
 
 def _is_us_company_with_sec(ticker: str) -> bool:
@@ -128,38 +129,15 @@ class AnalysisService:
         config["max_debate_rounds"] = research_depth
         config["max_risk_discuss_rounds"] = research_depth
         
-        # Set LLM provider (default to Azure)
-        llm_provider = llm_provider.lower()
-        config["llm_provider"] = llm_provider
-        
-        # Configure Azure-specific settings if using Azure
-        if llm_provider == "azure":
-            # Azure uses deployment names for models
-            # Default Azure models if not specified
-            if not shallow_thinker:
-                shallow_thinker = os.getenv("AZURE_QUICK_THINK_MODEL", "gpt-4o-mini-2024-07-18")
-            if not deep_thinker:
-                deep_thinker = os.getenv("AZURE_DEEP_THINK_MODEL", "gpt-4o-2024-08-06")
-            
-            config["quick_think_llm"] = shallow_thinker
-            config["deep_think_llm"] = deep_thinker
-            
-            # Verify Azure environment variables are set
-            azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-            azure_api_key = os.getenv("AZURE_OPENAI_API_KEY")
-            if not azure_endpoint or not azure_api_key:
-                raise ValueError(
-                    "Azure OpenAI requires AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY "
-                    "environment variables to be set"
-                )
-        else:
-            # For non-Azure providers, use provided models or defaults
-            if shallow_thinker:
-                config["quick_think_llm"] = shallow_thinker
-            if deep_thinker:
-                config["deep_think_llm"] = deep_thinker
-            if backend_url:
-                config["backend_url"] = backend_url
+        # Resolve provider + model defaults from env (with request overrides).
+        llm_overrides: Dict[str, Any] = {"llm_provider": llm_provider.lower()}
+        if shallow_thinker:
+            llm_overrides["quick_think_llm"] = shallow_thinker
+        if deep_thinker:
+            llm_overrides["deep_think_llm"] = deep_thinker
+        if backend_url:
+            llm_overrides["backend_url"] = backend_url
+        config.update(get_config_from_env(llm_overrides))
         
         config["results_dir"] = str(self.results_dir)
         
@@ -534,4 +512,3 @@ class AnalysisService:
     def get_analysis_status(self, analysis_id: str) -> Optional[Dict]:
         """Get current status of a running analysis."""
         return self.running_analyses.get(analysis_id)
-

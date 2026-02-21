@@ -39,6 +39,7 @@ def get_config_from_env(overrides: Optional[Dict[str, Any]] = None) -> Dict[str,
     provider = (
         overrides.get("llm_provider")
         or os.environ.get("LLM_PROVIDER")
+        or os.environ.get("CONFIG_LLM_PROVIDER")
         or ""
     ).strip().lower()
     azure_endpoint = (
