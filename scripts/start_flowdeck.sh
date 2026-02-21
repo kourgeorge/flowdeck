@@ -44,7 +44,7 @@ if [ "$1" = "--foreground" ]; then
   echo "[$(date '+%H:%M:%S')] Press Ctrl+C to stop both."
   # Start backend in background, capture PID
   cd "$BACKEND_DIR"
-  python -m uvicorn main:app --host 0.0.0.0 --port 8002 &
+  python -m uvicorn main:app --host 0.0.0.0 --port 8002 --log-config "$BACKEND_DIR/uvicorn_logging.json" &
   BACKEND_PID=$!
   echo $BACKEND_PID > "$PID_FILE"
   # Start frontend in background, capture PID
@@ -58,7 +58,7 @@ else
   stop_services 2>/dev/null || true
   echo "[$(date '+%H:%M:%S')] Starting Flowdeck in background..."
   cd "$BACKEND_DIR"
-  nohup python -m uvicorn main:app --host 0.0.0.0 --port 8002 > "$ROOT_DIR/backend.log" 2>&1 &
+  nohup python -m uvicorn main:app --host 0.0.0.0 --port 8002 --log-config "$BACKEND_DIR/uvicorn_logging.json" > "$ROOT_DIR/backend.log" 2>&1 &
   echo $! > "$PID_FILE"
   cd "$FRONTEND_DIR"
   nohup npm run preview -- --host >> "$ROOT_DIR/frontend.log" 2>&1 &
