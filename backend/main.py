@@ -32,7 +32,6 @@ from models.schemas import (
 )
 from services.market_data_service import MarketDataService
 from services.report_service import ReportService
-from services.recommendation_parser import RecommendationParser
 from services.analysis_service import AnalysisService
 from services.news_service import NewsService
 from services.info_fetcher import get_info_fetcher
@@ -96,7 +95,6 @@ app.add_middleware(
 # Initialize services
 market_data_service = MarketDataService()
 report_service = ReportService()
-recommendation_parser = RecommendationParser()
 analysis_service = AnalysisService()
 news_service = NewsService()
 # Information Fetcher Engine: single entry point for all data (used by /api/data)
@@ -195,18 +193,6 @@ def _get_stock_widgets_sync(
                         if tip.get("recommendation"):
                             recommendation = tip["recommendation"]
                             confidence = tip.get("confidence")
-                if recommendation is None:
-                    reports = report_service.get_reports_for_date(ticker, latest_date)
-                    if "final_trade_decision" in reports and reports["final_trade_decision"]:
-                        rec_data = recommendation_parser.parse_recommendation(reports["final_trade_decision"])
-                        if rec_data:
-                            recommendation = rec_data.recommendation
-                            confidence = rec_data.confidence
-                    if recommendation is None and "trader_investment_plan" in reports and reports["trader_investment_plan"]:
-                        rec_data = recommendation_parser.parse_recommendation(reports["trader_investment_plan"])
-                        if rec_data:
-                            recommendation = rec_data.recommendation
-                            confidence = rec_data.confidence
         except Exception as e:
             print(f"Warning: Failed to get reports for {ticker}: {e}")
 
@@ -311,38 +297,29 @@ def _get_stock_page_sync(ticker: str) -> StockPageData:
                 source="structured_output",
                 date=latest_date
             )
-        elif "final_trade_decision" in latest_reports and latest_reports["final_trade_decision"]:
-            rec_data = recommendation_parser.parse_recommendation(latest_reports["final_trade_decision"])
-            if rec_data:
+        if latest_recommendation is None:
+            tip_meta = latest_reports_with_scores_raw.get("trader_investment_plan") or {}
+            if tip_meta.get("recommendation"):
+                confidence = tip_meta.get("confidence")
+                if confidence is None or not (0 <= confidence <= 1):
+                    confidence = 0.9
                 latest_recommendation = Recommendation(
-                    recommendation=rec_data.recommendation,
-                    confidence=rec_data.confidence,
-                    source=rec_data.source,
-                    date=latest_date
-                )
-        if latest_recommendation is None and "trader_investment_plan" in latest_reports and latest_reports["trader_investment_plan"]:
-            rec_data = recommendation_parser.parse_recommendation(latest_reports["trader_investment_plan"])
-            if rec_data:
-                latest_recommendation = Recommendation(
-                    recommendation=rec_data.recommendation,
-                    confidence=rec_data.confidence,
-                    source=rec_data.source,
+                    recommendation=tip_meta["recommendation"],
+                    confidence=confidence,
+                    source="structured_output",
                     date=latest_date
                 )
 
     historical = report_service.get_historical_analyses(ticker)
     historical_analyses = []
     for h in historical:
-        reports = report_service.get_reports_for_date(ticker, h["date"])
+        reports_with_scores = report_service.get_reports_with_scores(ticker, h["date"])
         rec = None
-        if "final_trade_decision" in reports and reports["final_trade_decision"]:
-            rec_data = recommendation_parser.parse_recommendation(reports["final_trade_decision"])
-            if rec_data:
-                rec = rec_data.recommendation
-        elif "trader_investment_plan" in reports and reports["trader_investment_plan"]:
-            rec_data = recommendation_parser.parse_recommendation(reports["trader_investment_plan"])
-            if rec_data:
-                rec = rec_data.recommendation
+        final_meta = reports_with_scores.get("final_trade_decision") or {}
+        if final_meta.get("recommendation"):
+            rec = final_meta["recommendation"]
+        elif (reports_with_scores.get("trader_investment_plan") or {}).get("recommendation"):
+            rec = reports_with_scores["trader_investment_plan"]["recommendation"]
 
         historical_analyses.append(HistoricalAnalysis(
             date=h["date"],

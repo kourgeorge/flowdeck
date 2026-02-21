@@ -1,6 +1,12 @@
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+import logging
+
+from langchain_core.messages import AIMessage
 from pydantic import BaseModel, Field
 from ..utils.agent_utils import get_news, get_global_news
+from .helpers import is_tool_result_message, try_structured_response
+from .prompts import build_news_analyst_prompt
+
+logger = logging.getLogger(__name__)
 
 
 class NewsAnalysisOutput(BaseModel):
@@ -24,99 +30,76 @@ def create_news_analyst(llm):
             get_global_news,
         ]
 
-        system_message = (
-            "You are a news researcher tasked with analyzing recent news and trends over the past week. Please write a comprehensive report of the current state of the world that is relevant for trading and macroeconomics. Use the available tools: get_news(query, start_date, end_date) for company-specific or targeted news searches, and get_global_news(curr_date, look_back_days, limit) for broader macroeconomic news. Do not simply state the trends are mixed, provide detailed and finegrained analysis and insights that may help traders make decisions."
-            + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
-            + """ **CRITICAL: You MUST provide a News Score between 1-10 as part of your structured output.**
-            - Scoring guidelines:
-              * 1-3: Very negative news impact, significant negative developments, concerning macroeconomic trends, adverse global events
-              * 4-5: Neutral or mixed news impact, balanced developments, no clear positive or negative trend
-              * 6-7: Moderately positive news impact, generally favorable developments, some positive trends
-              * 8-10: Very positive news impact, significant positive developments, strong macroeconomic trends, favorable global events
-            - Base your score on: news sentiment, macroeconomic indicators, global events, market-moving developments, and overall news impact
-
-            **Formatting:** Structure your report for readability: use clear paragraphs and subparagraphs, Markdown tables for key data or comparisons, and headings (## or ###) to organize sections. Avoid long unbroken blocks of text so the output is easy to scan and use."""
+        prompt = build_news_analyst_prompt(
+            tool_names=[tool.name for tool in tools],
+            current_date=current_date,
+            ticker=ticker,
         )
-
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                (
-                    "system",
-                    "You are a helpful AI assistant, collaborating with other assistants."
-                    " Use the provided tools to progress towards answering the question."
-                    " If you are unable to fully answer, that's OK; another assistant with different tools"
-                    " will help where you left off. Execute what you can to make progress."
-                    " If you or any other assistant has the FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL** or deliverable,"
-                    " prefix your response with FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL** so the team knows to stop."
-                    " You have access to the following tools: {tool_names}.\n{system_message}"
-                    "For your reference, the current date is {current_date}. We are looking at the company {ticker}",
-                ),
-                MessagesPlaceholder(variable_name="messages"),
-            ]
-        )
-
-        prompt = prompt.partial(system_message=system_message)
-        prompt = prompt.partial(tool_names=", ".join([tool.name for tool in tools]))
-        prompt = prompt.partial(current_date=current_date)
-        prompt = prompt.partial(ticker=ticker)
+        state_messages = state["messages"]
+        structured_chain = prompt | llm.with_structured_output(NewsAnalysisOutput)
 
         # Check if last message is a tool result (indicating we're ready for final response)
-        from langchain_core.messages import ToolMessage
-        last_message = state["messages"][-1] if state["messages"] else None
-        is_after_tool_call = isinstance(last_message, ToolMessage) or (
-            hasattr(last_message, 'content') and 
-            isinstance(last_message.content, list) and
-            any(isinstance(item, dict) and item.get("type") == "tool" for item in last_message.content)
-        )
-        
-        # If we're after tool calls, use structured output for final response
-        if is_after_tool_call:
-            try:
-                structured_chain = prompt | llm.with_structured_output(NewsAnalysisOutput)
-                structured_result = structured_chain.invoke(state["messages"])
-                report = structured_result.report
-                news_score = structured_result.news_score
-                
-                # Create a message from the structured result
-                from langchain_core.messages import AIMessage
-                result = AIMessage(content=report)
-                
+        last_message = state_messages[-1] if state_messages else None
+        if is_tool_result_message(last_message):
+            report, news_score = try_structured_response(
+                structured_chain,
+                state_messages,
+                score_field="news_score",
+                logger=logger,
+                agent_name="News analyst",
+            )
+            if report is not None:
                 return {
-                    "messages": [result],
+                    "messages": [AIMessage(content=report)],
                     "news_report": report,
                     "news_score": news_score,
                 }
-            except Exception:
-                # Fallback to tool-based approach if structured output fails
-                pass
+
+            fallback_result = (prompt | llm).invoke(state_messages)
+            fallback_report = (
+                fallback_result.content
+                if hasattr(fallback_result, "content")
+                else str(fallback_result)
+            )
+            return {
+                "messages": [fallback_result],
+                "news_report": fallback_report,
+                "news_score": None,
+            }
         
         # Default: use tools (for initial calls or if structured output failed)
         chain_with_tools = prompt | llm.bind_tools(tools)
-        result = chain_with_tools.invoke(state["messages"])
-
-        report = ""
-        news_score = None
+        result = chain_with_tools.invoke(state_messages)
 
         # If no tool calls in result, we might be at final response
         # Try structured output parsing
-        if len(result.tool_calls) == 0:
-            try:
-                # Re-invoke with structured output to get parsed result
-                structured_chain = prompt | llm.with_structured_output(NewsAnalysisOutput)
-                structured_result = structured_chain.invoke(state["messages"])
-                report = structured_result.report
-                news_score = structured_result.news_score
-                # Update result content with the report
-                result.content = report
-            except Exception:
-                # Final fallback: use regular content (no score extraction)
-                report = result.content if hasattr(result, 'content') else str(result)
-                news_score = None
+        if not getattr(result, "tool_calls", []):
+            messages_with_result = [*state_messages, result]
+            report, news_score = try_structured_response(
+                structured_chain,
+                messages_with_result,
+                score_field="news_score",
+                logger=logger,
+                agent_name="News analyst",
+            )
+            if report is not None:
+                return {
+                    "messages": [AIMessage(content=report)],
+                    "news_report": report,
+                    "news_score": news_score,
+                }
+
+            report = result.content if hasattr(result, "content") else str(result)
+            return {
+                "messages": [result],
+                "news_report": report,
+                "news_score": None,
+            }
 
         return {
             "messages": [result],
-            "news_report": report,
-            "news_score": news_score,
+            "news_report": "",
+            "news_score": None,
         }
 
     return news_analyst_node
