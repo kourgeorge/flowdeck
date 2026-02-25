@@ -22,6 +22,7 @@ from ..dataflows.config import set_config
 # Import the new abstract tool methods from agent_utils
 from ..agents.utils.agent_utils import (
     get_stock_data,
+    get_stock_quote,
     get_indicators,
     get_fundamentals,
     get_balance_sheet,
@@ -133,6 +134,7 @@ class TradingAgentsGraph:
                 [
                     # Core stock data tools
                     get_stock_data,
+                    get_stock_quote,
                     # Technical indicators
                     get_indicators,
                 ]
@@ -166,6 +168,7 @@ class TradingAgentsGraph:
                 [
                     # Core stock data tools
                     get_stock_data,
+                    get_stock_quote,
                     # Technical indicators
                     get_indicators,
                     # Advanced technical analysis tools

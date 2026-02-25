@@ -3,7 +3,7 @@ import logging
 from langchain_core.messages import AIMessage
 from pydantic import BaseModel, Field
 
-from ..utils.agent_utils import get_stock_data, get_indicators
+from ..utils.agent_utils import get_stock_data, get_stock_quote, get_indicators
 from .helpers import is_tool_result_message, try_structured_response
 from .prompts import build_market_analyst_prompt
 
@@ -29,6 +29,7 @@ def create_market_analyst(llm):
 
         tools = [
             get_stock_data,
+            get_stock_quote,
             get_indicators,
         ]
 
