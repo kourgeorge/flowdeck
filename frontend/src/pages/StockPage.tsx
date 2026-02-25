@@ -15,6 +15,7 @@ import FinancialStatementViewer from '../components/FinancialStatementViewer';
 import FundamentalCharts from '../components/FundamentalCharts';
 import FundamentalPanes from '../components/FundamentalPanes';
 import NewsWidget from '../components/NewsWidget';
+import InsiderTransactionsWidget from '../components/InsiderTransactionsWidget';
 import AIAnalysisLoadingView from '../components/AIAnalysisLoadingView';
 import { parseReportDate } from '../utils/date';
 
@@ -64,6 +65,9 @@ export default function StockPage() {
   const [newsData, setNewsData] = useState<any[]>([]);
   const [newsError, setNewsError] = useState<string | null>(null);
   const [isLoadingNews, setIsLoadingNews] = useState(false);
+  const [insiderTransactions, setInsiderTransactions] = useState<any[]>([]);
+  const [insiderTransactionsError, setInsiderTransactionsError] = useState<string | null>(null);
+  const [isLoadingInsiderTransactions, setIsLoadingInsiderTransactions] = useState(false);
   const [analystRecommendations, setAnalystRecommendations] = useState<any>(null);
   const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false);
   const [fundamentalsSubTab, setFundamentalsSubTab] = useState<'statements' | 'charts'>('charts');
@@ -245,6 +249,8 @@ export default function StockPage() {
     if (ticker) {
       setNewsData([]);
       setNewsError(null); // Clear news when ticker changes so we don't show previous stock's news
+      setInsiderTransactions([]);
+      setInsiderTransactionsError(null);
       setFundamentalsSubTab('charts'); // Reset when ticker changes
       setFundInfo(null);
       setAnalysisProgress(null);
@@ -324,6 +330,24 @@ export default function StockPage() {
       });
   }, [ticker]);
 
+  const fetchInsiderTransactions = useCallback(() => {
+    if (!ticker) return;
+    setInsiderTransactionsError(null);
+    setIsLoadingInsiderTransactions(true);
+    stockApi.getInsiderTransactions(ticker, 50)
+      .then((response) => {
+        setInsiderTransactions(response.transactions || []);
+        setInsiderTransactionsError('error' in response ? response.error ?? null : null);
+        setIsLoadingInsiderTransactions(false);
+      })
+      .catch((err) => {
+        const message = err.response?.data?.detail ?? err.message ?? 'Unable to fetch insider transactions. Please try again later.';
+        setInsiderTransactionsError(message);
+        setInsiderTransactions([]);
+        setIsLoadingInsiderTransactions(false);
+      });
+  }, [ticker]);
+
   // Load subscription for this ticker (for email preference toggle)
   const refreshSubscriptionForTicker = useCallback(async () => {
     if (!user || !ticker) {
@@ -363,6 +387,12 @@ export default function StockPage() {
       fetchNews();
     }
   }, [activeTab, ticker, fetchNews]);
+
+  useEffect(() => {
+    if (activeTab === 'news' && ticker && !isLoadingInsiderTransactions) {
+      fetchInsiderTransactions();
+    }
+  }, [activeTab, ticker, fetchInsiderTransactions]);
 
   // Load SEC EDGAR filings when SEC Filings tab is active (US companies only)
   useEffect(() => {
@@ -1286,6 +1316,28 @@ export default function StockPage() {
                       />
                     )}
                   </div>
+                </div>
+                <div className="flex-1 min-h-0">
+                  {isLoadingInsiderTransactions ? (
+                    <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+                      <div className="animate-pulse">
+                        <div className="h-6 bg-gray-700 rounded w-64 mb-4"></div>
+                        <div className="space-y-4">
+                          {[1, 2, 3].map((i) => (
+                            <div key={i} className="h-12 bg-gray-700 rounded"></div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <InsiderTransactionsWidget
+                      transactions={insiderTransactions}
+                      ticker={stockData.ticker}
+                      onRetry={fetchInsiderTransactions}
+                      isLoading={isLoadingInsiderTransactions}
+                      errorMessage={insiderTransactionsError}
+                    />
+                  )}
                 </div>
               </div>
             )}

@@ -166,6 +166,33 @@ export const stockApi = {
     return response.data;
   },
 
+  // Get latest insider transactions (raw market data via /api/data)
+  getInsiderTransactions: async (
+    ticker: string,
+    limit: number = 50
+  ): Promise<{
+    ticker: string;
+    date: string;
+    transactions: Array<{
+      insider: string | null;
+      position: string | null;
+      transaction: string | null;
+      start_date: string | null;
+      shares: number | null;
+      value: number | null;
+      ownership: string | null;
+      url: string | null;
+      text: string | null;
+    }>;
+    count: number;
+    error?: string;
+  }> => {
+    const response = await api.get(`/api/data/insider-transactions/${ticker}`, {
+      params: { limit },
+    });
+    return response.data;
+  },
+
   // Get upcoming earnings and ex-dividend dates (Yahoo Finance)
   getFutureEvents: async (ticker: string): Promise<{
     ticker: string;
@@ -239,4 +266,3 @@ export const contactApi = {
 };
 
 export default stockApi;
-

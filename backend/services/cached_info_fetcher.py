@@ -19,6 +19,7 @@ from config import (
     DATA_CACHE_TTL_FUNDAMENTALS,
     DATA_CACHE_TTL_FUND_INFO,
     DATA_CACHE_TTL_HISTORICAL,
+    DATA_CACHE_TTL_INSIDER_TRANSACTIONS,
     DATA_CACHE_TTL_NEWS,
     DATA_CACHE_TTL_QUOTE,
     DATA_CACHE_TTL_STOCK_DATA,
@@ -102,6 +103,14 @@ class CachedInfoFetcher:
             key,
             DATA_CACHE_TTL_NEWS,
             lambda: self._fetcher.get_news(ticker, vendor=vendor, lookback_days=lookback_days),
+        )
+
+    def get_insider_transactions(self, ticker: str, limit: int = 50) -> Dict[str, Any]:
+        key = f"insider_transactions:{ticker.upper()}:{limit}"
+        return get_cached(
+            key,
+            DATA_CACHE_TTL_INSIDER_TRANSACTIONS,
+            lambda: self._fetcher.get_insider_transactions(ticker, limit=limit),
         )
 
     def get_company_info(self, ticker: str) -> Dict[str, Any]:

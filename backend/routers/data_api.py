@@ -53,6 +53,15 @@ async def data_news(
     )
 
 
+@router.get("/insider-transactions/{ticker}")
+async def data_insider_transactions(
+    ticker: str,
+    limit: int = Query(50, ge=1, le=200, description="Maximum number of insider transactions to return"),
+):
+    """Get latest insider transactions for a ticker."""
+    return await asyncio.to_thread(_engine().get_insider_transactions, ticker, limit)
+
+
 @router.get("/company/{ticker}")
 async def data_company(ticker: str):
     """Get company profile (name, sector, industry, exchange, country, website)."""

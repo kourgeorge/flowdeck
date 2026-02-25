@@ -130,6 +130,83 @@ class InfoFetcher:
         svc = self._get_news_service()
         return svc.get_news(ticker, vendor=vendor or "yfinance", lookback_days=lookback_days)
 
+    def get_insider_transactions(
+        self,
+        ticker: str,
+        limit: int = 50,
+    ) -> Dict[str, Any]:
+        """Get latest insider transactions from Yahoo Finance."""
+        import yfinance as yf
+        import pandas as pd
+
+        ticker = ticker.upper()
+        curr_date = datetime.now().strftime("%Y-%m-%d")
+
+        try:
+            raw_df = yf.Ticker(ticker).insider_transactions
+        except Exception as e:
+            return {
+                "ticker": ticker,
+                "date": curr_date,
+                "transactions": [],
+                "count": 0,
+                "error": str(e),
+            }
+
+        if raw_df is None or raw_df.empty:
+            return {
+                "ticker": ticker,
+                "date": curr_date,
+                "transactions": [],
+                "count": 0,
+            }
+
+        df = raw_df.copy()
+        if "Start Date" in df.columns:
+            df = df.sort_values(by="Start Date", ascending=False, na_position="last")
+        if limit > 0:
+            df = df.head(limit)
+
+        def _cell(row: Dict[str, Any], key: str) -> Any:
+            val = row.get(key)
+            if pd.isna(val):
+                return None
+            # Convert pandas timestamps and numpy scalars to JSON-serializable values.
+            if hasattr(val, "isoformat"):
+                try:
+                    return val.date().isoformat() if hasattr(val, "date") else val.isoformat()
+                except Exception:
+                    return str(val)
+            if hasattr(val, "item"):
+                try:
+                    return val.item()
+                except Exception:
+                    return str(val)
+            return val
+
+        transactions: List[Dict[str, Any]] = []
+        for row in df.to_dict(orient="records"):
+            transactions.append(
+                {
+                    "insider": _cell(row, "Insider"),
+                    "position": _cell(row, "Position"),
+                    "transaction": _cell(row, "Transaction"),
+                    "start_date": _cell(row, "Start Date"),
+                    "shares": _cell(row, "Shares"),
+                    "value": _cell(row, "Value"),
+                    "ownership": _cell(row, "Ownership"),
+                    "url": _cell(row, "URL"),
+                    "text": _cell(row, "Text"),
+                }
+            )
+
+        return {
+            "ticker": ticker,
+            "date": curr_date,
+            "transactions": transactions,
+            "count": len(transactions),
+        }
+
     # ---------- Company & fundamentals ----------
     def get_company_info(self, ticker: str) -> Dict[str, Any]:
         """Get company profile (name, sector, industry, etc.)."""
