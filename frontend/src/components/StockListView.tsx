@@ -1,12 +1,20 @@
 import type { RefObject } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  PolarAngleAxis,
+  PolarGrid,
+  PolarRadiusAxis,
+  Radar,
+  RadarChart,
+  ResponsiveContainer,
+} from 'recharts';
 import type { StockWidget as StockWidgetType } from '../services/types';
 import { parseReportDate } from '../utils/date';
 
 /** Min and max number of visible stock rows; table height is dynamic within these limits. */
 const MIN_VISIBLE_ROWS = 3;
 const MAX_VISIBLE_ROWS = 12;
-const ROW_HEIGHT_PX = 52;
+const ROW_HEIGHT_PX = 72;
 const TABLE_HEADER_HEIGHT_PX = 52;
 
 function getTableHeightPx(rowCount: number): number {
@@ -32,7 +40,7 @@ const REPORT_LABELS: Record<string, string> = {
   technical_report: 'Technical',
   sec_report: 'SEC',
   investment_plan: 'Research',
-  final_trade_decision: 'Confidence',
+  final_trade_decision: 'Low Risk',
   research_report: 'Research',
   marker: 'Marker',
   risk: 'Risk',
@@ -49,10 +57,31 @@ const REPORT_ORDER: string[] = [
   'final_trade_decision', // Confidence last
 ];
 
-function scoreEntryOrder([key]: [string, unknown]): number {
+const EXCLUDED_REPORT_TYPES = new Set(['trader_investment_plan']);
+
+type ReportScoreMap = NonNullable<StockWidgetType['report_scores']>;
+type ReportScoreEntry = [string, ReportScoreMap[string]];
+
+function scoreEntryOrder(key: string): number {
   const i = REPORT_ORDER.indexOf(key);
   if (i >= 0) return i;
   return REPORT_ORDER.length - 0.5; // unknown reports before Confidence
+}
+
+function getAnalysisScoreEntries(scores: StockWidgetType['report_scores']): ReportScoreEntry[] {
+  if (!scores || Object.keys(scores).length === 0) return [];
+  return (Object.entries(scores) as ReportScoreEntry[])
+    .filter(([reportType]) => !EXCLUDED_REPORT_TYPES.has(reportType))
+    .sort((a, b) => scoreEntryOrder(a[0]) - scoreEntryOrder(b[0]));
+}
+
+function getSpiderData(scoreEntries: ReportScoreEntry[]) {
+  return scoreEntries
+    .filter(([, data]) => data.score != null)
+    .map(([reportType, data]) => ({
+      aspect: formatReportKey(reportType),
+      score: data.score as number,
+    }));
 }
 
 function formatReportKey(key: string): string {
@@ -69,13 +98,32 @@ function getScoreColor(score: number | null | undefined): string {
   return 'text-green-400';
 }
 
+function calculateAverageAnalystScore(scoreEntries: ReportScoreEntry[]): number | null {
+  const analystReports = ['market_report', 'news_report', 'fundamentals_report', 'technical_report', 'sec_report'];
+  const analystScores = scoreEntries
+    .filter(([type]) => analystReports.includes(type))
+    .map(([, data]) => data.score)
+    .filter((score): score is number => score != null);
+  
+  if (analystScores.length === 0) return null;
+  return analystScores.reduce((sum, score) => sum + score, 0) / analystScores.length;
+}
+
+function getRadarFillColor(avgScore: number | null): string {
+  if (avgScore == null) return '#38bdf8';
+  if (avgScore <= 3) return '#f87171';
+  if (avgScore <= 5) return '#facc15';
+  if (avgScore <= 7) return '#38bdf8';
+  return '#4ade80';
+}
+
 function formatDate(dateStr: string | null): string {
   const date = parseReportDate(dateStr);
   if (!date) return '—';
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function getRecommendationBadge(rec: string | null, confidence?: number | null) {
+function getRecommendationBadge(rec: string | null) {
   if (!rec) return <span className="text-gray-500">—</span>;
   const colors: Record<string, string> = {
     BUY: 'bg-green-500/20 text-green-400 border-green-500/50',
@@ -83,26 +131,49 @@ function getRecommendationBadge(rec: string | null, confidence?: number | null) 
     HOLD: 'bg-amber-500/20 text-amber-400 border-amber-500/50',
   };
   const c = colors[rec.toUpperCase()] || 'bg-gray-500/20 text-gray-400 border-gray-500/50';
-  const confidencePct =
-    confidence != null && confidence >= 0 && confidence <= 1
-      ? `${Math.round(confidence * 100)}%`
-      : null;
   return (
-    <span className="inline-flex items-center gap-x-1.5 whitespace-nowrap max-w-full min-w-0">
-      <span className={`px-2 py-0.5 rounded text-xs font-semibold border shrink-0 ${c}`}>
-        {rec.toUpperCase()}
-      </span>
-      {confidencePct != null && (
-        <span className="text-gray-400 text-xs font-medium truncate">Confidence: {confidencePct}</span>
-      )}
+    <span className={`px-2 py-0.5 rounded text-xs font-semibold border ${c}`}>
+      {rec.toUpperCase()}
     </span>
   );
 }
 
+function getWidgetConfidence(widget: StockWidgetType): number | null {
+  const direct = widget.confidence;
+  if (direct != null && direct >= 0 && direct <= 1) return direct;
+  const finalScore = widget.report_scores?.final_trade_decision?.score;
+  if (finalScore != null && finalScore >= 0 && finalScore <= 10) return finalScore / 10;
+  return null;
+}
+
 function getConfidenceValue(widget: StockWidgetType): number {
-  const c = widget.confidence;
-  if (c != null && c >= 0 && c <= 1) return c;
-  return -1;
+  return getWidgetConfidence(widget) ?? -1;
+}
+
+function AspectSpiderWidget({ scoreEntries }: { scoreEntries: ReportScoreEntry[] }) {
+  const spiderData = getSpiderData(scoreEntries);
+  const avgScore = calculateAverageAnalystScore(scoreEntries);
+  const radarColor = getRadarFillColor(avgScore);
+  
+  if (spiderData.length < 3) {
+    return (
+      <div className="h-20 w-20 shrink-0 rounded border border-gray-700/80 bg-gray-900/50 flex items-center justify-center">
+        <span className="text-[10px] text-gray-500">N/A</span>
+      </div>
+    );
+  }
+  return (
+    <div className="h-20 w-20 shrink-0 overflow-hidden" aria-label="AI aspect score spider chart">
+      <ResponsiveContainer width="100%" height="100%">
+        <RadarChart data={spiderData} cx="50%" cy="50%" outerRadius="95%" margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+          <PolarGrid stroke="#4b5563" />
+          <PolarAngleAxis dataKey="aspect" tick={false} axisLine={false} />
+          <PolarRadiusAxis type="number" domain={[0, 10]} tickCount={6} allowDecimals={false} tick={false} axisLine={false} />
+          <Radar dataKey="score" stroke={radarColor} fill={radarColor} fillOpacity={0.6} isAnimationActive={false} />
+        </RadarChart>
+      </ResponsiveContainer>
+    </div>
+  );
 }
 
 export default function StockListView({ widgets, tickerToName, scrollRef, onScroll, footer }: StockListViewProps) {
@@ -126,8 +197,8 @@ export default function StockListView({ widgets, tickerToName, scrollRef, onScro
           <col className="w-[16%]" />
           <col className="w-[8%]" />
           <col className="w-[8%]" />
-          <col className="w-[15%]" />
-          <col className="w-[38%]" />
+          <col className="w-[7%]" />
+          <col className="w-[46%]" />
           <col className="w-[8%]" />
         </colgroup>
         <thead className="sticky top-0 z-10 bg-gray-800 shadow-[0_1px_0_0_rgba(55,65,81,1)]">
@@ -136,7 +207,7 @@ export default function StockListView({ widgets, tickerToName, scrollRef, onScro
             <th className="py-3 px-2 font-semibold truncate" title="Name">Name</th>
             <th className="py-3 px-2 font-semibold text-right whitespace-nowrap">Price</th>
             <th className="py-3 px-2 font-semibold text-right whitespace-nowrap">Change</th>
-            <th className="py-3 px-2 font-semibold whitespace-nowrap">Recommendation</th>
+            <th className="py-3 px-2 font-semibold whitespace-nowrap text-center">Call</th>
             <th className="py-3 px-2 font-semibold min-w-0">AI analysis scores</th>
             <th className="py-3 px-2 font-semibold whitespace-nowrap">Report date</th>
           </tr>
@@ -145,9 +216,7 @@ export default function StockListView({ widgets, tickerToName, scrollRef, onScro
           {sortedWidgets.map((widget) => {
             const changeColor = widget.daily_change_percent >= 0 ? 'text-green-400' : 'text-red-400';
             const name = tickerToName[widget.ticker] || widget.ticker;
-            const scores = widget.report_scores && Object.keys(widget.report_scores).length > 0
-              ? widget.report_scores
-              : null;
+            const scoreEntries = getAnalysisScoreEntries(widget.report_scores);
 
             return (
               <tr
@@ -167,14 +236,13 @@ export default function StockListView({ widgets, tickerToName, scrollRef, onScro
                     ? `${widget.daily_change_percent >= 0 ? '+' : ''}${widget.daily_change_percent.toFixed(2)}%`
                     : '—'}
                 </td>
-                <td className="py-3 px-2 min-w-0 truncate">{getRecommendationBadge(widget.recommendation, widget.confidence)}</td>
+                <td className="py-3 px-2 min-w-0 truncate text-center">{getRecommendationBadge(widget.recommendation)}</td>
                 <td className="py-3 px-2 min-w-0">
-                  {scores ? (
-                    <div className="flex flex-wrap gap-2">
-                      {Object.entries(scores)
-                        .filter(([reportType]) => reportType !== 'final_trade_decision' && reportType !== 'trader_investment_plan')
-                        .sort((a, b) => scoreEntryOrder(a) - scoreEntryOrder(b))
-                        .map(([reportType, data]) => {
+                  {scoreEntries.length > 0 ? (
+                    <div className="flex items-center gap-3 min-w-0">
+                      <AspectSpiderWidget scoreEntries={scoreEntries} />
+                      <div className="flex flex-wrap gap-2 min-w-0">
+                        {scoreEntries.map(([reportType, data]) => {
                         const label = formatReportKey(reportType);
                         const value = data.score != null ? `${data.score}/10` : '—';
                         return (
@@ -189,6 +257,7 @@ export default function StockListView({ widgets, tickerToName, scrollRef, onScro
                           </div>
                         );
                       })}
+                      </div>
                     </div>
                   ) : (
                     <span className="text-gray-500 text-sm">No scores</span>

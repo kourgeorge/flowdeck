@@ -28,7 +28,8 @@ export default function ReportTabs({ availableReports, selectedReport, onSelectR
     news_report: 'News',
     sec_report: 'SEC',
     investment_plan: 'Research',
-    final_trade_decision: 'Thesis',
+    trader_investment_plan: 'Trader',
+    final_trade_decision: 'Risk Analysis',
   };
 
   const formatReportName = (name: string) => {

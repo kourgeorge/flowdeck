@@ -23,6 +23,13 @@ export default function Footer() {
             </Link>
             <span>·</span>
             <Link
+              to="/architecture"
+              className="hover:text-white transition-colors"
+            >
+              Architecture
+            </Link>
+            <span>·</span>
+            <Link
               to="/terms"
               className="hover:text-white transition-colors"
             >

@@ -58,6 +58,12 @@ const REPORT_METADATA: Record<string, { title: string; contains: string; aspects
     aspects: 'Summary of key points from both Bull and Bear; which side the judge aligns with and why; strategic actions, position sizing, and monitoring; expected, bear-case, and bull-case percentage returns from current price over the investment horizon.',
     methodology: 'Produced after the Bull vs Bear debate. The Bull and Bear researchers take turns arguing, drawing on all prior reports. The Research Manager acts as judge, evaluates both sides, commits to Buy/Sell/Hold, and produces the investment plan with expected return scenarios.',
   },
+  trader_investment_plan: {
+    title: 'Trader',
+    contains: 'The trader\'s execution-oriented plan translated from research into an actionable trading stance.',
+    aspects: 'Concrete trade direction, rationale, and execution notes derived from analyst and research-manager outputs.',
+    methodology: 'Produced after the Research Manager\'s investment plan. The Trader agent converts the research recommendation into a practical trading plan used as input for the downstream risk debate.',
+  },
   final_trade_decision: {
     title: 'Risk & Confidence',
     contains: 'The ultimate BUY/SELL/HOLD decision with detailed reasoning. Includes a Confidence Score (1–10) and key takeaways for traders.',
@@ -286,4 +292,3 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
     </div>
   );
 }
-

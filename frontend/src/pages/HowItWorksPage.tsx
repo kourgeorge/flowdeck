@@ -15,6 +15,14 @@ export default function HowItWorksPage() {
         <p className="text-gray-500 text-sm mb-10">
           How we use AI to produce insights and recommendations you see on your stock pages.
         </p>
+        <div className="mb-10">
+          <Link
+            to="/architecture"
+            className="inline-flex items-center rounded-md border border-gray-600 px-3 py-2 text-sm text-gray-300 hover:text-white hover:border-gray-400 transition-colors"
+          >
+            View Full Architecture Schematic
+          </Link>
+        </div>
 
         <div className="space-y-10 text-sm leading-relaxed">
           {/* What Flowdeck gives you */}
@@ -112,6 +120,12 @@ export default function HowItWorksPage() {
             className="inline-flex items-center text-sm text-gray-400 hover:text-white transition-colors"
           >
             Contact →
+          </Link>
+          <Link
+            to="/architecture"
+            className="inline-flex items-center text-sm text-gray-400 hover:text-white transition-colors"
+          >
+            Architecture →
           </Link>
         </div>
       </div>

@@ -3,6 +3,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import HomePage from './pages/HomePage';
 import HowItWorksPage from './pages/HowItWorksPage';
+import ArchitecturePage from './pages/ArchitecturePage';
 import ProfilePage from './pages/ProfilePage';
 import StockPage from './pages/StockPage';
 import TermsOfUsePage from './pages/TermsOfUsePage';
@@ -23,6 +24,7 @@ function App() {
           <Route path="subscriptions" element={<Navigate to="/dashboard" replace />} />
           <Route path="admin" element={<AdminDashboardPage />} />
           <Route path="how-it-works" element={<HowItWorksPage />} />
+          <Route path="architecture" element={<ArchitecturePage />} />
           <Route path="terms" element={<TermsOfUsePage />} />
           <Route path="contact" element={<ContactUsPage />} />
         </Route>
@@ -33,4 +35,3 @@ function App() {
 }
 
 export default App;
-

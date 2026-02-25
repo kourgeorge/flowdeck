@@ -517,10 +517,11 @@ export default function StockPage() {
     'fundamentals_report',
     'sec_report',
     'investment_plan',
+    'trader_investment_plan',
     'final_trade_decision',
   ];
 
-  const allReports = Object.keys(stockData.reports || {}).filter((r) => r !== 'trader_investment_plan');
+  const allReports = Object.keys(stockData.reports || {});
   const availableReports = [...allReports].sort((a, b) => {
     const idxA = REPORT_PROCESS_ORDER.indexOf(a);
     const idxB = REPORT_PROCESS_ORDER.indexOf(b);
