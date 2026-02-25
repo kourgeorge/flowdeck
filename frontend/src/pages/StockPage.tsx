@@ -661,7 +661,22 @@ export default function StockPage() {
                             : 'text-gray-400 hover:text-white hover:bg-gray-800/70 border-transparent font-medium'
                       }`}
                     >
-                      {tab.label}
+                      <span className="inline-flex items-center gap-1.5">
+                        {isAiTab && (
+                          <svg
+                            className="w-5 h-5 opacity-90"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            aria-hidden="true"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l1.25 3.25L16.5 7.5l-3.25 1.25L12 12l-1.25-3.25L7.5 7.5l3.25-1.25L12 3z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 13l.9 2.1L9 16l-2.1.9L6 19l-.9-2.1L3 16l2.1-.9L6 13z" />
+                          </svg>
+                        )}
+                        {tab.label}
+                      </span>
                     </button>
                   );
                 })}
