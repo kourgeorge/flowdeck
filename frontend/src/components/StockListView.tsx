@@ -29,6 +29,7 @@ const REPORT_LABELS: Record<string, string> = {
   fundamentals_report: 'Fundamentals',
   market_report: 'Market',
   news_report: 'News',
+  technical_report: 'Technical',
   sec_report: 'SEC',
   investment_plan: 'Research',
   final_trade_decision: 'Confidence',
@@ -37,11 +38,12 @@ const REPORT_LABELS: Record<string, string> = {
   risk: 'Risk',
 };
 
-/** Order: Market, News, Fundamentals, SEC, Research, Confidence. */
+/** Order: Market, News, Fundamentals, Technical, SEC, Research, Confidence. */
 const REPORT_ORDER: string[] = [
   'market_report',
   'news_report',
   'fundamentals_report',
+  'technical_report',
   'sec_report',
   'investment_plan',
   'final_trade_decision', // Confidence last

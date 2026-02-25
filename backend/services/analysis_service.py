@@ -118,7 +118,7 @@ class AnalysisService:
 
         # Default analysts if not provided
         if analysts is None:
-            analysts = ["market", "news", "fundamentals", "sec"]
+            analysts = ["market", "news", "fundamentals", "technical", "sec"]
         # Exclude SEC analyst for non-US tickers (crypto, forex, non-US stocks, indices)
         if "sec" in analysts and not _is_us_company_with_sec(ticker):
             analysts = [a for a in analysts if a != "sec"]
@@ -170,6 +170,7 @@ class AnalysisService:
             "Social Analyst": "pending",
             "News Analyst": "pending",
             "Fundamentals Analyst": "pending",
+            "Technical Analyst": "pending",
             "SEC Analyst": "pending",
             "Bull Researcher": "pending",
             "Bear Researcher": "pending",
@@ -181,17 +182,18 @@ class AnalysisService:
             "Portfolio Manager": "pending",
         }
         
-        # Set first analyst to in_progress
-        if "market" in analysts:
-            agent_statuses["Market Analyst"] = "in_progress"
-        elif "social" in analysts:
-            agent_statuses["Social Analyst"] = "in_progress"
-        elif "news" in analysts:
-            agent_statuses["News Analyst"] = "in_progress"
-        elif "fundamentals" in analysts:
-            agent_statuses["Fundamentals Analyst"] = "in_progress"
-        elif "sec" in analysts:
-            agent_statuses["SEC Analyst"] = "in_progress"
+        # Set first selected analyst to in_progress
+        analyst_status_map = {
+            "market": "Market Analyst",
+            "social": "Social Analyst",
+            "news": "News Analyst",
+            "fundamentals": "Fundamentals Analyst",
+            "technical": "Technical Analyst",
+            "sec": "SEC Analyst",
+        }
+        first_selected = next((a for a in analysts if a in analyst_status_map), None)
+        if first_selected:
+            agent_statuses[analyst_status_map[first_selected]] = "in_progress"
         
         # Store analysis info
         self.running_analyses[analysis_id] = {
@@ -299,6 +301,22 @@ class AnalysisService:
                     )
                     raise
 
+            # Determine when analyst phase is complete (last selected analyst report saved).
+            analyst_to_report_key = {
+                "market": "market_report",
+                "social": "sentiment_report",
+                "news": "news_report",
+                "fundamentals": "fundamentals_report",
+                "technical": "technical_report",
+                "sec": "sec_report",
+            }
+            last_analyst_report_key = None
+            for analyst in reversed(analysts):
+                report_key = analyst_to_report_key.get(analyst)
+                if report_key:
+                    last_analyst_report_key = report_key
+                    break
+
             # Stream the analysis
             _progress_log(f"Analysis started analysis_id={analysis_id} ticker={ticker} run_id={run_id}")
             last_chunk = None
@@ -341,6 +359,7 @@ class AnalysisService:
                     ("sentiment_report", "sentiment_report", "sentiment_score", "Sentiment Score", "Social Analyst"),
                     ("news_report", "news_report", "news_score", "News Score", "News Analyst"),
                     ("fundamentals_report", "fundamentals_report", "fundamentals_score", "Fundamentals Score", "Fundamentals Analyst"),
+                    ("technical_report", "technical_report", "technical_score", "Technical Score", "Technical Analyst"),
                     ("sec_report", "sec_report", "sec_score", "SEC Score", "SEC Analyst"),
                 ]
                 for key, chunk_key, score_key, label, agent in _reports:
@@ -350,7 +369,7 @@ class AnalysisService:
                         analysis_info["agent_statuses"][agent] = "completed"
                         _write_report(key, c, chunk.get(score_key), label)
                         _progress_log(f"{agent} completed → {key} saved")
-                        if key == "fundamentals_report":
+                        if last_analyst_report_key and key == last_analyst_report_key:
                             analysis_info["agent_statuses"]["Bull Researcher"] = "in_progress"
                             analysis_info["agent_statuses"]["Bear Researcher"] = "in_progress"
                             analysis_info["agent_statuses"]["Research Manager"] = "in_progress"
@@ -441,22 +460,25 @@ class AnalysisService:
                     except Exception:
                         pass
 
-            # Fallback: ensure sec_report is saved if SEC analyst ran but was missed in stream chunks
-            if last_chunk and "sec" in analysts and "sec_report" not in analysis_info.get("reports", {}):
-                sec_content = last_chunk.get("sec_report")
-                if sec_content:
+            # Fallback: ensure optional analyst reports are saved if missed in stream chunks.
+            if last_chunk:
+                fallback_reports = [
+                    ("technical", "technical_report", "technical_score", "Technical Score", "Technical Analyst"),
+                    ("sec", "sec_report", "sec_score", "SEC Score", "SEC Analyst"),
+                ]
+                for analyst_key, report_key, score_key, label, agent in fallback_reports:
+                    if analyst_key not in analysts or report_key in analysis_info.get("reports", {}):
+                        continue
+                    content = last_chunk.get(report_key)
+                    if not content:
+                        continue
                     try:
-                        _write_report(
-                            "sec_report",
-                            sec_content,
-                            last_chunk.get("sec_score"),
-                            "SEC Score",
-                        )
-                        analysis_info["reports"]["sec_report"] = sec_content
-                        analysis_info["agent_statuses"]["SEC Analyst"] = "completed"
-                        _progress_log("SEC report saved (from final state)")
+                        _write_report(report_key, content, last_chunk.get(score_key), label)
+                        analysis_info["reports"][report_key] = content
+                        analysis_info["agent_statuses"][agent] = "completed"
+                        _progress_log(f"{agent} report saved (from final state)")
                     except Exception as e:
-                        logger.warning("Failed to save sec_report from final state: %s", e)
+                        logger.warning("Failed to save %s from final state: %s", report_key, e)
             
             # Mark as completed
             analysis_info["status"] = "completed"

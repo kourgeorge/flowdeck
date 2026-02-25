@@ -504,7 +504,7 @@ async def start_analysis(
             raise HTTPException(status_code=400, detail="Ticker is required")
         
         analysis_date = body.get("analysis_date") or datetime.now().strftime("%Y-%m-%d")
-        analysts = body.get("analysts", ["market", "news", "fundamentals", "sec"])
+        analysts = body.get("analysts", ["market", "news", "fundamentals", "technical", "sec"])
         research_depth = body.get("research_depth", 2)
         llm_provider = body.get("llm_provider", "azure")  # Default to Azure
         backend_url = body.get("backend_url")
@@ -637,7 +637,7 @@ def _run_sync_major_stocks_background(analysis_date: str) -> None:
         tickers=triggered,
         analysis_date=analysis_date,
         analysis_service=analysis_service,
-        analysts=["market", "news", "fundamentals", "sec"],
+        analysts=["market", "news", "fundamentals", "technical", "sec"],
         research_depth=5,
         llm_provider="azure",
         wait_for_completion=True,

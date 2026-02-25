@@ -45,7 +45,7 @@ def run_analyses_for_tickers(
     Start analysis for each ticker in tickers, sequentially. Optionally wait for each to complete.
     """
     if analysts is None:
-        analysts = ["market", "news", "fundamentals"]
+        analysts = ["market", "news", "fundamentals", "technical"]
     for ticker in tickers:
         analysis_id, _ = analysis_service.start_analysis(
             ticker=ticker,
@@ -87,7 +87,7 @@ def run_sync(
         return {"date": analysis_date, "triggered": [], "skipped": skipped}
     analysis_service = AnalysisService(results_dir=RESULTS_DIR)
     if analysts is None:
-        analysts = ["market", "news", "fundamentals"]
+        analysts = ["market", "news", "fundamentals", "technical"]
     run_analyses_for_tickers(
         tickers=triggered,
         analysis_date=analysis_date,

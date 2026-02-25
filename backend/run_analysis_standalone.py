@@ -82,7 +82,7 @@ def main() -> None:
     parser.add_argument("--ticker", required=True, help="Ticker symbol")
     parser.add_argument("--analysis-date", required=True, help="Analysis date YYYY-MM-DD")
     parser.add_argument("--analysis-id", required=True, help="Analysis UUID from Node")
-    parser.add_argument("--analysts", default="market,news,fundamentals", help="Comma-separated analysts")
+    parser.add_argument("--analysts", default="market,news,fundamentals,technical", help="Comma-separated analysts")
     parser.add_argument("--research-depth", type=int, default=2, help="Max debate rounds")
     parser.add_argument("--llm-provider", default="azure", help="LLM provider")
     parser.add_argument("--results-dir", default="results", help="Results directory (absolute or relative to repo)")
@@ -96,7 +96,7 @@ def main() -> None:
     analysis_date = args.analysis_date.strip()
     analysts = [a.strip() for a in args.analysts.split(",") if a.strip()]
     if not analysts:
-        analysts = ["market", "news", "fundamentals"]
+        analysts = ["market", "news", "fundamentals", "technical"]
 
     os.environ["INFO_SERVICE_URL"] = args.info_service_url.strip().rstrip("/")
 
@@ -145,6 +145,8 @@ def main() -> None:
         "Social Analyst": "pending",
         "News Analyst": "pending",
         "Fundamentals Analyst": "pending",
+        "Technical Analyst": "pending",
+        "SEC Analyst": "pending",
         "Bull Researcher": "pending",
         "Bear Researcher": "pending",
         "Research Manager": "pending",
@@ -154,14 +156,17 @@ def main() -> None:
         "Safe Analyst": "pending",
         "Portfolio Manager": "pending",
     }
-    if "market" in analysts:
-        agent_statuses["Market Analyst"] = "in_progress"
-    elif "social" in analysts:
-        agent_statuses["Social Analyst"] = "in_progress"
-    elif "news" in analysts:
-        agent_statuses["News Analyst"] = "in_progress"
-    elif "fundamentals" in analysts:
-        agent_statuses["Fundamentals Analyst"] = "in_progress"
+    analyst_status_map = {
+        "market": "Market Analyst",
+        "social": "Social Analyst",
+        "news": "News Analyst",
+        "fundamentals": "Fundamentals Analyst",
+        "technical": "Technical Analyst",
+        "sec": "SEC Analyst",
+    }
+    first_selected = next((a for a in analysts if a in analyst_status_map), None)
+    if first_selected:
+        agent_statuses[analyst_status_map[first_selected]] = "in_progress"
 
     reports: dict = {}
     final_recommendation = None
@@ -223,6 +228,20 @@ def main() -> None:
             init_agent_state = graph.propagator.create_initial_state(ticker, analysis_date)
             graph_args = graph.propagator.get_graph_args()
             _progress_log(f"Analysis started ticker={ticker} run_id={run_id} analysts={analysts}")
+            analyst_to_report_key = {
+                "market": "market_report",
+                "social": "sentiment_report",
+                "news": "news_report",
+                "fundamentals": "fundamentals_report",
+                "technical": "technical_report",
+                "sec": "sec_report",
+            }
+            last_analyst_report_key = None
+            for analyst in reversed(analysts):
+                report_key = analyst_to_report_key.get(analyst)
+                if report_key:
+                    last_analyst_report_key = report_key
+                    break
 
             heartbeat_thread = threading.Thread(target=heartbeat_loop, daemon=True)
             heartbeat_thread.start()
@@ -241,6 +260,8 @@ def main() -> None:
                     ("sentiment_report", "sentiment_report", "sentiment_score", "Sentiment Score", "Social Analyst"),
                     ("news_report", "news_report", "news_score", "News Score", "News Analyst"),
                     ("fundamentals_report", "fundamentals_report", "fundamentals_score", "Fundamentals Score", "Fundamentals Analyst"),
+                    ("technical_report", "technical_report", "technical_score", "Technical Score", "Technical Analyst"),
+                    ("sec_report", "sec_report", "sec_score", "SEC Score", "SEC Analyst"),
                 ]
                 for key, chunk_key, score_key, label, agent in _reports:
                     if chunk_key in chunk and chunk[chunk_key]:
@@ -249,7 +270,7 @@ def main() -> None:
                         agent_statuses[agent] = "completed"
                         _write_report(key, c, chunk.get(score_key), label)
                         _progress_log(f"{agent} completed → {key} saved")
-                        if key == "fundamentals_report":
+                        if last_analyst_report_key and key == last_analyst_report_key:
                             agent_statuses["Bull Researcher"] = "in_progress"
                             agent_statuses["Bear Researcher"] = "in_progress"
                             agent_statuses["Research Manager"] = "in_progress"

@@ -24,6 +24,7 @@ export default function ReportTabs({ availableReports, selectedReport, onSelectR
   const REPORT_LABELS: Record<string, string> = {
     market_report: 'Market',
     fundamentals_report: 'Fundamentals',
+    technical_report: 'Technical',
     news_report: 'News',
     sec_report: 'SEC',
     investment_plan: 'Research',
@@ -83,4 +84,3 @@ export default function ReportTabs({ availableReports, selectedReport, onSelectR
     </div>
   );
 }
-
