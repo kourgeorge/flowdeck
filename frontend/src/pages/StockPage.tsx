@@ -513,9 +513,9 @@ export default function StockPage() {
     'market_report',
     'sentiment_report',
     'news_report',
+    'technical_report',
     'fundamentals_report',
     'sec_report',
-    'technical_report',
     'investment_plan',
     'final_trade_decision',
   ];
