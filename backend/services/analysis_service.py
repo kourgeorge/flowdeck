@@ -410,7 +410,13 @@ class AnalysisService:
                     c = chunk["trader_investment_plan"]
                     analysis_info["reports"]["trader_investment_plan"] = c
                     analysis_info["agent_statuses"]["Trader"] = "completed"
-                    _write_report("trader_investment_plan", c, None, "Trader Plan")
+                    _write_report(
+                        "trader_investment_plan",
+                        c,
+                        None,
+                        "Trader Plan",
+                        recommendation=chunk.get("trader_recommendation"),
+                    )
                     analysis_info["agent_statuses"]["Risky Analyst"] = "in_progress"
                     analysis_info["agent_statuses"]["Safe Analyst"] = "in_progress"
                     analysis_info["agent_statuses"]["Neutral Analyst"] = "in_progress"
@@ -433,6 +439,7 @@ class AnalysisService:
                     risky = chunk.get("risky_summary") or []
                     safe = chunk.get("safe_summary") or []
                     neutral = chunk.get("neutral_summary") or []
+                    final_rec = chunk.get("recommendation") or chunk.get("trader_recommendation")
                     analysis_info["reports"]["final_trade_decision"] = content
                     rscore = chunk.get("risk_score")
                     kt = (chunk.get("final_report_key_takeaways") or [])[:5] or extract_key_takeaways(content)
@@ -448,9 +455,9 @@ class AnalysisService:
                         content=content,
                         metadata={**inner, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral},
                     )
-                    analysis_info["recommendation"] = chunk.get("recommendation")
+                    analysis_info["recommendation"] = final_rec
                     analysis_info["confidence"] = (chunk.get("risk_score") / 10.0) if chunk.get("risk_score") is not None else None
-                    rec = chunk.get("recommendation", "")
+                    rec = final_rec or ""
                     _progress_log(f"Final trade decision ready → {rec}")
 
                 # Call progress callback if provided

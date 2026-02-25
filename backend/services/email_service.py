@@ -158,14 +158,19 @@ def _build_report_email_bodies(
     confidence: Optional[float] = None,
 ) -> tuple[str, str, str]:
     """Return (subject, text_body, html_body). Link is to the stock page only, not a specific report."""
+    display_confidence = confidence
+    # Backward compatibility: some callers/store metadata as normalized 0-1 confidence.
+    if display_confidence is not None and 0 <= display_confidence <= 1:
+        display_confidence = display_confidence * 10
+
     report_url = f"{_get_frontend_url()}/stocks/{ticker.upper()}"
     ticker_upper = ticker.upper()
     subject = f"Your {ticker_upper} report is ready — Flowdeck"
     summary_lines = []
     if recommendation:
         summary_lines.append(f"Recommendation: {recommendation}")
-    if confidence is not None:
-        summary_lines.append(f"Confidence: {confidence:.1f}/10")
+    if display_confidence is not None:
+        summary_lines.append(f"Confidence: {display_confidence:.1f}/10")
     summary_lines.append("")
     summary_lines.append(f"View full report: {report_url}")
     text_body = "\n".join(summary_lines)
@@ -179,8 +184,8 @@ def _build_report_email_bodies(
     if recommendation:
         rec_html = f'<p style="margin:0 0 12px;font-size:15px;color:{_TEXT_DARK};"><strong>Recommendation:</strong> <span style="display:inline-block;padding:4px 10px;background:{_BRAND_BG};color:{_BRAND_PRIMARY};border-radius:6px;font-weight:600;">{safe(recommendation)}</span></p>'
     conf_html = ""
-    if confidence is not None:
-        conf_html = f'<p style="margin:0 0 20px;font-size:14px;color:#64748b;">Confidence: <strong>{confidence:.1f}/10</strong></p>'
+    if display_confidence is not None:
+        conf_html = f'<p style="margin:0 0 20px;font-size:14px;color:#64748b;">Confidence: <strong>{display_confidence:.1f}/10</strong></p>'
     inner = f"""
     <h2 style="margin:0 0 20px;font-size:22px;color:{_TEXT_DARK};font-weight:600;">Your report is ready</h2>
     <p style="margin:0 0 16px;font-size:16px;color:#475569;line-height:1.5;">We've completed a new analysis for <strong>{safe(ticker_upper)}</strong>.</p>

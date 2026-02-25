@@ -307,7 +307,13 @@ def main() -> None:
                     c = chunk["trader_investment_plan"]
                     reports["trader_investment_plan"] = c
                     agent_statuses["Trader"] = "completed"
-                    _write_report("trader_investment_plan", c, None, "Trader Plan")
+                    _write_report(
+                        "trader_investment_plan",
+                        c,
+                        None,
+                        "Trader Plan",
+                        recommendation=chunk.get("trader_recommendation"),
+                    )
                     agent_statuses["Risky Analyst"] = "in_progress"
                     agent_statuses["Safe Analyst"] = "in_progress"
                     agent_statuses["Neutral Analyst"] = "in_progress"
@@ -328,7 +334,7 @@ def main() -> None:
                     neutral = chunk.get("neutral_summary") or []
                     reports["final_trade_decision"] = content
                     rscore = chunk.get("risk_score")
-                    final_recommendation = chunk.get("recommendation")
+                    final_recommendation = chunk.get("recommendation") or chunk.get("trader_recommendation")
                     final_confidence = (rscore / 10.0) if rscore is not None else None
                     kt = (chunk.get("final_report_key_takeaways") or [])[:5] or extract_key_takeaways(content)
                     meta = _build_report_json(
@@ -343,7 +349,7 @@ def main() -> None:
                         content=content,
                         metadata={**meta, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral},
                     )
-                    rec = chunk.get("recommendation", "")
+                    rec = final_recommendation or ""
                     _progress_log(f"Final trade decision ready → {rec}")
 
                 emit({

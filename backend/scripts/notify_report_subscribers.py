@@ -36,10 +36,10 @@ def main() -> None:
         sys.exit(1)
 
     scores = report_service.get_reports_with_scores(ticker, latest_date)
-    # Prefer final_trade_decision, then investment_plan for recommendation/confidence
+    # Prefer final_trade_decision, then trader_investment_plan for recommendation/confidence
     final_meta = scores.get("final_trade_decision") or {}
     if not final_meta.get("recommendation"):
-        final_meta = scores.get("investment_plan") or {}
+        final_meta = scores.get("trader_investment_plan") or {}
     recommendation = final_meta.get("recommendation")
     confidence = final_meta.get("confidence")
     if confidence is not None and not isinstance(confidence, (int, float)):

@@ -110,6 +110,40 @@ app.include_router(contact_router)
 active_connections: dict[str, WebSocket] = {}
 
 
+def _normalize_confidence(value: object) -> Optional[float]:
+    """Return normalized confidence only when it is a valid 0-1 numeric value."""
+    if not isinstance(value, (int, float)):
+        return None
+    confidence = float(value)
+    if 0.0 <= confidence <= 1.0:
+        return confidence
+    return None
+
+
+def _normalize_score_confidence(value: object) -> Optional[float]:
+    """Convert a 0-10 score to normalized confidence (0-1)."""
+    if not isinstance(value, (int, float)):
+        return None
+    score = float(value)
+    if 0.0 <= score <= 10.0:
+        return score / 10.0
+    return None
+
+
+def _extract_confidence(*metas: object) -> Optional[float]:
+    """Pick first available confidence from metadata, with score/10 fallback."""
+    for meta in metas:
+        if not isinstance(meta, dict):
+            continue
+        confidence = _normalize_confidence(meta.get("confidence"))
+        if confidence is not None:
+            return confidence
+        confidence_from_score = _normalize_score_confidence(meta.get("score"))
+        if confidence_from_score is not None:
+            return confidence_from_score
+    return None
+
+
 def _get_stock_widgets_sync(
     tickers: Optional[str],
     date: Optional[str],
@@ -197,15 +231,14 @@ def _get_stock_widgets_sync(
                     }
                     if not report_scores:
                         report_scores = None
+                    tip = scores_raw.get("trader_investment_plan") or {}
                     ftd = scores_raw.get("final_trade_decision") or {}
-                    if ftd.get("recommendation"):
-                        recommendation = ftd["recommendation"]
-                        confidence = ftd.get("confidence")
-                    if recommendation is None:
-                        tip = scores_raw.get("trader_investment_plan") or {}
-                        if tip.get("recommendation"):
-                            recommendation = tip["recommendation"]
-                            confidence = tip.get("confidence")
+                    if tip.get("recommendation"):
+                        recommendation = tip["recommendation"]
+                    elif ftd.get("recommendation"):
+                        # Legacy fallback for older runs that predate structured trader recommendation.
+                        recommendation = ftd.get("recommendation")
+                    confidence = _extract_confidence(tip, ftd)
         except Exception as e:
             print(f"Warning: Failed to get reports for {ticker}: {e}")
 
@@ -299,40 +332,35 @@ def _get_stock_page_sync(ticker: str) -> StockPageData:
         first_report = next(iter(latest_reports_with_scores_raw.values()), {})
         report_days_ago = first_report.get('days_ago')
 
+        tip_meta = latest_reports_with_scores_raw.get("trader_investment_plan") or {}
         final_meta = latest_reports_with_scores_raw.get("final_trade_decision") or {}
-        if final_meta.get("recommendation"):
-            confidence = final_meta.get("confidence")
-            if confidence is None or not (0 <= confidence <= 1):
-                confidence = 1.0
+        confidence = _extract_confidence(tip_meta, final_meta)
+        if tip_meta.get("recommendation"):
+            latest_recommendation = Recommendation(
+                recommendation=tip_meta["recommendation"],
+                confidence=confidence,
+                source="trader_investment_plan",
+                date=latest_date
+            )
+        elif final_meta.get("recommendation"):
+            # Legacy fallback for older runs that predate structured trader recommendation.
             latest_recommendation = Recommendation(
                 recommendation=final_meta["recommendation"],
                 confidence=confidence,
-                source="structured_output",
+                source="final_trade_decision",
                 date=latest_date
             )
-        if latest_recommendation is None:
-            tip_meta = latest_reports_with_scores_raw.get("trader_investment_plan") or {}
-            if tip_meta.get("recommendation"):
-                confidence = tip_meta.get("confidence")
-                if confidence is None or not (0 <= confidence <= 1):
-                    confidence = 0.9
-                latest_recommendation = Recommendation(
-                    recommendation=tip_meta["recommendation"],
-                    confidence=confidence,
-                    source="structured_output",
-                    date=latest_date
-                )
 
     historical = report_service.get_historical_analyses(ticker)
     historical_analyses = []
     for h in historical:
         reports_with_scores = report_service.get_reports_with_scores(ticker, h["date"])
         rec = None
-        final_meta = reports_with_scores.get("final_trade_decision") or {}
-        if final_meta.get("recommendation"):
-            rec = final_meta["recommendation"]
-        elif (reports_with_scores.get("trader_investment_plan") or {}).get("recommendation"):
+        if (reports_with_scores.get("trader_investment_plan") or {}).get("recommendation"):
             rec = reports_with_scores["trader_investment_plan"]["recommendation"]
+        elif (reports_with_scores.get("final_trade_decision") or {}).get("recommendation"):
+            # Legacy fallback for older runs that predate structured trader recommendation.
+            rec = reports_with_scores["final_trade_decision"]["recommendation"]
 
         historical_analyses.append(HistoricalAnalysis(
             date=h["date"],
