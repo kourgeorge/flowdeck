@@ -60,9 +60,21 @@ interface FundamentalData {
 
 interface FundamentalPanesProps {
   data: FundamentalData;
+  analystRecommendations?: {
+    recommendation?: string;
+    target_price?: number | string;
+    latest_date?: string;
+    breakdown?: Record<string, number | string>;
+    total_analysts?: number | string;
+  } | null;
+  isLoadingRecommendations?: boolean;
 }
 
-const FundamentalPanes: React.FC<FundamentalPanesProps> = ({ data }) => {
+const FundamentalPanes: React.FC<FundamentalPanesProps> = ({
+  data,
+  analystRecommendations,
+  isLoadingRecommendations = false
+}) => {
   const fundamentalData = data;
 
   // Format number with appropriate units
@@ -420,6 +432,84 @@ const FundamentalPanes: React.FC<FundamentalPanesProps> = ({ data }) => {
         </div>
       )}
 
+      {/* Analyst Recommendations (Yahoo Finance) */}
+      {isLoadingRecommendations ? (
+        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+          <div className="animate-pulse">
+            <div className="h-6 bg-gray-700 rounded w-48 mb-4"></div>
+            <div className="h-32 bg-gray-700 rounded"></div>
+          </div>
+        </div>
+      ) : analystRecommendations && analystRecommendations.recommendation ? (
+        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Analyst Recommendations (Yahoo Finance)</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <div className="mb-4">
+                <div className="text-sm text-gray-400 mb-2">Overall Recommendation</div>
+                <div className={`text-3xl font-bold ${
+                  analystRecommendations.recommendation === 'BUY'
+                    ? 'text-green-400'
+                    : analystRecommendations.recommendation === 'SELL'
+                    ? 'text-red-400'
+                    : 'text-yellow-400'
+                }`}>
+                  {analystRecommendations.recommendation}
+                </div>
+                {analystRecommendations.target_price != null && !Number.isNaN(Number(analystRecommendations.target_price)) && (
+                  <div className="text-sm text-gray-400 mt-2">
+                    Target Price: <span className="text-white font-semibold">${Number(analystRecommendations.target_price).toFixed(2)}</span>
+                  </div>
+                )}
+                {analystRecommendations.latest_date && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    Updated: {new Date(analystRecommendations.latest_date).toLocaleDateString()}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div>
+              <div className="text-sm text-gray-400 mb-3">Recommendation Breakdown</div>
+              <div className="space-y-2">
+                {analystRecommendations.breakdown && Object.entries(analystRecommendations.breakdown).map(([rating, count]) => {
+                  const numCount = Number(count);
+                  const totalAnalysts = Number(analystRecommendations.total_analysts ?? 0);
+                  return (
+                    <div key={rating} className="flex items-center justify-between">
+                      <span className="text-sm text-gray-300">{rating}</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-32 bg-gray-700 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full ${
+                              rating === 'Strong Buy' || rating === 'Buy' ? 'bg-green-500' :
+                              rating === 'Strong Sell' || rating === 'Sell' ? 'bg-red-500' :
+                              'bg-yellow-500'
+                            }`}
+                            style={{ width: `${totalAnalysts > 0 ? (numCount / totalAnalysts) * 100 : 0}%` }}
+                          ></div>
+                        </div>
+                        <span className="text-sm font-semibold text-white w-8 text-right">{numCount}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="pt-2 border-t border-gray-700">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-gray-300">Total Analysts</span>
+                    <span className="text-sm font-bold text-white">{analystRecommendations.total_analysts ?? 'N/A'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : analystRecommendations && !analystRecommendations.recommendation ? (
+        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+          <h3 className="text-lg font-semibold text-white mb-2">Analyst Recommendations (Yahoo Finance)</h3>
+          <p className="text-gray-400 text-sm">No analyst recommendations available for this stock.</p>
+        </div>
+      ) : null}
+
       {/* Additional Info */}
       <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
         <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
@@ -473,4 +563,3 @@ const FundamentalPanes: React.FC<FundamentalPanesProps> = ({ data }) => {
 };
 
 export default FundamentalPanes;
-
