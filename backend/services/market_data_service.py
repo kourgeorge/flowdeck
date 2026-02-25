@@ -19,6 +19,30 @@ def _is_valid_price(price: float) -> bool:
 
 class MarketDataService:
     """Service for fetching real-time market data."""
+
+    @staticmethod
+    def _get_previous_close_from_history(ticker_obj: yf.Ticker) -> Optional[float]:
+        """
+        Resolve previous close from Yahoo daily history.
+        Using the prior completed session close is more reliable than fast_info/info
+        around corporate actions and inconsistent quote fields.
+        """
+        try:
+            hist = ticker_obj.history(
+                period="10d",
+                interval="1d",
+                auto_adjust=False,
+                prepost=False,
+            )
+            if hist.empty or "Close" not in hist.columns:
+                return None
+            close_series = hist["Close"].dropna()
+            if len(close_series) < 2:
+                return None
+            prev_close = float(close_series.iloc[-2])
+            return prev_close if _is_valid_price(prev_close) else None
+        except Exception:
+            return None
     
     @staticmethod
     def _get_market_status(ticker_info: dict) -> str:
@@ -49,11 +73,17 @@ class MarketDataService:
             if current_price is None or not _is_valid_price(current_price):
                 return None
             
-            # Get previous close
-            previous_close = fast_info.get('previousClose') or info.get('previousClose') or info.get('regularMarketPreviousClose')
+            # Prefer previous close from daily history to match Yahoo's displayed change basis.
+            previous_close = MarketDataService._get_previous_close_from_history(ticker_obj)
+            if previous_close is None:
+                previous_close = (
+                    fast_info.get('previousClose')
+                    or info.get('previousClose')
+                    or info.get('regularMarketPreviousClose')
+                )
             
             # Calculate change
-            if previous_close:
+            if previous_close and _is_valid_price(previous_close):
                 daily_change = current_price - previous_close
                 daily_change_percent = (daily_change / previous_close) * 100
             else:
@@ -121,7 +151,7 @@ class MarketDataService:
                 period="5d",
                 interval="1d",
                 group_by="ticker",
-                auto_adjust=True,
+                auto_adjust=False,
                 prepost=False,
                 threads=True,
                 progress=False,
@@ -132,7 +162,18 @@ class MarketDataService:
             if len(tickers) == 1:
                 # Single ticker: columns are flat (Open, High, Low, Close, ...)
                 t = tickers[0]
-                close_series = data["Close"] if "Close" in data.columns else None
+                if isinstance(data.columns, pd.MultiIndex) and t in data.columns.get_level_values(0):
+                    t_data = data[t]
+                    close_series = t_data["Close"] if "Close" in t_data.columns else None
+                    volume_series = t_data["Volume"] if "Volume" in t_data.columns else None
+                    high_series = t_data["High"] if "High" in t_data.columns else None
+                    low_series = t_data["Low"] if "Low" in t_data.columns else None
+                else:
+                    close_series = data["Close"] if "Close" in data.columns else None
+                    volume_series = data["Volume"] if "Volume" in data.columns else None
+                    high_series = data["High"] if "High" in data.columns else None
+                    low_series = data["Low"] if "Low" in data.columns else None
+
                 if close_series is not None and len(close_series) >= 2:
                     current = float(close_series.iloc[-1])
                     if not _is_valid_price(current):
@@ -150,10 +191,10 @@ class MarketDataService:
                             ask_price=None,
                             bid_size=None,
                             ask_size=None,
-                            volume=int(data["Volume"].iloc[-1]) if "Volume" in data.columns else None,
+                            volume=int(volume_series.iloc[-1]) if volume_series is not None else None,
                             previous_close=round(prev, 2),
-                            day_high=round(float(data["High"].iloc[-1]), 2) if "High" in data.columns else None,
-                            day_low=round(float(data["Low"].iloc[-1]), 2) if "Low" in data.columns else None,
+                            day_high=round(float(high_series.iloc[-1]), 2) if high_series is not None else None,
+                            day_low=round(float(low_series.iloc[-1]), 2) if low_series is not None else None,
                             fifty_two_week_high=None,
                             fifty_two_week_low=None,
                             market_status="UNKNOWN",
@@ -171,10 +212,10 @@ class MarketDataService:
                             ask_price=None,
                             bid_size=None,
                             ask_size=None,
-                            volume=int(data["Volume"].iloc[-1]) if "Volume" in data.columns else None,
+                            volume=int(volume_series.iloc[-1]) if volume_series is not None else None,
                             previous_close=round(current, 2),
-                            day_high=round(float(data["High"].iloc[-1]), 2) if "High" in data.columns else None,
-                            day_low=round(float(data["Low"].iloc[-1]), 2) if "Low" in data.columns else None,
+                            day_high=round(float(high_series.iloc[-1]), 2) if high_series is not None else None,
+                            day_low=round(float(low_series.iloc[-1]), 2) if low_series is not None else None,
                             fifty_two_week_high=None,
                             fifty_two_week_low=None,
                             market_status="UNKNOWN",
@@ -238,4 +279,3 @@ class MarketDataService:
         except Exception as e:
             print(f"Warning: Batch quote fetch failed: {e}")
         return results
-
