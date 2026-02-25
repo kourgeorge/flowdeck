@@ -40,11 +40,14 @@ def create_research_manager(llm, memory):
         sentiment_report = state["sentiment_report"]
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
+        sec_report = state.get("sec_report", "")
         technical_report = state.get("technical_report", "")
 
         investment_debate_state = state["investment_debate_state"]
 
         curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
+        if sec_report:
+            curr_situation += f"\n\n{sec_report}"
         if technical_report:
             curr_situation += f"\n\n{technical_report}"
         past_memories = memory.get_memories(curr_situation, n_matches=2)
@@ -83,6 +86,8 @@ Take into account your past mistakes on similar situations. Use these insights t
 - bear_case_return_pct: Downside scenario percentage return (e.g. -12.87 for -12.87%).
 - bull_case_return_pct: Upside scenario percentage return (e.g. 9.41 for +9.41%).
 Use the debate and your view to estimate these three numbers. They must be numeric (can be negative for bear).
+
+{f"Additional Context - SEC/Regulatory Analysis: {sec_report}" if sec_report else ""}
 
 {f"Additional Context - Advanced Technical Analysis: {technical_report}" if technical_report else ""}
 
