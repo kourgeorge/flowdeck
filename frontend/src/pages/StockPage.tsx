@@ -639,23 +639,32 @@ export default function StockPage() {
               <nav className="flex flex-wrap gap-1" aria-label="Stock page sections">
                 {[
                   { id: 'overview', label: 'Overview' },
-                  { id: 'ai-analysis', label: 'AI Analysis' },
                   ...(hasFundamentals ? [{ id: 'fundamentals', label: 'Fundamentals' }] : []),
                   ...(isUSCompany ? [{ id: 'sec-filings', label: 'SEC Filings' }] : []),
                   { id: 'news', label: 'News' },
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`px-4 py-3 text-sm font-medium rounded-t-lg transition-colors border-b-2 -mb-px ${
-                      activeTab === tab.id
-                        ? 'bg-gray-800 text-white border-blue-500'
-                        : 'text-gray-400 hover:text-white hover:bg-gray-800/70 border-transparent'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
+                  { id: 'ai-analysis', label: 'AI Analysis' },
+                ].map((tab) => {
+                  const isActive = activeTab === tab.id;
+                  const isAiTab = tab.id === 'ai-analysis';
+
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`px-4 py-3 text-sm rounded-t-lg transition-colors border-b-2 -mb-px ${
+                        isActive
+                          ? isAiTab
+                            ? 'bg-violet-900/45 text-violet-200 border-violet-400 font-semibold'
+                            : 'bg-gray-800 text-white border-blue-500 font-medium'
+                          : isAiTab
+                            ? 'bg-violet-700/30 text-violet-100 hover:text-white hover:bg-violet-600/40 border-violet-500/50 font-semibold'
+                            : 'text-gray-400 hover:text-white hover:bg-gray-800/70 border-transparent font-medium'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
               </nav>
             </div>
 
