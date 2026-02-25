@@ -68,6 +68,21 @@ def get_news(ticker: str, start_date: str, end_date: str, base_url: Optional[str
     return data
 
 
+def get_insider_transactions(
+    ticker: str,
+    base_url: Optional[str] = None,
+    limit: int = 50,
+) -> str:
+    """Fetch insider transactions from info service. Returns JSON string."""
+    base_url = base_url or _get_info_service_base_url()
+    if not base_url:
+        raise ValueError("Info service URL not configured (set INFO_SERVICE_URL or config info_service_url)")
+    data = _get(None, base_url, f"/api/data/insider-transactions/{ticker.upper()}", params={"limit": limit})
+    if isinstance(data, dict):
+        return json.dumps(data)
+    return str(data)
+
+
 def get_stock_data(ticker: str, start_date: str, end_date: str, base_url: Optional[str] = None) -> str:
     """Fetch OHLCV time series from info service. Returns the same string format as route_to_vendor get_stock_data."""
     base_url = base_url or _get_info_service_base_url()

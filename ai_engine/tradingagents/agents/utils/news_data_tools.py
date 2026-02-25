@@ -4,9 +4,14 @@ from typing import Annotated
 from ...dataflows.interface import route_to_vendor
 
 try:
-    from ...dataflows.info_service_client import get_news as get_news_via_service, is_configured as info_service_configured
+    from ...dataflows.info_service_client import (
+        get_news as get_news_via_service,
+        get_insider_transactions as get_insider_transactions_via_service,
+        is_configured as info_service_configured,
+    )
 except ImportError:
     get_news_via_service = None
+    get_insider_transactions_via_service = None
     info_service_configured = lambda: False
 
 
@@ -78,4 +83,6 @@ def get_insider_transactions(
     Returns:
         str: A report of insider transaction data
     """
+    if get_insider_transactions_via_service is not None and info_service_configured():
+        return get_insider_transactions_via_service(ticker, limit=50)
     return route_to_vendor("get_insider_transactions", ticker, curr_date)

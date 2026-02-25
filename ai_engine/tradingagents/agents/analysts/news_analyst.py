@@ -2,7 +2,7 @@ import logging
 
 from langchain_core.messages import AIMessage
 from pydantic import BaseModel, Field
-from ..utils.agent_utils import get_news, get_global_news
+from ..utils.agent_utils import get_news, get_global_news, get_insider_transactions
 from .helpers import is_tool_result_message, try_structured_response
 from .prompts import build_news_analyst_prompt
 
@@ -28,6 +28,7 @@ def create_news_analyst(llm):
         tools = [
             get_news,
             get_global_news,
+            get_insider_transactions,
         ]
 
         prompt = build_news_analyst_prompt(
