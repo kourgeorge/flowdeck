@@ -1,14 +1,11 @@
-make the trading agent flow to use the platform fetchers apis instead of goinf to the yahoo and data providers directrly  
-report the bullish and bearish more clearly in the reports.
-chack how things work for small stocks.
-make the system ready for ai agents traders - make sure the report api is clear.
 Insights for your own portfolio - build a portfolio and let the ai give you recommendation
-
 stability of the analysis
-Users
 protgolio management
-mailing of reports
 synopsys giving last report
+
+understanding makor stock events
+ask questions about stocks (GPT like)
+run analysis on the top 500 stocks
 
 
 
