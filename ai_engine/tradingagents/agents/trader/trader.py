@@ -1,6 +1,18 @@
 import functools
-import time
-import json
+from typing import Literal
+from langchain_core.messages import AIMessage, BaseMessage
+from pydantic import BaseModel, Field
+
+
+class TraderOutput(BaseModel):
+    """Structured output for trader: narrative plan + explicit recommendation."""
+
+    trader_investment_plan: str = Field(
+        description="Detailed trader decision narrative with rationale and execution considerations."
+    )
+    recommendation: Literal["BUY", "SELL", "HOLD"] = Field(
+        description="Clear actionable recommendation: BUY, SELL, or HOLD."
+    )
 
 
 def create_trader(llm, memory):
@@ -30,16 +42,38 @@ def create_trader(llm, memory):
         messages = [
             {
                 "role": "system",
-                "content": f"""You are a trading agent analyzing market data to make investment decisions. Based on your analysis, provide a specific recommendation to buy, sell, or hold. End with a firm decision and always conclude your response with 'FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**' to confirm your recommendation. Do not forget to utilize lessons from past decisions to learn from your mistakes. Here is some reflections from similar situatiosn you traded in and the lessons learned: {past_memory_str}""",
+                "content": f"""You are a trading agent analyzing market data to make investment decisions. Based on your analysis, provide a specific recommendation to buy, sell, or hold. In your structured output, provide both:
+1) trader_investment_plan: a detailed narrative decision with reasoning and execution notes.
+2) recommendation: exactly one of BUY, SELL, or HOLD.
+Do not forget to utilize lessons from past decisions to learn from your mistakes. Here is some reflections from similar situatiosn you traded in and the lessons learned: {past_memory_str}""",
             },
             context,
         ]
 
-        result = llm.invoke(messages)
+        recommendation = None
+        try:
+            structured_llm = llm.with_structured_output(TraderOutput)
+            structured_response = structured_llm.invoke(messages)
+            trader_investment_plan = structured_response.trader_investment_plan
+            recommendation = getattr(structured_response, "recommendation", None)
+            result_message = AIMessage(content=trader_investment_plan)
+        except Exception:
+            raw_result = llm.invoke(messages)
+            trader_investment_plan = (
+                raw_result.content
+                if hasattr(raw_result, "content")
+                else str(raw_result)
+            )
+            result_message = (
+                raw_result
+                if isinstance(raw_result, BaseMessage)
+                else AIMessage(content=trader_investment_plan)
+            )
 
         return {
-            "messages": [result],
-            "trader_investment_plan": result.content,
+            "messages": [result_message],
+            "trader_investment_plan": trader_investment_plan,
+            "trader_recommendation": recommendation,
             "sender": name,
         }
 

@@ -1,15 +1,13 @@
-from typing import Literal, List
+from typing import List
+from statistics import pstdev
 from pydantic import BaseModel, Field
 
 
 class RiskManagerOutput(BaseModel):
-    """Structured output for risk manager: decision text, recommendation enum, risk score, key takeaways, analyst summaries."""
+    """Structured output for risk manager: risk analysis text, risk score, key takeaways, analyst summaries."""
 
     final_trade_decision: str = Field(
-        description="Final trade decision including detailed reasoning and refined trader plan (narrative)."
-    )
-    recommendation: Literal["BUY", "SELL", "HOLD"] = Field(
-        description="Clear actionable recommendation: BUY, SELL, or HOLD."
+        description="Final risk analysis including detailed reasoning and refined trader plan (narrative)."
     )
     risk_score: int = Field(
         ge=1,
@@ -48,6 +46,32 @@ def create_risk_manager(llm, memory):
         sentiment_report = state["sentiment_report"]
         sec_report = state.get("sec_report") or ""
         trader_plan = state["investment_plan"]
+        score_candidates = {
+            "market_score": state.get("market_score"),
+            "sentiment_score": state.get("sentiment_score"),
+            "news_score": state.get("news_score"),
+            "fundamentals_score": state.get("fundamentals_score"),
+            "sec_score": state.get("sec_score"),
+            "technical_score": state.get("technical_score"),
+            "recommendation_score": state.get("recommendation_score"),
+        }
+        available_scores = {
+            k: float(v)
+            for k, v in score_candidates.items()
+            if isinstance(v, (int, float))
+        }
+        score_values = list(available_scores.values())
+        avg_score = round(sum(score_values) / len(score_values), 2) if score_values else None
+        score_std = (
+            round(pstdev(score_values), 2)
+            if len(score_values) > 1
+            else (0.0 if len(score_values) == 1 else None)
+        )
+        score_context_lines = (
+            "\n".join([f"- {k}: {v:.2f}" for k, v in available_scores.items()])
+            if available_scores
+            else "- No upstream aspect scores are available for this run."
+        )
 
         curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
         if sec_report:
@@ -58,18 +82,19 @@ def create_risk_manager(llm, memory):
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
 
-        prompt = f"""As the Risk Management Judge and Debate Facilitator, your goal is to evaluate the debate between three risk analysts—Risky, Neutral, and Safe/Conservative—and determine the best course of action for the trader. Your decision must result in a clear recommendation: Buy, Sell, or Hold. Choose Hold only if strongly justified by specific arguments, not as a fallback when all sides seem valid. Strive for clarity and decisiveness.
+        prompt = f"""As the Risk Management Judge and Debate Facilitator, your goal is to evaluate the debate between three risk analysts—Risky, Neutral, and Safe/Conservative—and produce a clear risk analysis for the trader's plan. Focus on risk quality, vulnerabilities, and practical risk controls.
 
 Guidelines for Decision-Making:
 1. **Context**: The situation may include an SEC/regulatory report (management discussion, competition, risk factors from EDGAR). Factor regulatory and disclosure risk into your final decision when that report is present.
 2. **Summarize Key Arguments**: Extract the strongest points from each analyst, focusing on relevance to the context.
-3. **Provide Rationale**: Support your recommendation with direct quotes and counterarguments from the debate.
+3. **Provide Rationale**: Support your analysis with direct quotes and counterarguments from the debate.
 4. **Refine the Trader's Plan**: Start with the trader's original plan, **{trader_plan}**, and adjust it based on the analysts' insights.
-5. **Learn from Past Mistakes**: Use lessons from **{past_memory_str}** to address prior misjudgments and improve the decision you are making now to make sure you don't make a wrong BUY/SELL/HOLD call that loses money.
+5. **Learn from Past Mistakes**: Use lessons from **{past_memory_str}** to address prior misjudgments and improve the risk assessment.
+6. **Use Quantitative Score Context**: You must incorporate all available upstream report scores and their statistics when deciding the final risk_score.
+7. **Do Not Output Trade Recommendation**: Do NOT output BUY, SELL, or HOLD as a final recommendation. The trader's recommendation is handled upstream.
 
 Deliverables:
-- recommendation: Exactly one of BUY, SELL, or HOLD (use these exact strings in your structured output).
-- final_trade_decision: Detailed reasoning and refined plan (narrative text).
+- final_trade_decision: Detailed risk analysis and refined plan (narrative text, without issuing a BUY/SELL/HOLD recommendation).
 - risk_score: An integer 1-10.
 - key_takeaways: A list of 3-5 short one-sentence takeaways for traders.
 
@@ -80,13 +105,27 @@ Deliverables:
 - safe_summary: Summarize the safe/conservative analyst's key arguments in a short list (each item one sentence).
 - neutral_summary: Summarize the neutral analyst's key arguments in a short list (each item one sentence).
 
-**CRITICAL: You MUST provide recommendation (BUY/SELL/HOLD), risk_score (1-10), and key_takeaways (3-5 items) in your structured output.**
+**CRITICAL: You MUST provide risk_score (1-10) and key_takeaways (3-5 items) in your structured output.**
+**CRITICAL: Do NOT provide a BUY/SELL/HOLD recommendation in your structured output.**
 - Scoring guidelines:
   * 1-3: Very weak decision, low confidence, highly uncertain risk assessment, unclear direction
   * 4-5: Moderate decision, some confidence, balanced risk assessment, moderate clarity
   * 6-7: Strong decision, good confidence, clear risk assessment, well-supported decision
   * 8-10: Very strong decision, high confidence, very clear risk assessment, strongly supported decision
 - Base your score on: clarity of risk signals, strength of risk arguments, confidence in decision, alignment of risk evidence, and overall conviction in risk management
+- Quantitative calibration rules:
+  * Consider every available score in this run: market, sentiment, news, fundamentals, SEC, technical, and recommendation.
+  * Use the average score as your baseline anchor for risk_score.
+  * Use score dispersion (standard deviation) as confidence penalty/boost:
+    - std <= 1.0: signals are consistent; confidence can be stronger if debate evidence agrees.
+    - 1.0 < std <= 2.0: mixed consistency; keep confidence moderate unless evidence is decisive.
+    - std > 2.0: conflicting signals; avoid very high confidence unless you clearly justify why one side dominates.
+  * Keep risk_score as an integer from 1-10, and align it with both quantitative context and debate quality.
+
+**Quantitative Score Context (precomputed):**
+{score_context_lines}
+- score_average: {avg_score if avg_score is not None else "N/A"}
+- score_std_dev: {score_std if score_std is not None else "N/A"}
 
 ---
 
@@ -97,8 +136,7 @@ Deliverables:
 
 Focus on actionable insights and continuous improvement. Build on past lessons, critically evaluate all perspectives, and ensure each decision advances better outcomes."""
 
-        # Use structured output for final_trade_decision, recommendation, risk_score, key_takeaways, analyst summaries
-        recommendation = None
+        # Use structured output for final_trade_decision, risk_score, key_takeaways, analyst summaries
         key_takeaways = []
         risky_summary = []
         safe_summary = []
@@ -108,7 +146,6 @@ Focus on actionable insights and continuous improvement. Build on past lessons, 
             structured_response = structured_llm.invoke(prompt)
             final_trade_decision = structured_response.final_trade_decision
             risk_score = structured_response.risk_score
-            recommendation = getattr(structured_response, "recommendation", None)
             key_takeaways = list(getattr(structured_response, "key_takeaways", []) or [])[:5]
             risky_summary = list(getattr(structured_response, "risky_summary", []) or [])
             safe_summary = list(getattr(structured_response, "safe_summary", []) or [])
@@ -139,7 +176,6 @@ Focus on actionable insights and continuous improvement. Build on past lessons, 
             "risk_debate_state": new_risk_debate_state,
             "final_trade_decision": final_trade_decision,
             "risk_score": risk_score,
-            "recommendation": recommendation,
             "final_report_key_takeaways": key_takeaways,
             "risky_summary": risky_summary,
             "safe_summary": safe_summary,

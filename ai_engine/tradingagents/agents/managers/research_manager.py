@@ -3,13 +3,13 @@ from pydantic import BaseModel, Field
 
 
 class ResearchManagerOutput(BaseModel):
-    """Structured output for research manager including investment plan, recommendation score, and return expectations."""
+    """Structured output for research manager: strategy narrative, directional score, and return expectations."""
     investment_plan: str = Field(
-        description="Comprehensive investment plan including recommendation (Buy/Sell/Hold), rationale, and strategic actions"
+        description="Comprehensive investment plan with directional thesis, rationale, and strategic actions for the Trader"
     )
     recommendation_score: int = Field(
         ge=1, le=10,
-        description="Recommendation score from 1-10 indicating confidence and strength of the investment recommendation. 1-3: Very weak recommendation/low confidence, 4-5: Moderate recommendation/some confidence, 6-7: Strong recommendation/good confidence, 8-10: Very strong recommendation/high confidence"
+        description="Directional conviction score from 1-10. 1-3: Very weak/low conviction, 4-5: Moderate conviction, 6-7: Strong conviction, 8-10: Very strong conviction"
     )
     bull_summary: List[str] = Field(
         default_factory=list,
@@ -56,26 +56,26 @@ def create_research_manager(llm, memory):
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
 
-        prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate and make a definitive decision: align with the bear analyst, the bull analyst, or choose Hold only if it is strongly justified based on the arguments presented.
+        prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate and make a definitive directional call: align with the bear analyst, the bull analyst, or choose a hold-bias only if strongly justified by the arguments.
 
-Summarize the key points from both sides concisely, focusing on the most compelling evidence or reasoning. Your recommendation—Buy, Sell, or Hold—must be clear and actionable. Avoid defaulting to Hold simply because both sides have valid points; commit to a stance grounded in the debate's strongest arguments.
+Summarize the key points from both sides concisely, focusing on the most compelling evidence or reasoning. Your directional stance must be clear and actionable for the Trader. Avoid defaulting to hold-bias simply because both sides have valid points; commit to a stance grounded in the debate's strongest arguments.
 
 Additionally, develop a detailed investment plan for the trader. This should include:
 
-Your Recommendation: A decisive stance supported by the most convincing arguments.
+Directional Stance: A decisive thesis supported by the most convincing arguments.
 Rationale: An explanation of why these arguments lead to your conclusion.
-Strategic Actions: Concrete steps for implementing the recommendation.
+Strategic Actions: Concrete steps the Trader can use to implement the plan.
 Take into account your past mistakes on similar situations. Use these insights to refine your decision-making and ensure you are learning and improving. Present your analysis conversationally, as if speaking naturally.
 
 **Formatting:** Structure the investment plan for readability: use clear paragraphs and subparagraphs, Markdown tables for key data or comparisons (e.g. bull vs bear points, return scenarios), and headings (## or ###) to organize sections. Avoid long unbroken blocks of text so the output is well organized and easy to scan. 
 
 **CRITICAL: You MUST provide a Recommendation Score between 1-10 as part of your structured output.**
 - Scoring guidelines:
-  * 1-3: Very weak recommendation, low confidence, highly mixed signals, unclear direction
-  * 4-5: Moderate recommendation, some confidence, balanced arguments, moderate clarity
-  * 6-7: Strong recommendation, good confidence, clear signals, well-supported decision
-  * 8-10: Very strong recommendation, high confidence, very clear signals, strongly supported decision
-- Base your score on: clarity of signals, strength of arguments, confidence in recommendation, alignment of evidence, and overall conviction
+  * 1-3: Very weak directional conviction, highly mixed signals, unclear direction
+  * 4-5: Moderate directional conviction, balanced arguments, moderate clarity
+  * 6-7: Strong directional conviction, clear signals, well-supported thesis
+  * 8-10: Very strong directional conviction, very clear signals, strongly supported thesis
+- Base your score on: clarity of signals, strength of arguments, confidence in directional stance, alignment of evidence, and overall conviction
 
 **CRITICAL: You MUST provide bull_summary and bear_summary as lists of 3-5 bullet points each:**
 - bull_summary: Summarize the bull analyst's key arguments in a short list (each item one sentence).
