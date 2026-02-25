@@ -116,9 +116,11 @@ def _get_stock_widgets_sync(
     only_date: bool = False,
     limit: Optional[int] = None,
     offset: int = 0,
+    recent_days: Optional[int] = None,
 ) -> WidgetsResponse:
     """Sync implementation of widget data (runs in thread pool to avoid blocking event loop).
     When only_date=True and tickers is None, returns only tickers that have reports for the given date (no major-stocks list).
+    When only_date=True and recent_days>1, returns tickers with reports in that trailing window.
     When only_date=True and limit is set, uses pagination and returns total count."""
     use_major_split = False
     major_set: set[str] = set()
@@ -127,13 +129,24 @@ def _get_stock_widgets_sync(
         ticker_list = [t.strip().upper() for t in tickers.split(",")]
     else:
         report_date = date or datetime.now().strftime("%Y-%m-%d")
+        recent_window_days = recent_days if recent_days and recent_days > 1 else None
         if only_date and limit is not None:
-            ticker_list, total_count = report_service.get_tickers_with_reports_for_date_paginated(
-                report_date, limit, offset
-            )
+            if recent_window_days:
+                ticker_list, total_count = report_service.get_tickers_with_reports_for_recent_days_paginated(
+                    report_date, recent_window_days, limit, offset
+                )
+            else:
+                ticker_list, total_count = report_service.get_tickers_with_reports_for_date_paginated(
+                    report_date, limit, offset
+                )
         else:
             if only_date:
-                tickers_for_date = report_service.get_tickers_with_reports_for_date(report_date)
+                if recent_window_days:
+                    tickers_for_date = report_service.get_tickers_with_reports_for_recent_days(
+                        report_date, recent_window_days
+                    )
+                else:
+                    tickers_for_date = report_service.get_tickers_with_reports_for_date(report_date)
                 ticker_list = [t.upper() for t in tickers_for_date]
             else:
                 # Home page: only fetch major stocks (UI shows at most 10); avoid loading all tickers with reports for date
@@ -441,12 +454,13 @@ async def get_stock_widgets(
     tickers: Optional[str] = Query(None, description="Comma-separated list of tickers"),
     date: Optional[str] = Query(None, description="Date (YYYY-MM-DD) for report filter; default today"),
     only_date: bool = Query(False, description="When set with no tickers: return only tickers with reports for the given date (no major-stocks list)"),
+    recent_days: Optional[int] = Query(None, ge=1, le=30, description="When only_date: include reports from the last N days ending at date"),
     limit: Optional[int] = Query(None, description="When only_date: max number of widgets to return (paginated)"),
     offset: int = Query(0, description="When only_date and limit: pagination offset"),
 ):
     """Get widget data for stocks. Uses cached batch quote fetch for speed. Runs in thread pool (non-blocking)."""
     try:
-        return await asyncio.to_thread(_get_stock_widgets_sync, tickers, date, only_date, limit, offset)
+        return await asyncio.to_thread(_get_stock_widgets_sync, tickers, date, only_date, limit, offset, recent_days)
     except Exception as e:
         print(f"Error in get_stock_widgets: {e}")
         import traceback

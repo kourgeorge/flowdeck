@@ -11,6 +11,7 @@ import type { StockWidget as StockWidgetType } from '../services/types';
 import { useAuth } from '../contexts/AuthContext';
 
 const RECENT_PAGE_SIZE = 10;
+const RECENT_ANALYZED_DAYS = 3;
 
 export default function SubscriptionsPage() {
   const { user } = useAuth();
@@ -67,7 +68,14 @@ export default function SubscriptionsPage() {
   const loadRecentPage = useCallback(
     async (offset: number, append: boolean) => {
       const today = new Date().toISOString().slice(0, 10);
-      const res = await stockApi.getWidgets(undefined, today, true, RECENT_PAGE_SIZE, offset);
+      const res = await stockApi.getWidgets(
+        undefined,
+        today,
+        true,
+        RECENT_PAGE_SIZE,
+        offset,
+        RECENT_ANALYZED_DAYS
+      );
       if (res.total != null) setRecentTotal(res.total);
       if (append) {
         setRecentAnalyzedWidgets((prev) => [...prev, ...res.widgets]);
@@ -97,7 +105,14 @@ export default function SubscriptionsPage() {
       setLoadingMoreRecent(true);
       const today = new Date().toISOString().slice(0, 10);
       stockApi
-        .getWidgets(undefined, today, true, RECENT_PAGE_SIZE, recentAnalyzedWidgets.length)
+        .getWidgets(
+          undefined,
+          today,
+          true,
+          RECENT_PAGE_SIZE,
+          recentAnalyzedWidgets.length,
+          RECENT_ANALYZED_DAYS
+        )
         .then((res) => {
           if (res.total != null) setRecentTotal(res.total);
           setRecentAnalyzedWidgets((prev) => [...prev, ...res.widgets]);
@@ -187,7 +202,7 @@ export default function SubscriptionsPage() {
               <h2 className="text-lg font-semibold text-white mb-4 shrink-0">Recently Analyzed</h2>
               {recentAnalyzedWidgets.length === 0 ? (
                 <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 text-center shrink-0">
-                  <p className="text-gray-400 text-sm">No other analyzed stocks for this date.</p>
+                  <p className="text-gray-400 text-sm">No analyzed stocks in the last 3 days.</p>
                 </div>
               ) : (
                 <StockListView
@@ -202,7 +217,7 @@ export default function SubscriptionsPage() {
                       )}
                       {recentTotal != null && recentAnalyzedWidgets.length >= recentTotal && recentTotal > 0 && (
                         <div className="py-2 text-center text-gray-500 text-xs">
-                          All {recentTotal} analyzed today
+                          All {recentTotal} analyzed in the last 3 days
                         </div>
                       )}
                     </>

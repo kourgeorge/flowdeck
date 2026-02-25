@@ -20,18 +20,21 @@ const api = axios.create({
 export const stockApi = {
   // Get widgets for stocks (optional date YYYY-MM-DD for report-of-day filter when no tickers).
   // When onlyAnalyzedToday=true and no tickers, returns only tickers that have reports for the date (no major-stocks list).
+  // With recentDays>1 and onlyAnalyzedToday, returns tickers analyzed in the trailing N-day window ending at date.
   // When limit/offset are set with onlyAnalyzedToday, returns paginated results and response.total is set.
   getWidgets: async (
     tickers?: string[],
     date?: string,
     onlyAnalyzedToday?: boolean,
     limit?: number,
-    offset?: number
+    offset?: number,
+    recentDays?: number
   ): Promise<WidgetsResponse> => {
     const params: Record<string, string> = {};
     if (tickers?.length) params.tickers = tickers.join(',');
     if (date) params.date = date;
     if (onlyAnalyzedToday) params.only_date = 'true';
+    if (recentDays != null) params.recent_days = String(recentDays);
     if (limit != null) params.limit = String(limit);
     if (offset != null) params.offset = String(offset);
     const response = await api.get<WidgetsResponse>('/api/stocks/widgets', { params });

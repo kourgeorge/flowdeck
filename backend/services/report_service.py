@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -212,6 +212,80 @@ class ReportService:
             rows = (
                 db.query(Report.ticker, Report.run_id)
                 .filter(Report.run_id.like(f"{date}%"))
+                .order_by(Report.run_id.desc())
+                .all()
+            )
+            seen: set[str] = set()
+            ordered_tickers: List[str] = []
+            for r in rows:
+                t = r.ticker.upper()
+                if t not in seen:
+                    seen.add(t)
+                    ordered_tickers.append(t)
+            total = len(ordered_tickers)
+            tickers = ordered_tickers[offset : offset + limit]
+            return (tickers, total)
+        finally:
+            db.close()
+
+    def _recent_date_window_bounds(self, end_date: str, days: int) -> Optional[tuple[str, str]]:
+        """Return [start, end) bounds over run_id prefixes for the N-day window ending on end_date."""
+        date_part = _date_part(end_date) or end_date
+        try:
+            end_day = datetime.strptime(date_part, "%Y-%m-%d").date()
+        except ValueError:
+            return None
+        start_day = end_day - timedelta(days=max(1, days) - 1)
+        start_bound = start_day.strftime("%Y-%m-%d")
+        end_exclusive = (end_day + timedelta(days=1)).strftime("%Y-%m-%d")
+        return (start_bound, end_exclusive)
+
+    def get_tickers_with_reports_for_recent_days(self, end_date: str, days: int) -> List[str]:
+        """Tickers with reports in the last N days (inclusive), ordered by recency."""
+        if days <= 1:
+            return self.get_tickers_with_reports_for_date(end_date)
+
+        bounds = self._recent_date_window_bounds(end_date, days)
+        if bounds is None:
+            return self.get_tickers_with_reports_for_date(end_date)
+
+        start_bound, end_exclusive = bounds
+        db = SessionLocal()
+        try:
+            rows = (
+                db.query(Report.ticker, Report.run_id)
+                .filter(Report.run_id >= start_bound, Report.run_id < end_exclusive)
+                .order_by(Report.run_id.desc())
+                .all()
+            )
+            seen: set[str] = set()
+            ordered_tickers: List[str] = []
+            for r in rows:
+                t = r.ticker.upper()
+                if t not in seen:
+                    seen.add(t)
+                    ordered_tickers.append(t)
+            return ordered_tickers
+        finally:
+            db.close()
+
+    def get_tickers_with_reports_for_recent_days_paginated(
+        self, end_date: str, days: int, limit: int, offset: int = 0
+    ) -> tuple[List[str], int]:
+        """Paginated tickers with reports in the last N days (inclusive), ordered by recency."""
+        if days <= 1:
+            return self.get_tickers_with_reports_for_date_paginated(end_date, limit, offset)
+
+        bounds = self._recent_date_window_bounds(end_date, days)
+        if bounds is None:
+            return self.get_tickers_with_reports_for_date_paginated(end_date, limit, offset)
+
+        start_bound, end_exclusive = bounds
+        db = SessionLocal()
+        try:
+            rows = (
+                db.query(Report.ticker, Report.run_id)
+                .filter(Report.run_id >= start_bound, Report.run_id < end_exclusive)
                 .order_by(Report.run_id.desc())
                 .all()
             )
