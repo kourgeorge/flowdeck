@@ -3,10 +3,37 @@ import yfinance as yf
 from stockstats import wrap
 from typing import Annotated
 import os
+import glob
 from .config import get_config, DATA_DIR
 
 
 class StockstatsUtils:
+    @staticmethod
+    def _load_csv_if_valid(path: str):
+        """Return DataFrame only when cache exists, has rows, and includes Date."""
+        if not os.path.exists(path):
+            return None
+        try:
+            df = pd.read_csv(path)
+            if df.empty or "Date" not in df.columns:
+                return None
+            df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+            df = df.dropna(subset=["Date"])
+            if df.empty:
+                return None
+            return df
+        except Exception:
+            return None
+
+    @staticmethod
+    def _latest_valid_symbol_cache(cache_dir: str, symbol: str):
+        pattern = os.path.join(cache_dir, f"{symbol}-YFin-data-*.csv")
+        for candidate in sorted(glob.glob(pattern), reverse=True):
+            df = StockstatsUtils._load_csv_if_valid(candidate)
+            if df is not None:
+                return df
+        return None
+
     @staticmethod
     def get_stock_stats(
         symbol: Annotated[str, "ticker symbol for the company"],
@@ -53,20 +80,31 @@ class StockstatsUtils:
                 f"{symbol}-YFin-data-{start_date}-{end_date}.csv",
             )
 
-            if os.path.exists(data_file):
-                data = pd.read_csv(data_file)
-                data["Date"] = pd.to_datetime(data["Date"])
-            else:
-                data = yf.download(
-                    symbol,
-                    start=start_date,
-                    end=end_date,
-                    multi_level_index=False,
-                    progress=False,
-                    auto_adjust=True,
-                )
-                data = data.reset_index()
-                data.to_csv(data_file, index=False)
+            data = StockstatsUtils._load_csv_if_valid(data_file)
+
+            if data is None:
+                try:
+                    downloaded = yf.download(
+                        symbol,
+                        start=start_date,
+                        end=end_date,
+                        multi_level_index=False,
+                        progress=False,
+                        auto_adjust=True,
+                    ).reset_index()
+                    if not downloaded.empty and "Date" in downloaded.columns:
+                        downloaded["Date"] = pd.to_datetime(downloaded["Date"], errors="coerce")
+                        downloaded = downloaded.dropna(subset=["Date"])
+                        if not downloaded.empty:
+                            downloaded.to_csv(data_file, index=False)
+                            data = downloaded
+                except Exception:
+                    data = None
+
+            if data is None or data.empty:
+                data = StockstatsUtils._latest_valid_symbol_cache(config["data_cache_dir"], symbol)
+                if data is None:
+                    raise Exception(f"Stockstats fail: no valid cached YFinance data available for {symbol}")
 
             df = wrap(data)
             df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")

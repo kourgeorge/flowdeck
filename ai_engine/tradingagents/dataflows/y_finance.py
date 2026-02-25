@@ -4,6 +4,7 @@ from dateutil.relativedelta import relativedelta
 import yfinance as yf
 import pandas as pd
 import os
+import glob
 
 # Make stockstats import optional - only needed for technical indicators
 try:
@@ -205,6 +206,30 @@ def _get_stock_stats_bulk(
     from stockstats import wrap
     import os
     
+    def _load_csv_if_valid(path: str) -> pd.DataFrame | None:
+        """Return DataFrame only when cache exists, has rows, and includes Date."""
+        if not os.path.exists(path):
+            return None
+        try:
+            cached_df = pd.read_csv(path)
+            if cached_df.empty or "Date" not in cached_df.columns:
+                return None
+            cached_df["Date"] = pd.to_datetime(cached_df["Date"], errors="coerce")
+            cached_df = cached_df.dropna(subset=["Date"])
+            if cached_df.empty:
+                return None
+            return cached_df
+        except Exception:
+            return None
+
+    def _latest_valid_symbol_cache(cache_dir: str, ticker: str) -> pd.DataFrame | None:
+        pattern = os.path.join(cache_dir, f"{ticker}-YFin-data-*.csv")
+        for candidate in sorted(glob.glob(pattern), reverse=True):
+            cached_df = _load_csv_if_valid(candidate)
+            if cached_df is not None:
+                return cached_df
+        return None
+
     config = get_config()
     online = config["data_vendors"]["technical_indicators"] != "local"
     
@@ -223,8 +248,6 @@ def _get_stock_stats_bulk(
     else:
         # Online data fetching with caching
         today_date = pd.Timestamp.today()
-        curr_date_dt = pd.to_datetime(curr_date)
-        
         end_date = today_date
         start_date = today_date - pd.DateOffset(years=15)
         start_date_str = start_date.strftime("%Y-%m-%d")
@@ -237,20 +260,37 @@ def _get_stock_stats_bulk(
             f"{symbol}-YFin-data-{start_date_str}-{end_date_str}.csv",
         )
         
-        if os.path.exists(data_file):
-            data = pd.read_csv(data_file)
-            data["Date"] = pd.to_datetime(data["Date"])
-        else:
-            data = yf.download(
-                symbol,
-                start=start_date_str,
-                end=end_date_str,
-                multi_level_index=False,
-                progress=False,
-                auto_adjust=True,
-            )
-            data = data.reset_index()
-            data.to_csv(data_file, index=False)
+        # Prefer today's cache, but ignore corrupt/empty files.
+        data = _load_csv_if_valid(data_file)
+
+        if data is None:
+            try:
+                downloaded = yf.download(
+                    symbol,
+                    start=start_date_str,
+                    end=end_date_str,
+                    multi_level_index=False,
+                    progress=False,
+                    auto_adjust=True,
+                ).reset_index()
+                if not downloaded.empty and "Date" in downloaded.columns:
+                    downloaded["Date"] = pd.to_datetime(downloaded["Date"], errors="coerce")
+                    downloaded = downloaded.dropna(subset=["Date"])
+                    if not downloaded.empty:
+                        downloaded.to_csv(data_file, index=False)
+                        data = downloaded
+            except Exception:
+                data = None
+
+        # Network can fail in offline/sandbox mode; use latest good cache instead.
+        if data is None or data.empty:
+            fallback_data = _latest_valid_symbol_cache(config["data_cache_dir"], symbol)
+            if fallback_data is not None:
+                data = fallback_data
+            else:
+                raise Exception(
+                    f"Stockstats fail: no valid cached YFinance data available for {symbol}"
+                )
         
         df = wrap(data)
         df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
@@ -637,7 +677,8 @@ def get_fundamentals(
 
 
 def get_insider_transactions(
-    ticker: Annotated[str, "ticker symbol of the company"]
+    ticker: Annotated[str, "ticker symbol of the company"],
+    curr_date: Annotated[str, "current date (not used for yfinance)"] = None,
 ):
     """Get insider transactions data from yfinance."""
     try:
