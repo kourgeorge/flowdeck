@@ -4,7 +4,7 @@ import StockListView from '../components/StockListView';
 import StockSearch from '../components/StockSearch';
 import { stockApi, API_BASE_URL } from '../services/api';
 import type { StockWidget as StockWidgetType } from '../services/types';
-import { APP_NAME, LOGO_PATH } from '../config';
+import { LOGO_PATH } from '../config';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function HomePage() {
