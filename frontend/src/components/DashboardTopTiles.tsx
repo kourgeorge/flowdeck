@@ -155,11 +155,6 @@ function DashboardTile({
         )}
       </div>
       <TileSparkline chartData={chartData} isPositive={up} />
-      {w.has_report && w.confidence != null && (
-        <div className="text-[10px] text-gray-500">
-          AI confidence {(w.confidence * 100).toFixed(0)}%
-        </div>
-      )}
     </button>
   );
 }
