@@ -76,7 +76,7 @@ export default function StockWidget({ widget, variant = 'default', companyName }
   const isDashboard = variant === 'dashboard';
   return (
     <div
-      onClick={() => navigate(`/stocks/${widget.ticker}`)}
+      onClick={() => navigate(`/tickers/${widget.ticker}`)}
       className={`
         rounded-lg border-2 cursor-pointer
         transition-all duration-200 hover:scale-[1.02] hover:shadow-lg

@@ -66,7 +66,7 @@ export default function StockSearch() {
     e.preventDefault();
     const ticker = searchTerm.trim().toUpperCase();
     if (ticker) {
-      navigate(`/stocks/${ticker}`);
+      navigate(`/tickers/${ticker}`);
       setSearchTerm('');
       setShowSuggestions(false);
     }
@@ -76,7 +76,7 @@ export default function StockSearch() {
   const handleSelectSuggestion = (stock: Stock) => {
     setSearchTerm(stock.ticker);
     setShowSuggestions(false);
-    navigate(`/stocks/${stock.ticker}`);
+    navigate(`/tickers/${stock.ticker}`);
   };
 
   // Handle keyboard navigation

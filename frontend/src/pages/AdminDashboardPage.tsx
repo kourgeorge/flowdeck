@@ -346,7 +346,7 @@ export default function AdminDashboardPage() {
                   <tr key={a.id} className="border-b border-gray-700/50">
                     <td className="px-4 py-3">
                       <Link
-                        to={`/stocks/${a.ticker}`}
+                        to={`/tickers/${a.ticker}`}
                         className="text-blue-400 hover:text-blue-300 font-medium"
                       >
                         {a.ticker}
@@ -381,7 +381,7 @@ export default function AdminDashboardPage() {
                   <tr key={r.id} className="border-b border-gray-700/50">
                     <td className="px-4 py-3">
                       <Link
-                        to={`/stocks/${r.ticker}`}
+                        to={`/tickers/${r.ticker}`}
                         className="text-blue-400 hover:text-blue-300 font-medium"
                       >
                         {r.ticker}
@@ -416,7 +416,7 @@ export default function AdminDashboardPage() {
                     <td className="px-4 py-3 text-gray-300">{s.user_email}</td>
                     <td className="px-4 py-3">
                       <Link
-                        to={`/stocks/${s.ticker}`}
+                        to={`/tickers/${s.ticker}`}
                         className="text-blue-400 hover:text-blue-300 font-medium"
                       >
                         {s.ticker}

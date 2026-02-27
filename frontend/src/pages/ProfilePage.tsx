@@ -271,7 +271,7 @@ export default function ProfilePage() {
                   className="flex items-center justify-between gap-4 py-2 border-b border-gray-700/50 last:border-0"
                 >
                   <Link
-                    to={`/stocks/${s.ticker}`}
+                    to={`/tickers/${s.ticker}`}
                     className="text-blue-400 hover:text-blue-300 font-medium shrink-0"
                   >
                     {s.ticker}

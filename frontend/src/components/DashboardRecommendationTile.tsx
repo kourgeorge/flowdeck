@@ -56,7 +56,7 @@ export default function DashboardRecommendationTile({
       <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 h-full flex flex-col justify-center min-h-[120px]">
         <p className="text-gray-500 text-sm mb-2">No report yet</p>
         <Link
-          to={`/stocks/${ticker}`}
+          to={`/tickers/${ticker}`}
           className="text-sm text-blue-400 hover:text-blue-300 font-medium"
         >
           Generate report →

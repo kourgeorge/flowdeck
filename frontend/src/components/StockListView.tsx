@@ -223,7 +223,7 @@ export default function StockListView({ widgets, tickerToName, scrollRef, onScro
             return (
               <tr
                 key={widget.ticker}
-                onClick={() => navigate(`/stocks/${widget.ticker}`)}
+                onClick={() => navigate(`/tickers/${widget.ticker}`)}
                 className="border-b border-gray-700/80 hover:bg-gray-700/50 cursor-pointer transition-colors"
               >
                 <td className="py-3 px-2 font-bold text-white whitespace-nowrap truncate" title={widget.ticker}>{widget.ticker}</td>

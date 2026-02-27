@@ -20,7 +20,7 @@ function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<HomePage />} />
-          <Route path="stocks/:ticker" element={<StockPage />} />
+          <Route path="tickers/:ticker" element={<StockPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="subscriptions" element={<Navigate to="/dashboard" replace />} />

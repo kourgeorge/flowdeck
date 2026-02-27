@@ -44,14 +44,14 @@ export const stockApi = {
     if (recentDays != null) params.recent_days = String(recentDays);
     if (limit != null) params.limit = String(limit);
     if (offset != null) params.offset = String(offset);
-    const response = await api.get<WidgetsResponse>('/api/stocks/widgets', { params });
+    const response = await api.get<WidgetsResponse>('/api/tickers/widgets', { params });
     return response.data;
   },
 
   // Get stock page data (sends auth when logged in so views count for creator rewards)
   getStockPage: async (ticker: string): Promise<StockPageData> => {
     const token = getStoredToken();
-    const response = await api.get<StockPageData>(`/api/stocks/${ticker}`, {
+    const response = await api.get<StockPageData>(`/api/tickers/${ticker}`, {
       headers: {
         ...(token && { Authorization: `Bearer ${token}` }),
       },

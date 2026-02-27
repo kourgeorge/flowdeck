@@ -182,14 +182,14 @@ export default function DashboardTopTiles({
             {hasSubscribed && (
               <div className="flex items-stretch gap-2 shrink-0 border-r border-gray-700 pr-2">
                 {subscribedWidgets.map((w) => (
-                  <DashboardTile key={`${copy}-sub-${w.ticker}`} w={w} tileClass={SUBSCRIBED_TILE_CLASS} onNavigate={(t) => navigate(`/stocks/${t}`)} />
+                  <DashboardTile key={`${copy}-sub-${w.ticker}`} w={w} tileClass={SUBSCRIBED_TILE_CLASS} onNavigate={(t) => navigate(`/tickers/${t}`)} />
                 ))}
               </div>
             )}
             {hasRecent && (
               <div className="flex items-stretch gap-2 shrink-0">
                 {recentOnly.map((w) => (
-                  <DashboardTile key={`${copy}-recent-${w.ticker}`} w={w} tileClass={RECENTLY_ANALYZED_TILE_CLASS} onNavigate={(t) => navigate(`/stocks/${t}`)} />
+                  <DashboardTile key={`${copy}-recent-${w.ticker}`} w={w} tileClass={RECENTLY_ANALYZED_TILE_CLASS} onNavigate={(t) => navigate(`/tickers/${t}`)} />
                 ))}
               </div>
             )}

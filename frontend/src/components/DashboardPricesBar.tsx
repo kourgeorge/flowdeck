@@ -20,7 +20,7 @@ export default function DashboardPricesBar({ widgets }: DashboardPricesBarProps)
             <button
               key={w.ticker}
               type="button"
-              onClick={() => navigate(`/stocks/${w.ticker}`)}
+              onClick={() => navigate(`/tickers/${w.ticker}`)}
               className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-700/80 transition-colors text-left shrink-0"
             >
               <span className="font-semibold text-white">{w.ticker}</span>
