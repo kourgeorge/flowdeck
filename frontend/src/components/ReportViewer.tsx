@@ -67,8 +67,8 @@ const REPORT_METADATA: Record<string, { title: string; contains: string; aspects
   final_trade_decision: {
     title: 'Risk & Confidence',
     contains: 'The ultimate BUY/SELL/HOLD decision with detailed reasoning. Includes a Confidence Score (1–10) and key takeaways for traders.',
-    aspects: 'Summary of the Risky, Safe, and Neutral analysts\' arguments; rationale for the final decision; refined plan incorporating risk insights; lessons from past decisions; and 3–5 key takeaways.',
-    methodology: 'Final step in the analysis. The Risky, Safe, and Neutral analysts debate the Trader\'s plan—each arguing for high-risk, low-risk, or balanced approaches using all prior reports. The Risk Judge weighs their arguments, refines the plan, and produces the final trade decision with a confidence score. This is the end of the pipeline.',
+    aspects: 'Summary of the Risky, Neutral, and Safe analysts\' arguments; rationale for the final decision; refined plan incorporating risk insights; lessons from past decisions; and 3–5 key takeaways.',
+    methodology: 'Final step in the analysis. The Risky, Neutral, and Safe analysts debate the Trader\'s plan—each arguing for high-risk, balanced, or low-risk approaches using all prior reports. The Risk Judge weighs their arguments, refines the plan, and produces the final trade decision with a confidence score. This is the end of the pipeline.',
   },
 };
 
@@ -223,21 +223,21 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
               </ul>
             </div>
           )}
-          {safeViewpoint && safeViewpoint.length > 0 && (
-            <div className="rounded-lg border border-blue-900/50 bg-blue-950/30 p-4">
-              <div className="mb-2 text-sm font-semibold text-blue-400">Safe Analyst Viewpoint</div>
+          {neutralViewpoint && neutralViewpoint.length > 0 && (
+            <div className="rounded-lg border border-gray-500/50 bg-gray-700/40 p-4">
+              <div className="mb-2 text-sm font-semibold text-gray-300">Neutral Analyst Viewpoint</div>
               <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
-                {safeViewpoint.map((p, i) => (
+                {neutralViewpoint.map((p, i) => (
                   <li key={i}>{p}</li>
                 ))}
               </ul>
             </div>
           )}
-          {neutralViewpoint && neutralViewpoint.length > 0 && (
-            <div className="rounded-lg border border-slate-600 bg-slate-800/50 p-4">
-              <div className="mb-2 text-sm font-semibold text-slate-400">Neutral Analyst Viewpoint</div>
+          {safeViewpoint && safeViewpoint.length > 0 && (
+            <div className="rounded-lg border border-blue-900/50 bg-blue-950/30 p-4">
+              <div className="mb-2 text-sm font-semibold text-blue-400">Safe Analyst Viewpoint</div>
               <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
-                {neutralViewpoint.map((p, i) => (
+                {safeViewpoint.map((p, i) => (
                   <li key={i}>{p}</li>
                 ))}
               </ul>
