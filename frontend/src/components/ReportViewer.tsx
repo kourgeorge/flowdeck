@@ -209,7 +209,10 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
         </div>
       ) : null}
       {reportType === 'final_trade_decision' && hasRiskViewpoints ? (
-        <div className="space-y-4">
+        <div className="rounded-lg border border-slate-600 bg-slate-900/40 p-4 space-y-4">
+          <div className="text-xs font-semibold uppercase tracking-widest text-slate-500 pb-1 border-b border-slate-700">
+            Analyst Viewpoints
+          </div>
           {riskyViewpoint && riskyViewpoint.length > 0 && (
             <div className="rounded-lg border border-amber-900/50 bg-amber-950/30 p-4">
               <div className="mb-2 text-sm font-semibold text-amber-400">Risky Analyst Viewpoint</div>

@@ -572,14 +572,6 @@ export default function StockPage() {
     <div className="min-h-screen p-8 min-w-0">
       <div className="w-full min-w-0 px-6">
         <div className="w-full max-w-6xl mx-auto space-y-6 min-w-0">
-            {/* Back to Stocks - above stock name tile */}
-            <button
-              onClick={() => navigate('/')}
-              className="text-gray-400 hover:text-white text-sm font-medium"
-            >
-              ← Back to Stocks
-            </button>
-
             {/* Top Header with Price */}
             <div className="bg-gray-800 border-b border-gray-700 rounded-lg overflow-hidden">
               <div className="px-4 sm:px-6 py-6 min-w-0">
