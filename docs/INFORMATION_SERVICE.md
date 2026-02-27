@@ -27,7 +27,7 @@ Full URLs: e.g. `GET /api/data/quote/AAPL`.
 
 ## Dashboard UI
 
-The UI fetches raw market data from `/api/data/*` (quote, news, fundamentals, statements, charts, historical, analyst recs). UI-specific views (widgets, full page) come from `/api/stocks/*`.
+The UI fetches raw market data from `/api/data/*` (quote, news, fundamentals, statements, charts, historical, analyst recs). UI-specific views (widgets, full page) come from `/api/tickers/*`.
 
 ## AI agents
 

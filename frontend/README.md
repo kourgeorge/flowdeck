@@ -187,8 +187,8 @@ RESULTS_DIR = "results"  # Resolved to repo root (TradingAgents/results)
 - `GET /api/data/analyst-recommendations/{ticker}` - Analyst recommendations
 
 **Stocks API** (UI views):
-- `GET /api/stocks/widgets?tickers=...` - Widget data for stocks
-- `GET /api/stocks/{ticker}` - Complete stock page (quote, reports, recommendations)
+- `GET /api/tickers/widgets?tickers=...` - Widget data for stocks
+- `GET /api/tickers/{ticker}` - Complete stock page (quote, reports, recommendations)
 
 **Analysis API:**
 - `POST /api/analyses/start` - Start new analysis
@@ -278,7 +278,7 @@ You should see: `INFO: Uvicorn running on http://0.0.0.0:8002`
 
 7. **Test API directly**: Try accessing the API directly in your browser:
    - `http://localhost:8002/health` - Should return JSON with status
-   - `http://localhost:8002/api/stocks/widgets` - Should return widget data
+   - `http://localhost:8002/api/tickers/widgets` - Should return widget data
    - `http://localhost:8002/docs` - FastAPI interactive docs
 
 8. **Check CORS**: If you see CORS errors in the browser console, the backend CORS is configured to allow `localhost:3003`, but verify the backend is actually running

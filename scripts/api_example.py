@@ -72,8 +72,8 @@ def main():
     print(f"  Body:   {r.json()}")
 
     # Stock widgets (public)
-    print("\n[GET /api/stocks/widgets?tickers=AAPL]")
-    r = session.get(f"{base}/api/stocks/widgets", params={"tickers": "AAPL"})
+    print("\n[GET /api/tickers/widgets?tickers=AAPL]")
+    r = session.get(f"{base}/api/tickers/widgets", params={"tickers": "AAPL"})
     print(f"  Status: {r.status_code}")
     data = r.json()
     if r.ok and data.get("widgets"):
@@ -103,8 +103,8 @@ def main():
         print(f"  Body:   {r.text[:150]}")
 
     # Stock page (works without auth; optional auth records view for creator rewards)
-    print("\n[GET /api/stocks/AAPL] (no token)")
-    r = session.get(f"{base}/api/stocks/AAPL")
+    print("\n[GET /api/tickers/AAPL] (no token)")
+    r = session.get(f"{base}/api/tickers/AAPL")
     print(f"  Status: {r.status_code}")
     if r.ok:
         s = r.json()
@@ -184,8 +184,8 @@ def main():
         print(f"  Body:   {r.json()}")
 
     # Stock page with auth (records view for creator rewards)
-    print("\n[GET /api/stocks/AAPL] (with token)")
-    r = session.get(f"{base}/api/stocks/AAPL")
+    print("\n[GET /api/tickers/AAPL] (with token)")
+    r = session.get(f"{base}/api/tickers/AAPL")
     print(f"  Status: {r.status_code}")
     if r.ok:
         s = r.json()
@@ -239,8 +239,8 @@ def main():
     print("""
 Public (no auth):
   - GET /, /health
-  - GET /api/stocks/widgets
-  - GET /api/stocks/{ticker}  (optional auth for view recording)
+  - GET /api/tickers/widgets
+  - GET /api/tickers/{ticker}  (optional auth for view recording)
   - GET /api/data/*           (quote, company, news, fundamentals, etc.)
   - POST /api/auth/register, /api/auth/login
 
@@ -248,7 +248,7 @@ Authenticated (Bearer token required):
   - GET /api/me, PATCH /api/me
   - GET/POST/DELETE /api/subscriptions
   - POST /api/analyses/start
-  - GET /api/stocks/{ticker}  (records view for creator rewards when token present)
+  - GET /api/tickers/{ticker}  (records view for creator rewards when token present)
 
 Admin only:
   - POST /api/tokens/top-up

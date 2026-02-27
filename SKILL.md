@@ -94,8 +94,8 @@ GET /health              # {"status": "healthy", "service": "tradingagents-api"}
 Batch widget data for one or more tickers (optional date for report-of-day filter):
 
 ```bash
-GET /api/stocks/widgets?tickers=AAPL,MSFT
-GET /api/stocks/widgets?date=2025-02-14
+GET /api/tickers/widgets?tickers=AAPL,MSFT
+GET /api/tickers/widgets?date=2025-02-14
 ```
 
 ### Stock page
@@ -103,8 +103,8 @@ GET /api/stocks/widgets?date=2025-02-14
 Full page data for a ticker (reports, quote, etc.). Optional auth records the view for creator rewards.
 
 ```bash
-GET /api/stocks/AAPL
-GET /api/stocks/AAPL   # with Authorization: Bearer TOKEN (records view)
+GET /api/tickers/AAPL
+GET /api/tickers/AAPL   # with Authorization: Bearer TOKEN (records view)
 ```
 
 ### Data API (market & fundamentals)
@@ -275,8 +275,8 @@ Check balance via `GET /api/me` → `token_balance`.
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/`, `/health` | No | Health and root |
-| GET | `/api/stocks/widgets` | No | Widget data (tickers, optional date) |
-| GET | `/api/stocks/{ticker}` | Optional | Stock page (auth records view) |
+| GET | `/api/tickers/widgets` | No | Widget data (tickers, optional date) |
+| GET | `/api/tickers/{ticker}` | Optional | Stock page (auth records view) |
 | GET | `/api/data/*` | No | Quote, company, news, fundamentals, historical, EDGAR, etc. |
 | POST | `/api/auth/register` | No | Register (email, password) |
 | POST | `/api/auth/login` | No | Login (email, password) |
@@ -296,7 +296,7 @@ Check balance via `GET /api/me` → `token_balance`.
 |--------|------------------|
 | **Register / login** | `POST /api/auth/register` or `/api/auth/login` |
 | **Get market data** | `GET /api/data/quote/{ticker}`, `/company`, `/news`, `/fundamentals`, `/historical`, etc. |
-| **Get stock page** | `GET /api/stocks/{ticker}` (optional auth for view tracking) |
+| **Get stock page** | `GET /api/tickers/{ticker}` (optional auth for view tracking) |
 | **Check token balance** | `GET /api/me` → `token_balance` |
 | **Start AI analysis** | `POST /api/analyses/start` (200 tokens); poll `GET /api/analyses/{id}/status` |
 | **Manage watchlist** | `GET/POST/DELETE /api/subscriptions` |
