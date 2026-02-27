@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { stockApi } from '../services/api';
 import type { StockWidget as StockWidgetType } from '../services/types';
@@ -165,6 +165,9 @@ export default function DashboardTopTiles({
   onSelectTicker,
 }: DashboardTopTilesProps) {
   const navigate = useNavigate();
+  const [collapsed, setCollapsed] = useState(false);
+  const toggleCollapsed = useCallback(() => setCollapsed((c) => !c), []);
+
   const subscribedTickers = new Set(subscribedWidgets.map((w) => w.ticker));
   const recentOnly = recentAnalyzedWidgets.filter((w) => !subscribedTickers.has(w.ticker));
   const hasSubscribed = subscribedWidgets.length > 0;
@@ -181,27 +184,50 @@ export default function DashboardTopTiles({
   };
 
   return (
-    <div className="w-full border-y border-gray-700 bg-gray-800/80 shrink-0 overflow-hidden">
-      <div className="flex items-stretch gap-2 py-2 px-2 w-max animate-tiles-scroll">
-        {[1, 2].map((copy) => (
-          <div key={copy} className="flex items-stretch gap-2 shrink-0">
-            {hasSubscribed && (
-              <div className="flex items-stretch gap-2 shrink-0 border-r border-gray-700 pr-2">
-                {subscribedWidgets.map((w) => (
-                  <DashboardTile key={`${copy}-sub-${w.ticker}`} w={w} tileClass={SUBSCRIBED_TILE_CLASS} onNavigate={handleNavigate} />
-                ))}
+    <div className="w-full bg-gray-800/80 shrink-0 border-b border-gray-700">
+      {/* Scrolling tiles — hidden when collapsed */}
+      {!collapsed && (
+        <div className="overflow-hidden border-b border-gray-700/60">
+          <div className="flex items-stretch gap-2 py-2 px-2 w-max animate-tiles-scroll">
+            {[1, 2].map((copy) => (
+              <div key={copy} className="flex items-stretch gap-2 shrink-0">
+                {hasSubscribed && (
+                  <div className="flex items-stretch gap-2 shrink-0 border-r border-gray-700 pr-2">
+                    {subscribedWidgets.map((w) => (
+                      <DashboardTile key={`${copy}-sub-${w.ticker}`} w={w} tileClass={SUBSCRIBED_TILE_CLASS} onNavigate={handleNavigate} />
+                    ))}
+                  </div>
+                )}
+                {hasRecent && (
+                  <div className="flex items-stretch gap-2 shrink-0">
+                    {recentOnly.map((w) => (
+                      <DashboardTile key={`${copy}-recent-${w.ticker}`} w={w} tileClass={RECENTLY_ANALYZED_TILE_CLASS} onNavigate={handleNavigate} />
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-            {hasRecent && (
-              <div className="flex items-stretch gap-2 shrink-0">
-                {recentOnly.map((w) => (
-                  <DashboardTile key={`${copy}-recent-${w.ticker}`} w={w} tileClass={RECENTLY_ANALYZED_TILE_CLASS} onNavigate={handleNavigate} />
-                ))}
-              </div>
-            )}
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
+
+      {/* Collapse / expand toggle strip */}
+      <button
+        type="button"
+        onClick={toggleCollapsed}
+        title={collapsed ? 'Expand ticker bar' : 'Collapse ticker bar'}
+        className="w-full flex items-center justify-center gap-1 py-0.5 text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 transition-colors text-[10px]"
+      >
+        <svg
+          className={`w-3 h-3 transition-transform duration-200 ${collapsed ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+        </svg>
+        {collapsed && <span className="font-medium tracking-wide">Tickers</span>}
+      </button>
     </div>
   );
 }

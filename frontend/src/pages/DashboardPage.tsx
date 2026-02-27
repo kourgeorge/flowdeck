@@ -319,23 +319,13 @@ export default function DashboardPage() {
         <div className="flex flex-1 min-h-0 overflow-hidden">
 
           {/* Left sidebar — desktop */}
-          <aside className={`shrink-0 border-r border-gray-700 bg-gray-800/50 flex-col min-h-0 hidden md:flex transition-all duration-200 ${sidebarCollapsed ? 'w-10' : 'w-64'}`}>
-            {/* Collapse toggle button */}
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed((c) => !c)}
-              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              className="shrink-0 flex items-center justify-center h-8 w-full border-b border-gray-700 text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors"
-            >
-              <svg className={`w-4 h-4 transition-transform duration-200 ${sidebarCollapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
+          <aside className={`shrink-0 border-r border-gray-700 bg-gray-800/50 flex-row min-h-0 hidden md:flex transition-all duration-200 ${sidebarCollapsed ? 'w-6' : 'w-64'}`}>
+            {/* Stock list — hidden when collapsed */}
             {!sidebarCollapsed && (
               <div
                 ref={sidebarScrollRef}
                 onScroll={handleSidebarScroll}
-                className="flex-1 min-h-0 overflow-y-auto"
+                className="flex-1 min-w-0 min-h-0 overflow-y-auto"
               >
                 <DashboardStockSidebar
                   subscribedWidgets={widgets}
@@ -362,6 +352,17 @@ export default function DashboardPage() {
                 )}
               </div>
             )}
+            {/* Collapse toggle — vertical strip on the right edge */}
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((c) => !c)}
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              className="shrink-0 flex items-center justify-center w-6 self-stretch border-l border-gray-700 text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors"
+            >
+              <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${sidebarCollapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
           </aside>
 
           {/* Mobile: collapsible stock list above detail panel */}
