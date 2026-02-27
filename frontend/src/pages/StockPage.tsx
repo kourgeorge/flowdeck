@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { subscriptionApi, type Subscription } from '../services/subscriptionApi';
 import ReportTabs from '../components/ReportTabs';
 import AspectSpiderChart, { getAnalysisScoreEntries } from '../components/AspectSpiderChart';
+import ReturnScenarioBar from '../components/ReturnScenarioBar';
 import ReportViewer from '../components/ReportViewer';
 import SubscribeButton from '../components/SubscribeButton';
 import AuthModal from '../components/AuthModal';
@@ -1157,32 +1158,11 @@ export default function StockPage() {
                     <div className="mt-4 pt-4 border-t border-gray-600/50 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                       <div className="flex flex-col gap-1">
                         {(stockData.expected_return_pct != null || stockData.bear_case_return_pct != null || stockData.bull_case_return_pct != null) && (
-                          <div className="flex flex-wrap gap-6">
-                            {stockData.expected_return_pct != null && (
-                              <div>
-                                <span className="text-sm text-gray-400">Expected: </span>
-                                <span className={stockData.expected_return_pct >= 0 ? 'text-green-400 font-semibold' : 'text-red-400 font-semibold'}>
-                                  {stockData.expected_return_pct >= 0 ? '+' : ''}{stockData.expected_return_pct.toFixed(2)}%
-                                </span>
-                              </div>
-                            )}
-                            {stockData.bear_case_return_pct != null && (
-                              <div>
-                                <span className="text-sm text-gray-400">Bear: </span>
-                                <span className="text-red-400 font-semibold">
-                                  {stockData.bear_case_return_pct >= 0 ? '+' : ''}{stockData.bear_case_return_pct.toFixed(2)}%
-                                </span>
-                              </div>
-                            )}
-                            {stockData.bull_case_return_pct != null && (
-                              <div>
-                                <span className="text-sm text-gray-400">Bull: </span>
-                                <span className="text-green-400 font-semibold">
-                                  {stockData.bull_case_return_pct >= 0 ? '+' : ''}{stockData.bull_case_return_pct.toFixed(2)}%
-                                </span>
-                              </div>
-                            )}
-                          </div>
+                          <ReturnScenarioBar
+                            expected={stockData.expected_return_pct}
+                            bear={stockData.bear_case_return_pct}
+                            bull={stockData.bull_case_return_pct}
+                          />
                         )}
                         {(stockData.report_view_count != null || stockData.report_earned_tokens != null) && (
                           <div className="flex flex-wrap gap-4 text-sm text-gray-400">

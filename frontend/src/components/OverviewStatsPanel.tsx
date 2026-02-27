@@ -169,66 +169,6 @@ function PieTooltip({ active, payload }: { active?: boolean; payload?: Array<{ n
   );
 }
 
-// Custom legend for pie charts — compact horizontal wrap
-function PieLegend({ data }: { data: { name: string; value: number }[] }) {
-  return (
-    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 justify-center">
-      {data.map((entry, i) => (
-        <div key={entry.name} className="flex items-center gap-1 text-xs text-gray-300">
-          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: pieColor(i) }} />
-          <span className="truncate max-w-[100px]" title={entry.name}>{entry.name}</span>
-          <span className="text-gray-500">({entry.value})</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-interface DistributionPieProps {
-  title: string;
-  data: { name: string; value: number }[];
-  loading?: boolean;
-}
-
-function DistributionPie({ title, data, loading }: DistributionPieProps) {
-  return (
-    <div className="bg-gray-800 rounded-xl border border-gray-700 p-4 flex flex-col">
-      <h3 className="text-white font-semibold text-sm mb-3">{title}</h3>
-      {loading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="w-24 h-24 rounded-full bg-gray-700 animate-pulse" />
-        </div>
-      ) : data.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center text-gray-500 text-xs">No data</div>
-      ) : (
-        <>
-          <div style={{ height: 180 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={data}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={45}
-                  outerRadius={80}
-                  paddingAngle={2}
-                  dataKey="value"
-                  isAnimationActive={true}
-                >
-                  {data.map((_, i) => (
-                    <Cell key={i} fill={pieColor(i)} stroke="transparent" />
-                  ))}
-                </Pie>
-                <Tooltip content={<PieTooltip />} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <PieLegend data={data} />
-        </>
-      )}
-    </div>
-  );
-}
 
 // Small inline pie tile — no legend, tooltip on hover
 function MiniPieTile({ title, data, loading }: { title: string; data: { name: string; value: number }[]; loading?: boolean }) {
