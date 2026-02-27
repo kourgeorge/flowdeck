@@ -7,12 +7,19 @@ import type { StockWidget as StockWidgetType } from '../services/types';
 import { LOGO_PATH } from '../config';
 import { useAuth } from '../contexts/AuthContext';
 
+interface PublicStats {
+  total_analyses: number;
+  total_reports: number;
+  unique_tickers_analyzed: number;
+}
+
 export default function HomePage() {
   const { user } = useAuth();
   const [widgets, setWidgets] = useState<StockWidgetType[]>([]);
   const [tickerToName, setTickerToName] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [publicStats, setPublicStats] = useState<PublicStats | null>(null);
 
   useEffect(() => {
     fetch('/stocks.json')
@@ -25,6 +32,18 @@ export default function HomePage() {
         setTickerToName(map);
       })
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const stats = await stockApi.getPublicStats();
+        setPublicStats(stats);
+      } catch (err) {
+        console.error('Failed to load public stats:', err);
+      }
+    };
+    loadStats();
   }, []);
 
   const loadWidgets = async () => {
@@ -105,20 +124,23 @@ export default function HomePage() {
 
           {/* Stats Bar */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-4xl mx-auto">
-            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 text-center">
-              <div className="text-3xl mb-2">🔬</div>
-              <div className="text-white font-semibold mb-1">Multi-Agent AI</div>
-              <div className="text-gray-400 text-sm">Specialized analysts + debate</div>
+            <div className="bg-blue-900/30 border border-blue-700/50 rounded-lg p-6 text-center">
+              <div className="text-2xl font-bold text-blue-300 mb-1">
+                {publicStats ? publicStats.total_analyses.toLocaleString() : '—'}
+              </div>
+              <div className="text-blue-400/80 text-sm">AI Analyses Generated</div>
             </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 text-center">
-              <div className="text-3xl mb-2">📊</div>
-              <div className="text-white font-semibold mb-1">BUY/SELL/HOLD</div>
-              <div className="text-gray-400 text-sm">Clear recommendations</div>
+            <div className="bg-violet-900/30 border border-violet-700/50 rounded-lg p-6 text-center">
+              <div className="text-2xl font-bold text-violet-300 mb-1">
+                {publicStats ? publicStats.total_reports.toLocaleString() : '—'}
+              </div>
+              <div className="text-violet-400/80 text-sm">Reports Created</div>
             </div>
-            <div className="bg-gray-800/50 border border-blue-600/50 rounded-lg p-6 text-center bg-blue-500/5">
-              <div className="text-3xl mb-2">🎁</div>
-              <div className="text-blue-400 font-semibold mb-1">1,000 Free Tokens</div>
-              <div className="text-gray-400 text-sm">On sign-up</div>
+            <div className="bg-emerald-900/30 border border-emerald-700/50 rounded-lg p-6 text-center">
+              <div className="text-2xl font-bold text-emerald-300 mb-1">
+                {publicStats ? publicStats.unique_tickers_analyzed.toLocaleString() : '—'}
+              </div>
+              <div className="text-emerald-400/80 text-sm">Stocks Analyzed</div>
             </div>
           </div>
         </div>

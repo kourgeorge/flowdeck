@@ -16,7 +16,7 @@ export default function SignInPromoBanner({ onSignInClick, className = '' }: Sig
       role="banner"
     >
       <p className="text-sm text-gray-200">
-        <span className="font-medium text-white">Sign in</span> to subscribe to your favorite stocks and get them in one place on your home page.
+        <span className="font-medium text-white">Sign in</span> to run AI analysis on any stock and access your personalized dashboard.
       </p>
       <button
         type="button"

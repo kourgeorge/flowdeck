@@ -259,6 +259,16 @@ export const stockApi = {
     const response = await api.get(`/api/data/edgar-filings/${ticker}`);
     return response.data;
   },
+
+  // Get public stats (no auth required)
+  getPublicStats: async (): Promise<{
+    total_analyses: number;
+    total_reports: number;
+    unique_tickers_analyzed: number;
+  }> => {
+    const response = await api.get('/api/stats');
+    return response.data;
+  },
 };
 
 export const contactApi = {

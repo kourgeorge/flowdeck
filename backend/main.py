@@ -403,6 +403,29 @@ async def health():
     return {"status": "healthy", "service": "tradingagents-api"}
 
 
+class PublicStatsResponse(BaseModel):
+    total_analyses: int
+    total_reports: int
+    unique_tickers_analyzed: int
+
+
+@app.get("/api/stats", response_model=PublicStatsResponse)
+async def get_public_stats(db: Session = Depends(get_db)):
+    """Public stats about analyses and reports (no auth required)."""
+    from sqlalchemy import func as sqla_func
+    from models.db_models import AnalysisRun, Report
+    
+    total_analyses = db.query(sqla_func.count(AnalysisRun.id)).scalar() or 0
+    total_reports = db.query(sqla_func.count(Report.id)).scalar() or 0
+    unique_tickers = db.query(sqla_func.count(sqla_func.distinct(AnalysisRun.ticker))).scalar() or 0
+    
+    return PublicStatsResponse(
+        total_analyses=int(total_analyses),
+        total_reports=int(total_reports),
+        unique_tickers_analyzed=int(unique_tickers),
+    )
+
+
 class MeResponse(BaseModel):
     user_id: int
     email: str
