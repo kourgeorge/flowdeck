@@ -5,7 +5,20 @@ import {
   Radar,
   RadarChart,
   ResponsiveContainer,
+  Tooltip,
 } from 'recharts';
+
+function RadarTooltip({ active, payload }: { active?: boolean; payload?: any[] }) {
+  if (!active || !payload || payload.length === 0) return null;
+  const { aspect, score } = payload[0]?.payload ?? {};
+  if (aspect == null) return null;
+  return (
+    <div className="bg-gray-900 border border-gray-600 rounded px-2 py-1 text-xs shadow-lg pointer-events-none">
+      <span className="text-gray-300">{aspect}: </span>
+      <span className="font-semibold text-white">{score != null ? `${score}/10` : '—'}</span>
+    </div>
+  );
+}
 
 const REPORT_LABELS: Record<string, string> = {
   fundamentals_report: 'Fundamentals',
@@ -111,9 +124,10 @@ export default function AspectSpiderChart({ scoreEntries, size = 80, showLabels 
 
   return (
     <div
-      className="shrink-0 overflow-hidden"
+      className="shrink-0 overflow-hidden outline-none focus:outline-none"
       style={{ width: size, height: size }}
       aria-label="AI aspect score spider chart"
+      tabIndex={-1}
     >
       <ResponsiveContainer width="100%" height="100%">
         <RadarChart data={spiderData} cx="50%" cy="50%" outerRadius="90%" margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
@@ -138,6 +152,7 @@ export default function AspectSpiderChart({ scoreEntries, size = 80, showLabels 
             fillOpacity={0.6}
             isAnimationActive={false}
           />
+          <Tooltip content={<RadarTooltip />} />
         </RadarChart>
       </ResponsiveContainer>
     </div>
