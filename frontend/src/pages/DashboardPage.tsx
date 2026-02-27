@@ -1,26 +1,33 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import StockListView from '../components/StockListView';
 import StockSearch from '../components/StockSearch';
-import DashboardNewsSection from '../components/DashboardNewsSection';
 import DashboardTopTiles from '../components/DashboardTopTiles';
+import DashboardStockSidebar from '../components/DashboardStockSidebar';
+import StockDetailPanel from '../components/StockDetailPanel';
+import StockListView from '../components/StockListView';
+import DashboardNewsSection from '../components/DashboardNewsSection';
 import DashboardPriceTrendsChart from '../components/DashboardPriceTrendsChart';
 import { stockApi } from '../services/api';
 import { subscriptionApi } from '../services/subscriptionApi';
 import type { StockWidget as StockWidgetType } from '../services/types';
 import { useAuth } from '../contexts/AuthContext';
 
-const RECENT_PAGE_SIZE = 10;
+const RECENT_PAGE_SIZE = 20;
 const RECENT_ANALYZED_DAYS = 3;
+
+type DashboardTab = 'overview' | 'stock-view';
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const [dashboardTab, setDashboardTab] = useState<DashboardTab>('overview');
   const [widgets, setWidgets] = useState<StockWidgetType[]>([]);
   const [recentAnalyzedWidgets, setRecentAnalyzedWidgets] = useState<StockWidgetType[]>([]);
   const [recentTotal, setRecentTotal] = useState<number | null>(null);
   const [loadingMoreRecent, setLoadingMoreRecent] = useState(false);
   const [tickerToName, setTickerToName] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
+  const sidebarScrollRef = useRef<HTMLDivElement>(null);
   const recentScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -28,20 +35,14 @@ export default function DashboardPage() {
       .then((res) => res.json())
       .then((arr: Array<{ ticker: string; name: string }>) => {
         const map: Record<string, string> = {};
-        arr.forEach(({ ticker, name }) => {
-          map[ticker] = name;
-        });
+        arr.forEach(({ ticker, name }) => { map[ticker] = name; });
         setTickerToName(map);
       })
       .catch(() => {});
   }, []);
 
   const loadSubscriptions = async () => {
-    if (!user) {
-      setWidgets([]);
-      setIsLoading(false);
-      return;
-    }
+    if (!user) { setWidgets([]); setIsLoading(false); return; }
     try {
       setIsLoading(true);
       const subs = await subscriptionApi.list();
@@ -49,6 +50,7 @@ export default function DashboardPage() {
       if (tickers.length > 0) {
         const res = await stockApi.getWidgets(tickers);
         setWidgets(res.widgets);
+        setSelectedTicker((prev) => prev ?? (res.widgets[0]?.ticker ?? null));
       } else {
         setWidgets([]);
       }
@@ -65,54 +67,38 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [user]);
 
-  const loadRecentPage = useCallback(
-    async (offset: number, append: boolean) => {
-      const today = new Date().toISOString().slice(0, 10);
-      const res = await stockApi.getWidgets(
-        undefined,
-        today,
-        true,
-        RECENT_PAGE_SIZE,
-        offset,
-        RECENT_ANALYZED_DAYS
-      );
-      if (res.total != null) setRecentTotal(res.total);
-      if (append) {
-        setRecentAnalyzedWidgets((prev) => [...prev, ...res.widgets]);
-      } else {
-        setRecentAnalyzedWidgets(res.widgets);
-      }
-    },
-    []
-  );
+  const loadRecentPage = useCallback(async (offset: number, append: boolean) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const res = await stockApi.getWidgets(undefined, today, true, RECENT_PAGE_SIZE, offset, RECENT_ANALYZED_DAYS);
+    if (res.total != null) setRecentTotal(res.total);
+    if (append) {
+      setRecentAnalyzedWidgets((prev) => [...prev, ...res.widgets]);
+    } else {
+      setRecentAnalyzedWidgets(res.widgets);
+      setSelectedTicker((prev) => {
+        if (prev) return prev;
+        return res.widgets[0]?.ticker ?? null;
+      });
+    }
+  }, []);
 
   useEffect(() => {
     if (!user) return;
-    loadRecentPage(0, false).catch(() => {
-      setRecentAnalyzedWidgets([]);
-      setRecentTotal(null);
-    });
+    loadRecentPage(0, false).catch(() => { setRecentAnalyzedWidgets([]); setRecentTotal(null); });
     const interval = setInterval(() => loadRecentPage(0, false).catch(() => {}), 60000);
     return () => clearInterval(interval);
   }, [user, loadRecentPage]);
 
-  const handleRecentScroll = useCallback(() => {
-    const el = recentScrollRef.current;
+  // Infinite scroll for sidebar (stock-view tab)
+  const handleSidebarScroll = useCallback(() => {
+    const el = sidebarScrollRef.current;
     if (!el || loadingMoreRecent || recentTotal == null) return;
     if (recentAnalyzedWidgets.length >= recentTotal) return;
-    const threshold = 120;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - threshold) {
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
       setLoadingMoreRecent(true);
       const today = new Date().toISOString().slice(0, 10);
       stockApi
-        .getWidgets(
-          undefined,
-          today,
-          true,
-          RECENT_PAGE_SIZE,
-          recentAnalyzedWidgets.length,
-          RECENT_ANALYZED_DAYS
-        )
+        .getWidgets(undefined, today, true, RECENT_PAGE_SIZE, recentAnalyzedWidgets.length, RECENT_ANALYZED_DAYS)
         .then((res) => {
           if (res.total != null) setRecentTotal(res.total);
           setRecentAnalyzedWidgets((prev) => [...prev, ...res.widgets]);
@@ -121,19 +107,34 @@ export default function DashboardPage() {
     }
   }, [loadingMoreRecent, recentTotal, recentAnalyzedWidgets.length]);
 
-  const tickers = widgets.map((w) => w.ticker);
+  // Infinite scroll for overview tab recent list
+  const handleRecentScroll = useCallback(() => {
+    const el = recentScrollRef.current;
+    if (!el || loadingMoreRecent || recentTotal == null) return;
+    if (recentAnalyzedWidgets.length >= recentTotal) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 120) {
+      setLoadingMoreRecent(true);
+      const today = new Date().toISOString().slice(0, 10);
+      stockApi
+        .getWidgets(undefined, today, true, RECENT_PAGE_SIZE, recentAnalyzedWidgets.length, RECENT_ANALYZED_DAYS)
+        .then((res) => {
+          if (res.total != null) setRecentTotal(res.total);
+          setRecentAnalyzedWidgets((prev) => [...prev, ...res.widgets]);
+        })
+        .finally(() => setLoadingMoreRecent(false));
+    }
+  }, [loadingMoreRecent, recentTotal, recentAnalyzedWidgets.length]);
+
+  const handleSubscriptionChange = useCallback(() => {
+    loadSubscriptions();
+  }, [user]);
 
   if (!user) {
     return (
       <div className="min-h-[60vh] px-4 py-6 sm:p-6 lg:p-8 flex items-center justify-center">
         <div className="max-w-md text-center">
-          <p className="text-gray-400 mb-6">
-            Sign in to view and manage your subscribed stocks.
-          </p>
-          <Link
-            to="/"
-            className="inline-block px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
-          >
+          <p className="text-gray-400 mb-6">Sign in to view and manage your subscribed stocks.</p>
+          <Link to="/" className="inline-block px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium">
             Go to Home
           </Link>
         </div>
@@ -141,7 +142,7 @@ export default function DashboardPage() {
     );
   }
 
-  if (isLoading && widgets.length === 0) {
+  if (isLoading && widgets.length === 0 && recentAnalyzedWidgets.length === 0) {
     return (
       <div className="min-h-[60vh] px-4 py-6 sm:p-6 lg:p-8">
         <div className="max-w-layout mx-auto min-w-0 w-full">
@@ -160,14 +161,9 @@ export default function DashboardPage() {
         <div className="max-w-layout mx-auto min-w-0 w-full">
           <StockSearch />
           <div className="mt-6 bg-gray-800 rounded-lg border border-gray-700 p-12 text-center">
-            <p className="text-gray-400 mb-4">You haven’t subscribed to any stocks yet.</p>
-            <p className="text-gray-500 text-sm mb-6">
-              Add stocks from the search above or browse on Home to build your dashboard.
-            </p>
-            <Link
-              to="/"
-              className="inline-block px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
-            >
+            <p className="text-gray-400 mb-4">You haven't subscribed to any stocks yet.</p>
+            <p className="text-gray-500 text-sm mb-6">Add stocks from the search above or browse on Home to build your dashboard.</p>
+            <Link to="/" className="inline-block px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium">
               Browse stocks
             </Link>
           </div>
@@ -176,69 +172,173 @@ export default function DashboardPage() {
     );
   }
 
+  const subscribedTickers = widgets.map((w) => w.ticker);
+
   return (
-    <div className="min-h-[60vh] px-4 py-6 sm:p-6 lg:p-8">
-      <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
-        <DashboardTopTiles
-          subscribedWidgets={widgets}
-          recentAnalyzedWidgets={recentAnalyzedWidgets}
-        />
-        <StockSearch />
+    <div className="flex flex-col h-full overflow-hidden">
 
-        <div className="mt-6 flex flex-col lg:flex-row gap-6 lg:gap-8 lg:items-stretch">
-          <div className="flex-1 min-w-0 flex flex-col">
-            {tickers.length > 0 && (
-              <div className="shrink-0 min-h-[340px]">
-                <DashboardPriceTrendsChart tickers={tickers} period="6mo" height={340} />
-              </div>
-            )}
+      {/* Scrolling ticker bar */}
+      <DashboardTopTiles
+        subscribedWidgets={widgets}
+        recentAnalyzedWidgets={recentAnalyzedWidgets}
+        onSelectTicker={(ticker) => { setSelectedTicker(ticker); setDashboardTab('stock-view'); }}
+      />
 
-            <div className="shrink-0 mt-6">
-              <h2 className="text-lg font-semibold text-white mb-4">Subscribed stocks</h2>
-              <StockListView widgets={widgets} tickerToName={tickerToName} />
-            </div>
-
-            <div className="flex-1 flex flex-col min-h-0 mt-8">
-              <h2 className="text-lg font-semibold text-white mb-4 shrink-0">Recently Analyzed</h2>
-              {recentAnalyzedWidgets.length === 0 ? (
-                <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 text-center shrink-0">
-                  <p className="text-gray-400 text-sm">No analyzed stocks in the last 3 days.</p>
-                </div>
-              ) : (
-                <StockListView
-                  widgets={recentAnalyzedWidgets}
-                  tickerToName={tickerToName}
-                  scrollRef={recentScrollRef}
-                  onScroll={handleRecentScroll}
-                  preserveOrder={true}
-                  footer={
-                    <>
-                      {loadingMoreRecent && (
-                        <div className="py-3 text-center text-gray-400 text-sm">Loading more…</div>
-                      )}
-                      {recentTotal != null && recentAnalyzedWidgets.length >= recentTotal && recentTotal > 0 && (
-                        <div className="py-2 text-center text-gray-500 text-xs">
-                          All {recentTotal} analyzed in the last 3 days
-                        </div>
-                      )}
-                    </>
-                  }
-                />
-              )}
-            </div>
-          </div>
-
-          {tickers.length > 0 && (
-            <aside className="w-full lg:w-[360px] shrink-0 flex flex-col self-stretch min-h-0">
-              <DashboardNewsSection
-                tickers={tickers}
-                refreshIntervalMs={120000}
-                fillHeight
-              />
-            </aside>
-          )}
+      {/* Dashboard-level tab bar + search */}
+      <div className="px-4 pt-2 border-b border-gray-700 bg-gray-900 shrink-0 flex flex-wrap items-end gap-4">
+        <nav className="flex gap-0.5" aria-label="Dashboard views">
+          {([
+              { id: 'overview', label: 'Overview' },
+              { id: 'stock-view', label: 'Stock View' },
+            ] as { id: DashboardTab; label: string }[]).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setDashboardTab(tab.id)}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors -mb-px ${
+                dashboardTab === tab.id
+                  ? 'text-white border-blue-500 bg-gray-800'
+                  : 'text-gray-400 border-transparent hover:text-white hover:bg-gray-800/60'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+        <div className="flex-1 min-w-0 pb-2">
+          <StockSearch />
         </div>
       </div>
+
+      {/* ── Stock View Tab ── */}
+      {dashboardTab === 'stock-view' && (
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+
+          {/* Left sidebar */}
+          <aside className="w-64 shrink-0 border-r border-gray-700 bg-gray-800/50 flex flex-col min-h-0 hidden md:flex">
+            <div
+              ref={sidebarScrollRef}
+              onScroll={handleSidebarScroll}
+              className="flex-1 min-h-0 overflow-y-auto"
+            >
+              <DashboardStockSidebar
+                subscribedWidgets={widgets}
+                recentWidgets={recentAnalyzedWidgets}
+                tickerToName={tickerToName}
+                selectedTicker={selectedTicker}
+                onSelect={setSelectedTicker}
+              />
+              {loadingMoreRecent && (
+                <div className="py-3 text-center text-gray-400 text-xs">Loading more…</div>
+              )}
+              {recentTotal != null && recentAnalyzedWidgets.length >= recentTotal && recentTotal > 0 && (
+                <div className="py-2 text-center text-gray-500 text-xs">
+                  All {recentTotal} analyzed in the last 3 days
+                </div>
+              )}
+            </div>
+          </aside>
+
+          {/* Right main panel */}
+          <main className="flex-1 min-w-0 flex flex-col min-h-0 bg-gray-900">
+            {selectedTicker ? (
+              <StockDetailPanel
+                key={selectedTicker}
+                ticker={selectedTicker}
+                onSubscriptionChange={handleSubscriptionChange}
+              />
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
+                Select a stock from the list to view details.
+              </div>
+            )}
+          </main>
+
+          {/* Mobile: stock selector at bottom */}
+          <div className="md:hidden fixed bottom-0 left-0 right-0 border-t border-gray-700 bg-gray-800/95 z-20" style={{ maxHeight: '40vh', overflowY: 'auto' }}>
+            <DashboardStockSidebar
+              subscribedWidgets={widgets}
+              recentWidgets={recentAnalyzedWidgets}
+              tickerToName={tickerToName}
+              selectedTicker={selectedTicker}
+              onSelect={setSelectedTicker}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── Overview Tab ── */}
+      {dashboardTab === 'overview' && (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="px-4 py-6 sm:p-6 lg:p-8">
+            <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
+
+              <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 lg:items-stretch">
+                <div className="flex-1 min-w-0 flex flex-col">
+
+                  {/* Price trends chart */}
+                  {subscribedTickers.length > 0 && (
+                    <div className="shrink-0 min-h-[340px]">
+                      <DashboardPriceTrendsChart tickers={subscribedTickers} period="6mo" height={340} />
+                    </div>
+                  )}
+
+                  {/* Subscribed stocks list */}
+                  <div className="shrink-0 mt-6">
+                    <h2 className="text-lg font-semibold text-white mb-4">Subscribed stocks</h2>
+                    <StockListView widgets={widgets} tickerToName={tickerToName} />
+                  </div>
+
+                  {/* Recently analyzed list */}
+                  <div className="flex-1 flex flex-col min-h-0 mt-8">
+                    <h2 className="text-lg font-semibold text-white mb-4 shrink-0">Recently Analyzed</h2>
+                    {recentAnalyzedWidgets.length === 0 ? (
+                      <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 text-center shrink-0">
+                        <p className="text-gray-400 text-sm">No analyzed stocks in the last 3 days.</p>
+                      </div>
+                    ) : (
+                      <StockListView
+                        widgets={recentAnalyzedWidgets}
+                        tickerToName={tickerToName}
+                        scrollRef={recentScrollRef}
+                        onScroll={handleRecentScroll}
+                        preserveOrder={true}
+                        footer={
+                          <>
+                            {loadingMoreRecent && (
+                              <div className="py-3 text-center text-gray-400 text-sm">Loading more…</div>
+                            )}
+                            {recentTotal != null && recentAnalyzedWidgets.length >= recentTotal && recentTotal > 0 && (
+                              <div className="py-2 text-center text-gray-500 text-xs">
+                                All {recentTotal} analyzed in the last 3 days
+                              </div>
+                            )}
+                          </>
+                        }
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {/* News sidebar */}
+                {subscribedTickers.length > 0 && (
+                  <aside className="w-full lg:w-[360px] shrink-0 flex flex-col self-stretch min-h-0">
+                    <DashboardNewsSection
+                      tickers={subscribedTickers}
+                      refreshIntervalMs={120000}
+                      fillHeight
+                    />
+                  </aside>
+                )}
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
+
+// Made with Bob

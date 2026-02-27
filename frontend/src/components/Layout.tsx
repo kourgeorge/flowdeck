@@ -166,9 +166,9 @@ export default function Layout() {
       )}
 
       {/* Main content area */}
-      <div className="flex flex-col flex-1 min-w-0">
+      <div className="flex flex-col flex-1 min-w-0 min-h-0 h-screen overflow-hidden">
         {/* Hamburger: mobile only */}
-        <div className="md:hidden sticky top-0 z-20 flex items-center border-b border-gray-700 bg-gray-900/95 px-4 py-3">
+        <div className="md:hidden sticky top-0 z-20 flex items-center border-b border-gray-700 bg-gray-900/95 px-4 py-3 shrink-0">
           <button
             type="button"
             aria-expanded={sidebarOpen}
@@ -180,7 +180,7 @@ export default function Layout() {
           </button>
         </div>
         <SignInPromoBanner onSignInClick={() => setAuthModalOpen(true)} />
-        <main className="flex-1 min-w-0">
+        <main className="flex-1 min-w-0 min-h-0 overflow-auto">
           <Outlet />
         </main>
         <Footer />

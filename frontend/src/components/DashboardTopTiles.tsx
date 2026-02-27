@@ -66,6 +66,8 @@ interface DashboardTopTilesProps {
   subscribedWidgets: StockWidgetType[];
   /** Recently analyzed stocks (excluding subscribed) – shown with orangish background */
   recentAnalyzedWidgets: StockWidgetType[];
+  /** Optional: called when a tile is clicked; if provided, prevents navigation */
+  onSelectTicker?: (ticker: string) => void;
 }
 
 function getRecColors(rec: string | null) {
@@ -165,6 +167,7 @@ function DashboardTile({
 export default function DashboardTopTiles({
   subscribedWidgets,
   recentAnalyzedWidgets,
+  onSelectTicker,
 }: DashboardTopTilesProps) {
   const navigate = useNavigate();
   const subscribedTickers = new Set(subscribedWidgets.map((w) => w.ticker));
@@ -174,22 +177,30 @@ export default function DashboardTopTiles({
 
   if (!hasSubscribed && !hasRecent) return null;
 
+  const handleNavigate = (ticker: string) => {
+    if (onSelectTicker) {
+      onSelectTicker(ticker);
+    } else {
+      navigate(`/tickers/${ticker}`);
+    }
+  };
+
   return (
-    <div className="w-full border-y border-gray-700 bg-gray-800/80 shrink-0 mb-6 overflow-hidden">
+    <div className="w-full border-y border-gray-700 bg-gray-800/80 shrink-0 overflow-hidden">
       <div className="flex items-stretch gap-2 py-2 px-2 w-max animate-tiles-scroll">
         {[1, 2].map((copy) => (
           <div key={copy} className="flex items-stretch gap-2 shrink-0">
             {hasSubscribed && (
               <div className="flex items-stretch gap-2 shrink-0 border-r border-gray-700 pr-2">
                 {subscribedWidgets.map((w) => (
-                  <DashboardTile key={`${copy}-sub-${w.ticker}`} w={w} tileClass={SUBSCRIBED_TILE_CLASS} onNavigate={(t) => navigate(`/tickers/${t}`)} />
+                  <DashboardTile key={`${copy}-sub-${w.ticker}`} w={w} tileClass={SUBSCRIBED_TILE_CLASS} onNavigate={handleNavigate} />
                 ))}
               </div>
             )}
             {hasRecent && (
               <div className="flex items-stretch gap-2 shrink-0">
                 {recentOnly.map((w) => (
-                  <DashboardTile key={`${copy}-recent-${w.ticker}`} w={w} tileClass={RECENTLY_ANALYZED_TILE_CLASS} onNavigate={(t) => navigate(`/tickers/${t}`)} />
+                  <DashboardTile key={`${copy}-recent-${w.ticker}`} w={w} tileClass={RECENTLY_ANALYZED_TILE_CLASS} onNavigate={handleNavigate} />
                 ))}
               </div>
             )}
