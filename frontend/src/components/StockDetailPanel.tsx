@@ -581,11 +581,11 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                   {stockData.has_reports && stockData.report_date && (() => {
                     const summaryScoreEntries = getAnalysisScoreEntries(stockData.reports_with_scores ?? null);
                     return (
-                    <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 rounded-lg border border-blue-700/50 p-4">
+                    <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 rounded-lg border border-blue-700/50 p-5">
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                         <div className="flex-1">
-                          <div className="text-xs text-gray-400 mb-0.5">Last Analysis Date</div>
-                          <div className="text-base font-semibold text-white">
+                          <div className="text-sm text-gray-400 mb-0.5">Last Analysis Date</div>
+                          <div className="text-lg font-semibold text-white">
                             {parseReportDate(stockData.report_date)?.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) ?? 'N/A'}
                           </div>
                           {modelsUsed && (modelsUsed.provider || modelsUsed.deep_think || modelsUsed.quick_think) && (
@@ -608,11 +608,11 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                             <AspectSpiderChart scoreEntries={summaryScoreEntries} size={80} />
                           )}
                           <div className="text-right">
-                            <div className="text-xs text-gray-400 mb-0.5">AI Decision</div>
-                            <div className={`text-xl font-bold ${stockData.recommendation?.recommendation === 'BUY' ? 'text-green-400' : stockData.recommendation?.recommendation === 'SELL' ? 'text-red-400' : stockData.recommendation?.recommendation === 'HOLD' ? 'text-yellow-400' : 'text-white'}`}>
+                            <div className="text-sm text-gray-400 mb-0.5">AI Decision</div>
+                            <div className={`text-2xl font-bold ${stockData.recommendation?.recommendation === 'BUY' ? 'text-green-400' : stockData.recommendation?.recommendation === 'SELL' ? 'text-red-400' : stockData.recommendation?.recommendation === 'HOLD' ? 'text-yellow-400' : 'text-white'}`}>
                               {stockData.recommendation?.recommendation || 'N/A'}
                             </div>
-                            {stockData.recommendation?.confidence && <div className="text-xs text-gray-400 mt-0.5">Confidence: {(stockData.recommendation.confidence * 100).toFixed(0)}%</div>}
+                            {stockData.recommendation?.confidence && <div className="text-sm text-gray-400 mt-0.5">Confidence: {(stockData.recommendation.confidence * 100).toFixed(0)}%</div>}
                           </div>
                         </div>
                       </div>

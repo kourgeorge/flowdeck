@@ -59,7 +59,7 @@ export default function ReturnScenarioBar({
   return (
     <div className={`w-full ${compact ? 'space-y-1' : 'space-y-2'}`}>
       {/* Label row */}
-      <div className={`flex items-center gap-1 ${textSm} text-gray-400 font-medium`}>
+      <div className={`flex items-center gap-1 ${compact ? 'text-xs' : 'text-sm'} text-gray-400 font-medium`}>
         <span>Return Scenarios</span>
       </div>
 

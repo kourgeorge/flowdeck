@@ -54,7 +54,7 @@ export default function ReportTabs({ availableReports, selectedReport, onSelectR
 
   return (
     <div className="border-b border-slate-700 mb-6">
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-0.5">
         {availableReports.map((reportType) => {
           const scoreData = reportScores?.[reportType];
           const score = scoreData?.score;
@@ -64,7 +64,7 @@ export default function ReportTabs({ availableReports, selectedReport, onSelectR
               key={reportType}
               onClick={() => handleTabClick(reportType)}
               className={`
-                px-4 py-2 font-medium transition-colors flex items-center gap-2
+                px-2 py-1.5 text-sm font-medium transition-colors flex items-center gap-1
                 ${
                   activeTab === reportType
                     ? 'border-b-2 border-blue-500 text-blue-400'
