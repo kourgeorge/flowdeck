@@ -353,7 +353,7 @@ export default function StockDetailPanel({ ticker, onSubscriptionChange }: Stock
                   ...(hasFundamentals ? [{ id: 'fundamentals', label: 'Fundamentals' }] : []),
                   ...(isUSCompany ? [{ id: 'sec-filings', label: 'SEC Filings' }] : []),
                   { id: 'news', label: 'News' },
-                  { id: 'ai-analysis', label: 'AI Analysis' },
+                  { id: 'ai-analysis', label: '🕷 AI Analysis' },
                 ].map((tab) => {
                   const isActive = activeTab === tab.id;
                   const isAiTab = tab.id === 'ai-analysis';
