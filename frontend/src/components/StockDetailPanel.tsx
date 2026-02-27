@@ -52,7 +52,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const [extendedInfo, setExtendedInfo] = useState<ExtendedInfo | null>(null);
   const [isLoading, setIsLoading] = useState(!prefetchedData);
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('ai-analysis');
   const [fundamentalsData, setFundamentalsData] = useState<string | object | null>(null);
   const [financialStatements, setFinancialStatements] = useState<any>(null);
   const [isLoadingFundamentals, setIsLoadingFundamentals] = useState(false);
@@ -166,7 +166,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     setFinancialStatements(null); setNewsData([]); setNewsError(null); setInsiderTransactions([]);
     setInsiderTransactionsError(null); setFundamentalsSubTab('charts'); setFundInfo(null);
     setAnalysisProgress(null); setEdgarFilings(null); setEdgarFilingsError(null); setFutureEvents(null);
-    setActiveTab('overview'); setSelectedReport(null); setLoadError(null); setAnalysisError(null);
+    setActiveTab('ai-analysis'); setSelectedReport(null); setLoadError(null); setAnalysisError(null);
     if (wsClientRef.current) { wsClientRef.current.disconnect(); wsClientRef.current = null; }
 
     if (prefetchedData) {
