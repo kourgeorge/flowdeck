@@ -20,6 +20,7 @@ type DashboardTab = 'overview' | 'stock-view';
 export default function DashboardPage() {
   const { user } = useAuth();
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>('overview');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [widgets, setWidgets] = useState<StockWidgetType[]>([]);
   const [recentAnalyzedWidgets, setRecentAnalyzedWidgets] = useState<StockWidgetType[]>([]);
   const [recentTotal, setRecentTotal] = useState<number | null>(null);
@@ -218,33 +219,88 @@ export default function DashboardPage() {
       {dashboardTab === 'stock-view' && (
         <div className="flex flex-1 min-h-0 overflow-hidden">
 
-          {/* Left sidebar */}
-          <aside className="w-64 shrink-0 border-r border-gray-700 bg-gray-800/50 flex flex-col min-h-0 hidden md:flex">
-            <div
-              ref={sidebarScrollRef}
-              onScroll={handleSidebarScroll}
-              className="flex-1 min-h-0 overflow-y-auto"
+          {/* Left sidebar — desktop */}
+          <aside className={`shrink-0 border-r border-gray-700 bg-gray-800/50 flex-col min-h-0 hidden md:flex transition-all duration-200 ${sidebarCollapsed ? 'w-10' : 'w-64'}`}>
+            {/* Collapse toggle button */}
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((c) => !c)}
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              className="shrink-0 flex items-center justify-center h-8 w-full border-b border-gray-700 text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors"
             >
-              <DashboardStockSidebar
-                subscribedWidgets={widgets}
-                recentWidgets={recentAnalyzedWidgets}
-                tickerToName={tickerToName}
-                selectedTicker={selectedTicker}
-                onSelect={setSelectedTicker}
-              />
-              {loadingMoreRecent && (
-                <div className="py-3 text-center text-gray-400 text-xs">Loading more…</div>
-              )}
-              {recentTotal != null && recentAnalyzedWidgets.length >= recentTotal && recentTotal > 0 && (
-                <div className="py-2 text-center text-gray-500 text-xs">
-                  All {recentTotal} analyzed in the last 3 days
+              <svg className={`w-4 h-4 transition-transform duration-200 ${sidebarCollapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            {!sidebarCollapsed && (
+              <div
+                ref={sidebarScrollRef}
+                onScroll={handleSidebarScroll}
+                className="flex-1 min-h-0 overflow-y-auto"
+              >
+                <DashboardStockSidebar
+                  subscribedWidgets={widgets}
+                  recentWidgets={recentAnalyzedWidgets}
+                  tickerToName={tickerToName}
+                  selectedTicker={selectedTicker}
+                  onSelect={setSelectedTicker}
+                />
+                {loadingMoreRecent && (
+                  <div className="py-3 text-center text-gray-400 text-xs">Loading more…</div>
+                )}
+                {recentTotal != null && recentAnalyzedWidgets.length >= recentTotal && recentTotal > 0 && (
+                  <div className="py-2 text-center text-gray-500 text-xs">
+                    All {recentTotal} analyzed in the last 3 days
+                  </div>
+                )}
+              </div>
+            )}
+          </aside>
+
+          {/* Mobile: collapsible stock list above detail panel */}
+          <div className="md:hidden flex flex-col flex-1 min-h-0 overflow-y-auto">
+            {/* Toggle header */}
+            <div className="shrink-0 border-b border-gray-700 bg-gray-800/80">
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed((c) => !c)}
+                className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-gray-700/50 transition-colors"
+              >
+                <span className="font-medium">Stocks</span>
+                <svg className={`w-4 h-4 transition-transform duration-200 ${sidebarCollapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {!sidebarCollapsed && (
+                <div style={{ maxHeight: '35vh', overflowY: 'auto' }}>
+                  <DashboardStockSidebar
+                    subscribedWidgets={widgets}
+                    recentWidgets={recentAnalyzedWidgets}
+                    tickerToName={tickerToName}
+                    selectedTicker={selectedTicker}
+                    onSelect={(ticker) => { setSelectedTicker(ticker); setSidebarCollapsed(true); }}
+                  />
                 </div>
               )}
             </div>
-          </aside>
+            {/* Detail panel below */}
+            <div className="flex-1 min-h-0 bg-gray-900">
+              {selectedTicker ? (
+                <StockDetailPanel
+                  key={selectedTicker}
+                  ticker={selectedTicker}
+                  onSubscriptionChange={handleSubscriptionChange}
+                />
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-gray-500 text-sm p-8">
+                  Select a stock from the list above to view details.
+                </div>
+              )}
+            </div>
+          </div>
 
-          {/* Right main panel */}
-          <main className="flex-1 min-w-0 flex flex-col min-h-0 bg-gray-900">
+          {/* Right main panel — desktop */}
+          <main className="flex-1 min-w-0 flex-col min-h-0 bg-gray-900 hidden md:flex">
             {selectedTicker ? (
               <StockDetailPanel
                 key={selectedTicker}
@@ -257,17 +313,6 @@ export default function DashboardPage() {
               </div>
             )}
           </main>
-
-          {/* Mobile: stock selector at bottom */}
-          <div className="md:hidden fixed bottom-0 left-0 right-0 border-t border-gray-700 bg-gray-800/95 z-20" style={{ maxHeight: '40vh', overflowY: 'auto' }}>
-            <DashboardStockSidebar
-              subscribedWidgets={widgets}
-              recentWidgets={recentAnalyzedWidgets}
-              tickerToName={tickerToName}
-              selectedTicker={selectedTicker}
-              onSelect={setSelectedTicker}
-            />
-          </div>
         </div>
       )}
 
