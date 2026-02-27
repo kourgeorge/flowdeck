@@ -173,7 +173,10 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       setStockData(prefetchedData);
       setIsLoading(false);
       applyStockData(prefetchedData);
-      // Still kick off background fetches for secondary data (company info, extended info, etc.)
+      // Silently refresh stock page data in the background to pick up any changes
+      // since the prefetch (e.g. new report, updated price). No loading spinner shown.
+      stockApi.getStockPage(ticker).then((fresh) => applyStockData(fresh)).catch(() => {});
+      // Kick off background fetches for secondary data (company info, extended info, etc.)
       stockApi.getCompanyInfo(ticker).then((info) => {
         setCompanyInfo(info);
         const qt = info.quoteType;
