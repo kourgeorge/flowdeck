@@ -7,7 +7,11 @@ interface Stock {
   name: string;
 }
 
-export default function StockSearch() {
+interface StockSearchProps {
+  compact?: boolean;
+}
+
+export default function StockSearch({ compact = false }: StockSearchProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [suggestions, setSuggestions] = useState<Stock[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -148,7 +152,7 @@ export default function StockSearch() {
   }, []);
 
   return (
-    <div className="w-full max-w-2xl mx-auto mb-8 relative">
+    <div className={`w-full relative ${compact ? '' : 'max-w-2xl mx-auto mb-8'}`}>
       <form onSubmit={handleSearch} className="w-full">
         <div className="flex gap-2 relative">
           <div className="flex-1 relative">
@@ -163,7 +167,7 @@ export default function StockSearch() {
                   setShowSuggestions(true);
                 }
               }}
-              placeholder="Search by ticker or company name (e.g., AAPL, Apple)..."
+              placeholder="Ticker search…"
               className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
             {showSuggestions && suggestions.length > 0 && (
