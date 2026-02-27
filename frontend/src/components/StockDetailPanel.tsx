@@ -32,6 +32,8 @@ interface ExtendedInfo {
 }
 interface StockDetailPanelProps {
   ticker: string;
+  /** Pre-fetched stock page data from the dashboard cache (avoids loading spinner). */
+  prefetchedData?: StockPageData | null;
   onSubscriptionChange?: () => void;
 }
 const REPORT_PROCESS_ORDER = [
@@ -39,15 +41,15 @@ const REPORT_PROCESS_ORDER = [
   'fundamentals_report','sec_report','investment_plan','trader_investment_plan','final_trade_decision',
 ];
 
-export default function StockDetailPanel({ ticker, onSubscriptionChange }: StockDetailPanelProps) {
+export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptionChange }: StockDetailPanelProps) {
   const { user } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalMessage, setAuthModalMessage] = useState('Please sign in to run a fresh analysis.');
   const [previewTickers, setPreviewTickers] = useState<Set<string>>(new Set());
-  const [stockData, setStockData] = useState<StockPageData | null>(null);
+  const [stockData, setStockData] = useState<StockPageData | null>(prefetchedData ?? null);
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
   const [extendedInfo, setExtendedInfo] = useState<ExtendedInfo | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!prefetchedData);
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [fundamentalsData, setFundamentalsData] = useState<string | object | null>(null);
@@ -108,25 +110,29 @@ export default function StockDetailPanel({ ticker, onSubscriptionChange }: Stock
     prevPriceRef.current = currentPrice;
   }, [refreshedQuote?.current_price, stockData?.quote?.current_price]);
 
+  const applyStockData = (data: StockPageData) => {
+    setStockData(data);
+    if (data.reports && Object.keys(data.reports).length > 0) {
+      const reports = Object.keys(data.reports);
+      setSelectedReport(reports.includes('final_trade_decision') ? 'final_trade_decision' : reports[0]);
+    }
+    if (data.is_generating && data.generation_analysis_id) {
+      setAnalysisProgress(null);
+      const client = new WebSocketClient(data.generation_analysis_id);
+      client.on('status', (msg: any) => { const s = msg?.data?.agent_statuses; if (s) setAnalysisProgress({ agent_statuses: s, current_agent: null }); });
+      client.on('progress', (msg: any) => { const s = msg?.data?.agent_statuses; const c = msg?.data?.current_agent; if (s) setAnalysisProgress({ agent_statuses: s, current_agent: c ?? null }); loadStockData(); });
+      client.on('completed', () => { setAnalysisProgress(null); loadStockData(); });
+      client.connect();
+      wsClientRef.current = client;
+    } else { setAnalysisProgress(null); }
+  };
+
   const loadStockData = async () => {
     if (!ticker) return;
     try {
       setIsLoading(true); setLoadError(null);
       const data = await stockApi.getStockPage(ticker);
-      setStockData(data);
-      if (data.reports && Object.keys(data.reports).length > 0) {
-        const reports = Object.keys(data.reports);
-        setSelectedReport(reports.includes('final_trade_decision') ? 'final_trade_decision' : reports[0]);
-      }
-      if (data.is_generating && data.generation_analysis_id) {
-        setAnalysisProgress(null);
-        const client = new WebSocketClient(data.generation_analysis_id);
-        client.on('status', (msg: any) => { const s = msg?.data?.agent_statuses; if (s) setAnalysisProgress({ agent_statuses: s, current_agent: null }); });
-        client.on('progress', (msg: any) => { const s = msg?.data?.agent_statuses; const c = msg?.data?.current_agent; if (s) setAnalysisProgress({ agent_statuses: s, current_agent: c ?? null }); loadStockData(); });
-        client.on('completed', () => { setAnalysisProgress(null); loadStockData(); });
-        client.connect();
-        wsClientRef.current = client;
-      } else { setAnalysisProgress(null); }
+      applyStockData(data);
     } catch (error: any) {
       const detail = error?.response?.data?.detail;
       const is404 = error?.response?.status === 404;
@@ -154,13 +160,42 @@ export default function StockDetailPanel({ ticker, onSubscriptionChange }: Stock
   };
 
   useEffect(() => {
-    setStockData(null); setCompanyInfo(null); setExtendedInfo(null); setFundamentalsData(null);
+    // Reset all per-ticker state
+    setCompanyInfo(null); setExtendedInfo(null); setFundamentalsData(null);
     setFinancialStatements(null); setNewsData([]); setNewsError(null); setInsiderTransactions([]);
     setInsiderTransactionsError(null); setFundamentalsSubTab('charts'); setFundInfo(null);
     setAnalysisProgress(null); setEdgarFilings(null); setEdgarFilingsError(null); setFutureEvents(null);
     setActiveTab('overview'); setSelectedReport(null); setLoadError(null); setAnalysisError(null);
     if (wsClientRef.current) { wsClientRef.current.disconnect(); wsClientRef.current = null; }
-    loadStockData();
+
+    if (prefetchedData) {
+      // Use pre-fetched data immediately — no loading spinner
+      setStockData(prefetchedData);
+      setIsLoading(false);
+      applyStockData(prefetchedData);
+      // Still kick off background fetches for secondary data (company info, extended info, etc.)
+      stockApi.getCompanyInfo(ticker).then((info) => {
+        setCompanyInfo(info);
+        const qt = info.quoteType;
+        if (qt === 'EQUITY' || qt == null) {
+          setIsLoadingFundamentals(true);
+          stockApi.getFundamentals(ticker).then((r) => r && setFundamentalsData(r.fundamentals)).catch(() => {}).finally(() => setIsLoadingFundamentals(false));
+        } else { setFundamentalsData(null); setIsLoadingFundamentals(false); }
+        if (qt === 'ETF') {
+          setIsLoadingFundInfo(true);
+          stockApi.getFundInfo(ticker).then(setFundInfo).catch(() => {}).finally(() => setIsLoadingFundInfo(false));
+        } else { setFundInfo(null); }
+      }).catch(() => {});
+      stockApi.getExtendedInfo(ticker).then(setExtendedInfo).catch(() => {});
+      setIsLoadingRecommendations(true);
+      stockApi.getAnalystRecommendations(ticker).then(setAnalystRecommendations).catch(() => {}).finally(() => setIsLoadingRecommendations(false));
+      setIsLoadingFutureEvents(true);
+      stockApi.getFutureEvents(ticker).then(setFutureEvents).catch(() => {}).finally(() => setIsLoadingFutureEvents(false));
+    } else {
+      setStockData(null);
+      setIsLoading(true);
+      loadStockData();
+    }
     return () => { if (wsClientRef.current) wsClientRef.current.disconnect(); };
   }, [ticker]);
 
