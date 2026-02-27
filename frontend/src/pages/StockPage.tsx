@@ -18,6 +18,7 @@ import NewsWidget from '../components/NewsWidget';
 import InsiderTransactionsWidget from '../components/InsiderTransactionsWidget';
 import AIAnalysisLoadingView from '../components/AIAnalysisLoadingView';
 import { parseReportDate } from '../utils/date';
+import { configApi } from '../services/api';
 
 interface CompanyInfo {
   name: string;
@@ -52,6 +53,7 @@ export default function StockPage() {
   const { user } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalMessage, setAuthModalMessage] = useState('Please sign in to run a fresh analysis.');
+  const [previewTickers, setPreviewTickers] = useState<Set<string>>(new Set());
   const [stockData, setStockData] = useState<StockPageData | null>(null);
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
   const [extendedInfo, setExtendedInfo] = useState<ExtendedInfo | null>(null);
@@ -149,6 +151,13 @@ export default function StockPage() {
     }
     prevPriceRef.current = currentPrice;
   }, [refreshedQuote?.current_price, stockData?.quote?.current_price]);
+
+  // Fetch preview tickers (major stocks) from server once on mount
+  useEffect(() => {
+    configApi.getPublicConfig()
+      .then((cfg) => setPreviewTickers(new Set(cfg.preview_tickers.map((t) => t.toUpperCase()))))
+      .catch(() => {}); // silently ignore; gate defaults to open (empty set = no lock)
+  }, []);
 
   const loadStockData = async () => {
     if (!ticker) return;
@@ -1066,6 +1075,25 @@ export default function StockPage() {
             {/* AI Analysis Tab Content */}
             {activeTab === 'ai-analysis' && (
               <div className="space-y-6">
+                {/* Lock gate for non-logged-in users on non-preview stocks */}
+                {!user && !previewTickers.has((ticker ?? '').toUpperCase()) ? (
+                  <div className="flex flex-col items-center justify-center py-20 rounded-lg border border-gray-700 bg-gray-800/60">
+                    <svg className="w-12 h-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    <h3 className="text-lg font-semibold text-white mb-2">Sign in to view AI Analysis</h3>
+                    <p className="text-gray-400 text-sm mb-6 text-center max-w-xs">
+                      Create a free account to access AI-powered stock analysis reports.
+                    </p>
+                    <button
+                      onClick={() => { setAuthModalMessage('Sign in to access AI analysis reports.'); setAuthModalOpen(true); }}
+                      className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+                    >
+                      Sign In / Register
+                    </button>
+                  </div>
+                ) : (
+                  <>
                 <p className="text-sm text-amber-400/90 bg-amber-950/30 border border-amber-700/40 rounded-lg px-4 py-2">
                   For informational purposes only. Not investment advice.
                 </p>
@@ -1232,6 +1260,8 @@ export default function StockPage() {
                     />
                   )}
                 </div>
+                  </>
+                )}
               </div>
             )}
 

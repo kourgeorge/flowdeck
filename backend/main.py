@@ -403,6 +403,16 @@ async def health():
     return {"status": "healthy", "service": "tradingagents-api"}
 
 
+class PublicConfigResponse(BaseModel):
+    preview_tickers: list[str]
+
+
+@app.get("/api/config/public", response_model=PublicConfigResponse)
+async def get_public_config():
+    """Return public configuration (e.g. preview tickers visible without login)."""
+    return PublicConfigResponse(preview_tickers=list(MAJOR_STOCKS))
+
+
 class PublicStatsResponse(BaseModel):
     total_analyses: int
     total_reports: int

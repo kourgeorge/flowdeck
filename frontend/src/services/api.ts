@@ -17,6 +17,13 @@ const api = axios.create({
   },
 });
 
+export const configApi = {
+  getPublicConfig: async (): Promise<{ preview_tickers: string[] }> => {
+    const response = await api.get<{ preview_tickers: string[] }>('/api/config/public');
+    return response.data;
+  },
+};
+
 export const stockApi = {
   // Get widgets for stocks (optional date YYYY-MM-DD for report-of-day filter when no tickers).
   // When onlyAnalyzedToday=true and no tickers, returns only tickers that have reports for the date (no major-stocks list).
