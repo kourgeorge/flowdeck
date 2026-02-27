@@ -624,8 +624,8 @@ export default function StockPage() {
                         }`}>
                           <span>{quote.daily_change_percent >= 0 ? '▲' : '▼'}</span>
                           <span>
-                            ({quote.daily_change_percent >= 0 ? '+' : ''}{quote.daily_change_percent.toFixed(2)}%){' '}
-                            {quote.daily_change >= 0 ? '+' : ''}{quote.daily_change.toFixed(2)}
+                            {quote.daily_change >= 0 ? '+' : ''}{quote.daily_change.toFixed(2)}{' '}
+                            ({quote.daily_change_percent >= 0 ? '+' : ''}{quote.daily_change_percent.toFixed(2)}%)
                           </span>
                         </div>
                       </div>
