@@ -100,15 +100,16 @@ export default function HomePage() {
       <section className="bg-gray-900 px-4 py-10 sm:py-12 lg:py-14 pb-6 sm:pb-6 lg:pb-6">
         <div className="max-w-6xl mx-auto">
           {/* Logo */}
-          <div className="flex justify-center mb-5">
+          <div className="flex flex-col items-center mb-5">
             <img src={LOGO_PATH} alt="" className="w-20 h-20 sm:w-24 sm:h-24 object-contain" />
+            <span className="text-white text-2xl font-bold mt-2 tracking-wide">FlowDeck</span>
           </div>
 
           {/* Headline - 2-tone */}
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-center mb-4 leading-tight">
             <span className="text-white">Invest with the Odds in Your Favor</span>
             <br />
-            <span className="text-blue-400">With AI-Powered BUY/SELL/HOLD Insights.</span>
+            <span className="text-blue-400">With AI-Powered Insights.</span>
           </h1>
 
           {/* Subtext */}
@@ -276,8 +277,53 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* SECTION 5: TOKEN ECONOMY */}
-      <section className="px-4 py-12 sm:py-16 bg-gray-900 border-t border-gray-700">
+      {/* SECTION 5: FINAL CTA */}
+      <section className="px-4 py-10 sm:py-12 bg-gray-900 border-t border-gray-700">
+        <div className="max-w-4xl mx-auto text-center">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-4">
+            Ready to Invest Smarter?
+          </h2>
+          <p className="text-gray-400 text-base sm:text-lg mb-8 max-w-2xl mx-auto">
+            {user ? (
+              <>Start exploring stocks and generating AI analysis reports with your token balance.</>
+            ) : (
+              <>Sign up free and get <strong className="text-blue-400">1,000 tokens</strong> to generate your first AI analysis reports.</>
+            )}
+          </p>
+          <div className="flex flex-col items-center justify-center gap-6">
+            {user ? (
+              <>
+                <div className="w-full max-w-4xl">
+                  <StockSearch />
+                </div>
+                <Link
+                  to="/dashboard"
+                  className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-lg transition-colors"
+                >
+                  Go to Dashboard →
+                </Link>
+              </>
+            ) : (
+              <>
+                <div className="w-full max-w-4xl">
+                  <StockSearch />
+                </div>
+                <button
+                  onClick={() => {
+                    window.location.href = '/profile';
+                  }}
+                  className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-lg transition-colors"
+                >
+                  Get Started Free →
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 6: TOKEN ECONOMY */}
+      <section className="px-4 py-12 sm:py-16 bg-gray-900">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl sm:text-4xl font-bold text-white mb-3">
@@ -333,54 +379,6 @@ export default function HomePage() {
               </p>
             )}
           </div>
-        </div>
-      </section>
-
-      {/* SECTION 6: FINAL CTA */}
-      <section className="px-4 py-16 sm:py-20 bg-gray-900">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-4">
-            Ready to Invest Smarter?
-          </h2>
-          <p className="text-gray-400 text-base sm:text-lg mb-8 max-w-2xl mx-auto">
-            {user ? (
-              <>Start exploring stocks and generating AI analysis reports with your token balance.</>
-            ) : (
-              <>Sign up free and get <strong className="text-blue-400">1,000 tokens</strong> to generate your first AI analysis reports.</>
-            )}
-          </p>
-          <div className="flex flex-col items-center justify-center gap-6">
-            {user ? (
-              <>
-                <div className="w-full max-w-4xl">
-                  <StockSearch />
-                </div>
-                <Link
-                  to="/dashboard"
-                  className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-lg transition-colors"
-                >
-                  Go to Dashboard →
-                </Link>
-              </>
-            ) : (
-              <>
-                <div className="w-full max-w-4xl">
-                  <StockSearch />
-                </div>
-                <button
-                  onClick={() => {
-                    window.location.href = '/profile';
-                  }}
-                  className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-lg transition-colors"
-                >
-                  Get Started Free →
-                </button>
-              </>
-            )}
-          </div>
-          <p className="text-gray-500 text-sm mt-6">
-            No credit card required · {user ? 'Start analyzing' : '1,000 free tokens on sign-up'}
-          </p>
         </div>
       </section>
     </div>
