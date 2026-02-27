@@ -7,6 +7,7 @@ import StockDetailPanel from '../components/StockDetailPanel';
 import StockListView from '../components/StockListView';
 import DashboardNewsSection from '../components/DashboardNewsSection';
 import DashboardPriceTrendsChart from '../components/DashboardPriceTrendsChart';
+import OverviewStatsPanel, { ByMarketSection } from '../components/OverviewStatsPanel';
 import { stockApi } from '../services/api';
 import { subscriptionApi } from '../services/subscriptionApi';
 import type { StockWidget as StockWidgetType, StockPageData } from '../services/types';
@@ -436,6 +437,13 @@ export default function DashboardPage() {
           <div className="px-4 py-6 sm:p-6 lg:p-8">
             <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
 
+              {/* Subscribed stocks stats by market/exchange */}
+              {widgets.length > 0 && (
+                <div className="mb-6">
+                  <OverviewStatsPanel widgets={widgets} tickerToName={tickerToName} hideByMarket />
+                </div>
+              )}
+
               {/* Price trends chart */}
               {subscribedTickers.length > 0 && (
                 <div className="min-h-[340px]">
@@ -511,6 +519,13 @@ export default function DashboardPage() {
                   )
                 )}
               </div>
+
+              {/* By Market — below the subscribed stocks table */}
+              {widgets.length > 0 && (
+                <div className="mt-6">
+                  <ByMarketSection widgets={widgets} tickerToName={tickerToName} />
+                </div>
+              )}
 
             </div>
           </div>
