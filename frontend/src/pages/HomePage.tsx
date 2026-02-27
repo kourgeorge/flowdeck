@@ -301,6 +301,10 @@ export default function HomePage() {
                 </li>
                 <li className="flex items-start">
                   <span className="text-blue-400 mr-2">✓</span>
+                  <span><strong className="text-white">Full report access</strong> to any previously generated analysis</span>
+                </li>
+                <li className="flex items-start">
+                  <span className="text-blue-400 mr-2">✓</span>
                   <span><strong className="text-white">Personalized dashboard</strong> to track your portfolio</span>
                 </li>
                 <li className="flex items-start">
