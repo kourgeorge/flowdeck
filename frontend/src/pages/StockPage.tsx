@@ -1154,67 +1154,68 @@ export default function StockPage() {
                         </div>
                       </div>
                     </div>
-                    {(stockData.expected_return_pct != null || stockData.bear_case_return_pct != null || stockData.bull_case_return_pct != null) && (
-                      <div className="mt-4 pt-4 border-t border-gray-600/50 flex flex-wrap gap-6">
-                        {stockData.expected_return_pct != null && (
-                          <div>
-                            <span className="text-sm text-gray-400">Expected: </span>
-                            <span className={stockData.expected_return_pct >= 0 ? 'text-green-400 font-semibold' : 'text-red-400 font-semibold'}>
-                              {stockData.expected_return_pct >= 0 ? '+' : ''}{stockData.expected_return_pct.toFixed(2)}%
-                            </span>
+                    <div className="mt-4 pt-4 border-t border-gray-600/50 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                      <div className="flex flex-col gap-1">
+                        {(stockData.expected_return_pct != null || stockData.bear_case_return_pct != null || stockData.bull_case_return_pct != null) && (
+                          <div className="flex flex-wrap gap-6">
+                            {stockData.expected_return_pct != null && (
+                              <div>
+                                <span className="text-sm text-gray-400">Expected: </span>
+                                <span className={stockData.expected_return_pct >= 0 ? 'text-green-400 font-semibold' : 'text-red-400 font-semibold'}>
+                                  {stockData.expected_return_pct >= 0 ? '+' : ''}{stockData.expected_return_pct.toFixed(2)}%
+                                </span>
+                              </div>
+                            )}
+                            {stockData.bear_case_return_pct != null && (
+                              <div>
+                                <span className="text-sm text-gray-400">Bear: </span>
+                                <span className="text-red-400 font-semibold">
+                                  {stockData.bear_case_return_pct >= 0 ? '+' : ''}{stockData.bear_case_return_pct.toFixed(2)}%
+                                </span>
+                              </div>
+                            )}
+                            {stockData.bull_case_return_pct != null && (
+                              <div>
+                                <span className="text-sm text-gray-400">Bull: </span>
+                                <span className="text-green-400 font-semibold">
+                                  {stockData.bull_case_return_pct >= 0 ? '+' : ''}{stockData.bull_case_return_pct.toFixed(2)}%
+                                </span>
+                              </div>
+                            )}
                           </div>
                         )}
-                        {stockData.bear_case_return_pct != null && (
-                          <div>
-                            <span className="text-sm text-gray-400">Bear: </span>
-                            <span className="text-red-400 font-semibold">
-                              {stockData.bear_case_return_pct >= 0 ? '+' : ''}{stockData.bear_case_return_pct.toFixed(2)}%
-                            </span>
-                          </div>
-                        )}
-                        {stockData.bull_case_return_pct != null && (
-                          <div>
-                            <span className="text-sm text-gray-400">Bull: </span>
-                            <span className="text-green-400 font-semibold">
-                              {stockData.bull_case_return_pct >= 0 ? '+' : ''}{stockData.bull_case_return_pct.toFixed(2)}%
-                            </span>
+                        {(stockData.report_view_count != null || stockData.report_earned_tokens != null) && (
+                          <div className="flex flex-wrap gap-4 text-sm text-gray-400">
+                            {stockData.report_view_count != null && (
+                              <span title="Unique authenticated views of this report">
+                                {stockData.report_view_count} unique view{stockData.report_view_count !== 1 ? 's' : ''}
+                              </span>
+                            )}
+                            {stockData.report_earned_tokens != null && (
+                              <span title="Tokens earned by the report creator from views (max 400 per report)">
+                                {stockData.report_earned_tokens} tokens earned
+                              </span>
+                            )}
                           </div>
                         )}
                       </div>
-                    )}
-                    {(stockData.report_view_count != null || stockData.report_earned_tokens != null) && (
-                      <div className="mt-4 pt-4 border-t border-gray-600/50 flex flex-wrap gap-6 text-sm text-gray-400">
-                        {stockData.report_view_count != null && (
-                          <span title="Unique authenticated views of this report">
-                            {stockData.report_view_count} unique view{stockData.report_view_count !== 1 ? 's' : ''}
-                          </span>
-                        )}
-                        {stockData.report_earned_tokens != null && (
-                          <span title="Tokens earned by the report creator from views (max 400 per report)">
-                            {stockData.report_earned_tokens} tokens earned
-                          </span>
-                        )}
-                      </div>
-                    )}
+                      {!stockData.is_generating && (
+                        <button
+                          onClick={() => handleGenerateReport('fresh')}
+                          className="shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          Run Fresh Analysis
+                        </button>
+                      )}
+                    </div>
                   </div>
                   );
                 })()}
 
                 <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-semibold text-white">AI Analysis Reports</h2>
-                    {stockData.has_reports && !stockData.is_generating && (
-                      <button
-                        onClick={() => handleGenerateReport('fresh')}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        Run Fresh Analysis
-                      </button>
-                    )}
-                  </div>
                   {stockData.has_reports && !stockData.is_generating && (
                     <div>
                       <ReportTabs
