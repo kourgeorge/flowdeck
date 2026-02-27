@@ -322,7 +322,7 @@ export default function HomePage() {
           <div className="text-center">
             {user ? (
               <Link
-                to="/profile"
+                to="/profile#purchase-tokens"
                 className="inline-flex items-center px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-lg transition-colors"
               >
                 Buy Tokens →

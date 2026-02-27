@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { profileApi, type MeProfile } from '../services/authApi';
 import { subscriptionApi, type Subscription } from '../services/subscriptionApi';
@@ -10,6 +10,7 @@ const DELETE_CONFIRM_TEXT = 'DELETE';
 export default function ProfilePage() {
   const { user, deleteAccount } = useAuth();
   const navigate = useNavigate();
+  const { hash } = useLocation();
   const [profile, setProfile] = useState<MeProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +66,16 @@ export default function ProfilePage() {
       setTogglingTicker(null);
     }
   };
+
+  // Scroll to hash anchor after profile data is loaded
+  useEffect(() => {
+    if (!loading && profile && hash) {
+      const el = document.querySelector(hash);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+  }, [loading, profile, hash]);
 
   useEffect(() => {
     if (!user) {
@@ -211,7 +222,16 @@ export default function ProfilePage() {
 
         <h1 className="text-2xl font-bold text-white mb-8">Profile</h1>
 
-        {/* Budget */}
+        {/* Email (read-only) */}
+        {profile && (
+          <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
+            <h2 className="text-lg font-semibold text-white mb-2">Email</h2>
+            <p className="text-gray-300">{profile.email}</p>
+            <p className="text-xs text-gray-500 mt-1">Email cannot be changed here.</p>
+          </section>
+        )}
+
+        {/* Token Balance */}
         {profile && (
           <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
             <h2 className="text-lg font-semibold text-white mb-2">Token balance</h2>
@@ -224,21 +244,12 @@ export default function ProfilePage() {
 
         {/* Purchase Tokens */}
         {profile && (
-          <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
+          <section id="purchase-tokens" className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
             <h2 className="text-lg font-semibold text-white mb-4">Purchase Tokens</h2>
             <p className="text-sm text-gray-400 mb-6">
               Need more tokens? Choose a package below to top up your account with PayPal.
             </p>
             <TokenPurchase />
-          </section>
-        )}
-
-        {/* Email (read-only) */}
-        {profile && (
-          <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
-            <h2 className="text-lg font-semibold text-white mb-2">Email</h2>
-            <p className="text-gray-300">{profile.email}</p>
-            <p className="text-xs text-gray-500 mt-1">Email cannot be changed here.</p>
           </section>
         )}
 
