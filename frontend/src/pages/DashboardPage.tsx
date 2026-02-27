@@ -13,7 +13,7 @@ import { useAuth } from '../contexts/AuthContext';
 const RECENT_PAGE_SIZE = 10;
 const RECENT_ANALYZED_DAYS = 3;
 
-export default function SubscriptionsPage() {
+export default function DashboardPage() {
   const { user } = useAuth();
   const [widgets, setWidgets] = useState<StockWidgetType[]>([]);
   const [recentAnalyzedWidgets, setRecentAnalyzedWidgets] = useState<StockWidgetType[]>([]);
@@ -147,7 +147,7 @@ export default function SubscriptionsPage() {
         <div className="max-w-layout mx-auto min-w-0 w-full">
           <StockSearch />
           <div className="mt-6 bg-gray-800 rounded-lg border border-gray-700 p-8 text-center">
-            <p className="text-gray-400">Loading subscribed stocks…</p>
+            <p className="text-gray-400">loading dashboard</p>
           </div>
         </div>
       </div>
@@ -210,6 +210,7 @@ export default function SubscriptionsPage() {
                   tickerToName={tickerToName}
                   scrollRef={recentScrollRef}
                   onScroll={handleRecentScroll}
+                  preserveOrder={true}
                   footer={
                     <>
                       {loadingMoreRecent && (

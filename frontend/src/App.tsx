@@ -9,7 +9,7 @@ import StockPage from './pages/StockPage';
 import TermsOfUsePage from './pages/TermsOfUsePage';
 import ContactUsPage from './pages/ContactUsPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
-import SubscriptionsPage from './pages/SubscriptionsPage';
+import DashboardPage from './pages/DashboardPage';
 import PaymentSuccessPage from './pages/PaymentSuccessPage';
 import PaymentCancelPage from './pages/PaymentCancelPage';
 
@@ -22,7 +22,7 @@ function App() {
           <Route index element={<HomePage />} />
           <Route path="stocks/:ticker" element={<StockPage />} />
           <Route path="profile" element={<ProfilePage />} />
-          <Route path="dashboard" element={<SubscriptionsPage />} />
+          <Route path="dashboard" element={<DashboardPage />} />
           <Route path="subscriptions" element={<Navigate to="/dashboard" replace />} />
           <Route path="admin" element={<AdminDashboardPage />} />
           <Route path="how-it-works" element={<HowItWorksPage />} />
