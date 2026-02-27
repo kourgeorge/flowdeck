@@ -111,7 +111,7 @@ export default function HomePage() {
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-center mb-4 leading-tight">
             <span className="text-white">Invest with the Odds in Your Favor</span>
             <br />
-            <span className="text-blue-400">With AI-Powered Insights.</span>
+            <span className="text-blue-400">With AI-Powered Actionable Insights.</span>
           </h1>
 
           {/* Subtext */}
@@ -194,42 +194,36 @@ export default function HomePage() {
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
             <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <div className="text-4xl mb-3">📡</div>
               <h4 className="text-lg font-semibold text-white mb-2">Live Market Data</h4>
               <p className="text-gray-400 text-sm">
-                Real-time prices, volume, bid/ask, and 52-week ranges for all major stocks.
+                Real-time prices, volume, and ranges — plus AI-driven recommendations synthesized from news, SEC filings, fundamentals, technicals, and sentiment.
               </p>
             </div>
             <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <div className="text-4xl mb-3">🤖</div>
               <h4 className="text-lg font-semibold text-white mb-2">Multi-Agent AI Analysis</h4>
               <p className="text-gray-400 text-sm">
                 Specialized agents collaborate to analyze every angle before making a recommendation.
               </p>
             </div>
             <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <div className="text-4xl mb-3">📋</div>
               <h4 className="text-lg font-semibold text-white mb-2">Transparent Reports</h4>
               <p className="text-gray-400 text-sm">
                 Read the full reasoning behind every recommendation across multiple report tabs.
               </p>
             </div>
             <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <div className="text-4xl mb-3">🎯</div>
               <h4 className="text-lg font-semibold text-white mb-2">BUY/SELL/HOLD Recommendations</h4>
               <p className="text-gray-400 text-sm">
                 Clear, actionable recommendations backed by comprehensive AI analysis.
               </p>
             </div>
             <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <div className="text-4xl mb-3">🔔</div>
               <h4 className="text-lg font-semibold text-white mb-2">Stock Subscriptions</h4>
               <p className="text-gray-400 text-sm">
                 Subscribe to stocks and get email updates when new analysis reports are available.
               </p>
             </div>
             <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <div className="text-4xl mb-3">📈</div>
               <h4 className="text-lg font-semibold text-white mb-2">On-Demand Reports</h4>
               <p className="text-gray-400 text-sm">
                 Generate fresh AI analysis for any stock, any time — using your token balance.
@@ -243,7 +237,6 @@ export default function HomePage() {
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
             <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <div className="text-5xl mb-4">🔍</div>
               <h4 className="text-lg font-semibold text-white mb-2">1. Specialized Analysts</h4>
               <p className="text-gray-400 text-sm leading-relaxed">
                 Market, News, Fundamentals, Technical, and Sentiment analysts each produce
@@ -251,7 +244,6 @@ export default function HomePage() {
               </p>
             </div>
             <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <div className="text-5xl mb-4">⚖️</div>
               <h4 className="text-lg font-semibold text-white mb-2">2. Bull vs. Bear Debate</h4>
               <p className="text-gray-400 text-sm leading-relaxed">
                 AI researchers argue both sides across multiple rounds, stress-testing
@@ -259,7 +251,6 @@ export default function HomePage() {
               </p>
             </div>
             <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <div className="text-5xl mb-4">🎯</div>
               <h4 className="text-lg font-semibold text-white mb-2">3. Risk Check → Recommendation</h4>
               <p className="text-gray-400 text-sm leading-relaxed">
                 A final risk debate (aggressive, cautious, neutral) produces the
