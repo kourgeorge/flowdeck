@@ -185,28 +185,32 @@ export default function DashboardPage() {
       />
 
       {/* Dashboard-level tab bar + search */}
-      <div className="px-4 pt-2 border-b border-gray-700 bg-gray-900 shrink-0 flex flex-wrap items-end gap-4">
-        <nav className="flex gap-0.5" aria-label="Dashboard views">
-          {([
-              { id: 'overview', label: 'Overview' },
-              { id: 'stock-view', label: 'Stock View' },
-            ] as { id: DashboardTab; label: string }[]).map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setDashboardTab(tab.id)}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors -mb-px ${
-                dashboardTab === tab.id
-                  ? 'text-white border-blue-500 bg-gray-800'
-                  : 'text-gray-400 border-transparent hover:text-white hover:bg-gray-800/60'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
-        <div className="flex-1 min-w-0 pb-2">
-          <StockSearch />
+      <div className="px-4 pt-2 border-b border-gray-700 bg-gray-900 shrink-0">
+        {/* Search row — full width */}
+        <div className="pb-2">
+          <StockSearch compact />
+        </div>
+        {/* Tabs row */}
+        <div className="flex items-end gap-0.5">
+          <nav className="flex gap-0.5" aria-label="Dashboard views">
+            {([
+                { id: 'overview', label: 'Overview' },
+                { id: 'stock-view', label: 'Stock View' },
+              ] as { id: DashboardTab; label: string }[]).map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setDashboardTab(tab.id)}
+                className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors -mb-px ${
+                  dashboardTab === tab.id
+                    ? 'text-white border-blue-500 bg-gray-800'
+                    : 'text-gray-400 border-transparent hover:text-white hover:bg-gray-800/60'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
         </div>
       </div>
 

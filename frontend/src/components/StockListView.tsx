@@ -100,7 +100,7 @@ export default function StockListView({ widgets, tickerToName, scrollRef, onScro
         <tbody>
           {sortedWidgets.map((widget) => {
             const changeColor = widget.daily_change_percent >= 0 ? 'text-green-400' : 'text-red-400';
-            const name = tickerToName[widget.ticker] || widget.ticker;
+            const name = widget.name || tickerToName[widget.ticker] || widget.ticker;
             const scoreEntries = getAnalysisScoreEntries(widget.report_scores);
 
             return (

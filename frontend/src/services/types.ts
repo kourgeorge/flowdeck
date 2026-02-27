@@ -5,6 +5,7 @@ export interface ReportScoreSummary {
 
 export interface StockWidget {
   ticker: string;
+  name?: string | null;
   current_price: number;
   daily_change: number;
   daily_change_percent: number;

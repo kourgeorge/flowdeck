@@ -63,6 +63,7 @@ class ReportScoreSummary(BaseModel):
 class StockWidget(BaseModel):
     """Widget data for homepage."""
     ticker: str
+    name: Optional[str] = None  # Company full name (e.g. "JFrog Ltd.")
     current_price: float
     daily_change: float
     daily_change_percent: float

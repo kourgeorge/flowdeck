@@ -198,6 +198,15 @@ def _get_stock_widgets_sync(
     except Exception as e:
         print(f"Warning: Failed to fetch market quotes: {e}")
 
+    # Fetch company names (cached); best-effort — fall back to None on error
+    company_names: dict[str, Optional[str]] = {}
+    for ticker in ticker_list:
+        try:
+            info = cached_fetcher.get_company_info(ticker)
+            company_names[ticker] = info.get("name") or None
+        except Exception:
+            company_names[ticker] = None
+
     for ticker in ticker_list:
         quote_data = quotes_dict.get(ticker) if quotes_dict else None
         quote = None
@@ -245,9 +254,11 @@ def _get_stock_widgets_sync(
             print(f"Warning: Failed to get reports for {ticker}: {e}")
 
         is_major = (ticker.upper() in major_set) if use_major_split else None
+        company_name = company_names.get(ticker)
         if quote:
             widget = StockWidget(
                 ticker=ticker,
+                name=company_name,
                 current_price=quote.current_price,
                 daily_change=quote.daily_change,
                 daily_change_percent=quote.daily_change_percent,
@@ -262,6 +273,7 @@ def _get_stock_widgets_sync(
         else:
             widget = StockWidget(
                 ticker=ticker,
+                name=company_name,
                 current_price=0.0,
                 daily_change=0.0,
                 daily_change_percent=0.0,
