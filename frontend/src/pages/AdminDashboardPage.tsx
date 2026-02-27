@@ -157,58 +157,115 @@ export default function AdminDashboardPage() {
         )}
 
         {/* Daily Analyses Chart */}
-        {dailyAnalyses.length > 0 && (
-          <section className="mb-10">
-            <h2 className="text-lg font-semibold text-white mb-4">
-              Analyses per day (last 30 days)
-            </h2>
-            <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
-              <div className="flex items-end justify-between gap-1 h-48">
-                {dailyAnalyses.map((item) => {
-                  const maxCount = Math.max(...dailyAnalyses.map((d) => d.count), 1);
-                  const heightPercent = item.count > 0 ? (item.count / maxCount) * 100 : 0;
-                  const date = new Date(item.date);
-                  const dayLabel = date.toLocaleDateString(undefined, {
-                    month: 'short',
-                    day: 'numeric',
-                  });
-                  return (
-                    <div
-                      key={item.date}
-                      className="flex-1 flex flex-col items-center justify-end group relative"
-                    >
-                      <div
-                        className={`w-full transition-colors rounded-t ${
-                          item.count > 0
-                            ? 'bg-blue-500 hover:bg-blue-400'
-                            : 'bg-gray-700 hover:bg-gray-600'
-                        }`}
-                        style={{
-                          height: item.count > 0 ? `${heightPercent}%` : '2px',
-                          minHeight: '2px'
-                        }}
-                        title={`${dayLabel}: ${item.count} analyses`}
-                      />
-                      <div className="absolute -bottom-6 text-xs text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                        {dayLabel}
-                      </div>
-                      <div className="absolute -top-6 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 px-2 py-1 rounded">
-                        {item.count}
-                      </div>
-                    </div>
-                  );
-                })}
+        {dailyAnalyses.length > 0 && (() => {
+          const chartH = 160;
+          const chartW = 800;
+          const padLeft = 32;
+          const padBottom = 28;
+          const padTop = 16;
+          const padRight = 8;
+          const innerW = chartW - padLeft - padRight;
+          const innerH = chartH - padBottom - padTop;
+          const maxCount = Math.max(...dailyAnalyses.map((d) => d.count), 1);
+          const barW = innerW / dailyAnalyses.length;
+          const barGap = Math.max(1, barW * 0.15);
+          const totalAnalyses = dailyAnalyses.reduce((s, d) => s + d.count, 0);
+
+          // Y-axis ticks
+          const yTicks = [0, Math.round(maxCount / 2), maxCount];
+
+          return (
+            <section className="mb-10">
+              <h2 className="text-lg font-semibold text-white mb-4">
+                Analyses per day (last 30 days) — total: {totalAnalyses}
+              </h2>
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 overflow-x-auto">
+                <svg
+                  viewBox={`0 0 ${chartW} ${chartH}`}
+                  className="w-full"
+                  style={{ minWidth: '400px', height: `${chartH}px` }}
+                >
+                  {/* Y-axis grid lines and labels */}
+                  {yTicks.map((tick) => {
+                    const y = padTop + innerH - (tick / maxCount) * innerH;
+                    return (
+                      <g key={tick}>
+                        <line
+                          x1={padLeft}
+                          y1={y}
+                          x2={chartW - padRight}
+                          y2={y}
+                          stroke="#374151"
+                          strokeWidth="1"
+                          strokeDasharray={tick === 0 ? undefined : '3,3'}
+                        />
+                        <text
+                          x={padLeft - 4}
+                          y={y + 4}
+                          textAnchor="end"
+                          fontSize="10"
+                          fill="#9ca3af"
+                        >
+                          {tick}
+                        </text>
+                      </g>
+                    );
+                  })}
+
+                  {/* Bars */}
+                  {dailyAnalyses.map((item, i) => {
+                    const barHeight = (item.count / maxCount) * innerH;
+                    const x = padLeft + i * barW + barGap / 2;
+                    const y = padTop + innerH - barHeight;
+                    const w = barW - barGap;
+                    const date = new Date(item.date);
+                    const dayLabel = date.toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                    });
+                    const showLabel = i === 0 || i === dailyAnalyses.length - 1 || i % 5 === 0;
+                    return (
+                      <g key={item.date}>
+                        <rect
+                          x={x}
+                          y={item.count > 0 ? y : padTop + innerH - 2}
+                          width={Math.max(w, 1)}
+                          height={item.count > 0 ? barHeight : 2}
+                          fill={item.count > 0 ? '#3b82f6' : '#374151'}
+                          rx="2"
+                        >
+                          <title>{`${dayLabel}: ${item.count} analyses`}</title>
+                        </rect>
+                        {item.count > 0 && (
+                          <text
+                            x={x + w / 2}
+                            y={y - 3}
+                            textAnchor="middle"
+                            fontSize="9"
+                            fill="#93c5fd"
+                          >
+                            {item.count}
+                          </text>
+                        )}
+                        {showLabel && (
+                          <text
+                            x={x + w / 2}
+                            y={chartH - 4}
+                            textAnchor="middle"
+                            fontSize="9"
+                            fill="#6b7280"
+                          >
+                            {dayLabel}
+                          </text>
+                        )}
+                      </g>
+                    );
+                  })}
+                </svg>
               </div>
-              <div className="mt-8 flex justify-between text-xs text-gray-500">
-                <span>{dailyAnalyses[0]?.date}</span>
-                <span>{dailyAnalyses[dailyAnalyses.length - 1]?.date}</span>
-              </div>
-              <div className="mt-2 text-center text-sm text-gray-400">
-                Total: {dailyAnalyses.reduce((sum, d) => sum + d.count, 0)} analyses
-              </div>
-            </div>
-          </section>
-        )}
+            </section>
+          );
+        })()}
 
         {/* Customers */}
         <section className="mb-10">
