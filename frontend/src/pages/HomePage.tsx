@@ -78,7 +78,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen">
       {/* SECTION 1: HERO */}
-      <section className="bg-gray-900 px-4 py-10 sm:py-14 lg:py-16">
+      <section className="bg-gray-900 px-4 py-10 sm:py-12 lg:py-14 pb-6 sm:pb-6 lg:pb-6">
         <div className="max-w-6xl mx-auto">
           {/* Logo */}
           <div className="flex justify-center mb-5">
@@ -125,13 +125,10 @@ export default function HomePage() {
       </section>
 
       {/* SECTION 2: LIVE MARKET SNAPSHOT */}
-      <section className="px-4 py-10 sm:py-12 bg-gray-900 border-t border-gray-700">
+      <section className="px-4 py-6 sm:py-8 bg-gray-900">
         <div className="max-w-layout mx-auto">
-          {/* Stock Search */}
-          <div className="mb-6">
-            <StockSearch />
-          </div>
-
+          <h2 className="text-2xl font-bold text-white mb-6">Major Stocks</h2>
+          
           {error && (
             <div className="bg-red-500/10 border border-red-500 text-red-400 px-4 py-3 rounded-lg mb-6">
               {error}
@@ -318,7 +315,7 @@ export default function HomePage() {
       </section>
 
       {/* SECTION 6: FINAL CTA */}
-      <section className="px-4 py-16 sm:py-20 bg-gray-900 border-t border-gray-700">
+      <section className="px-4 py-16 sm:py-20 bg-gray-900">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-4">
             Ready to Invest Smarter?
