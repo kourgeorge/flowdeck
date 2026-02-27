@@ -8,6 +8,7 @@ import {
   type AdminReportItem,
   type AdminAnalysisItem,
   type AdminSubscriptionItem,
+  type AnalysisDailyCount,
 } from '../services/adminApi';
 
 function formatDate(s: string): string {
@@ -33,6 +34,7 @@ export default function AdminDashboardPage() {
   const [analysesTotal, setAnalysesTotal] = useState(0);
   const [subscriptions, setSubscriptions] = useState<AdminSubscriptionItem[]>([]);
   const [subscriptionsTotal, setSubscriptionsTotal] = useState(0);
+  const [dailyAnalyses, setDailyAnalyses] = useState<AnalysisDailyCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [addingForUserId, setAddingForUserId] = useState<number | null>(null);
@@ -45,11 +47,12 @@ export default function AdminDashboardPage() {
     Promise.all([
       adminApi.getStats(),
       adminApi.getUsers(50, 0),
-      adminApi.getReports(50),
+      adminApi.getReports(200),
       adminApi.getAnalyses(50),
       adminApi.getSubscriptions(100, 0),
+      adminApi.getAnalysesDaily(30),
     ])
-      .then(([s, u, r, a, sub]) => {
+      .then(([s, u, r, a, sub, daily]) => {
         if (cancelled) return;
         setStats(s);
         setUsers(u.users);
@@ -60,6 +63,7 @@ export default function AdminDashboardPage() {
         setAnalysesTotal(a.total);
         setSubscriptions(sub.subscriptions);
         setSubscriptionsTotal(sub.total);
+        setDailyAnalyses(daily.data);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -152,6 +156,60 @@ export default function AdminDashboardPage() {
           </section>
         )}
 
+        {/* Daily Analyses Chart */}
+        {dailyAnalyses.length > 0 && (
+          <section className="mb-10">
+            <h2 className="text-lg font-semibold text-white mb-4">
+              Analyses per day (last 30 days)
+            </h2>
+            <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+              <div className="flex items-end justify-between gap-1 h-48">
+                {dailyAnalyses.map((item) => {
+                  const maxCount = Math.max(...dailyAnalyses.map((d) => d.count), 1);
+                  const heightPercent = item.count > 0 ? (item.count / maxCount) * 100 : 0;
+                  const date = new Date(item.date);
+                  const dayLabel = date.toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                  });
+                  return (
+                    <div
+                      key={item.date}
+                      className="flex-1 flex flex-col items-center justify-end group relative"
+                    >
+                      <div
+                        className={`w-full transition-colors rounded-t ${
+                          item.count > 0
+                            ? 'bg-blue-500 hover:bg-blue-400'
+                            : 'bg-gray-700 hover:bg-gray-600'
+                        }`}
+                        style={{
+                          height: item.count > 0 ? `${heightPercent}%` : '2px',
+                          minHeight: '2px'
+                        }}
+                        title={`${dayLabel}: ${item.count} analyses`}
+                      />
+                      <div className="absolute -bottom-6 text-xs text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                        {dayLabel}
+                      </div>
+                      <div className="absolute -top-6 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 px-2 py-1 rounded">
+                        {item.count}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-8 flex justify-between text-xs text-gray-500">
+                <span>{dailyAnalyses[0]?.date}</span>
+                <span>{dailyAnalyses[dailyAnalyses.length - 1]?.date}</span>
+              </div>
+              <div className="mt-2 text-center text-sm text-gray-400">
+                Total: {dailyAnalyses.reduce((sum, d) => sum + d.count, 0)} analyses
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Customers */}
         <section className="mb-10">
           <h2 className="text-lg font-semibold text-white mb-4">Customers ({usersTotal})</h2>
@@ -170,7 +228,7 @@ export default function AdminDashboardPage() {
           )}
           <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-800/80">
             <table className="w-full min-w-[700px] text-left text-sm">
-              <thead>
+              <thead className="sticky top-0 bg-gray-800 z-10">
                 <tr className="border-b border-gray-700">
                   <th className="px-4 py-3 text-gray-400 font-medium">Email</th>
                   <th className="px-4 py-3 text-gray-400 font-medium">Name</th>
@@ -242,46 +300,12 @@ export default function AdminDashboardPage() {
           </div>
         </section>
 
-        {/* Latest reports */}
-        <section className="mb-10">
-          <h2 className="text-lg font-semibold text-white mb-4">Latest reports ({reportsTotal})</h2>
-          <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-800/80">
-            <table className="w-full min-w-[500px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-gray-700">
-                  <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Run ID</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Type</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reports.map((r) => (
-                  <tr key={r.id} className="border-b border-gray-700/50">
-                    <td className="px-4 py-3">
-                      <Link
-                        to={`/stocks/${r.ticker}`}
-                        className="text-blue-400 hover:text-blue-300 font-medium"
-                      >
-                        {r.ticker}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-gray-300 font-mono text-xs">{r.run_id}</td>
-                    <td className="px-4 py-3 text-gray-300">{r.report_type}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatDate(r.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
         {/* Recent analyses */}
         <section className="mb-10">
           <h2 className="text-lg font-semibold text-white mb-4">Recent analyses ({analysesTotal})</h2>
-          <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-800/80">
+          <div className="overflow-x-auto overflow-y-auto max-h-96 rounded-lg border border-gray-700 bg-gray-800/80">
             <table className="w-full min-w-[500px] text-left text-sm">
-              <thead>
+              <thead className="sticky top-0 bg-gray-800 z-10">
                 <tr className="border-b border-gray-700">
                   <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
                   <th className="px-4 py-3 text-gray-400 font-medium">Run ID</th>
@@ -312,12 +336,46 @@ export default function AdminDashboardPage() {
           </div>
         </section>
 
+        {/* Latest reports */}
+        <section className="mb-10">
+          <h2 className="text-lg font-semibold text-white mb-4">Latest reports ({reportsTotal})</h2>
+          <div className="overflow-x-auto overflow-y-auto max-h-96 rounded-lg border border-gray-700 bg-gray-800/80">
+            <table className="w-full min-w-[500px] text-left text-sm">
+              <thead className="sticky top-0 bg-gray-800 z-10">
+                <tr className="border-b border-gray-700">
+                  <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
+                  <th className="px-4 py-3 text-gray-400 font-medium">Run ID</th>
+                  <th className="px-4 py-3 text-gray-400 font-medium">Type</th>
+                  <th className="px-4 py-3 text-gray-400 font-medium">Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reports.map((r) => (
+                  <tr key={r.id} className="border-b border-gray-700/50">
+                    <td className="px-4 py-3">
+                      <Link
+                        to={`/stocks/${r.ticker}`}
+                        className="text-blue-400 hover:text-blue-300 font-medium"
+                      >
+                        {r.ticker}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-gray-300 font-mono text-xs">{r.run_id}</td>
+                    <td className="px-4 py-3 text-gray-300">{r.report_type}</td>
+                    <td className="px-4 py-3 text-gray-400">{formatDate(r.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
         {/* Subscriptions */}
         <section>
           <h2 className="text-lg font-semibold text-white mb-4">Subscriptions ({subscriptionsTotal})</h2>
           <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-800/80">
             <table className="w-full min-w-[400px] text-left text-sm">
-              <thead>
+              <thead className="sticky top-0 bg-gray-800 z-10">
                 <tr className="border-b border-gray-700">
                   <th className="px-4 py-3 text-gray-400 font-medium">User email</th>
                   <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>

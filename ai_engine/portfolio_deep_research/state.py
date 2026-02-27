@@ -50,3 +50,6 @@ class ResearchState(TypedDict, total=False):
     audit_log: Annotated[List[Dict[str, Any]], _list_reducer]
     existing_reports: Dict[str, Dict[str, Any]]
     narrative_output: Optional[Dict[str, Any]]
+    # Portfolio Risk Profiling
+    risk_profile: Optional[Dict[str, Any]]
+    portfolio_questions: Optional[List[Dict[str, Any]]]

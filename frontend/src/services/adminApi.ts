@@ -61,6 +61,11 @@ export interface AdminSubscriptionItem {
   created_at: string;
 }
 
+export interface AnalysisDailyCount {
+  date: string;
+  count: number;
+}
+
 export const adminApi = {
   getStats: async (): Promise<AdminStats> => {
     const res = await api.get<AdminStats>('/api/admin/stats', {
@@ -122,6 +127,16 @@ export const adminApi = {
       `/api/admin/users/${userId}/tokens`,
       { amount },
       { headers: authHeaders() },
+    );
+    return res.data;
+  },
+
+  getAnalysesDaily: async (
+    days = 30,
+  ): Promise<{ data: AnalysisDailyCount[] }> => {
+    const res = await api.get<{ data: AnalysisDailyCount[] }>(
+      '/api/admin/analyses/daily',
+      { params: { days }, headers: authHeaders() },
     );
     return res.data;
   },

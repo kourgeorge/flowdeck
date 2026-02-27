@@ -1,11 +1,11 @@
 """Admin-only API: stats, users, reports, analyses, subscriptions."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, cast, Date
 from sqlalchemy.orm import Session
 
 from auth import get_current_admin_user
@@ -280,3 +280,44 @@ def get_admin_subscriptions(
         for s, email in rows
     ]
     return AdminSubscriptionsResponse(subscriptions=items, total=total)
+
+
+class AnalysisDailyCount(BaseModel):
+    date: str  # ISO date string YYYY-MM-DD
+    count: int
+
+
+class AnalysesDailyResponse(BaseModel):
+    data: list[AnalysisDailyCount]
+
+
+@router.get("/analyses/daily", response_model=AnalysesDailyResponse)
+def get_analyses_daily(
+    _user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+    days: int = Query(30, ge=1, le=90),
+):
+    """Return count of analysis runs per day for the last N days."""
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = (
+        db.query(
+            func.date(AnalysisRun.created_at).label("day"),
+            func.count(AnalysisRun.id).label("count"),
+        )
+        .filter(AnalysisRun.created_at >= since)
+        .group_by("day")
+        .order_by("day")
+        .all()
+    )
+    # Build a full date range with 0-fill for missing days
+    today = date.today()
+    start = (datetime.now(timezone.utc) - timedelta(days=days - 1)).date()
+    count_by_day = {r.day: r.count for r in rows}  # type: ignore
+    result = []
+    current = start
+    while current <= today:
+        date_str = str(current)
+        count_val = count_by_day.get(date_str, 0)  # type: ignore[arg-type]
+        result.append(AnalysisDailyCount(date=date_str, count=count_val))  # type: ignore[arg-type]
+        current += timedelta(days=1)
+    return AnalysesDailyResponse(data=result)

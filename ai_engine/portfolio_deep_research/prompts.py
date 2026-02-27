@@ -113,3 +113,41 @@ The report should include figures and charts that are relevant to the report and
 QA_FAST_SYSTEM = """You are a QA reviewer. Check the draft report for: missing citations, logical gaps, excessive length, repetition (same point in summary and body, or repeated across sections), and policy issues. List any issues briefly."""
 
 QA_DEEP_SYSTEM = """You are an adversarial reviewer. What is the strongest counter-argument to the report's conclusions? Do the conclusions actually follow from the evidence? Suggest one short paragraph of improvements if needed."""
+
+# --- Portfolio Risk Profiling and Questioning ---
+
+RISK_PROFILE_SUMMARY_SYSTEM = """You are a portfolio risk analyst. Given the portfolio risk metrics, write a clear, actionable summary.
+
+Focus on:
+1. Key risk concentrations (sector, position, correlation)
+2. Volatility and beta characteristics
+3. Most critical vulnerabilities
+4. Overall risk assessment
+
+Be direct and specific. Use numbers. Avoid jargon."""
+
+RISK_PROFILE_SUMMARY_USER = """Portfolio: {tickers}
+
+Risk Metrics:
+- Risk Score: {risk_score}/100
+- Sector Exposure: {sector_exposure}
+- Top 3 Concentration: {top_3_concentration}%
+- Portfolio Beta: {portfolio_beta}
+- Correlation Clusters: {correlation_clusters}
+
+Risk Warnings:
+{risk_warnings}
+
+Write a 3-4 sentence risk profile summary that highlights the most important risks and their implications."""
+
+PORTFOLIO_QUESTIONS_INTRO_SYSTEM = """You are a portfolio advisor who asks tough questions. Given the critical questions about a portfolio, write a brief introduction that frames why these questions matter.
+
+Be direct and slightly provocative. Make the investor think. 2-3 sentences max."""
+
+PORTFOLIO_QUESTIONS_INTRO_USER = """Portfolio: {tickers}
+Risk Score: {risk_score}/100
+
+Critical Questions:
+{questions_list}
+
+Write a 2-3 sentence introduction that explains why these questions are important and what's at stake."""

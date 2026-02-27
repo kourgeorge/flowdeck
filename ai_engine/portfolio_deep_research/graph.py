@@ -32,10 +32,16 @@ from .prompts import (
     RESEARCH_AGENT_USER,
     SYNTHESIZE_SYSTEM,
     SYNTHESIZE_USER,
+    RISK_PROFILE_SUMMARY_SYSTEM,
+    RISK_PROFILE_SUMMARY_USER,
+    PORTFOLIO_QUESTIONS_INTRO_SYSTEM,
+    PORTFOLIO_QUESTIONS_INTRO_USER,
 )
 from .source_quality import apply_reliability_to_evidence
 from .state import Claim, ResearchState
 from .tools import get_all_tools, get_latest_reports
+from .portfolio_risk_profiler import analyze_portfolio_risk
+from .portfolio_interrogator import generate_portfolio_questions
 
 
 def _get_config(config: Optional[Dict[str, Any]] = None) -> PortfolioDeepResearchConfig:
@@ -455,6 +461,36 @@ async def qa(state: ResearchState, config: RunnableConfig) -> Dict[str, Any]:
     return {"final_answer": improved}
 
 
+async def analyze_portfolio_risk_node(state: ResearchState, config: RunnableConfig) -> Dict[str, Any]:
+    """Analyze portfolio risk: sector exposure, concentration, beta, correlations."""
+    logger.info("Step: analyze_portfolio_risk — calculating risk metrics")
+    tickers = state.get("tickers") or []
+    existing_reports = state.get("existing_reports") or {}
+    
+    if not tickers:
+        logger.warning("No tickers provided, skipping risk analysis")
+        return {"risk_profile": None, "portfolio_questions": None}
+    
+    # Perform risk analysis
+    risk_profile = analyze_portfolio_risk(tickers, existing_reports)
+    risk_profile_dict = risk_profile.to_dict()
+    
+    # Generate critical questions
+    questions = generate_portfolio_questions(tickers, risk_profile_dict)
+    questions_dict = [q.to_dict() for q in questions]
+    
+    logger.info(
+        "Step: analyze_portfolio_risk — done | risk_score=%.1f | questions=%d",
+        risk_profile_dict.get("risk_score", 0),
+        len(questions_dict),
+    )
+    
+    return {
+        "risk_profile": risk_profile_dict,
+        "portfolio_questions": questions_dict,
+    }
+
+
 async def deliver(state: ResearchState, config: RunnableConfig) -> Dict[str, Any]:
     """Set final output; optionally build HTML with figures (see figures.py)."""
     logger.info("Step: deliver — building HTML and final output")
@@ -462,6 +498,9 @@ async def deliver(state: ResearchState, config: RunnableConfig) -> Dict[str, Any
     narrative_output = state.get("narrative_output") or {}
     tickers = state.get("tickers") or []
     existing_reports = state.get("existing_reports") or {}
+    risk_profile = state.get("risk_profile") or {}
+    portfolio_questions = state.get("portfolio_questions") or []
+    
     # Build minimal payload and figure_data for HTML when available
     payload = {"entries": []}
     figure_data = {}
@@ -480,14 +519,63 @@ async def deliver(state: ResearchState, config: RunnableConfig) -> Dict[str, Any
         figure_data, payload = build_figure_data_and_payload(tickers, existing_reports, config)
     except Exception:  # noqa: BLE001
         pass
+    
+    # Add risk profile and questions to agent output (convert markdown to HTML)
+    import markdown
+    
+    risk_section = ""
+    risk_section_html = ""
+    if risk_profile:
+        risk_warnings = risk_profile.get("risk_warnings", [])
+        risk_score = risk_profile.get("risk_score", 0)
+        sector_exposure = risk_profile.get("sector_exposure", {})
+        
+        risk_section = f"\n\n## Portfolio Risk Profile\n\n"
+        risk_section += f"**Risk Score:** {risk_score:.0f}/100\n\n"
+        
+        if sector_exposure:
+            risk_section += "**Sector Exposure:**\n"
+            for sector, pct in list(sector_exposure.items())[:5]:
+                risk_section += f"- {sector}: {pct:.1f}%\n"
+            risk_section += "\n"
+        
+        if risk_warnings:
+            risk_section += "**Risk Warnings:**\n"
+            for warning in risk_warnings[:5]:
+                risk_section += f"- {warning}\n"
+            risk_section += "\n"
+        
+        # Convert to HTML
+        risk_section_html = markdown.markdown(risk_section)
+    
+    questions_section = ""
+    questions_section_html = ""
+    if portfolio_questions:
+        questions_section = "\n\n## Critical Questions About Your Portfolio\n\n"
+        for i, q in enumerate(portfolio_questions[:8], 1):
+            urgency = q.get("urgency", "medium")
+            urgency_emoji = "🔴" if urgency == "high" else "🟡" if urgency == "medium" else "🟢"
+            questions_section += f"{urgency_emoji} **{q.get('question', '')}**\n\n"
+            questions_section += f"{q.get('context', '')}\n\n"
+            if q.get("suggested_action"):
+                questions_section += f"*Suggested Action:* {q.get('suggested_action')}\n\n"
+        
+        # Convert to HTML
+        questions_section_html = markdown.markdown(questions_section)
+    
     try:
         from ai_engine.watchlist_consulting.vega_specs import build_all_specs
         from ai_engine.watchlist_consulting.html_report import build_html
         specs = build_all_specs(payload, figure_data)
+        
+        # Enhance narrative with risk profile and questions (use HTML versions)
+        enhanced_narrative = narrative_output.get("narrative") or final
+        enhanced_narrative += risk_section_html + questions_section_html
+        
         agent_output = {
             "title": narrative_output.get("title") or "Portfolio Deep Research Report",
             "portfolio_summary": narrative_output.get("summary") or final[:2000],
-            "narrative": narrative_output.get("narrative") or final,
+            "narrative": enhanced_narrative,
             "figure_explanations": narrative_output.get("figure_explanations") or "See narrative for figure context.",
             "per_ticker_highlights": [],
             "actions_section": "",
@@ -498,7 +586,8 @@ async def deliver(state: ResearchState, config: RunnableConfig) -> Dict[str, Any
         html = build_html(agent_output, payload, specs, report_date=report_date)
         return {"final_report_html": html, "figure_specs": specs, "figure_data": figure_data, "payload": payload}
     except Exception:
-        return {"final_report_html": None, "final_answer": final}
+        # Fallback: use markdown versions for plain text output
+        return {"final_report_html": None, "final_answer": final + risk_section + questions_section}
     finally:
         logger.info("Step: deliver — done")
 
@@ -509,6 +598,7 @@ builder = StateGraph[ResearchState, None, ResearchState, ResearchState](Research
 builder.add_node("interpret_query", interpret_query)
 builder.add_node("plan", plan)
 builder.add_node("load_existing_reports", load_existing_reports)
+builder.add_node("analyze_portfolio_risk", analyze_portfolio_risk_node)
 builder.add_node("research", research)
 builder.add_node("extract_evidence", extract_evidence)
 builder.add_node("synthesize", synthesize)
@@ -518,7 +608,8 @@ builder.add_node("deliver", deliver)
 builder.add_edge(START, "interpret_query")
 builder.add_edge("interpret_query", "plan")
 builder.add_edge("plan", "load_existing_reports")
-builder.add_edge("load_existing_reports", "research")
+builder.add_edge("load_existing_reports", "analyze_portfolio_risk")
+builder.add_edge("analyze_portfolio_risk", "research")
 builder.add_edge("research", "extract_evidence")
 builder.add_edge("extract_evidence", "synthesize")
 builder.add_edge("synthesize", "qa")
