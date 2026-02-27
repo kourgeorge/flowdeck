@@ -2,6 +2,15 @@ import { useState, useEffect } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
+import {
   adminApi,
   type AdminStats,
   type AdminUserItem,
@@ -9,6 +18,7 @@ import {
   type AdminAnalysisItem,
   type AdminSubscriptionItem,
   type AnalysisDailyCount,
+  type ViewsDailyCount,
 } from '../services/adminApi';
 
 function formatDate(s: string): string {
@@ -23,6 +33,55 @@ function formatDate(s: string): string {
   }
 }
 
+function DailyBarChart({
+  data,
+  color,
+  label,
+}: {
+  data: { date: string; count: number }[];
+  color: string;
+  label: string;
+}) {
+  if (data.length === 0) return null;
+  const total = data.reduce((s, d) => s + d.count, 0);
+  
+  // Format data for Recharts
+  const chartData = data.map((item) => ({
+    date: new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+    count: item.count,
+  }));
+
+  return (
+    <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 flex-1 min-w-0">
+      <p className="text-sm font-semibold text-white mb-2">
+        {label} — total: {total}
+      </p>
+      <ResponsiveContainer width="100%" height={200}>
+        <BarChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+          <XAxis
+            dataKey="date"
+            stroke="#9ca3af"
+            tick={{ fill: '#9ca3af', fontSize: 11 }}
+            interval="preserveStartEnd"
+          />
+          <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 11 }} />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: '#1f2937',
+              border: '1px solid #374151',
+              borderRadius: '0.5rem',
+              color: '#fff',
+            }}
+            labelStyle={{ color: '#9ca3af' }}
+          />
+          <Bar dataKey="count" fill={color} radius={[4, 4, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 export default function AdminDashboardPage() {
   const { user } = useAuth();
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -35,6 +94,7 @@ export default function AdminDashboardPage() {
   const [subscriptions, setSubscriptions] = useState<AdminSubscriptionItem[]>([]);
   const [subscriptionsTotal, setSubscriptionsTotal] = useState(0);
   const [dailyAnalyses, setDailyAnalyses] = useState<AnalysisDailyCount[]>([]);
+  const [dailyViews, setDailyViews] = useState<ViewsDailyCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [addingForUserId, setAddingForUserId] = useState<number | null>(null);
@@ -51,8 +111,9 @@ export default function AdminDashboardPage() {
       adminApi.getAnalyses(50),
       adminApi.getSubscriptions(100, 0),
       adminApi.getAnalysesDaily(30),
+      adminApi.getViewsDaily(30),
     ])
-      .then(([s, u, r, a, sub, daily]) => {
+      .then(([s, u, r, a, sub, dailyA, dailyV]) => {
         if (cancelled) return;
         setStats(s);
         setUsers(u.users);
@@ -63,7 +124,8 @@ export default function AdminDashboardPage() {
         setAnalysesTotal(a.total);
         setSubscriptions(sub.subscriptions);
         setSubscriptionsTotal(sub.total);
-        setDailyAnalyses(daily.data);
+        setDailyAnalyses(dailyA.data);
+        setDailyViews(dailyV.data);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -156,116 +218,24 @@ export default function AdminDashboardPage() {
           </section>
         )}
 
-        {/* Daily Analyses Chart */}
-        {dailyAnalyses.length > 0 && (() => {
-          const chartH = 160;
-          const chartW = 800;
-          const padLeft = 32;
-          const padBottom = 28;
-          const padTop = 16;
-          const padRight = 8;
-          const innerW = chartW - padLeft - padRight;
-          const innerH = chartH - padBottom - padTop;
-          const maxCount = Math.max(...dailyAnalyses.map((d) => d.count), 1);
-          const barW = innerW / dailyAnalyses.length;
-          const barGap = Math.max(1, barW * 0.15);
-          const totalAnalyses = dailyAnalyses.reduce((s, d) => s + d.count, 0);
-
-          // Y-axis ticks
-          const yTicks = [0, Math.round(maxCount / 2), maxCount];
-
-          return (
-            <section className="mb-10">
-              <h2 className="text-lg font-semibold text-white mb-4">
-                Analyses per day (last 30 days) — total: {totalAnalyses}
-              </h2>
-              <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 overflow-x-auto">
-                <svg
-                  viewBox={`0 0 ${chartW} ${chartH}`}
-                  className="w-full"
-                  style={{ minWidth: '400px', height: `${chartH}px` }}
-                >
-                  {/* Y-axis grid lines and labels */}
-                  {yTicks.map((tick) => {
-                    const y = padTop + innerH - (tick / maxCount) * innerH;
-                    return (
-                      <g key={tick}>
-                        <line
-                          x1={padLeft}
-                          y1={y}
-                          x2={chartW - padRight}
-                          y2={y}
-                          stroke="#374151"
-                          strokeWidth="1"
-                          strokeDasharray={tick === 0 ? undefined : '3,3'}
-                        />
-                        <text
-                          x={padLeft - 4}
-                          y={y + 4}
-                          textAnchor="end"
-                          fontSize="10"
-                          fill="#9ca3af"
-                        >
-                          {tick}
-                        </text>
-                      </g>
-                    );
-                  })}
-
-                  {/* Bars */}
-                  {dailyAnalyses.map((item, i) => {
-                    const barHeight = (item.count / maxCount) * innerH;
-                    const x = padLeft + i * barW + barGap / 2;
-                    const y = padTop + innerH - barHeight;
-                    const w = barW - barGap;
-                    const date = new Date(item.date);
-                    const dayLabel = date.toLocaleDateString(undefined, {
-                      month: 'short',
-                      day: 'numeric',
-                    });
-                    const showLabel = i === 0 || i === dailyAnalyses.length - 1 || i % 5 === 0;
-                    return (
-                      <g key={item.date}>
-                        <rect
-                          x={x}
-                          y={item.count > 0 ? y : padTop + innerH - 2}
-                          width={Math.max(w, 1)}
-                          height={item.count > 0 ? barHeight : 2}
-                          fill={item.count > 0 ? '#3b82f6' : '#374151'}
-                          rx="2"
-                        >
-                          <title>{`${dayLabel}: ${item.count} analyses`}</title>
-                        </rect>
-                        {item.count > 0 && (
-                          <text
-                            x={x + w / 2}
-                            y={y - 3}
-                            textAnchor="middle"
-                            fontSize="9"
-                            fill="#93c5fd"
-                          >
-                            {item.count}
-                          </text>
-                        )}
-                        {showLabel && (
-                          <text
-                            x={x + w / 2}
-                            y={chartH - 4}
-                            textAnchor="middle"
-                            fontSize="9"
-                            fill="#6b7280"
-                          >
-                            {dayLabel}
-                          </text>
-                        )}
-                      </g>
-                    );
-                  })}
-                </svg>
-              </div>
-            </section>
-          );
-        })()}
+        {/* Daily Charts: Analyses + Views side by side */}
+        {(dailyAnalyses.length > 0 || dailyViews.length > 0) && (
+          <section className="mb-10">
+            <h2 className="text-lg font-semibold text-white mb-4">Activity (last 30 days)</h2>
+            <div className="flex flex-col md:flex-row gap-4">
+              <DailyBarChart
+                data={dailyAnalyses}
+                color="#3b82f6"
+                label="Analyses per day"
+              />
+              <DailyBarChart
+                data={dailyViews}
+                color="#10b981"
+                label="Report views per day"
+              />
+            </div>
+          </section>
+        )}
 
         {/* Customers */}
         <section className="mb-10">

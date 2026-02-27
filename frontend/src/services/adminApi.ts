@@ -66,6 +66,11 @@ export interface AnalysisDailyCount {
   count: number;
 }
 
+export interface ViewsDailyCount {
+  date: string;
+  count: number;
+}
+
 export const adminApi = {
   getStats: async (): Promise<AdminStats> => {
     const res = await api.get<AdminStats>('/api/admin/stats', {
@@ -136,6 +141,16 @@ export const adminApi = {
   ): Promise<{ data: AnalysisDailyCount[] }> => {
     const res = await api.get<{ data: AnalysisDailyCount[] }>(
       '/api/admin/analyses/daily',
+      { params: { days }, headers: authHeaders() },
+    );
+    return res.data;
+  },
+
+  getViewsDaily: async (
+    days = 30,
+  ): Promise<{ data: ViewsDailyCount[] }> => {
+    const res = await api.get<{ data: ViewsDailyCount[] }>(
+      '/api/admin/views/daily',
       { params: { days }, headers: authHeaders() },
     );
     return res.data;
