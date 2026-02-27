@@ -100,3 +100,10 @@ body {
   display: none;
 }
 
+
+/* Suppress focus outline on recharts SVG (radar/chart clicks) */
+.recharts-wrapper svg,
+.recharts-wrapper svg:focus,
+.recharts-surface:focus {
+  outline: none !important;
+}

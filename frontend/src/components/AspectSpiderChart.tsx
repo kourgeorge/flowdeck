@@ -124,10 +124,11 @@ export default function AspectSpiderChart({ scoreEntries, size = 80, showLabels 
 
   return (
     <div
-      className="shrink-0 overflow-hidden outline-none focus:outline-none"
-      style={{ width: size, height: size }}
+      className="shrink-0 overflow-hidden"
+      style={{ width: size, height: size, outline: 'none' }}
       aria-label="AI aspect score spider chart"
       tabIndex={-1}
+      onMouseDown={(e) => e.preventDefault()}
     >
       <ResponsiveContainer width="100%" height="100%">
         <RadarChart data={spiderData} cx="50%" cy="50%" outerRadius="90%" margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
