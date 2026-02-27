@@ -656,27 +656,14 @@ export default function StockPage() {
                       className={`px-4 py-3 text-sm rounded-t-lg transition-colors border-b-2 -mb-px ${
                         isActive
                           ? isAiTab
-                            ? 'bg-violet-900/45 text-violet-200 border-violet-400 font-semibold'
+                            ? 'bg-blue-950/70 text-blue-200 border-blue-500 font-semibold'
                             : 'bg-gray-800 text-white border-blue-500 font-medium'
                           : isAiTab
-                            ? 'bg-violet-700/30 text-violet-100 hover:text-white hover:bg-violet-600/40 border-violet-500/50 font-semibold'
+                            ? 'bg-blue-950/40 text-blue-200 hover:text-white hover:bg-blue-950/60 border-blue-700/50 font-semibold'
                             : 'text-gray-400 hover:text-white hover:bg-gray-800/70 border-transparent font-medium'
                       }`}
                     >
                       <span className="inline-flex items-center gap-1.5">
-                        {isAiTab && (
-                          <svg
-                            className="w-5 h-5 opacity-90"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            aria-hidden="true"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l1.25 3.25L16.5 7.5l-3.25 1.25L12 12l-1.25-3.25L7.5 7.5l3.25-1.25L12 3z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 13l.9 2.1L9 16l-2.1.9L6 19l-.9-2.1L3 16l2.1-.9L6 13z" />
-                          </svg>
-                        )}
                         {tab.label}
                       </span>
                     </button>
