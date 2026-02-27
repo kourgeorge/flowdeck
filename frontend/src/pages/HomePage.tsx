@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import StockListView from '../components/StockListView';
 import StockSearch from '../components/StockSearch';
+import AuthModal from '../components/AuthModal';
 import { stockApi, API_BASE_URL } from '../services/api';
 import type { StockWidget as StockWidgetType } from '../services/types';
 import { LOGO_PATH } from '../config';
@@ -20,6 +21,7 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [publicStats, setPublicStats] = useState<PublicStats | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   useEffect(() => {
     fetch('/stocks.json')
@@ -323,7 +325,7 @@ export default function HomePage() {
       </section>
 
       {/* SECTION 6: TOKEN ECONOMY */}
-      <section className="px-4 py-12 sm:py-16 bg-gray-900">
+      <section className="px-4 py-8 sm:py-10 bg-gray-900">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl sm:text-4xl font-bold text-white mb-3">
@@ -343,20 +345,14 @@ export default function HomePage() {
               <div className="text-gray-400 text-sm mb-3">tokens</div>
               <div className="text-2xl font-semibold text-blue-400">$5.00</div>
             </div>
-            <div className="bg-gray-800 border border-blue-600 rounded-xl p-6 text-center relative">
-              <div className="absolute top-4 right-4 bg-blue-600 text-white text-xs px-2 py-1 rounded">
-                Popular
-              </div>
+            <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 text-center">
               <h3 className="text-lg font-semibold text-white mb-2">Popular Pack</h3>
               <div className="text-3xl font-bold text-white mb-1">1,000</div>
               <div className="text-gray-400 text-sm mb-3">tokens</div>
               <div className="text-2xl font-semibold text-blue-400">$9.00</div>
               <div className="text-green-400 text-xs mt-1">Save 10%</div>
             </div>
-            <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 text-center relative">
-              <div className="absolute top-4 right-4 bg-green-600 text-white text-xs px-2 py-1 rounded">
-                Best Value
-              </div>
+            <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 text-center">
               <h3 className="text-lg font-semibold text-white mb-2">Best Value Pack</h3>
               <div className="text-3xl font-bold text-white mb-1">2,500</div>
               <div className="text-gray-400 text-sm mb-3">tokens</div>
@@ -374,13 +370,24 @@ export default function HomePage() {
                 Buy Tokens →
               </Link>
             ) : (
-              <p className="text-gray-400 text-sm">
-                Sign up to get your free tokens and purchase more as needed
-              </p>
+              <button
+                onClick={() => setShowAuthModal(true)}
+                className="inline-flex items-center px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-lg transition-colors"
+              >
+                Buy Tokens →
+              </button>
             )}
           </div>
         </div>
       </section>
+
+      {/* Auth Modal */}
+      {showAuthModal && (
+        <AuthModal
+          onClose={() => setShowAuthModal(false)}
+          message="Please sign in to purchase tokens."
+        />
+      )}
     </div>
   );
 }
