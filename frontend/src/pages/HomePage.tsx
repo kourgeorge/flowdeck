@@ -285,13 +285,31 @@ export default function HomePage() {
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-4">
             Ready to Invest Smarter?
           </h2>
-          <p className="text-gray-400 text-base sm:text-lg mb-8 max-w-2xl mx-auto">
-            {user ? (
-              <>Start exploring stocks and generating AI analysis reports with your token balance.</>
-            ) : (
-              <>Sign up free and get <strong className="text-blue-400">1,000 tokens</strong> to generate your first AI analysis reports.</>
-            )}
-          </p>
+          {user ? (
+            <p className="text-gray-400 text-base sm:text-lg mb-8 max-w-2xl mx-auto">
+              Start exploring stocks and generating AI analysis reports with your token balance.
+            </p>
+          ) : (
+            <div className="mb-8 max-w-2xl mx-auto">
+              <p className="text-gray-400 text-base sm:text-lg mb-4">
+                Sign up free and get instant access to:
+              </p>
+              <ul className="text-left text-gray-300 space-y-2 inline-block">
+                <li className="flex items-start">
+                  <span className="text-blue-400 mr-2">✓</span>
+                  <span><strong className="text-white">1,000 free tokens</strong> to generate AI analysis reports</span>
+                </li>
+                <li className="flex items-start">
+                  <span className="text-blue-400 mr-2">✓</span>
+                  <span><strong className="text-white">Personalized dashboard</strong> to track your portfolio</span>
+                </li>
+                <li className="flex items-start">
+                  <span className="text-blue-400 mr-2">✓</span>
+                  <span><strong className="text-white">Stock subscriptions</strong> with email updates</span>
+                </li>
+              </ul>
+            </div>
+          )}
           <div className="flex flex-col items-center justify-center gap-6">
             {user ? (
               <>
