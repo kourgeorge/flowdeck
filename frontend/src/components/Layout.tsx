@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { APP_NAME, LOGO_PATH } from '../config';
 import Footer from './Footer';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,7 +7,6 @@ import AuthModal from './AuthModal';
 import SignInPromoBanner from './SignInPromoBanner';
 
 const navItems: { to: string; label: string; authOnly?: boolean }[] = [
-  { to: '/', label: 'Home' },
   { to: '/dashboard', label: 'Dashboard', authOnly: true },
 ];
 
@@ -37,6 +36,7 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   return (
     <div className="flex min-h-screen">
@@ -143,7 +143,7 @@ export default function Layout() {
               {user ? (
                 <button
                   type="button"
-                  onClick={() => { logout(); setSidebarOpen(false); }}
+                  onClick={() => { logout(); setSidebarOpen(false); navigate('/'); }}
                   className="block w-full text-left px-4 py-2 rounded-lg text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
                 >
                   Log out
@@ -152,7 +152,7 @@ export default function Layout() {
                 <button
                   type="button"
                   onClick={() => { setAuthModalOpen(true); setSidebarOpen(false); }}
-                  className="block w-full text-left px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                  className="block w-full text-left px-4 py-2 rounded-lg text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
                 >
                   Log in
                 </button>

@@ -147,7 +147,7 @@ export default function DashboardPage() {
         <div className="max-w-layout mx-auto min-w-0 w-full">
           <StockSearch />
           <div className="mt-6 bg-gray-800 rounded-lg border border-gray-700 p-8 text-center">
-            <p className="text-gray-400">loading dashboard</p>
+            <p className="text-gray-400">Loading dashboard...</p>
           </div>
         </div>
       </div>
