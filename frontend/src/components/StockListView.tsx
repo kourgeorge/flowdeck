@@ -1,15 +1,8 @@
 import type { RefObject } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  PolarAngleAxis,
-  PolarGrid,
-  PolarRadiusAxis,
-  Radar,
-  RadarChart,
-  ResponsiveContainer,
-} from 'recharts';
 import type { StockWidget as StockWidgetType } from '../services/types';
 import { parseReportDate } from '../utils/date';
+import AspectSpiderChart, { getScoreColor, formatReportKey, getAnalysisScoreEntries } from './AspectSpiderChart';
 
 /** Min and max number of visible stock rows; table height is dynamic within these limits. */
 const MIN_VISIBLE_ROWS = 3;
@@ -33,90 +26,6 @@ interface StockListViewProps {
   footer?: React.ReactNode;
   /** If true, preserve the order from widgets array instead of sorting by confidence. Default: false */
   preserveOrder?: boolean;
-}
-
-const REPORT_LABELS: Record<string, string> = {
-  fundamentals_report: 'Fundamentals',
-  market_report: 'Market',
-  news_report: 'News',
-  technical_report: 'Technical',
-  sec_report: 'SEC',
-  investment_plan: 'Research',
-  final_trade_decision: 'Low Risk',
-  research_report: 'Research',
-  marker: 'Marker',
-  risk: 'Risk',
-};
-
-/** Order: Market, News, Fundamentals, Technical, SEC, Research, Confidence. */
-const REPORT_ORDER: string[] = [
-  'market_report',
-  'news_report',
-  'fundamentals_report',
-  'technical_report',
-  'sec_report',
-  'investment_plan',
-  'final_trade_decision', // Confidence last
-];
-
-const EXCLUDED_REPORT_TYPES = new Set(['trader_investment_plan']);
-
-type ReportScoreMap = NonNullable<StockWidgetType['report_scores']>;
-type ReportScoreEntry = [string, ReportScoreMap[string]];
-
-function scoreEntryOrder(key: string): number {
-  const i = REPORT_ORDER.indexOf(key);
-  if (i >= 0) return i;
-  return REPORT_ORDER.length - 0.5; // unknown reports before Confidence
-}
-
-function getAnalysisScoreEntries(scores: StockWidgetType['report_scores']): ReportScoreEntry[] {
-  if (!scores || Object.keys(scores).length === 0) return [];
-  return (Object.entries(scores) as ReportScoreEntry[])
-    .filter(([reportType]) => !EXCLUDED_REPORT_TYPES.has(reportType))
-    .sort((a, b) => scoreEntryOrder(a[0]) - scoreEntryOrder(b[0]));
-}
-
-function getSpiderData(scoreEntries: ReportScoreEntry[]) {
-  return scoreEntries
-    .filter(([, data]) => data.score != null)
-    .map(([reportType, data]) => ({
-      aspect: formatReportKey(reportType),
-      score: data.score as number,
-    }));
-}
-
-function formatReportKey(key: string): string {
-  const label = REPORT_LABELS[key];
-  if (label) return label;
-  return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function getScoreColor(score: number | null | undefined): string {
-  if (score == null) return 'text-gray-400';
-  if (score <= 3) return 'text-red-400';
-  if (score <= 5) return 'text-yellow-400';
-  if (score <= 7) return 'text-blue-400';
-  return 'text-green-400';
-}
-
-function calculateAverageAnalystScore(scoreEntries: ReportScoreEntry[]): number | null {
-  const analystReports = ['market_report', 'news_report', 'fundamentals_report', 'technical_report', 'sec_report'];
-  const analystScores = scoreEntries
-    .filter(([type]) => analystReports.includes(type))
-    .map(([, data]) => data.score)
-    .filter((score): score is number => score != null);
-  
-  if (analystScores.length === 0) return null;
-  return analystScores.reduce((sum, score) => sum + score, 0) / analystScores.length;
-}
-
-function getRadarFillColor(avgScore: number | null): string {
-  if (avgScore == null) return '#38bdf8';
-  if (avgScore <= 3) return '#f87171';
-  if (avgScore <= 5) return '#facc15';
-  if (avgScore <= 7) return '#38bdf8';
-  return '#4ade80';
 }
 
 function formatDate(dateStr: string | null): string {
@@ -150,32 +59,6 @@ function getWidgetConfidence(widget: StockWidgetType): number | null {
 
 function getConfidenceValue(widget: StockWidgetType): number {
   return getWidgetConfidence(widget) ?? -1;
-}
-
-function AspectSpiderWidget({ scoreEntries }: { scoreEntries: ReportScoreEntry[] }) {
-  const spiderData = getSpiderData(scoreEntries);
-  const avgScore = calculateAverageAnalystScore(scoreEntries);
-  const radarColor = getRadarFillColor(avgScore);
-  
-  if (spiderData.length < 3) {
-    return (
-      <div className="h-20 w-20 shrink-0 rounded border border-gray-700/80 bg-gray-900/50 flex items-center justify-center">
-        <span className="text-[10px] text-gray-500">N/A</span>
-      </div>
-    );
-  }
-  return (
-    <div className="h-20 w-20 shrink-0 overflow-hidden" aria-label="AI aspect score spider chart">
-      <ResponsiveContainer width="100%" height="100%">
-        <RadarChart data={spiderData} cx="50%" cy="50%" outerRadius="95%" margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-          <PolarGrid stroke="#4b5563" />
-          <PolarAngleAxis dataKey="aspect" tick={false} axisLine={false} />
-          <PolarRadiusAxis type="number" domain={[0, 10]} tickCount={6} allowDecimals={false} tick={false} axisLine={false} />
-          <Radar dataKey="score" stroke={radarColor} fill={radarColor} fillOpacity={0.6} isAnimationActive={false} />
-        </RadarChart>
-      </ResponsiveContainer>
-    </div>
-  );
 }
 
 export default function StockListView({ widgets, tickerToName, scrollRef, onScroll, footer, preserveOrder = false }: StockListViewProps) {
@@ -242,7 +125,7 @@ export default function StockListView({ widgets, tickerToName, scrollRef, onScro
                 <td className="py-3 px-2 min-w-0">
                   {scoreEntries.length > 0 ? (
                     <div className="flex items-center gap-3 min-w-0">
-                      <AspectSpiderWidget scoreEntries={scoreEntries} />
+                      <AspectSpiderChart scoreEntries={scoreEntries} size={80} />
                       <div className="flex flex-wrap gap-2 min-w-0">
                         {scoreEntries.map(([reportType, data]) => {
                         const label = formatReportKey(reportType);

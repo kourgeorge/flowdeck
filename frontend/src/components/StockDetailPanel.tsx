@@ -17,6 +17,7 @@ import NewsWidget from './NewsWidget';
 import InsiderTransactionsWidget from './InsiderTransactionsWidget';
 import AIAnalysisLoadingView from './AIAnalysisLoadingView';
 import { parseReportDate } from '../utils/date';
+import AspectSpiderChart, { getAnalysisScoreEntries } from './AspectSpiderChart';
 
 interface CompanyInfo {
   name: string; sector: string; industry: string; exchange: string;
@@ -353,7 +354,7 @@ export default function StockDetailPanel({ ticker, onSubscriptionChange }: Stock
                   ...(hasFundamentals ? [{ id: 'fundamentals', label: 'Fundamentals' }] : []),
                   ...(isUSCompany ? [{ id: 'sec-filings', label: 'SEC Filings' }] : []),
                   { id: 'news', label: 'News' },
-                  { id: 'ai-analysis', label: '🕷 AI Analysis' },
+                  { id: 'ai-analysis', label: 'AI Analysis' },
                 ].map((tab) => {
                   const isActive = activeTab === tab.id;
                   const isAiTab = tab.id === 'ai-analysis';
@@ -538,10 +539,12 @@ export default function StockDetailPanel({ ticker, onSubscriptionChange }: Stock
                       </button>
                     </div>
                   )}
-                  {stockData.has_reports && stockData.report_date && (
+                  {stockData.has_reports && stockData.report_date && (() => {
+                    const summaryScoreEntries = getAnalysisScoreEntries(stockData.reports_with_scores ?? null);
+                    return (
                     <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 rounded-lg border border-blue-700/50 p-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <div>
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                        <div className="flex-1">
                           <div className="text-xs text-gray-400 mb-0.5">Last Analysis Date</div>
                           <div className="text-base font-semibold text-white">
                             {parseReportDate(stockData.report_date)?.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) ?? 'N/A'}
@@ -553,12 +556,18 @@ export default function StockDetailPanel({ ticker, onSubscriptionChange }: Stock
                             </div>
                           )}
                         </div>
-                        <div className="sm:text-right">
-                          <div className="text-xs text-gray-400 mb-0.5">AI Decision</div>
-                          <div className={`text-base font-bold ${stockData.recommendation?.recommendation === 'BUY' ? 'text-green-400' : stockData.recommendation?.recommendation === 'SELL' ? 'text-red-400' : stockData.recommendation?.recommendation === 'HOLD' ? 'text-yellow-400' : 'text-white'}`}>
-                            {stockData.recommendation?.recommendation || 'N/A'}
+                        {/* Radar chart + decision */}
+                        <div className="flex items-center gap-4 shrink-0">
+                          {summaryScoreEntries.length >= 3 && (
+                            <AspectSpiderChart scoreEntries={summaryScoreEntries} size={80} />
+                          )}
+                          <div className="text-right">
+                            <div className="text-xs text-gray-400 mb-0.5">AI Decision</div>
+                            <div className={`text-xl font-bold ${stockData.recommendation?.recommendation === 'BUY' ? 'text-green-400' : stockData.recommendation?.recommendation === 'SELL' ? 'text-red-400' : stockData.recommendation?.recommendation === 'HOLD' ? 'text-yellow-400' : 'text-white'}`}>
+                              {stockData.recommendation?.recommendation || 'N/A'}
+                            </div>
+                            {stockData.recommendation?.confidence && <div className="text-xs text-gray-400 mt-0.5">Confidence: {(stockData.recommendation.confidence * 100).toFixed(0)}%</div>}
                           </div>
-                          {stockData.recommendation?.confidence && <div className="text-xs text-gray-400 mt-0.5">Confidence: {(stockData.recommendation.confidence * 100).toFixed(0)}%</div>}
                         </div>
                       </div>
                       {(stockData.expected_return_pct != null || stockData.bear_case_return_pct != null || stockData.bull_case_return_pct != null) && (
@@ -569,7 +578,8 @@ export default function StockDetailPanel({ ticker, onSubscriptionChange }: Stock
                         </div>
                       )}
                     </div>
-                  )}
+                    );
+                  })()}
                   <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-semibold text-white">AI Analysis Reports</h3>

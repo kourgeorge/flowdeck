@@ -7,6 +7,7 @@ import { useQuoteRefresh } from '../hooks/useQuoteRefresh';
 import { useAuth } from '../contexts/AuthContext';
 import { subscriptionApi, type Subscription } from '../services/subscriptionApi';
 import ReportTabs from '../components/ReportTabs';
+import AspectSpiderChart, { getAnalysisScoreEntries } from '../components/AspectSpiderChart';
 import ReportViewer from '../components/ReportViewer';
 import SubscribeButton from '../components/SubscribeButton';
 import AuthModal from '../components/AuthModal';
@@ -644,7 +645,7 @@ export default function StockPage() {
                   ...(hasFundamentals ? [{ id: 'fundamentals', label: 'Fundamentals' }] : []),
                   ...(isUSCompany ? [{ id: 'sec-filings', label: 'SEC Filings' }] : []),
                   { id: 'news', label: 'News' },
-                  { id: 'ai-analysis', label: '🕷 AI Analysis' },
+                  { id: 'ai-analysis', label: 'AI Analysis' },
                 ].map((tab) => {
                   const isActive = activeTab === tab.id;
                   const isAiTab = tab.id === 'ai-analysis';
@@ -1103,10 +1104,12 @@ export default function StockPage() {
                   </div>
                 )}
                 {/* Analysis Summary Header */}
-                {stockData.has_reports && stockData.report_date && (
+                {stockData.has_reports && stockData.report_date && (() => {
+                  const summaryScoreEntries = getAnalysisScoreEntries(stockData.reports_with_scores ?? null);
+                  return (
                   <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 rounded-lg border border-blue-700/50 p-6">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                      <div>
+                    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                      <div className="flex-1">
                         <div className="text-sm text-gray-400 mb-1">Last Analysis Date</div>
                         <div className="text-lg font-semibold text-white">
                           {parseReportDate(stockData.report_date)?.toLocaleDateString('en-US', {
@@ -1124,24 +1127,31 @@ export default function StockPage() {
                           </div>
                         )}
                       </div>
-                      <div className="md:text-right">
-                        <div className="text-sm text-gray-400 mb-1">AI Decision</div>
-                        <div className={`text-lg font-bold ${
-                          stockData.recommendation?.recommendation === 'BUY' 
-                            ? 'text-green-400' 
-                            : stockData.recommendation?.recommendation === 'SELL'
-                            ? 'text-red-400'
-                            : stockData.recommendation?.recommendation === 'HOLD'
-                            ? 'text-yellow-400'
-                            : 'text-white'
-                        }`}>
-                          {stockData.recommendation?.recommendation || 'N/A'}
-                        </div>
-                        {stockData.recommendation?.confidence && (
-                          <div className="text-xs text-gray-400 mt-1">
-                            Confidence: {(stockData.recommendation.confidence * 100).toFixed(0)}%
-                          </div>
+
+                      {/* Radar chart + decision side by side */}
+                      <div className="flex items-center gap-6 shrink-0">
+                        {summaryScoreEntries.length >= 3 && (
+                          <AspectSpiderChart scoreEntries={summaryScoreEntries} size={80} />
                         )}
+                        <div className="text-right">
+                          <div className="text-sm text-gray-400 mb-1">AI Decision</div>
+                          <div className={`text-2xl font-bold ${
+                            stockData.recommendation?.recommendation === 'BUY'
+                              ? 'text-green-400'
+                              : stockData.recommendation?.recommendation === 'SELL'
+                              ? 'text-red-400'
+                              : stockData.recommendation?.recommendation === 'HOLD'
+                              ? 'text-yellow-400'
+                              : 'text-white'
+                          }`}>
+                            {stockData.recommendation?.recommendation || 'N/A'}
+                          </div>
+                          {stockData.recommendation?.confidence && (
+                            <div className="text-xs text-gray-400 mt-1">
+                              Confidence: {(stockData.recommendation.confidence * 100).toFixed(0)}%
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                     {(stockData.expected_return_pct != null || stockData.bear_case_return_pct != null || stockData.bull_case_return_pct != null) && (
@@ -1187,7 +1197,8 @@ export default function StockPage() {
                       </div>
                     )}
                   </div>
-                )}
+                  );
+                })()}
 
                 <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
                   <div className="flex items-center justify-between mb-4">
