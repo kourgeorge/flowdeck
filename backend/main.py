@@ -512,7 +512,7 @@ async def top_up_tokens(
     return {"token_balance": token_service.get_balance(current_user.id, db)}
 
 
-@app.get("/api/stocks/widgets", response_model=WidgetsResponse)
+@app.get("/api/tickers/widgets", response_model=WidgetsResponse)
 async def get_stock_widgets(
     tickers: Optional[str] = Query(None, description="Comma-separated list of tickers"),
     date: Optional[str] = Query(None, description="Date (YYYY-MM-DD) for report filter; default today"),
@@ -531,7 +531,7 @@ async def get_stock_widgets(
         raise HTTPException(status_code=500, detail=f"Failed to load widget data: {str(e)}")
 
 
-@app.get("/api/stocks/{ticker}", response_model=StockPageData)
+@app.get("/api/tickers/{ticker}", response_model=StockPageData)
 async def get_stock_page(
     ticker: str,
     current_user=Depends(get_current_user_optional),

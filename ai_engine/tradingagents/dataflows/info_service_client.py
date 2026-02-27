@@ -89,7 +89,7 @@ def get_stock_data(ticker: str, start_date: str, end_date: str, base_url: Option
     if not base_url:
         raise ValueError("Info service URL not configured (set INFO_SERVICE_URL or config info_service_url)")
     params = {"start_date": start_date, "end_date": end_date}
-    data = _get(None, base_url, f"/api/data/stock-data/{ticker.upper()}", params=params)
+    data = _get(None, base_url, f"/api/data/ticker-data/{ticker.upper()}", params=params)
     if isinstance(data, dict) and "data" in data:
         return data["data"]
     return str(data)

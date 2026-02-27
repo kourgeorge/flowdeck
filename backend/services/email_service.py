@@ -163,7 +163,7 @@ def _build_report_email_bodies(
     if display_confidence is not None and 0 <= display_confidence <= 1:
         display_confidence = display_confidence * 10
 
-    report_url = f"{_get_frontend_url()}/stocks/{ticker.upper()}"
+    report_url = f"{_get_frontend_url()}/tickers/{ticker.upper()}"
     ticker_upper = ticker.upper()
     subject = f"Your {ticker_upper} report is ready — Flowdeck"
     summary_lines = []
@@ -418,7 +418,7 @@ def send_subscription_confirmation(user_email: str, ticker: str) -> bool:
     if not user_email or "@" not in user_email:
         return True
     ticker_upper = ticker.upper()
-    stock_url = f"{_get_frontend_url()}/stocks/{ticker_upper}"
+    stock_url = f"{_get_frontend_url()}/tickers/{ticker_upper}"
     subject = "Subscription confirmed — Flowdeck"
     text_body = (
         f"Your subscription is confirmed.\n\n"

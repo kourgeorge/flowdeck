@@ -118,7 +118,7 @@ async def data_historical(
     return await asyncio.to_thread(_engine().get_historical, ticker, period, interval)
 
 
-@router.get("/stock-data/{ticker}")
+@router.get("/ticker-data/{ticker}")
 async def data_stock_data(
     ticker: str,
     start_date: str = Query(..., description="Start date YYYY-MM-DD"),
