@@ -41,6 +41,7 @@ grip
 parsel
 requests
 beautifulsoup4
+markdown
 
 # CLI / UX
 chainlit
@@ -57,3 +58,4 @@ typing-extensions
 setuptools
 pytz
 redis
+paypalrestsdk>=1.13.1

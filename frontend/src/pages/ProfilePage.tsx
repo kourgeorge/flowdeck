@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { profileApi, type MeProfile } from '../services/authApi';
 import { subscriptionApi, type Subscription } from '../services/subscriptionApi';
+import TokenPurchase from '../components/TokenPurchase';
 
 const DELETE_CONFIRM_TEXT = 'DELETE';
 
@@ -199,8 +200,8 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen p-8">
-      <div className="max-w-lg mx-auto">
+    <div className="min-h-screen px-4 py-6 sm:p-6 lg:p-8">
+      <div className="max-w-layout mx-auto min-w-0 w-full">
         <Link
           to="/"
           className="inline-flex items-center text-sm text-gray-400 hover:text-white transition-colors mb-8"
@@ -218,6 +219,17 @@ export default function ProfilePage() {
             <p className="text-sm text-gray-400 mt-1">
               Creating a report costs 200 tokens. You earn tokens when others view your reports.
             </p>
+          </section>
+        )}
+
+        {/* Purchase Tokens */}
+        {profile && (
+          <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
+            <h2 className="text-lg font-semibold text-white mb-4">Purchase Tokens</h2>
+            <p className="text-sm text-gray-400 mb-6">
+              Need more tokens? Choose a package below to top up your account with PayPal.
+            </p>
+            <TokenPurchase />
           </section>
         )}
 

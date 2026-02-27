@@ -10,6 +10,8 @@ import TermsOfUsePage from './pages/TermsOfUsePage';
 import ContactUsPage from './pages/ContactUsPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import SubscriptionsPage from './pages/SubscriptionsPage';
+import PaymentSuccessPage from './pages/PaymentSuccessPage';
+import PaymentCancelPage from './pages/PaymentCancelPage';
 
 function App() {
   return (
@@ -27,6 +29,8 @@ function App() {
           <Route path="architecture" element={<ArchitecturePage />} />
           <Route path="terms" element={<TermsOfUsePage />} />
           <Route path="contact" element={<ContactUsPage />} />
+          <Route path="payment/success" element={<PaymentSuccessPage />} />
+          <Route path="payment/cancel" element={<PaymentCancelPage />} />
         </Route>
       </Routes>
     </Router>
