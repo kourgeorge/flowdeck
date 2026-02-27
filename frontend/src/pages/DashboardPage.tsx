@@ -272,6 +272,10 @@ export default function DashboardPage() {
   }
 
   const subscribedTickers = widgets.map((w) => w.ticker);
+  const subscribedTickerSet = new Set(subscribedTickers);
+  const recentAnalyzedNonSubscribed = recentAnalyzedWidgets.filter(
+    (w) => !subscribedTickerSet.has(w.ticker)
+  );
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -467,8 +471,8 @@ export default function DashboardPage() {
                     }`}
                   >
                     Recently Analyzed
-                    {recentTotal != null && recentTotal > 0 && (
-                      <span className="ml-1.5 text-xs text-gray-500">({recentTotal})</span>
+                    {recentAnalyzedNonSubscribed.length > 0 && (
+                      <span className="ml-1.5 text-xs text-gray-500">({recentAnalyzedNonSubscribed.length})</span>
                     )}
                   </button>
                 </div>
@@ -480,13 +484,13 @@ export default function DashboardPage() {
 
                 {/* Recently analyzed tab content */}
                 {stockListTab === 'recent' && (
-                  recentAnalyzedWidgets.length === 0 ? (
+                  recentAnalyzedNonSubscribed.length === 0 ? (
                     <div className="bg-gray-800 rounded-lg border border-gray-700 border-t-0 p-8 text-center">
                       <p className="text-gray-400 text-sm">No analyzed stocks in the last 3 days.</p>
                     </div>
                   ) : (
                     <StockListView
-                      widgets={recentAnalyzedWidgets}
+                      widgets={recentAnalyzedNonSubscribed}
                       tickerToName={tickerToName}
                       scrollRef={recentScrollRef}
                       onScroll={handleRecentScroll}
@@ -498,7 +502,7 @@ export default function DashboardPage() {
                           )}
                           {recentTotal != null && recentAnalyzedWidgets.length >= recentTotal && recentTotal > 0 && (
                             <div className="py-2 text-center text-gray-500 text-xs">
-                              All {recentTotal} analyzed in the last 3 days
+                              All {recentAnalyzedNonSubscribed.length} analyzed in the last 3 days
                             </div>
                           )}
                         </>
