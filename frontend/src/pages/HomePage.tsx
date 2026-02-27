@@ -311,9 +311,7 @@ export default function HomePage() {
                   <StockSearch />
                 </div>
                 <button
-                  onClick={() => {
-                    window.location.href = '/profile';
-                  }}
+                  onClick={() => setShowAuthModal(true)}
                   className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-lg transition-colors"
                 >
                   Get Started Free →
