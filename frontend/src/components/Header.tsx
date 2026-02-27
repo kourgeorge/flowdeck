@@ -8,7 +8,7 @@ export default function Header() {
         <div className="flex items-center justify-between">
           <Link
             to="/"
-            className="flex items-center gap-3 text-xl font-bold text-white hover:text-blue-400 transition-colors"
+            className="flex items-center gap-3 text-xl font-bold text-white hover:text-blue-400 transition-colors focus:outline-none"
           >
             <img src={LOGO_PATH} alt="" className="w-8 h-8 object-contain" />
             {APP_NAME}

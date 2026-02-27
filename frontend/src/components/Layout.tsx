@@ -60,7 +60,7 @@ export default function Layout() {
           <NavLink
             to="/"
             onClick={() => setSidebarOpen(false)}
-            className="flex flex-col items-center gap-2 rounded-lg hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 md:flex-1"
+            className="flex flex-col items-center gap-2 rounded-lg hover:opacity-90 transition-opacity focus:outline-none md:flex-1"
           >
             <img
               src={LOGO_PATH}
