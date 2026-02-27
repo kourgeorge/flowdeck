@@ -31,6 +31,8 @@ interface StockListViewProps {
   onScroll?: () => void;
   /** Optional content rendered below the table inside the scroll area. */
   footer?: React.ReactNode;
+  /** If true, preserve the order from widgets array instead of sorting by confidence. Default: false */
+  preserveOrder?: boolean;
 }
 
 const REPORT_LABELS: Record<string, string> = {
@@ -176,11 +178,11 @@ function AspectSpiderWidget({ scoreEntries }: { scoreEntries: ReportScoreEntry[]
   );
 }
 
-export default function StockListView({ widgets, tickerToName, scrollRef, onScroll, footer }: StockListViewProps) {
+export default function StockListView({ widgets, tickerToName, scrollRef, onScroll, footer, preserveOrder = false }: StockListViewProps) {
   const navigate = useNavigate();
-  const sortedWidgets = [...widgets].sort(
-    (a, b) => getConfidenceValue(b) - getConfidenceValue(a)
-  );
+  const sortedWidgets = preserveOrder
+    ? widgets
+    : [...widgets].sort((a, b) => getConfidenceValue(b) - getConfidenceValue(a));
   const tableHeightPx = getTableHeightPx(sortedWidgets.length);
 
   return (
