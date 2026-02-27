@@ -17,11 +17,13 @@ const RECENT_ANALYZED_DAYS = 3;
 /** Max concurrent prefetch requests to avoid hammering the server */
 const PREFETCH_CONCURRENCY = 3;
 
-type DashboardTab = 'overview' | 'stock-view';
+type DashboardTab = 'overview' | 'stock-view' | 'news';
+type StockListTab = 'subscribed' | 'recent';
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>('overview');
+  const [stockListTab, setStockListTab] = useState<StockListTab>('subscribed');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [widgets, setWidgets] = useState<StockWidgetType[]>([]);
   const [recentAnalyzedWidgets, setRecentAnalyzedWidgets] = useState<StockWidgetType[]>([]);
@@ -293,6 +295,7 @@ export default function DashboardPage() {
             {([
                 { id: 'overview', label: 'Overview' },
                 { id: 'stock-view', label: 'Stock View' },
+                { id: 'news', label: 'News' },
               ] as { id: DashboardTab; label: string }[]).map((tab) => (
               <button
                 key={tab.id}
@@ -428,65 +431,102 @@ export default function DashboardPage() {
           <div className="px-4 py-6 sm:p-6 lg:p-8">
             <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
 
-              <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 lg:items-stretch">
-                <div className="flex-1 min-w-0 flex flex-col">
+              {/* Price trends chart */}
+              {subscribedTickers.length > 0 && (
+                <div className="min-h-[340px]">
+                  <DashboardPriceTrendsChart tickers={subscribedTickers} period="6mo" height={340} />
+                </div>
+              )}
 
-                  {/* Price trends chart */}
-                  {subscribedTickers.length > 0 && (
-                    <div className="shrink-0 min-h-[340px]">
-                      <DashboardPriceTrendsChart tickers={subscribedTickers} period="6mo" height={340} />
-                    </div>
-                  )}
-
-                  {/* Subscribed stocks list */}
-                  <div className="shrink-0 mt-6">
-                    <h2 className="text-lg font-semibold text-white mb-4">Subscribed stocks</h2>
-                    <StockListView widgets={widgets} tickerToName={tickerToName} />
-                  </div>
-
-                  {/* Recently analyzed list */}
-                  <div className="flex-1 flex flex-col min-h-0 mt-8">
-                    <h2 className="text-lg font-semibold text-white mb-4 shrink-0">Recently Analyzed</h2>
-                    {recentAnalyzedWidgets.length === 0 ? (
-                      <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 text-center shrink-0">
-                        <p className="text-gray-400 text-sm">No analyzed stocks in the last 3 days.</p>
-                      </div>
-                    ) : (
-                      <StockListView
-                        widgets={recentAnalyzedWidgets}
-                        tickerToName={tickerToName}
-                        scrollRef={recentScrollRef}
-                        onScroll={handleRecentScroll}
-                        preserveOrder={true}
-                        footer={
-                          <>
-                            {loadingMoreRecent && (
-                              <div className="py-3 text-center text-gray-400 text-sm">Loading more…</div>
-                            )}
-                            {recentTotal != null && recentAnalyzedWidgets.length >= recentTotal && recentTotal > 0 && (
-                              <div className="py-2 text-center text-gray-500 text-xs">
-                                All {recentTotal} analyzed in the last 3 days
-                              </div>
-                            )}
-                          </>
-                        }
-                      />
+              {/* Combined stock list widget — full width */}
+              <div className="mt-6">
+                {/* Tab header */}
+                <div className="flex items-center gap-0 mb-0 border-b border-gray-700">
+                  <button
+                    type="button"
+                    onClick={() => setStockListTab('subscribed')}
+                    className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors -mb-px ${
+                      stockListTab === 'subscribed'
+                        ? 'text-white border-blue-500 bg-gray-800'
+                        : 'text-gray-400 border-transparent hover:text-white hover:bg-gray-800/60'
+                    }`}
+                  >
+                    Subscribed stocks
+                    {widgets.length > 0 && (
+                      <span className="ml-1.5 text-xs text-gray-500">({widgets.length})</span>
                     )}
-                  </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStockListTab('recent')}
+                    className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors -mb-px ${
+                      stockListTab === 'recent'
+                        ? 'text-white border-blue-500 bg-gray-800'
+                        : 'text-gray-400 border-transparent hover:text-white hover:bg-gray-800/60'
+                    }`}
+                  >
+                    Recently Analyzed
+                    {recentTotal != null && recentTotal > 0 && (
+                      <span className="ml-1.5 text-xs text-gray-500">({recentTotal})</span>
+                    )}
+                  </button>
                 </div>
 
-                {/* News sidebar */}
-                {subscribedTickers.length > 0 && (
-                  <aside className="w-full lg:w-[360px] shrink-0 flex flex-col self-stretch min-h-0">
-                    <DashboardNewsSection
-                      tickers={subscribedTickers}
-                      refreshIntervalMs={120000}
-                      fillHeight
+                {/* Subscribed tab content */}
+                {stockListTab === 'subscribed' && (
+                  <StockListView widgets={widgets} tickerToName={tickerToName} />
+                )}
+
+                {/* Recently analyzed tab content */}
+                {stockListTab === 'recent' && (
+                  recentAnalyzedWidgets.length === 0 ? (
+                    <div className="bg-gray-800 rounded-lg border border-gray-700 border-t-0 p-8 text-center">
+                      <p className="text-gray-400 text-sm">No analyzed stocks in the last 3 days.</p>
+                    </div>
+                  ) : (
+                    <StockListView
+                      widgets={recentAnalyzedWidgets}
+                      tickerToName={tickerToName}
+                      scrollRef={recentScrollRef}
+                      onScroll={handleRecentScroll}
+                      preserveOrder={true}
+                      footer={
+                        <>
+                          {loadingMoreRecent && (
+                            <div className="py-3 text-center text-gray-400 text-sm">Loading more…</div>
+                          )}
+                          {recentTotal != null && recentAnalyzedWidgets.length >= recentTotal && recentTotal > 0 && (
+                            <div className="py-2 text-center text-gray-500 text-xs">
+                              All {recentTotal} analyzed in the last 3 days
+                            </div>
+                          )}
+                        </>
+                      }
                     />
-                  </aside>
+                  )
                 )}
               </div>
 
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── News Tab ── */}
+      {dashboardTab === 'news' && (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="px-4 py-6 sm:p-6 lg:p-8">
+            <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
+              {subscribedTickers.length > 0 ? (
+                <DashboardNewsSection
+                  tickers={subscribedTickers}
+                  refreshIntervalMs={120000}
+                />
+              ) : (
+                <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 text-center">
+                  <p className="text-gray-400 text-sm">Subscribe to stocks to see news here.</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

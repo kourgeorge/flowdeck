@@ -119,14 +119,13 @@ export default function DashboardNewsSection({
       }
     >
       <div className="p-4 border-b border-gray-700 shrink-0">
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <h2 className="text-lg font-semibold text-white">News</h2>
-          {lastUpdated && (
+        {lastUpdated && (
+          <div className="flex justify-end mb-3">
             <span className="text-xs text-gray-500 whitespace-nowrap">
               Last updated: {lastUpdated.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · {lastUpdated.toLocaleDateString()}
             </span>
-          )}
-        </div>
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -156,9 +155,9 @@ export default function DashboardNewsSection({
         </div>
       </div>
       <div
-        ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4"
-      >
+      ref={scrollContainerRef}
+      className="flex-1 overflow-y-auto min-h-0 p-4"
+    >
         {error && (
           <p className="text-amber-400/90 text-sm">{error}</p>
         )}
@@ -174,46 +173,54 @@ export default function DashboardNewsSection({
         ) : displayList.length === 0 ? (
           <p className="text-gray-400 text-sm">No news articles for your stocks.</p>
         ) : (
-          <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {displayList.map((article) => (
               <div
                 key={`${article.ticker}-${article.uuid}`}
-                className="bg-gray-700/50 rounded-lg p-3 hover:border-gray-600 border border-transparent transition-colors"
+                className="bg-gray-700/50 rounded-lg p-4 hover:border-gray-600 border border-transparent transition-colors"
               >
-                <div className="flex items-start justify-between gap-2 mb-1">
-                  <span className="shrink-0 px-2 py-0.5 rounded text-xs font-medium bg-gray-600 text-gray-200">
-                    {article.ticker}
-                  </span>
-                </div>
-                <a
-                  href={article.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-400 hover:text-blue-300 font-medium text-sm leading-tight block hover:underline"
-                >
-                  {article.title}
-                </a>
-                <div className="flex items-center gap-2 mt-1 text-xs text-gray-400">
-                  <span>{article.publisher}</span>
-                  {article.published_time && (
-                    <>
-                      <span>·</span>
-                      <span>{article.published_time}</span>
-                    </>
+                <div className="flex gap-4">
+                  {article.thumbnail && (
+                    <div className="flex-shrink-0">
+                      <img
+                        src={article.thumbnail}
+                        alt={article.title}
+                        className="w-24 h-24 object-cover rounded"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    </div>
                   )}
+                  <div className="flex-1 min-w-0">
+                    <div className="mb-1">
+                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-600 text-gray-200">
+                        {article.ticker}
+                      </span>
+                    </div>
+                    <a
+                      href={article.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-400 hover:text-blue-300 font-semibold text-base leading-tight block hover:underline"
+                    >
+                      {article.title}
+                    </a>
+                    <div className="flex items-center gap-3 mt-1 text-sm text-gray-400">
+                      <span className="font-medium">{article.publisher}</span>
+                      {article.published_time && (
+                        <>
+                          <span>•</span>
+                          <span>{article.published_time}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <a
-                  href={article.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-blue-400 hover:text-blue-300 mt-1 inline-block"
-                >
-                  Read more
-                </a>
               </div>
             ))}
-            {hasMore && <div ref={loadMoreRef} className="h-4 flex-shrink-0" aria-hidden />}
-          </>
+            {hasMore && <div ref={loadMoreRef} className="h-4 col-span-full flex-shrink-0" aria-hidden />}
+          </div>
         )}
       </div>
     </div>
