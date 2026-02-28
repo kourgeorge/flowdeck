@@ -6,7 +6,7 @@ import AuthModal from './AuthModal';
 
 const navItems: { to: string; label: string; authOnly?: boolean }[] = [
   { to: '/dashboard', label: 'Dashboard', authOnly: true },
-  { to: '/copilot', label: COPILOT_NAME, authOnly: true },
+  { to: '/copilot', label: 'Trading Copilot', authOnly: true },
   { to: '/chat', label: 'AI Analyst Agent', authOnly: true },
 ];
 
