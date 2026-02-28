@@ -229,9 +229,9 @@ export default function HomePage() {
               </p>
             </div>
             <div className="bg-blue-900/20 border border-blue-700/50 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">AI Analyst Chat</h4>
+              <h4 className="text-lg font-semibold text-white mb-2">AI Analyst Agent</h4>
               <p className="text-gray-400 text-sm">
-                Ask anything about stocks in natural language. The AI Analyst has live access to prices, fundamentals, news, technical indicators, insider activity, and your saved reports.
+                Ask anything about stocks in natural language. The AI Analyst Agent has live access to prices, fundamentals, news, technical indicators, insider activity, and your saved reports.
               </p>
             </div>
           </div>
@@ -311,7 +311,7 @@ export default function HomePage() {
                 </li>
                 <li className="flex items-start">
                   <span className="text-blue-400 mr-2">✓</span>
-                  <span><strong className="text-white">AI Analyst</strong> — chat with live market data and analysis</span>
+                  <span><strong className="text-white">AI Analyst Agent</strong> — chat with live market data and analysis</span>
                 </li>
               </ul>
             </div>
