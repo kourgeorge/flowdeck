@@ -379,7 +379,7 @@ export default function ChatPage() {
       {/* Input area */}
       <div className="shrink-0 px-4 pb-2 pt-3 bg-gray-800/80 border-t border-gray-700">
         <div className="max-w-3xl mx-auto">
-          <div className="flex items-end gap-2 bg-slate-700/80 rounded-xl border border-slate-600 focus-within:border-blue-500 transition-colors px-3 py-2">
+          <div className="flex items-center gap-2 bg-slate-700/80 rounded-xl border border-slate-600 focus-within:border-blue-500 transition-colors px-3 py-2">
             <textarea
               ref={inputRef}
               value={input}
