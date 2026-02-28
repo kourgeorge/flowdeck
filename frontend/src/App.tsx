@@ -12,6 +12,7 @@ import AdminDashboardPage from './pages/AdminDashboardPage';
 import DashboardPage from './pages/DashboardPage';
 import PaymentSuccessPage from './pages/PaymentSuccessPage';
 import PaymentCancelPage from './pages/PaymentCancelPage';
+import ChatPage from './pages/ChatPage';
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
           <Route path="tickers/:ticker" element={<StockPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="chat" element={<ChatPage />} />
           <Route path="subscriptions" element={<Navigate to="/dashboard" replace />} />
           <Route path="admin" element={<AdminDashboardPage />} />
           <Route path="how-it-works" element={<HowItWorksPage />} />
