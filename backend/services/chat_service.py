@@ -254,27 +254,34 @@ def _tool_get_global_news() -> str:
 
 
 def _tool_web_search(query: str) -> str:
-    """Search the web using Serper API for any query."""
+    """Search the web using SerpAPI (serpapi.com) for any query."""
+    import urllib.parse
+    import urllib.request
+    import json as _json
+
     api_key = os.environ.get("SERPAPI_KEY", "")
     if not api_key:
         return "Web search is unavailable: SERPAPI_KEY is not configured."
     try:
-        response = requests.post(
-            "https://google.serper.dev/search",
-            headers={
-                "X-API-KEY": api_key,
-                "Content-Type": "application/json",
-            },
-            json={"q": query, "num": 10},
-            timeout=15,
-        )
-        response.raise_for_status()
-        data = response.json()
+        params = {
+            "engine": "google",
+            "q": query,
+            "num": 10,
+            "api_key": api_key,
+        }
+        url = "https://serpapi.com/search?" + urllib.parse.urlencode(params)
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = _json.loads(resp.read().decode())
+
+        error = data.get("error")
+        if error:
+            return f"Web search error: {error}"
 
         lines = [f"## Web Search Results for: {query}", ""]
 
         # Answer box (direct answer)
-        answer_box = data.get("answerBox")
+        answer_box = data.get("answer_box")
         if answer_box:
             title = answer_box.get("title", "")
             answer = answer_box.get("answer") or answer_box.get("snippet", "")
@@ -285,7 +292,7 @@ def _tool_web_search(query: str) -> str:
             lines.append("")
 
         # Knowledge graph
-        kg = data.get("knowledgeGraph")
+        kg = data.get("knowledge_graph")
         if kg:
             kg_title = kg.get("title", "")
             kg_desc = kg.get("description", "")
@@ -294,7 +301,7 @@ def _tool_web_search(query: str) -> str:
                 lines.append("")
 
         # Organic results
-        organic = data.get("organic", [])
+        organic = data.get("organic_results", [])
         for i, result in enumerate(organic[:8], 1):
             title = result.get("title", "")
             link = result.get("link", "")
@@ -309,7 +316,7 @@ def _tool_web_search(query: str) -> str:
             lines.append("")
 
         # Top stories
-        top_stories = data.get("topStories", [])
+        top_stories = data.get("top_stories", [])
         if top_stories:
             lines.append("### Top Stories")
             for story in top_stories[:5]:
@@ -328,8 +335,6 @@ def _tool_web_search(query: str) -> str:
             return f"No results found for: {query}"
 
         return "\n".join(lines)
-    except requests.exceptions.HTTPError as e:
-        return f"Web search HTTP error: {e}"
     except Exception as e:
         logger.exception("web_search error for query '%s': %s", query, e)
         return f"Error performing web search: {e}"
@@ -709,12 +714,17 @@ TOOLS = [
     {
         "name": "web_search",
         "description": (
-            "Search the web using Google (via Serper) for any query. "
-            "Use when the user asks about recent events, news, or information that may not be covered by other tools, "
-            "such as breaking news, earnings announcements, analyst upgrades/downgrades, regulatory filings, "
-            "macroeconomic data releases, company announcements, or any general financial/market question "
-            "that requires up-to-date web information. "
-            "Also use for questions about companies, industries, or topics not directly tied to a specific ticker."
+            "Your ONLY gateway to live internet data. Use this tool whenever the information needed is NOT already "
+            "provided by the other available tools (get_platform_reports, get_stock_quote, get_stock_data, "
+            "get_indicators, get_fundamentals, get_balance_sheet, get_cashflow, get_income_statement, "
+            "get_news, get_global_news, get_insider_transactions, get_insider_sentiment). "
+            "This covers ANY online content: breaking news, earnings call transcripts, analyst upgrades/downgrades, "
+            "price target changes, SEC/regulatory filings, IPO details, M&A activity, product launches, "
+            "macroeconomic data releases (CPI, GDP, jobs report), central bank decisions, geopolitical events, "
+            "competitor analysis, industry trends, company background, executive changes, legal proceedings, "
+            "social media sentiment, Reddit/Twitter discussions, blog posts, research papers, or ANY other "
+            "topic that requires fetching current information from the web. "
+            "When in doubt about whether another tool covers the question, use this tool to search online."
         ),
         "parameters": {
             "type": "object",
@@ -845,6 +855,13 @@ class ChatService:
         if not last_user_msg:
             return {"reply": "Please send a message.", "tokens_used": 1}
 
+        logger.info(
+            "chat() started | user_id=%s | history_len=%d | query=%r",
+            user_id,
+            len(messages),
+            last_user_msg[:200],
+        )
+
         today = datetime.date.today().isoformat()
         has_user_ctx = user_id is not None and db is not None
         user_ctx_section = """
@@ -898,7 +915,13 @@ This is for informational and educational purposes only. Not personalized invest
             tool_calls_made = 0
             max_tool_rounds = 5
 
-            for _ in range(max_tool_rounds):
+            for round_num in range(max_tool_rounds):
+                logger.debug(
+                    "chat() LLM invoke | user_id=%s | round=%d | messages_in_context=%d",
+                    user_id,
+                    round_num + 1,
+                    len(lc_messages),
+                )
                 response = _invoke_with_retry(llm_with_tools.invoke, lc_messages)
 
                 # Check if the model wants to call tools
@@ -906,7 +929,22 @@ This is for informational and educational purposes only. Not personalized invest
                 if not tool_calls:
                     # No tool calls — final answer
                     reply = response.content if hasattr(response, "content") else str(response)
+                    logger.info(
+                        "chat() finished | user_id=%s | rounds=%d | tools_called=%d | reply_len=%d",
+                        user_id,
+                        round_num + 1,
+                        tool_calls_made,
+                        len(reply),
+                    )
                     return {"reply": reply, "tokens_used": max(1, 1 + tool_calls_made), "tools_called": tool_calls_made}
+
+                logger.debug(
+                    "chat() tool round %d | user_id=%s | num_tool_calls=%d | tools=%s",
+                    round_num + 1,
+                    user_id,
+                    len(tool_calls),
+                    [tc.get("name") or tc.get("function", {}).get("name", "?") for tc in tool_calls],
+                )
 
                 # Execute each tool call
                 lc_messages.append(response)  # add assistant message with tool_calls
@@ -923,26 +961,62 @@ This is for informational and educational purposes only. Not personalized invest
                     else:
                         tool_args = tool_args_raw or {}
 
+                    logger.info(
+                        "chat() tool call | user_id=%s | tool=%s | args=%s",
+                        user_id,
+                        tool_name,
+                        {k: str(v)[:100] for k, v in tool_args.items()},
+                    )
+
                     fn = tool_fn_map.get(tool_name)
                     if fn:
                         try:
                             arg_val = next(iter(tool_args.values()), "") if tool_args else ""
                             tool_result = fn(str(arg_val))
+                            logger.debug(
+                                "chat() tool result | user_id=%s | tool=%s | result_len=%d",
+                                user_id,
+                                tool_name,
+                                len(str(tool_result)),
+                            )
                         except Exception as e:
+                            logger.warning(
+                                "chat() tool exception | user_id=%s | tool=%s | error=%s",
+                                user_id,
+                                tool_name,
+                                e,
+                            )
                             tool_result = f"Tool error: {e}"
                     else:
+                        logger.warning(
+                            "chat() unknown tool | user_id=%s | tool=%s",
+                            user_id,
+                            tool_name,
+                        )
                         tool_result = f"Unknown tool: {tool_name}"
 
                     lc_messages.append(ToolMessage(content=str(tool_result), tool_call_id=tool_id))
                     tool_calls_made += 1
 
             # Max rounds reached — get final answer without tools
+            logger.warning(
+                "chat() max tool rounds reached | user_id=%s | max_rounds=%d | tools_called=%d",
+                user_id,
+                max_tool_rounds,
+                tool_calls_made,
+            )
             final_response = _invoke_with_retry(llm.invoke, lc_messages)
             reply = final_response.content if hasattr(final_response, "content") else str(final_response)
+            logger.info(
+                "chat() finished (max rounds) | user_id=%s | tools_called=%d | reply_len=%d",
+                user_id,
+                tool_calls_made,
+                len(reply),
+            )
             return {"reply": reply, "tokens_used": max(1, 1 + tool_calls_made), "tools_called": tool_calls_made}
 
         except Exception as e:
-            logger.exception("Chat LLM error: %s", e)
+            logger.exception("chat() LLM error | user_id=%s | error=%s", user_id, e)
             return {
                 "reply": f"I encountered an error while processing your request: {str(e)}. Please try again.",
                 "tokens_used": 1,
@@ -955,13 +1029,14 @@ This is for informational and educational purposes only. Not personalized invest
         db: Optional[Any] = None,
     ) -> Generator[str, None, None]:
         """
-        Run the tool-calling loop then yield the full response as SSE.
+        Run the tool-calling loop and yield SSE events as tools execute.
 
         Yields SSE-formatted strings:
-          - ``data: {"type":"thinking","content":"..."}\\n\\n``  while tools are running
-          - ``data: {"type":"token","content":"..."}\\n\\n``     the final reply (single chunk)
-          - ``data: {"type":"done","tokens_used":N}\\n\\n``      when finished
-          - ``data: {"type":"error","content":"..."}\\n\\n``     on error
+          - ``data: {"type":"thinking","content":"..."}\\n\\n``           while tools are running
+          - ``data: {"type":"tool_call","name":"...","input":"...","output":"..."}\\n\\n``  per tool
+          - ``data: {"type":"token","content":"..."}\\n\\n``               the final reply (single chunk)
+          - ``data: {"type":"done","tokens_used":N,"tools_called":M}\\n\\n`` when finished
+          - ``data: {"type":"error","content":"..."}\\n\\n``               on error
         """
         if not messages:
             yield 'data: {"type":"token","content":"Hello! I\'m your FlowDeck Stock Market Analyst. Ask me anything about stocks, markets, or financial data."}\n\n'
@@ -979,15 +1054,120 @@ This is for informational and educational purposes only. Not personalized invest
             yield 'data: {"type":"done","tokens_used":1,"tools_called":0}\n\n'
             return
 
-        # Delegate to chat() and emit the result as SSE
+        today = datetime.date.today().isoformat()
+        has_user_ctx = user_id is not None and db is not None
+        user_ctx_section = """
+11. Call `get_user_context` to retrieve the current user's profile (email, name, token balance, member since).
+12. Call `get_user_subscriptions` to see which stocks the user is subscribed/watching on FlowDeck.
+13. Call `get_portfolio_overview` to get live quotes AND AI recommendations for ALL of the user's subscribed stocks at once — use this when the user asks about their portfolio or how their stocks are doing.""" if has_user_ctx else ""
+
+        system_content = f"""You are FlowDeck's Stock Market Analyst AI — an expert in equity analysis, trading strategy, and financial markets. Today is {today}.
+
+## Your Role
+You help users understand stocks, markets, and investment opportunities using real-time data and FlowDeck's proprietary AI analysis. You are knowledgeable, precise, and data-driven.
+
+## Tool Usage Rules
+1. **ALWAYS call `get_platform_reports` first** when the user asks about a stock's analysis, recommendation, outlook, investment thesis, bull/bear case, risks, or any AI-generated insight. This is your primary source of truth.
+2. Call `get_stock_quote` for current price and today's performance.
+3. Call `get_indicators` for technical analysis (RSI, MACD, Bollinger Bands, etc.).
+4. Call `get_fundamentals` for valuation metrics (P/E, EPS, margins, market cap).
+5. Call `get_income_statement`, `get_balance_sheet`, or `get_cashflow` for detailed financial statements.
+6. Call `get_news` for recent company-specific news and catalysts.
+7. Call `get_global_news` for macro/market-wide news and trends.
+8. Call `get_insider_transactions` or `get_insider_sentiment` for insider trading activity.
+9. Call `web_search` to find breaking news, recent earnings, analyst upgrades/downgrades, regulatory filings, macroeconomic data releases, or any information not covered by the other tools. Use it for general financial questions or when you need the latest web information.
+10. You may call multiple tools in sequence to build a comprehensive answer.{user_ctx_section}
+
+## Response Style
+- Be concise and data-driven. Lead with the most important insight.
+- Format numbers clearly: prices as $182.50, changes as +2.3%, large numbers as $2.1B or $450M.
+- Use markdown formatting: **bold** for key metrics, bullet points for lists.
+- When citing FlowDeck reports, reference the report type (e.g., "According to FlowDeck's Technical Analysis...").
+- If data is unavailable, say so clearly and offer what you can provide.
+
+## Disclaimer
+This is for informational and educational purposes only. Not personalized investment advice. Always do your own research."""
+
+        from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, BaseMessage, ToolMessage
+
+        lc_messages: List[BaseMessage] = [SystemMessage(content=system_content)]
+        for msg in messages[-20:]:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "user":
+                lc_messages.append(HumanMessage(content=content))
+            else:
+                lc_messages.append(AIMessage(content=content))
+
         try:
-            result = self.chat(messages, user_id=user_id, db=db)
-            reply = result.get("reply", "")
-            tokens_used = result.get("tokens_used", 1)
-            tools_called = result.get("tools_called", 0)
+            llm = self._get_llm()
+            tool_schemas, tool_fn_map = self._build_tool_registry(user_id, db)
+            llm_with_tools = llm.bind_tools(tool_schemas)  # type: ignore[attr-defined]
+
+            tool_calls_made = 0
+            max_tool_rounds = 5
+
+            for round_num in range(max_tool_rounds):
+                response = _invoke_with_retry(llm_with_tools.invoke, lc_messages)
+
+                tool_calls = getattr(response, "tool_calls", None)
+                if not tool_calls:
+                    # No tool calls — final answer
+                    reply = response.content if hasattr(response, "content") else str(response)
+                    if reply:
+                        yield f"data: {json.dumps({'type': 'token', 'content': reply})}\n\n"
+                    yield f"data: {json.dumps({'type': 'done', 'tokens_used': max(1, 1 + tool_calls_made), 'tools_called': tool_calls_made})}\n\n"
+                    return
+
+                # Execute each tool call and emit events
+                lc_messages.append(response)
+                for tc in tool_calls:
+                    tool_name = tc.get("name") or tc.get("function", {}).get("name", "")
+                    tool_args_raw = tc.get("args") or tc.get("function", {}).get("arguments", "{}")
+                    tool_id = tc.get("id", tool_name)
+
+                    if isinstance(tool_args_raw, str):
+                        try:
+                            tool_args = json.loads(tool_args_raw)
+                        except Exception:
+                            tool_args = {}
+                    else:
+                        tool_args = tool_args_raw or {}
+
+                    # Emit thinking status
+                    thinking_label = tool_name.replace("_", " ").replace("get ", "").replace("tool ", "").strip().title()
+                    yield f"data: {json.dumps({'type': 'thinking', 'content': thinking_label})}\n\n"
+
+                    fn = tool_fn_map.get(tool_name)
+                    if fn:
+                        try:
+                            arg_val = next(iter(tool_args.values()), "") if tool_args else ""
+                            tool_result = fn(str(arg_val))
+                        except Exception as e:
+                            logger.warning("chat_stream() tool exception | tool=%s | error=%s", tool_name, e)
+                            tool_result = f"Tool error: {e}"
+                    else:
+                        tool_result = f"Unknown tool: {tool_name}"
+
+                    # Emit tool_call event with input and truncated output
+                    tool_input_str = json.dumps(tool_args) if tool_args else ""
+                    tool_output_str = str(tool_result)
+                    # Truncate output to keep SSE events manageable (max 2000 chars)
+                    if len(tool_output_str) > 2000:
+                        tool_output_str = tool_output_str[:2000] + "…"
+                    yield f"data: {json.dumps({'type': 'tool_call', 'name': tool_name, 'input': tool_input_str, 'output': tool_output_str})}\n\n"
+
+                    lc_messages.append(ToolMessage(content=str(tool_result), tool_call_id=tool_id))
+                    tool_calls_made += 1
+
+            # Max rounds reached — get final answer without tools
+            logger.warning("chat_stream() max tool rounds reached | user_id=%s | tools_called=%d", user_id, tool_calls_made)
+            final_response = _invoke_with_retry(llm.invoke, lc_messages)
+            reply = final_response.content if hasattr(final_response, "content") else str(final_response)
             if reply:
                 yield f"data: {json.dumps({'type': 'token', 'content': reply})}\n\n"
-            yield f"data: {json.dumps({'type': 'done', 'tokens_used': tokens_used, 'tools_called': tools_called})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'tokens_used': max(1, 1 + tool_calls_made), 'tools_called': tool_calls_made})}\n\n"
+
         except Exception as e:
             logger.exception("Chat stream error: %s", e)
             yield f"data: {json.dumps({'type': 'error', 'content': f'I encountered an error: {str(e)}. Please try again.'})}\n\n"
