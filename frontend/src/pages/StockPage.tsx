@@ -11,7 +11,7 @@ export default function StockPage() {
   // Keep a session-scoped history stack of visited tickers
   const historyRef = useRef<string[]>([]);
   const posRef = useRef<number>(-1);
-  const [historyPos, setHistoryPos] = useState(-1);
+  const [_historyPos, setHistoryPos] = useState(-1);
 
   useEffect(() => {
     if (!ticker) return;
