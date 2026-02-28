@@ -151,6 +151,33 @@ def refund_for_analysis(user_id: int, ticker: str, run_id: str, db: Session) -> 
         db.commit()
 
 
+def deduct_for_chat(user_id: int, tokens_used: int, db: Session) -> bool:
+    """
+    Deduct tokens_used from user's token_balance for a chat exchange.
+    Returns False if the user has insufficient balance (< 1).
+    Deducts at least 1 token; floors balance at 0.
+    """
+    if tokens_used < 1:
+        tokens_used = 1
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return False
+    balance = getattr(user, "token_balance", None)
+    if balance is None:
+        user.token_balance = INITIAL_BALANCE
+        db.flush()
+        balance = user.token_balance
+    if balance < 1:
+        return False
+    try:
+        user.token_balance = max(0, balance - tokens_used)
+        db.commit()
+        return True
+    except Exception:
+        db.rollback()
+        return False
+
+
 def top_up(user_id: int, amount: int, db: Session) -> None:
     """Add amount to user's token_balance. Use positive amount."""
     if amount <= 0:
