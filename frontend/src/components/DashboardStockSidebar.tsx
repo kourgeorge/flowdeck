@@ -127,7 +127,7 @@ function SidebarStockSearch({ onSelect }: { onSelect: (ticker: string) => void }
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
-            placeholder="Add stock…"
+            placeholder="Add ticker…"
             className="w-full pl-8 pr-3 py-1.5 bg-gray-700/60 border border-gray-600 rounded text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
@@ -173,6 +173,10 @@ interface DashboardStockSidebarProps {
   tickerToName: Record<string, string>;
   selectedTicker: string | null;
   onSelect: (ticker: string) => void;
+  /** If provided, the search box calls this instead of onSelect */
+  onAdd?: (ticker: string) => void;
+  /** If provided, each row shows a remove (×) button */
+  onRemove?: (ticker: string) => void;
 }
 
 function getRecBadge(rec: string | null) {
@@ -194,42 +198,60 @@ function SidebarRow({
   item,
   isSelected,
   onSelect,
+  onRemove,
 }: {
   item: StockSidebarItem;
   isSelected: boolean;
   onSelect: (ticker: string) => void;
+  onRemove?: (ticker: string) => void;
 }) {
   const up = item.daily_change_percent >= 0;
   const changeColor = up ? 'text-green-400' : 'text-red-400';
 
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(item.ticker)}
-      className={`w-full text-left px-3 py-2.5 flex items-center gap-2 transition-colors border-b border-gray-700/60 last:border-0 ${
+    <div
+      className={`group w-full flex items-center border-b border-gray-700/60 last:border-0 ${
         isSelected
           ? 'bg-blue-600/20 border-l-2 border-l-blue-500'
           : 'hover:bg-gray-700/50 border-l-2 border-l-transparent'
       }`}
     >
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 mb-0.5">
-          <span className="font-semibold text-white text-sm truncate">{item.ticker}</span>
-          {item.has_report && getRecBadge(item.recommendation)}
-        </div>
-        <div className="text-xs text-gray-400 truncate">{item.name}</div>
-      </div>
-      <div className="shrink-0 text-right">
-        <div className="text-sm font-mono text-white">
-          {item.current_price > 0 ? `$${item.current_price.toFixed(2)}` : '—'}
-        </div>
-        {item.current_price > 0 && (
-          <div className={`text-xs font-mono ${changeColor}`}>
-            {up ? '+' : ''}{item.daily_change_percent.toFixed(2)}%
+      <button
+        type="button"
+        onClick={() => onSelect(item.ticker)}
+        className="flex-1 min-w-0 text-left px-3 py-2.5 flex items-center gap-2"
+      >
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <span className="font-semibold text-white text-sm truncate">{item.ticker}</span>
+            {item.has_report && getRecBadge(item.recommendation)}
           </div>
-        )}
-      </div>
-    </button>
+          <div className="text-xs text-gray-400 truncate">{item.name}</div>
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="text-sm font-mono text-white">
+            {item.current_price > 0 ? `$${item.current_price.toFixed(2)}` : '—'}
+          </div>
+          {item.current_price > 0 && (
+            <div className={`text-xs font-mono ${changeColor}`}>
+              {up ? '+' : ''}{item.daily_change_percent.toFixed(2)}%
+            </div>
+          )}
+        </div>
+      </button>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onRemove(item.ticker); }}
+          title={`Remove ${item.ticker} from list`}
+          className="shrink-0 mr-2 w-5 h-5 flex items-center justify-center rounded text-gray-500 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -239,6 +261,8 @@ export default function DashboardStockSidebar({
   tickerToName,
   selectedTicker,
   onSelect,
+  onAdd,
+  onRemove,
 }: DashboardStockSidebarProps) {
   const subscribedTickers = new Set(subscribedWidgets.map((w) => w.ticker));
   const recentOnly = recentWidgets.filter((w) => !subscribedTickers.has(w.ticker));
@@ -259,12 +283,21 @@ export default function DashboardStockSidebar({
   const hasSubscribed = subscribedItems.length > 0;
   const hasRecent = recentItems.length > 0;
 
+  // The search box adds to the list when onAdd is provided, otherwise selects
+  const handleSearchSelect = (ticker: string) => {
+    if (onAdd) {
+      onAdd(ticker);
+    } else {
+      onSelect(ticker);
+    }
+  };
+
   if (!hasSubscribed && !hasRecent) {
     return (
       <div className="flex flex-col">
-        <SidebarStockSearch onSelect={onSelect} />
+        <SidebarStockSearch onSelect={handleSearchSelect} />
         <div className="p-4 text-center text-gray-500 text-sm">
-          No stocks yet. Search above to add stocks.
+          No tickers yet. Search above to add tickers.
         </div>
       </div>
     );
@@ -272,11 +305,11 @@ export default function DashboardStockSidebar({
 
   return (
     <div className="flex flex-col min-h-0 overflow-y-auto">
-      <SidebarStockSearch onSelect={onSelect} />
+      <SidebarStockSearch onSelect={handleSearchSelect} />
       {hasSubscribed && (
         <div>
           <div className="px-3 py-2 text-xs font-semibold text-amber-400/80 uppercase tracking-wider bg-gray-800/60 border-b border-gray-700 sticky top-0 z-10">
-            Subscribed
+            Tickers
           </div>
           {subscribedItems.map((item) => (
             <SidebarRow
@@ -284,6 +317,7 @@ export default function DashboardStockSidebar({
               item={item}
               isSelected={selectedTicker === item.ticker}
               onSelect={onSelect}
+              onRemove={onRemove}
             />
           ))}
         </div>
@@ -299,6 +333,7 @@ export default function DashboardStockSidebar({
               item={item}
               isSelected={selectedTicker === item.ticker}
               onSelect={onSelect}
+              onRemove={onRemove}
             />
           ))}
         </div>
