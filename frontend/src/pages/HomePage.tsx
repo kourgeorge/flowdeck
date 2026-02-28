@@ -152,12 +152,12 @@ export default function HomePage() {
       {/* SECTION 2: LIVE MARKET SNAPSHOT */}
       <section className="px-4 py-6 sm:py-8 bg-gray-900">
         <div className="max-w-layout mx-auto">
-          <h2 className="text-2xl font-bold text-white mb-4">Major Stocks</h2>
-
           {/* Ticker Search */}
           <div className="mb-6">
             <StockSearch />
           </div>
+
+          <h2 className="text-2xl font-bold text-white mb-4">Major Stocks</h2>
 
           {error && (
             <div className="bg-red-500/10 border border-red-500 text-red-400 px-4 py-3 rounded-lg mb-6">
