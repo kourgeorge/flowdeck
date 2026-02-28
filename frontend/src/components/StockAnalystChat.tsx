@@ -391,7 +391,6 @@ export default function StockAnalystChat({ ticker, companyName }: StockAnalystCh
             </svg>
           </button>
         </div>
-        <p className="text-xs text-slate-500 mt-1.5 text-center">Enter to send · Shift+Enter for new line</p>
       </div>
     </div>
   );

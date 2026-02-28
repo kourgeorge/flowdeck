@@ -410,7 +410,6 @@ export default function ChatPage() {
               </svg>
             </button>
           </div>
-          <p className="text-xs text-slate-500 mt-1.5 text-center">Enter to send · Shift+Enter for new line</p>
         </div>
       </div>
     </div>
