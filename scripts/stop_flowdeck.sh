@@ -6,11 +6,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PID_FILE="$ROOT_DIR/.flowdeck.pids"
 
-if [ ! -f "$PID_FILE" ]; then
-  echo "No .flowdeck.pids found. Flowdeck may not be running."
-  exit 0
-fi
-
 # Kill a PID and its entire process group (catches npm -> vite child processes)
 kill_group() {
   local pid="$1"
@@ -27,10 +22,21 @@ kill_group() {
 }
 
 echo "[$(date '+%H:%M:%S')] Stopping Flowdeck..."
-while read -r pid; do
-  if [ -n "$pid" ]; then
-    kill_group "$pid"
-  fi
-done < "$PID_FILE"
-rm -f "$PID_FILE"
+
+if [ -f "$PID_FILE" ]; then
+  while read -r pid; do
+    if [ -n "$pid" ]; then
+      kill_group "$pid"
+    fi
+  done < "$PID_FILE"
+  rm -f "$PID_FILE"
+else
+  echo "  No .flowdeck.pids found — killing by process name..."
+fi
+
+# Always clean up any orphaned vite/uvicorn processes (handles setsid child escape on Linux)
+pkill -f "vite preview" 2>/dev/null || true
+pkill -f "vite/bin/vite.js" 2>/dev/null || true
+pkill -f "uvicorn main:app" 2>/dev/null || true
+
 echo "[$(date '+%H:%M:%S')] Done."

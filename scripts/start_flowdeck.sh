@@ -60,6 +60,11 @@ stop_services() {
     rm -f "$PID_FILE"
     echo "[$(date '+%H:%M:%S')] Stopped."
   fi
+  # Always kill orphaned vite/uvicorn processes (handles setsid child escape on Linux)
+  pkill -f "vite preview" 2>/dev/null || true
+  pkill -f "vite/bin/vite.js" 2>/dev/null || true
+  pkill -f "uvicorn main:app" 2>/dev/null || true
+  sleep 1
 }
 
 if [ "$1" = "--foreground" ]; then
