@@ -640,7 +640,12 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                   <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
                     {stockData.has_reports && !stockData.is_generating && (
                       <div>
-                        <ReportTabs availableReports={availableReports} selectedReport={selectedReport} onSelectReport={setSelectedReport} reportScores={reportScores} />
+                        <ReportTabs
+                          availableReports={availableReports}
+                          selectedReport={selectedReport}
+                          onSelectReport={setSelectedReport}
+                          reportScores={reportScores}
+                        />
                         <div className="mt-4">
                           <ReportViewer content={currentReportContent} score={currentReportScore} scoreLabel={currentReportScoreLabel}
                             keyTakeaways={currentReportData?.key_takeaways} reportType={selectedReport}

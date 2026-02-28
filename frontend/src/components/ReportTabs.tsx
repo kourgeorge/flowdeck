@@ -1,4 +1,7 @@
 
+/** Special virtual tab key for the AI chat panel */
+export const CHAT_TAB_KEY = '__chat__';
+
 interface ReportScore {
   score: number | null;
   score_label: string | null;
@@ -9,10 +12,14 @@ interface ReportTabsProps {
   selectedReport: string | null;
   onSelectReport: (reportType: string) => void;
   reportScores?: Record<string, ReportScore>;
+  /** Whether to show the Chat tab at the end */
+  showChatTab?: boolean;
 }
 
-export default function ReportTabs({ availableReports, selectedReport, onSelectReport, reportScores }: ReportTabsProps) {
-  const activeTab = selectedReport && availableReports.includes(selectedReport)
+export default function ReportTabs({ availableReports, selectedReport, onSelectReport, reportScores, showChatTab }: ReportTabsProps) {
+  const allTabs = showChatTab ? [...availableReports, CHAT_TAB_KEY] : availableReports;
+
+  const activeTab = selectedReport && allTabs.includes(selectedReport)
     ? selectedReport
     : (availableReports.length > 0 ? availableReports[0] : null);
 
@@ -33,6 +40,7 @@ export default function ReportTabs({ availableReports, selectedReport, onSelectR
   };
 
   const formatReportName = (name: string) => {
+    if (name === CHAT_TAB_KEY) return 'Chat';
     if (REPORT_LABELS[name]) return REPORT_LABELS[name];
     return name
       .split('_')
@@ -48,7 +56,7 @@ export default function ReportTabs({ availableReports, selectedReport, onSelectR
     return 'text-green-400';
   };
 
-  if (availableReports.length === 0) {
+  if (availableReports.length === 0 && !showChatTab) {
     return null;
   }
 
@@ -58,7 +66,7 @@ export default function ReportTabs({ availableReports, selectedReport, onSelectR
         {availableReports.map((reportType) => {
           const scoreData = reportScores?.[reportType];
           const score = scoreData?.score;
-          
+
           return (
             <button
               key={reportType}
@@ -81,6 +89,25 @@ export default function ReportTabs({ availableReports, selectedReport, onSelectR
             </button>
           );
         })}
+
+        {showChatTab && (
+          <button
+            onClick={() => handleTabClick(CHAT_TAB_KEY)}
+            className={`
+              px-2 py-1.5 text-sm font-medium transition-colors flex items-center gap-1.5 ml-1
+              ${
+                activeTab === CHAT_TAB_KEY
+                  ? 'border-b-2 border-blue-500 text-blue-400'
+                  : 'text-slate-400 hover:text-slate-300'
+              }
+            `}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+            </svg>
+            <span>Chat</span>
+          </button>
+        )}
       </div>
     </div>
   );

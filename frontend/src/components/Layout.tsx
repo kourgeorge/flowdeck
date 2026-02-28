@@ -5,6 +5,7 @@ import Footer from './Footer';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
 import SignInPromoBanner from './SignInPromoBanner';
+import StockChatPanel from './StockChatPanel';
 
 const navItems: { to: string; label: string; authOnly?: boolean }[] = [
   { to: '/dashboard', label: 'Dashboard', authOnly: true },
@@ -35,6 +36,7 @@ function HamburgerIcon({ open }: { open: boolean }) {
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -163,6 +165,35 @@ export default function Layout() {
       </aside>
       {authModalOpen && (
         <AuthModal onClose={() => setAuthModalOpen(false)} />
+      )}
+
+      {/* AI Chat Panel — rendered at app level, accessible from floating button */}
+      {user && chatOpen && (
+        <StockChatPanel onClose={() => setChatOpen(false)} />
+      )}
+
+      {/* Floating AI Chat button */}
+      {user && (
+        <button
+          type="button"
+          aria-label="Open AI Chat"
+          onClick={() => setChatOpen((o) => !o)}
+          className={`fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 rounded-full shadow-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 ${
+            chatOpen
+              ? 'bg-blue-700 text-white scale-95'
+              : 'bg-blue-600 hover:bg-blue-500 text-white hover:scale-110'
+          }`}
+        >
+          {chatOpen ? (
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          ) : (
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+            </svg>
+          )}
+        </button>
       )}
 
       {/* Main content area */}

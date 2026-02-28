@@ -285,4 +285,123 @@ export const contactApi = {
   },
 };
 
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface ChatResponse {
+  reply: string;
+  tokens_used: number;
+  balance: number;
+}
+
+export interface ChatStreamEvent {
+  type: 'token' | 'done' | 'error' | 'thinking';
+  content?: string;
+  tokens_used?: number;
+  tools_called?: number;
+  balance?: number;
+}
+
+export const chatApi = {
+  sendMessage: async (messages: ChatMessage[]): Promise<ChatResponse> => {
+    const token = getStoredToken();
+    const response = await api.post<ChatResponse>(
+      '/api/chat',
+      { messages },
+      {
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      }
+    );
+    return response.data;
+  },
+
+  /**
+   * Stream a chat response via SSE.
+   * Calls `onToken` for each incremental text chunk,
+   * `onThinking` for tool-call progress status messages,
+   * `onDone` when the stream finishes (with tokens_used and balance),
+   * and `onError` on failure.
+   * Returns an AbortController so the caller can cancel the stream.
+   */
+  streamMessage: (
+    messages: ChatMessage[],
+    onToken: (chunk: string) => void,
+    onDone: (tokensUsed: number, balance: number, toolsCalled: number) => void,
+    onError: (message: string) => void,
+    onThinking?: (status: string) => void,
+  ): AbortController => {
+    const controller = new AbortController();
+    const token = getStoredToken();
+
+    const run = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/chat/stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ messages }),
+          signal: controller.signal,
+        });
+
+        if (!res.ok) {
+          let detail = `HTTP ${res.status}`;
+          try {
+            const body = await res.json();
+            detail = body?.detail ?? detail;
+          } catch { /* ignore */ }
+          onError(detail);
+          return;
+        }
+
+        const reader = res.body?.getReader();
+        if (!reader) { onError('No response body'); return; }
+
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          // SSE lines are separated by \n\n
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() ?? '';
+
+          for (const part of parts) {
+            const line = part.trim();
+            if (!line.startsWith('data:')) continue;
+            const jsonStr = line.slice('data:'.length).trim();
+            if (!jsonStr) continue;
+            try {
+              const event: ChatStreamEvent = JSON.parse(jsonStr);
+              if (event.type === 'token' && event.content) {
+                onToken(event.content);
+              } else if (event.type === 'thinking' && event.content) {
+                onThinking?.(event.content);
+              } else if (event.type === 'done') {
+                onDone(event.tokens_used ?? 1, event.balance ?? 0, event.tools_called ?? 0);
+              } else if (event.type === 'error') {
+                onError(event.content ?? 'Unknown error');
+              }
+            } catch { /* malformed JSON, skip */ }
+          }
+        }
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return; // cancelled by caller
+        onError(err?.message ?? 'Stream failed');
+      }
+    };
+
+    run();
+    return controller;
+  },
+};
+
 export default stockApi;

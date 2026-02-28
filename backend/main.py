@@ -42,6 +42,7 @@ from routers.subscriptions import router as subscriptions_router
 from routers.admin import router as admin_router
 from routers.contact import router as contact_router
 from routers.payments import router as payments_router
+from routers.chat import router as chat_router
 from sync_major_stocks import get_missing_and_skipped, run_analyses_for_tickers
 from database import init_db, get_db
 from models.db_models import User
@@ -107,6 +108,7 @@ app.include_router(subscriptions_router)
 app.include_router(admin_router)
 app.include_router(contact_router)
 app.include_router(payments_router)
+app.include_router(chat_router, prefix="/api")
 
 # WebSocket connections
 active_connections: dict[str, WebSocket] = {}
