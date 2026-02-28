@@ -38,11 +38,6 @@ export default function Footer() {
             <span>·</span>
             <span>© {currentYear}</span>
           </div>
-          <div className="flex items-center gap-6 text-sm">
-            <span className="text-gray-500">
-              Real-time market insights and AI-powered analysis
-            </span>
-          </div>
         </div>
       </div>
     </footer>

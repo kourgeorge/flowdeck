@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { APP_NAME, LOGO_PATH } from '../config';
-import Footer from './Footer';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
 import SignInPromoBanner from './SignInPromoBanner';
 
 const navItems: { to: string; label: string; authOnly?: boolean }[] = [
   { to: '/dashboard', label: 'Dashboard', authOnly: true },
+  { to: '/copilot', label: 'Copilot', authOnly: true },
   { to: '/chat', label: 'AI Analyst Agent', authOnly: true },
 ];
 
@@ -161,6 +161,19 @@ export default function Layout() {
             </li>
           </ul>
         </nav>
+        {/* Sidebar bottom footer */}
+        <div className="p-4 border-t border-gray-700 text-xs text-gray-500 flex flex-col gap-1">
+          <div className="flex flex-wrap gap-x-2 gap-y-1">
+            <Link to="/" className="hover:text-gray-300 transition-colors">Flowdeck</Link>
+            <span>·</span>
+            <Link to="/how-it-works" className="hover:text-gray-300 transition-colors">How it works</Link>
+            <span>·</span>
+            <Link to="/terms" className="hover:text-gray-300 transition-colors">Terms of Use</Link>
+            <span>·</span>
+            <Link to="/contact" className="hover:text-gray-300 transition-colors">Contact</Link>
+          </div>
+          <span>© {new Date().getFullYear()}</span>
+        </div>
       </aside>
       {authModalOpen && (
         <AuthModal onClose={() => setAuthModalOpen(false)} />
@@ -184,7 +197,6 @@ export default function Layout() {
         <main className="flex-1 min-w-0 min-h-0 overflow-auto">
           <Outlet />
         </main>
-        <Footer />
       </div>
     </div>
   );
