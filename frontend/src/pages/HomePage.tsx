@@ -529,24 +529,24 @@ export default function HomePage() {
           </div>
 
           {/* Token Packages */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-            <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 text-center">
-              <h3 className="text-lg font-semibold text-white mb-2">Starter Pack</h3>
-              <div className="text-3xl font-bold text-white mb-1">500</div>
-              <div className="text-gray-400 text-sm mb-3">tokens</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
+            <div className="bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-center">
+              <h3 className="text-lg font-semibold text-white mb-1">Starter Pack</h3>
+              <div className="text-3xl font-bold text-white mb-0.5">500</div>
+              <div className="text-gray-400 text-sm mb-2">tokens</div>
               <div className="text-2xl font-semibold text-blue-400">$5.00</div>
             </div>
-            <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 text-center">
-              <h3 className="text-lg font-semibold text-white mb-2">Popular Pack</h3>
-              <div className="text-3xl font-bold text-white mb-1">1,000</div>
-              <div className="text-gray-400 text-sm mb-3">tokens</div>
+            <div className="bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-center">
+              <h3 className="text-lg font-semibold text-white mb-1">Popular Pack</h3>
+              <div className="text-3xl font-bold text-white mb-0.5">1,000</div>
+              <div className="text-gray-400 text-sm mb-2">tokens</div>
               <div className="text-2xl font-semibold text-blue-400">$9.00</div>
               <div className="text-green-400 text-xs mt-1">Save 10%</div>
             </div>
-            <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 text-center">
-              <h3 className="text-lg font-semibold text-white mb-2">Best Value Pack</h3>
-              <div className="text-3xl font-bold text-white mb-1">2,500</div>
-              <div className="text-gray-400 text-sm mb-3">tokens</div>
+            <div className="bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-center">
+              <h3 className="text-lg font-semibold text-white mb-1">Best Value Pack</h3>
+              <div className="text-3xl font-bold text-white mb-0.5">2,500</div>
+              <div className="text-gray-400 text-sm mb-2">tokens</div>
               <div className="text-2xl font-semibold text-blue-400">$20.00</div>
               <div className="text-green-400 text-xs mt-1">Save 20%</div>
             </div>
