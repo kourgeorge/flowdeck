@@ -13,6 +13,7 @@ import DashboardPage from './pages/DashboardPage';
 import PaymentSuccessPage from './pages/PaymentSuccessPage';
 import PaymentCancelPage from './pages/PaymentCancelPage';
 import ChatPage from './pages/ChatPage';
+import CopilotPage from './pages/CopilotPage';
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
           <Route path="profile" element={<ProfilePage />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="chat" element={<ChatPage />} />
+          <Route path="copilot" element={<CopilotPage />} />
           <Route path="subscriptions" element={<Navigate to="/dashboard" replace />} />
           <Route path="admin" element={<AdminDashboardPage />} />
           <Route path="how-it-works" element={<HowItWorksPage />} />

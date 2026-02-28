@@ -85,7 +85,7 @@ export default function CopilotPage() {
         {/* ── Left: Ticker Sidebar ── */}
         <aside
           className={`shrink-0 border-r border-gray-700 bg-gray-800/50 hidden md:flex flex-row min-h-0 transition-all duration-200 ${
-            sidebarCollapsed ? 'w-6' : 'w-64'
+            sidebarCollapsed ? 'w-4' : 'w-64'
           }`}
         >
           {!sidebarCollapsed && (
@@ -106,7 +106,7 @@ export default function CopilotPage() {
             type="button"
             onClick={() => setSidebarCollapsed((c) => !c)}
             title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="shrink-0 flex items-center justify-center w-6 self-stretch border-l border-gray-700 text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors"
+            className="shrink-0 flex items-center justify-center w-4 self-stretch border-l border-gray-700 text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors"
           >
             <svg
               className={`w-3.5 h-3.5 transition-transform duration-200 ${sidebarCollapsed ? 'rotate-180' : ''}`}
@@ -145,7 +145,7 @@ export default function CopilotPage() {
         {/* ── Right: AI Copilot Panel ── */}
         <div
           className={`shrink-0 hidden md:flex flex-col min-h-0 transition-all duration-200 ${
-            chatCollapsed ? 'w-8' : 'w-96'
+            chatCollapsed ? 'w-6' : 'w-96'
           }`}
         >
           <CopilotChatPanel
