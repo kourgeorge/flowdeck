@@ -137,14 +137,18 @@ export default function ChatPage() {
   const [thinkingStatus, setThinkingStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tokenBalance, setTokenBalance] = useState<number | null>(null);
+  const [displayName, setDisplayName] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Fetch initial token balance when user is logged in
+  // Fetch initial token balance and display name when user is logged in
   useEffect(() => {
-    if (!user) { setTokenBalance(null); return; }
-    profileApi.getMe().then((me) => setTokenBalance(me.token_balance)).catch(() => {});
+    if (!user) { setTokenBalance(null); setDisplayName(null); return; }
+    profileApi.getMe().then((me) => {
+      setTokenBalance(me.token_balance);
+      setDisplayName(me.name && me.name.trim() ? me.name.trim() : null);
+    }).catch(() => {});
   }, [user]);
 
   useEffect(() => {
@@ -319,7 +323,11 @@ export default function ChatPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
                       </svg>
                     </div>
-                    <h2 className="text-lg font-semibold text-white mb-2">Ask me anything about stocks</h2>
+                    <h2 className="text-lg font-semibold text-white mb-2">
+                      Hi {displayName ?? (user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1))}!
+                      <br />
+                      Ask me anything about the market
+                    </h2>
                     <p className="text-sm text-slate-400 leading-relaxed">
                       I have access to live prices, specialized AI reports & recommendations, fundamentals, news, technical indicators, insider activity, and your preferred tickers.
                     </p>
