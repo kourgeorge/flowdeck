@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { profileApi, type MeProfile } from '../services/authApi';
 import { subscriptionApi, type Subscription } from '../services/subscriptionApi';
 import TokenPurchase from '../components/TokenPurchase';
+import UserStatsSection from '../components/UserStatsSection';
 
 const DELETE_CONFIRM_TEXT = 'DELETE';
 
@@ -241,6 +242,9 @@ export default function ProfilePage() {
             </p>
           </section>
         )}
+
+        {/* Usage Statistics */}
+        <UserStatsSection />
 
         {/* Purchase Tokens */}
         {profile && (

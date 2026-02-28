@@ -85,6 +85,16 @@ export interface MeProfile {
   is_admin?: boolean;
 }
 
+export interface UserStats {
+  analyses_created: number;
+  tokens_spent_on_analyses: number;
+  tokens_earned_from_views: number;
+  reports_viewed: number;
+  unique_tickers_analyzed: number;
+  subscriptions_count: number;
+  member_since: string;
+}
+
 export interface UpdateProfileBody {
   name?: string | null;
   current_password?: string;
@@ -104,6 +114,14 @@ export const profileApi = {
     const token = getStoredToken();
     if (!token) throw new Error('Not authenticated');
     const res = await api.patch<MeProfile>('/api/me', body, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.data;
+  },
+  getStats: async (): Promise<UserStats> => {
+    const token = getStoredToken();
+    if (!token) throw new Error('Not authenticated');
+    const res = await api.get<UserStats>('/api/me/stats', {
       headers: { Authorization: `Bearer ${token}` },
     });
     return res.data;
