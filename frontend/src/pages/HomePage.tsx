@@ -152,8 +152,13 @@ export default function HomePage() {
       {/* SECTION 2: LIVE MARKET SNAPSHOT */}
       <section className="px-4 py-6 sm:py-8 bg-gray-900">
         <div className="max-w-layout mx-auto">
-          <h2 className="text-2xl font-bold text-white mb-6">Major Stocks</h2>
-          
+          <h2 className="text-2xl font-bold text-white mb-4">Major Stocks</h2>
+
+          {/* Ticker Search */}
+          <div className="mb-6">
+            <StockSearch />
+          </div>
+
           {error && (
             <div className="bg-red-500/10 border border-red-500 text-red-400 px-4 py-3 rounded-lg mb-6">
               {error}
@@ -206,21 +211,15 @@ export default function HomePage() {
               </p>
             </div>
             <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">Transparent Reports</h4>
+              <h4 className="text-lg font-semibold text-white mb-2">Transparent Reports & Recommendations</h4>
               <p className="text-gray-400 text-sm">
-                Read the full reasoning behind every recommendation across multiple report tabs.
+                Get clear <strong className="text-white">BUY / SELL / HOLD</strong> recommendations backed by comprehensive AI analysis — and read the full reasoning across multiple report tabs.
               </p>
             </div>
             <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">BUY/SELL/HOLD Recommendations</h4>
+              <h4 className="text-lg font-semibold text-white mb-2">Stock Subscriptions & Dashboard</h4>
               <p className="text-gray-400 text-sm">
-                Clear, actionable recommendations backed by comprehensive AI analysis.
-              </p>
-            </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">Stock Subscriptions</h4>
-              <p className="text-gray-400 text-sm">
-                Subscribe to stocks and get email updates when new analysis reports are available.
+                Subscribe to stocks and get email updates when new analysis reports are available. Track your watchlist and portfolio performance from a personalized dashboard.
               </p>
             </div>
             <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
@@ -229,43 +228,51 @@ export default function HomePage() {
                 Generate fresh AI analysis for any stock, any time — using your token balance.
               </p>
             </div>
+            <div className="bg-blue-900/20 border border-blue-700/50 rounded-xl p-6">
+              <h4 className="text-lg font-semibold text-white mb-2">AI Analyst Chat</h4>
+              <p className="text-gray-400 text-sm">
+                Ask anything about stocks in natural language. The AI Analyst has live access to prices, fundamentals, news, technical indicators, insider activity, and your saved reports.
+              </p>
+            </div>
           </div>
 
           {/* How It Works — 3 steps */}
-          <h3 className="text-lg font-semibold text-gray-300 uppercase tracking-wider mb-6">
-            How the AI Works
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">1. Specialized Analysts</h4>
-              <p className="text-gray-400 text-sm leading-relaxed">
-                Market, News, Fundamentals, Technical, and Sentiment analysts each produce
-                focused reports with scores. No single perspective dominates.
-              </p>
+          <div className="border border-gray-700 rounded-2xl p-8 bg-gray-800/30">
+            <h3 className="text-lg font-semibold text-gray-300 uppercase tracking-wider mb-6">
+              How the AI Works
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+                <h4 className="text-lg font-semibold text-white mb-2">1. Specialized Analysts</h4>
+                <p className="text-gray-400 text-sm leading-relaxed">
+                  Market, News, Fundamentals, Technical, and Sentiment analysts each produce
+                  focused reports with scores. No single perspective dominates.
+                </p>
+              </div>
+              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+                <h4 className="text-lg font-semibold text-white mb-2">2. Bull vs. Bear Debate</h4>
+                <p className="text-gray-400 text-sm leading-relaxed">
+                  AI researchers argue both sides across multiple rounds, stress-testing
+                  the investment case. What could go right? What could go wrong?
+                </p>
+              </div>
+              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+                <h4 className="text-lg font-semibold text-white mb-2">3. Risk Check → Recommendation</h4>
+                <p className="text-gray-400 text-sm leading-relaxed">
+                  A final risk debate (aggressive, cautious, neutral) produces the
+                  recommendation you see: <strong className="text-green-400">BUY</strong>, <strong className="text-red-400">SELL</strong>, or <strong className="text-yellow-400">HOLD</strong>.
+                </p>
+              </div>
             </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">2. Bull vs. Bear Debate</h4>
-              <p className="text-gray-400 text-sm leading-relaxed">
-                AI researchers argue both sides across multiple rounds, stress-testing
-                the investment case. What could go right? What could go wrong?
-              </p>
-            </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">3. Risk Check → Recommendation</h4>
-              <p className="text-gray-400 text-sm leading-relaxed">
-                A final risk debate (aggressive, cautious, neutral) produces the
-                recommendation you see: <strong className="text-green-400">BUY</strong>, <strong className="text-red-400">SELL</strong>, or <strong className="text-yellow-400">HOLD</strong>.
-              </p>
-            </div>
-          </div>
 
-          <div className="text-center">
-            <Link
-              to="/how-it-works"
-              className="inline-flex items-center px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors"
-            >
-              Read full explanation →
-            </Link>
+            <div className="text-center">
+              <Link
+                to="/how-it-works"
+                className="inline-flex items-center px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+              >
+                Read full explanation →
+              </Link>
+            </div>
           </div>
         </div>
       </section>
@@ -302,34 +309,28 @@ export default function HomePage() {
                   <span className="text-blue-400 mr-2">✓</span>
                   <span><strong className="text-white">Stock subscriptions</strong> with email updates</span>
                 </li>
+                <li className="flex items-start">
+                  <span className="text-blue-400 mr-2">✓</span>
+                  <span><strong className="text-white">AI Analyst</strong> — chat with live market data and analysis</span>
+                </li>
               </ul>
             </div>
           )}
           <div className="flex flex-col items-center justify-center gap-6">
             {user ? (
-              <>
-                <div className="w-full max-w-4xl">
-                  <StockSearch />
-                </div>
-                <Link
-                  to="/dashboard"
-                  className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-lg transition-colors"
-                >
-                  Go to Dashboard →
-                </Link>
-              </>
+              <Link
+                to="/dashboard"
+                className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-lg transition-colors"
+              >
+                Go to Dashboard →
+              </Link>
             ) : (
-              <>
-                <div className="w-full max-w-4xl">
-                  <StockSearch />
-                </div>
-                <button
-                  onClick={() => setShowAuthModal(true)}
-                  className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-lg transition-colors"
-                >
-                  Get Started Free →
-                </button>
-              </>
+              <button
+                onClick={() => setShowAuthModal(true)}
+                className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-lg transition-colors"
+              >
+                Get Started Free →
+              </button>
             )}
           </div>
         </div>

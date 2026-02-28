@@ -16,6 +16,7 @@ A modern, investor-focused stock analysis website featuring real-time market dat
   - Historical reports archive
 - **Stock Search**: Search for any ticker and generate reports on-demand
 - **Real-time Updates**: Live price updates and WebSocket support for report generation
+- **AI Analyst**: Conversational AI chat interface that lets users ask natural-language questions about any stock. The analyst has live access to prices, fundamentals, news, technical indicators, insider activity, and previously generated analysis reports. Responses stream in real-time and each message shows the number of tools accessed and tokens consumed.
 
 ## Project Structure
 

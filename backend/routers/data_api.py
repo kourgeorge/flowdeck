@@ -11,10 +11,13 @@ Blocking engine calls run in thread pool (non-blocking event loop).
 
 import asyncio
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Optional
+from sqlalchemy.orm import Session
 
+from auth import get_current_user
+from database import get_db
 from services.edgar_service import get_edgar_service
 from services.info_fetcher import get_info_fetcher
 from services.report_service import ReportService
@@ -156,8 +159,9 @@ async def data_edgar_filing_content(
     ticker: str,
     form: Optional[str] = Query(None, description="10-K or 10-Q"),
     limit: int = Query(1, ge=1, le=5, description="Max number of filings"),
+    _current_user=Depends(get_current_user),
 ):
-    """Get extracted SEC EDGAR sections (risk factors, MD&A, competition) for a ticker. Requires LLM (OpenAI or Azure)."""
+    """Get extracted SEC EDGAR sections (risk factors, MD&A, competition) for a ticker. Requires authentication and LLM (OpenAI or Azure)."""
     engine = get_edgar_service()
     return await asyncio.to_thread(engine.get_filing_content, ticker, form, limit)
 
@@ -175,8 +179,11 @@ def _get_report_service() -> ReportService:
 
 
 @router.get("/reports/{ticker}")
-async def data_reports_ticker(ticker: str):
-    """Get latest reports for one ticker. Returns report_date and reports dict (report_type -> content, score, key_takeaways, etc.)."""
+async def data_reports_ticker(
+    ticker: str,
+    _current_user=Depends(get_current_user),
+):
+    """Get latest reports for one ticker. Requires authentication. Returns report_date and reports dict (report_type -> content, score, key_takeaways, etc.)."""
     svc = _get_report_service()
     report_date = await asyncio.to_thread(svc.get_latest_report_date, ticker.upper())
     if not report_date:
@@ -186,8 +193,11 @@ async def data_reports_ticker(ticker: str):
 
 
 @router.post("/reports/batch")
-async def data_reports_batch(body: ReportsBatchBody):
-    """Get latest reports for multiple tickers. Body: { \"tickers\": [\"AAPL\", \"MSFT\", ...] }. Returns tickers -> { report_date, reports }."""
+async def data_reports_batch(
+    body: ReportsBatchBody,
+    _current_user=Depends(get_current_user),
+):
+    """Get latest reports for multiple tickers. Requires authentication. Body: { \"tickers\": [\"AAPL\", \"MSFT\", ...] }. Returns tickers -> { report_date, reports }."""
     tickers = [str(t).upper() for t in (body.tickers or []) if t][:50]
     svc = _get_report_service()
     result = {}

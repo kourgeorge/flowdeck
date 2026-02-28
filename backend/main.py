@@ -603,14 +603,14 @@ async def get_stock_widgets(
 @app.get("/api/tickers/{ticker}", response_model=StockPageData)
 async def get_stock_page(
     ticker: str,
-    current_user=Depends(get_current_user_optional),
+    current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Get complete stock page data. Runs in thread pool (non-blocking). Authenticated views are recorded for creator rewards."""
+    """Get complete stock page data. Requires authentication. Runs in thread pool (non-blocking). Views are recorded for creator rewards."""
     ticker = ticker.upper()
     try:
         result = await asyncio.to_thread(_get_stock_page_sync, ticker)
-        if current_user and result.report_date:
+        if result.report_date:
             try:
                 token_service.record_view(ticker, result.report_date, current_user.id, db)
             except Exception:
@@ -731,8 +731,11 @@ async def start_analysis(
 
 
 @app.get("/api/analyses/{analysis_id}/status")
-async def get_analysis_status(analysis_id: str):
-    """Get status of a running analysis."""
+async def get_analysis_status(
+    analysis_id: str,
+    _current_user=Depends(get_current_user),
+):
+    """Get status of a running analysis. Requires authentication."""
     status = analysis_service.get_analysis_status(analysis_id)
     if not status:
         raise HTTPException(status_code=404, detail="Analysis not found")
@@ -740,8 +743,36 @@ async def get_analysis_status(analysis_id: str):
 
 
 @app.websocket("/ws/analyses/{analysis_id}")
-async def websocket_endpoint(websocket: WebSocket, analysis_id: str):
-    """WebSocket endpoint for real-time analysis updates."""
+async def websocket_endpoint(websocket: WebSocket, analysis_id: str, token: Optional[str] = Query(None)):
+    """WebSocket endpoint for real-time analysis updates. Requires a valid Bearer token via ?token= query param."""
+    from auth import decode_token
+    from database import SessionLocal
+
+    # Authenticate before accepting the connection
+    if not token:
+        await websocket.close(code=4001, reason="Missing authentication token")
+        return
+
+    sub = decode_token(token)
+    if not sub:
+        await websocket.close(code=4001, reason="Invalid or expired token")
+        return
+
+    db = SessionLocal()
+    try:
+        from models.db_models import User as UserModel
+        try:
+            user_id = int(sub)
+        except ValueError:
+            await websocket.close(code=4001, reason="Invalid token subject")
+            return
+        user = db.query(UserModel).filter(UserModel.id == user_id).first()
+        if not user:
+            await websocket.close(code=4001, reason="User not found")
+            return
+    finally:
+        db.close()
+
     await websocket.accept()
     active_connections[analysis_id] = websocket
     

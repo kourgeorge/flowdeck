@@ -105,9 +105,14 @@ export const stockApi = {
     return response.data;
   },
 
-  // Get analysis status
+  // Get analysis status (requires auth)
   getAnalysisStatus: async (analysisId: string): Promise<any> => {
-    const response = await api.get(`/api/analyses/${analysisId}/status`);
+    const token = getStoredToken();
+    const response = await api.get(`/api/analyses/${analysisId}/status`, {
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
     return response.data;
   },
 

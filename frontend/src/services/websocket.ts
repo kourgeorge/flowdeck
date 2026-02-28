@@ -1,3 +1,5 @@
+import { getStoredToken } from './authApi';
+
 export class WebSocketClient {
   private ws: WebSocket | null = null;
   private url: string;
@@ -11,7 +13,9 @@ export class WebSocketClient {
     // In dev, use current host so Vite proxy forwards /ws to backend; otherwise use VITE_WS_URL or 8002
     const host = import.meta.env.VITE_WS_URL
       || (import.meta.env.DEV ? window.location.host : window.location.host.replace('3003', '8002'));
-    this.url = `${protocol}//${host}/ws/analyses/${analysisId}`;
+    const token = getStoredToken();
+    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+    this.url = `${protocol}//${host}/ws/analyses/${analysisId}${tokenParam}`;
   }
 
   connect(): void {
