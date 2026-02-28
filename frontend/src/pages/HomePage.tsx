@@ -108,17 +108,34 @@ export default function HomePage() {
           </div>
 
           {/* Headline - 2-tone */}
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-center mb-4 leading-tight">
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-center mb-4 leading-tight">
             <span className="text-white">Invest with the Odds in Your Favor</span>
             <br />
             <span className="text-blue-400">With AI-Powered Actionable Insights.</span>
           </h1>
 
           {/* Subtext */}
-          <p className="text-gray-400 text-center text-base sm:text-lg max-w-3xl mx-auto mb-5 leading-relaxed">
+          <p className="text-gray-400 text-center text-base sm:text-lg max-w-3xl mx-auto mb-3 leading-relaxed">
             A committee of specialized AI agents analyzes market data, news, fundamentals, and risk —
             then delivers a clear recommendation with full reasoning.
           </p>
+
+          {/* Trader Copilot pill */}
+          <div className="flex justify-center mb-5">
+            <Link
+              to="/copilot"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-900/40 border border-blue-700/50 hover:bg-blue-900/60 hover:border-blue-600 transition-colors group"
+            >
+              <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <span className="text-blue-300 text-sm font-medium">New: Trader Copilot</span>
+              <span className="text-gray-500 text-sm">— research & chat side by side</span>
+              <svg className="w-3.5 h-3.5 text-blue-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </div>
 
           {/* Social Proof */}
           <p className="text-gray-500 text-center text-sm mb-6">
