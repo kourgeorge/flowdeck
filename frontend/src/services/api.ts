@@ -320,11 +320,11 @@ export interface ChatStreamEvent {
 }
 
 export const chatApi = {
-  sendMessage: async (messages: ChatMessage[]): Promise<ChatResponse> => {
+  sendMessage: async (messages: ChatMessage[], context?: Record<string, unknown>): Promise<ChatResponse> => {
     const token = getStoredToken();
     const response = await api.post<ChatResponse>(
       '/api/chat',
-      { messages },
+      { messages, ...(context ? { context } : {}) },
       {
         headers: {
           ...(token && { Authorization: `Bearer ${token}` }),
@@ -350,6 +350,7 @@ export const chatApi = {
     onError: (message: string) => void,
     onThinking?: (status: string) => void,
     onToolCall?: (toolCall: ToolCallEvent) => void,
+    context?: Record<string, unknown>,
   ): AbortController => {
     const controller = new AbortController();
     const token = getStoredToken();
@@ -362,7 +363,7 @@ export const chatApi = {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify({ messages }),
+          body: JSON.stringify({ messages, ...(context ? { context } : {}) }),
           signal: controller.signal,
         });
 
