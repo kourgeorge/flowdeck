@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import StockSearch from '../components/StockSearch';
 import DashboardTopTiles from '../components/DashboardTopTiles';
@@ -8,15 +8,8 @@ import StockListView from '../components/StockListView';
 import DashboardNewsSection from '../components/DashboardNewsSection';
 import DashboardPriceTrendsChart from '../components/DashboardPriceTrendsChart';
 import OverviewStatsPanel, { ByMarketSection } from '../components/OverviewStatsPanel';
-import { stockApi } from '../services/api';
-import { subscriptionApi } from '../services/subscriptionApi';
-import type { StockWidget as StockWidgetType, StockPageData } from '../services/types';
+import { useDashboardData } from '../hooks/useDashboardData';
 import { useAuth } from '../contexts/AuthContext';
-
-const RECENT_PAGE_SIZE = 20;
-const RECENT_ANALYZED_DAYS = 3;
-/** Max concurrent prefetch requests to avoid hammering the server */
-const PREFETCH_CONCURRENCY = 3;
 
 type DashboardTab = 'overview' | 'stock-view' | 'news';
 type StockListTab = 'subscribed' | 'recent';
@@ -26,208 +19,24 @@ export default function DashboardPage() {
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>('overview');
   const [stockListTab, setStockListTab] = useState<StockListTab>('subscribed');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [widgets, setWidgets] = useState<StockWidgetType[]>([]);
-  const [recentAnalyzedWidgets, setRecentAnalyzedWidgets] = useState<StockWidgetType[]>([]);
-  const [recentTotal, setRecentTotal] = useState<number | null>(null);
-  const [loadingMoreRecent, setLoadingMoreRecent] = useState(false);
-  const [backgroundLoadingAll, setBackgroundLoadingAll] = useState(false);
-  const [tickerToName, setTickerToName] = useState<Record<string, string>>({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
-  /** Pre-fetched StockPageData keyed by ticker (uppercase) */
-  const [prefetchCache, setPrefetchCache] = useState<Record<string, StockPageData>>({});
-  const sidebarScrollRef = useRef<HTMLDivElement>(null);
-  const recentScrollRef = useRef<HTMLDivElement>(null);
-  // Track whether we've already kicked off the background full-load
-  const backgroundLoadStartedRef = useRef(false);
-  // Set of tickers currently being prefetched or already prefetched
-  const prefetchedRef = useRef<Set<string>>(new Set());
 
-  useEffect(() => {
-    fetch('/stocks.json')
-      .then((res) => res.json())
-      .then((arr: Array<{ ticker: string; name: string }>) => {
-        const map: Record<string, string> = {};
-        arr.forEach(({ ticker, name }) => { map[ticker] = name; });
-        setTickerToName(map);
-      })
-      .catch(() => {});
-  }, []);
-
-  const loadSubscriptions = async () => {
-    if (!user) { setWidgets([]); setIsLoading(false); return; }
-    try {
-      setIsLoading(true);
-      const subs = await subscriptionApi.list();
-      const tickers = subs.map((s) => s.ticker);
-      if (tickers.length > 0) {
-        const res = await stockApi.getWidgets(tickers);
-        setWidgets(res.widgets);
-        setSelectedTicker((prev) => prev ?? (res.widgets[0]?.ticker ?? null));
-      } else {
-        setWidgets([]);
-      }
-    } catch {
-      setWidgets([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadSubscriptions();
-    const interval = setInterval(loadSubscriptions, 60000);
-    return () => clearInterval(interval);
-  }, [user]);
-
-  const loadRecentPage = useCallback(async (offset: number, append: boolean) => {
-    const today = new Date().toISOString().slice(0, 10);
-    const res = await stockApi.getWidgets(undefined, today, true, RECENT_PAGE_SIZE, offset, RECENT_ANALYZED_DAYS);
-    if (res.total != null) setRecentTotal(res.total);
-    if (append) {
-      setRecentAnalyzedWidgets((prev) => [...prev, ...res.widgets]);
-    } else {
-      setRecentAnalyzedWidgets(res.widgets);
-      setSelectedTicker((prev) => {
-        if (prev) return prev;
-        return res.widgets[0]?.ticker ?? null;
-      });
-    }
-    return res;
-  }, []);
-
-  /**
-   * Background-load ALL remaining pages of recently analyzed stocks so the
-   * sidebar is fully populated before the user switches to Stock View.
-   * Pages are fetched sequentially to avoid hammering the server.
-   */
-  const loadAllRecentInBackground = useCallback(async (knownTotal: number, alreadyLoaded: number) => {
-    if (backgroundLoadStartedRef.current) return;
-    backgroundLoadStartedRef.current = true;
-    setBackgroundLoadingAll(true);
-    try {
-      const today = new Date().toISOString().slice(0, 10);
-      let offset = alreadyLoaded;
-      while (offset < knownTotal) {
-        const res = await stockApi.getWidgets(undefined, today, true, RECENT_PAGE_SIZE, offset, RECENT_ANALYZED_DAYS);
-        if (res.total != null) setRecentTotal(res.total);
-        setRecentAnalyzedWidgets((prev) => {
-          // Deduplicate by ticker in case of overlap
-          const existingTickers = new Set(prev.map((w) => w.ticker));
-          const newWidgets = res.widgets.filter((w) => !existingTickers.has(w.ticker));
-          return newWidgets.length > 0 ? [...prev, ...newWidgets] : prev;
-        });
-        offset += res.widgets.length;
-        if (res.widgets.length === 0) break;
-      }
-    } catch {
-      // Background load failure is non-critical; user can still scroll to load more
-    } finally {
-      setBackgroundLoadingAll(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!user) return;
-    // Reset background load flag when user changes so it re-runs on next login
-    backgroundLoadStartedRef.current = false;
-    loadRecentPage(0, false).catch(() => { setRecentAnalyzedWidgets([]); setRecentTotal(null); });
-    const interval = setInterval(() => {
-      backgroundLoadStartedRef.current = false;
-      loadRecentPage(0, false).catch(() => {});
-    }, 60000);
-    return () => clearInterval(interval);
-  }, [user, loadRecentPage]);
-
-  // Once the first page is loaded and we know the total, kick off background loading of all remaining pages
-  useEffect(() => {
-    if (!user) return;
-    if (recentTotal == null || backgroundLoadStartedRef.current) return;
-    if (recentAnalyzedWidgets.length >= recentTotal) return;
-    loadAllRecentInBackground(recentTotal, recentAnalyzedWidgets.length);
-  }, [user, recentTotal, recentAnalyzedWidgets.length, loadAllRecentInBackground]);
-
-  /**
-   * Pre-fetch StockPageData for newly added tickers so that clicking a ticker
-   * in the sidebar shows data instantly (no loading spinner).
-   * Uses a concurrency-limited queue to avoid hammering the server.
-   */
-  useEffect(() => {
-    if (!user) return;
-    const allTickers = [
-      ...widgets.map((w) => w.ticker),
-      ...recentAnalyzedWidgets.map((w) => w.ticker),
-    ];
-    const newTickers = allTickers.filter((t) => !prefetchedRef.current.has(t));
-    if (newTickers.length === 0) return;
-
-    // Mark all as "in-flight" immediately to prevent duplicate fetches
-    newTickers.forEach((t) => prefetchedRef.current.add(t));
-
-    // Fetch in batches of PREFETCH_CONCURRENCY
-    const fetchBatch = async (batch: string[]) => {
-      await Promise.all(
-        batch.map((ticker) =>
-          stockApi.getStockPage(ticker)
-            .then((data) => {
-              setPrefetchCache((prev) => ({ ...prev, [ticker]: data }));
-            })
-            .catch(() => {
-              // Remove from prefetched set on failure so it can be retried
-              prefetchedRef.current.delete(ticker);
-            })
-        )
-      );
-    };
-
-    const runQueue = async () => {
-      for (let i = 0; i < newTickers.length; i += PREFETCH_CONCURRENCY) {
-        await fetchBatch(newTickers.slice(i, i + PREFETCH_CONCURRENCY));
-      }
-    };
-
-    runQueue();
-  }, [user, widgets, recentAnalyzedWidgets]);
-
-  // Infinite scroll for sidebar (stock-view tab) — only used if background load hasn't finished
-  const handleSidebarScroll = useCallback(() => {
-    const el = sidebarScrollRef.current;
-    if (!el || loadingMoreRecent || backgroundLoadingAll || recentTotal == null) return;
-    if (recentAnalyzedWidgets.length >= recentTotal) return;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
-      setLoadingMoreRecent(true);
-      const today = new Date().toISOString().slice(0, 10);
-      stockApi
-        .getWidgets(undefined, today, true, RECENT_PAGE_SIZE, recentAnalyzedWidgets.length, RECENT_ANALYZED_DAYS)
-        .then((res) => {
-          if (res.total != null) setRecentTotal(res.total);
-          setRecentAnalyzedWidgets((prev) => [...prev, ...res.widgets]);
-        })
-        .finally(() => setLoadingMoreRecent(false));
-    }
-  }, [loadingMoreRecent, backgroundLoadingAll, recentTotal, recentAnalyzedWidgets.length]);
-
-  // Infinite scroll for overview tab recent list — only used if background load hasn't finished
-  const handleRecentScroll = useCallback(() => {
-    const el = recentScrollRef.current;
-    if (!el || loadingMoreRecent || backgroundLoadingAll || recentTotal == null) return;
-    if (recentAnalyzedWidgets.length >= recentTotal) return;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 120) {
-      setLoadingMoreRecent(true);
-      const today = new Date().toISOString().slice(0, 10);
-      stockApi
-        .getWidgets(undefined, today, true, RECENT_PAGE_SIZE, recentAnalyzedWidgets.length, RECENT_ANALYZED_DAYS)
-        .then((res) => {
-          if (res.total != null) setRecentTotal(res.total);
-          setRecentAnalyzedWidgets((prev) => [...prev, ...res.widgets]);
-        })
-        .finally(() => setLoadingMoreRecent(false));
-    }
-  }, [loadingMoreRecent, backgroundLoadingAll, recentTotal, recentAnalyzedWidgets.length]);
-
-  const handleSubscriptionChange = useCallback(() => {
-    loadSubscriptions();
-  }, [user]);
+  const {
+    widgets,
+    recentAnalyzedWidgets,
+    recentTotal,
+    loadingMoreRecent,
+    backgroundLoadingAll,
+    tickerToName,
+    isLoading,
+    selectedTicker,
+    setSelectedTicker,
+    prefetchCache,
+    sidebarScrollRef,
+    recentScrollRef,
+    handleSidebarScroll,
+    handleRecentScroll,
+    handleSubscriptionChange,
+  } = useDashboardData();
 
   if (!user) {
     return (
