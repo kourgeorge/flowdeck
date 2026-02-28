@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { COPILOT_NAME } from '../config';
 
 export default function HowItWorksPage() {
   return (
@@ -13,7 +14,7 @@ export default function HowItWorksPage() {
 
         <h1 className="text-3xl font-bold text-white mb-2">How Flowdeck Works</h1>
         <p className="text-gray-500 text-sm mb-10">
-          How we use AI to produce insights and recommendations you see on your stock pages — and how the Trader Copilot and AI Analyst Agent help you dig deeper.
+          How we use AI to produce insights and recommendations you see on your stock pages — and how {COPILOT_NAME} (your Trading Copilot) and the AI Analyst Agent help you dig deeper.
         </p>
         <div className="mb-10">
           <Link
@@ -93,22 +94,22 @@ export default function HowItWorksPage() {
             </p>
           </section>
 
-          {/* Trader Copilot */}
+          {/* Trading Copilot — Deck */}
           <section>
-            <h2 className="text-lg font-semibold text-white mb-3">The Trader Copilot</h2>
+            <h2 className="text-lg font-semibold text-white mb-3">{COPILOT_NAME} — Your Trading Copilot</h2>
             <p className="mb-3">
-              The <strong className="text-white">Trader Copilot</strong> (<Link to="/copilot" className="text-blue-400 hover:text-blue-300 underline underline-offset-2">/copilot</Link>) is a three-panel workspace designed for active research. Instead of switching between tabs, you get everything in one view:
+              <strong className="text-white">{COPILOT_NAME}</strong> (<Link to="/copilot" className="text-blue-400 hover:text-blue-300 underline underline-offset-2">/copilot</Link>) is your Trading Copilot — a three-panel workspace designed for active research. Instead of switching between tabs, you get everything in one view:
             </p>
             <ul className="list-disc list-inside space-y-1.5 mb-3 text-gray-300">
               <li><strong className="text-white">Left panel</strong> — your watchlist. Add any ticker with the search box; click to select it as your focus stock.</li>
               <li><strong className="text-white">Middle panel</strong> — full stock detail for the selected ticker: live quote, AI recommendation, all report tabs, fundamentals, news, and insider activity.</li>
-              <li><strong className="text-white">Right panel</strong> — the AI Copilot chat, pre-loaded with context about the selected ticker and your entire watchlist.</li>
+              <li><strong className="text-white">Right panel</strong> — the {COPILOT_NAME} AI chat, pre-loaded with context about the selected ticker and your entire watchlist.</li>
             </ul>
             <p className="mb-3">
               The chat panel is context-aware. When you select a ticker, the AI automatically knows which stock you are looking at. You can ask <em>"What are the key risks here?"</em> or <em>"Summarize the latest report"</em> without specifying the ticker — the AI already knows. You can also ask cross-ticker questions like <em>"Compare NVDA and AMD fundamentals"</em> or <em>"Which of my watchlist stocks has the best recommendation right now?"</em>
             </p>
             <p>
-              Each message in the Copilot chat shows which data tools were accessed (e.g. Stock Quote, AI Reports, Fundamentals, Technical Indicators) and how many tokens were consumed, so you always know what information the AI used to form its answer.
+              Each message in the {COPILOT_NAME} chat shows which data tools were accessed (e.g. Stock Quote, AI Reports, Fundamentals, Technical Indicators) and how many tokens were consumed, so you always know what information the AI used to form its answer.
             </p>
           </section>
 
@@ -116,7 +117,7 @@ export default function HowItWorksPage() {
           <section>
             <h2 className="text-lg font-semibold text-white mb-3">The AI Analyst Agent</h2>
             <p className="mb-3">
-              The standalone <strong className="text-white">AI Analyst Agent</strong> (<Link to="/chat" className="text-blue-400 hover:text-blue-300 underline underline-offset-2">/chat</Link>) gives you a full-page conversational interface for deep-dive research. It has live access to the same data sources as the Copilot chat:
+              The standalone <strong className="text-white">AI Analyst Agent</strong> (<Link to="/chat" className="text-blue-400 hover:text-blue-300 underline underline-offset-2">/chat</Link>) gives you a full-page conversational interface for deep-dive research. It has live access to the same data sources as the {COPILOT_NAME} chat:
             </p>
             <ul className="list-disc list-inside space-y-1.5 mb-3 text-gray-300">
               <li>Live stock quotes and historical price data</li>
@@ -131,7 +132,7 @@ export default function HowItWorksPage() {
               Responses stream token-by-token as the AI reasons through your question. You can see exactly which tools were called and how many tokens each message consumed. The AI Analyst is best for open-ended research: <em>"Walk me through the bull and bear case for TSLA"</em>, <em>"What does the technical picture look like for AAPL right now?"</em>, or <em>"Summarize the key themes across my watchlist this week."</em>
             </p>
             <p>
-              Both the Copilot chat and the AI Analyst Agent use tokens from your balance. Each message deducts tokens based on the complexity of the query and the number of data tools accessed. New users receive <strong className="text-white">1,000 free tokens</strong> on sign-up.
+              Both the {COPILOT_NAME} chat and the AI Analyst Agent use tokens from your balance. Each message deducts tokens based on the complexity of the query and the number of data tools accessed. New users receive <strong className="text-white">1,000 free tokens</strong> on sign-up.
             </p>
           </section>
 
@@ -139,7 +140,7 @@ export default function HowItWorksPage() {
           <section>
             <h2 className="text-lg font-semibold text-white mb-3">In a Nutshell</h2>
             <p>
-              Flowdeck gives you AI-powered stock insights by (1) pulling in live market data, news, and fundamentals, (2) running that information through specialized analysts and a structured bull/bear and risk debate, and (3) showing you a clear BUY/SELL/HOLD plus detailed reports so you can see how the AI got there. The <strong className="text-white">Trader Copilot</strong> lets you research and chat side by side, while the <strong className="text-white">AI Analyst Agent</strong> is available for deeper, open-ended conversations. The flow is designed to be transparent and multi-step — so you get a reasonable, in-depth explanation of how the AI processes information and arrives at the recommendation you see.
+              Flowdeck gives you AI-powered stock insights by (1) pulling in live market data, news, and fundamentals, (2) running that information through specialized analysts and a structured bull/bear and risk debate, and (3) showing you a clear BUY/SELL/HOLD plus detailed reports so you can see how the AI got there. <strong className="text-white">{COPILOT_NAME}</strong>, your Trading Copilot, lets you research and chat side by side, while the <strong className="text-white">AI Analyst Agent</strong> is available for deeper, open-ended conversations. The flow is designed to be transparent and multi-step — so you get a reasonable, in-depth explanation of how the AI processes information and arrives at the recommendation you see.
             </p>
           </section>
         </div>
@@ -155,7 +156,7 @@ export default function HowItWorksPage() {
             to="/copilot"
             className="inline-flex items-center text-sm text-gray-400 hover:text-white transition-colors"
           >
-            Trader Copilot →
+            {COPILOT_NAME} →
           </Link>
           <Link
             to="/chat"

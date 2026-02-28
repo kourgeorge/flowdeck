@@ -5,7 +5,7 @@ import StockSearch from '../components/StockSearch';
 import AuthModal from '../components/AuthModal';
 import { stockApi, API_BASE_URL } from '../services/api';
 import type { StockWidget as StockWidgetType } from '../services/types';
-import { LOGO_PATH } from '../config';
+import { LOGO_PATH, COPILOT_NAME } from '../config';
 import { useAuth } from '../contexts/AuthContext';
 
 interface PublicStats {
@@ -120,7 +120,7 @@ export default function HomePage() {
             then delivers a clear recommendation with full reasoning.
           </p>
 
-          {/* Trader Copilot pill */}
+          {/* Trading Copilot — Deck pill */}
           <div className="flex justify-center mb-5">
             <Link
               to="/copilot"
@@ -129,8 +129,8 @@ export default function HomePage() {
               <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
-              <span className="text-blue-300 text-sm font-medium">New: Trader Copilot</span>
-              <span className="text-gray-500 text-sm">— research & chat side by side</span>
+              <span className="text-blue-300 text-sm font-medium">New: {COPILOT_NAME}</span>
+              <span className="text-gray-500 text-sm">— your Trading Copilot, research & chat side by side</span>
               <svg className="w-3.5 h-3.5 text-blue-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
@@ -208,14 +208,14 @@ export default function HomePage() {
                 <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                <span className="text-blue-300 text-xs font-semibold uppercase tracking-wider">Trader Copilot</span>
+                <span className="text-blue-300 text-xs font-semibold uppercase tracking-wider">Trading Copilot — {COPILOT_NAME}</span>
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4 leading-tight">
                 Research and Chat,<br />
                 <span className="text-blue-400">Side by Side</span>
               </h2>
               <p className="text-gray-400 text-base leading-relaxed mb-6">
-                The Trader Copilot is a three-panel workspace: your watchlist on the left, full stock detail in the middle, and an AI chat on the right. Ask follow-up questions while you read the report — no switching tabs, no copy-pasting tickers.
+                {COPILOT_NAME} is your Trading Copilot — a three-panel workspace: your watchlist on the left, full stock detail in the middle, and an AI chat on the right. Ask follow-up questions while you read the report — no switching tabs, no copy-pasting tickers.
               </p>
               <ul className="space-y-3 mb-8">
                 {[
@@ -238,7 +238,7 @@ export default function HomePage() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                Open Trader Copilot
+                Open {COPILOT_NAME}
               </Link>
             </div>
 
@@ -253,7 +253,7 @@ export default function HomePage() {
                   <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
-                  <span className="text-xs text-gray-400 font-medium">Copilot</span>
+                  <span className="text-xs text-gray-400 font-medium">{COPILOT_NAME}</span>
                 </div>
               </div>
               {/* Three-panel layout preview */}
@@ -313,7 +313,7 @@ export default function HomePage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                       </svg>
                     </div>
-                    <span className="text-white text-[10px] font-semibold">Copilot</span>
+                    <span className="text-white text-[10px] font-semibold">{COPILOT_NAME}</span>
                   </div>
                   <div className="flex-1 p-2 flex flex-col gap-2 overflow-hidden">
                     <div className="self-end bg-blue-600 text-white rounded-xl rounded-br-sm px-2 py-1 text-[9px] max-w-[90%]">
@@ -393,9 +393,9 @@ export default function HomePage() {
               </p>
             </div>
             <div className="bg-blue-900/20 border border-blue-700/50 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">Trader Copilot & AI Analyst</h4>
+              <h4 className="text-lg font-semibold text-white mb-2">{COPILOT_NAME} — Trading Copilot & AI Analyst</h4>
               <p className="text-gray-400 text-sm">
-                Research stocks and chat with the AI side by side in the Copilot workspace, or use the standalone AI Analyst Agent for deep-dive conversations with live market data access.
+                Research stocks and chat with the AI side by side in {COPILOT_NAME}, your Trading Copilot, or use the standalone AI Analyst Agent for deep-dive conversations with live market data access.
               </p>
             </div>
           </div>
@@ -475,7 +475,7 @@ export default function HomePage() {
                 </li>
                 <li className="flex items-start">
                   <span className="text-blue-400 mr-2">✓</span>
-                  <span><strong className="text-white">Trader Copilot</strong> — research and chat side by side</span>
+                  <span><strong className="text-white">{COPILOT_NAME}</strong> — your Trading Copilot, research and chat side by side</span>
                 </li>
                 <li className="flex items-start">
                   <span className="text-blue-400 mr-2">✓</span>
@@ -500,7 +500,7 @@ export default function HomePage() {
                   <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
-                  Open Copilot
+                  Open {COPILOT_NAME}
                 </Link>
               </div>
             ) : (

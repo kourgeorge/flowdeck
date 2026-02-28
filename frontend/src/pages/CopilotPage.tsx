@@ -5,6 +5,7 @@ import StockDetailPanel from '../components/StockDetailPanel';
 import CopilotChatPanel from '../components/CopilotChatPanel';
 import { useSubscribedStocks } from '../hooks/useSubscribedStocks';
 import { useAuth } from '../contexts/AuthContext';
+import { COPILOT_NAME } from '../config';
 import type { StockPageData, StockWidget } from '../services/types';
 
 export default function CopilotPage() {
@@ -37,9 +38,9 @@ export default function CopilotPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <h2 className="text-lg font-semibold text-white mb-2">Sign in to use Copilot</h2>
+          <h2 className="text-lg font-semibold text-white mb-2">Sign in to use {COPILOT_NAME}</h2>
           <p className="text-gray-400 mb-6 text-sm">
-            Copilot combines the stock view with an AI analyst chat so you can research and discuss stocks side by side.
+            {COPILOT_NAME} is your Trading Copilot — it combines the stock view with an AI analyst chat so you can research and discuss stocks side by side.
           </p>
           <Link to="/" className="inline-block px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium">
             Go to Home
@@ -58,7 +59,7 @@ export default function CopilotPage() {
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
-          <p className="text-gray-400 text-sm">Loading Copilot…</p>
+          <p className="text-gray-400 text-sm">Loading {COPILOT_NAME}…</p>
         </div>
       </div>
     );
@@ -74,7 +75,7 @@ export default function CopilotPage() {
           <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
-          <span className="text-sm font-semibold text-white">Copilot</span>
+          <span className="text-sm font-semibold text-white">{COPILOT_NAME}</span>
         </div>
         <div className="ml-auto" />
       </div>
@@ -142,7 +143,7 @@ export default function CopilotPage() {
           )}
         </main>
 
-        {/* ── Right: AI Copilot Panel ── */}
+        {/* ── Right: AI Trading Copilot — Deck ── */}
         <div
           className={`shrink-0 hidden md:flex flex-col min-h-0 transition-all duration-200 ${
             chatCollapsed ? 'w-6' : 'w-96'
@@ -201,7 +202,7 @@ export default function CopilotPage() {
   );
 }
 
-/** Mobile-only tabbed view: Stock Detail | Copilot */
+/** Mobile-only tabbed view: Stock Detail | Deck */
 function MobileStockChatTabs({
   selectedTicker,
   tickers,
@@ -239,7 +240,7 @@ function MobileStockChatTabs({
               : 'text-gray-400 border-transparent hover:text-white'
           }`}
         >
-          Copilot
+          {COPILOT_NAME}
         </button>
       </div>
 

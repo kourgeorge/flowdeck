@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { APP_NAME, LOGO_PATH } from '../config';
+import { APP_NAME, LOGO_PATH, COPILOT_NAME } from '../config';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
 
 const navItems: { to: string; label: string; authOnly?: boolean }[] = [
   { to: '/dashboard', label: 'Dashboard', authOnly: true },
-  { to: '/copilot', label: 'Copilot', authOnly: true },
+  { to: '/copilot', label: COPILOT_NAME, authOnly: true },
   { to: '/chat', label: 'AI Analyst Agent', authOnly: true },
 ];
 
@@ -151,7 +151,7 @@ export default function Layout() {
               ) : (
                 <div className="mt-2 rounded-lg bg-blue-950/60 border border-blue-700/40 p-3 flex flex-col gap-2">
                   <p className="text-xs text-gray-300 leading-snug">
-                    <span className="font-medium text-white">Sign in</span> to run AI analysis on any stock, access your personalized dashboard, and get a personalized trader copilot.
+                    <span className="font-medium text-white">Sign in</span> to run AI analysis on any stock, access your personalized dashboard, and use {COPILOT_NAME} — your Trading Copilot.
                   </p>
                   <button
                     type="button"

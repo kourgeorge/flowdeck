@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import ChatView, { useChatState } from './ChatView';
 import { useAuth } from '../contexts/AuthContext';
 import { profileApi } from '../services/authApi';
+import { COPILOT_NAME } from '../config';
 
 function getSuggestedQuestions(ticker?: string | null, tickers?: string[]): string[] {
   if (ticker) {
@@ -81,7 +82,7 @@ export default function CopilotChatPanel({
         <button
           type="button"
           onClick={onToggleCollapse}
-          title="Expand Copilot"
+          title={`Expand ${COPILOT_NAME}`}
           className="flex items-center justify-center w-6 h-6 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded transition-colors"
         >
           <svg className="w-3.5 h-3.5 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -93,7 +94,7 @@ export default function CopilotChatPanel({
             className="text-xs text-gray-500 font-medium select-none"
             style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
           >
-            Copilot
+            {COPILOT_NAME}
           </span>
         </div>
       </div>
@@ -112,7 +113,7 @@ export default function CopilotChatPanel({
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="text-sm font-semibold text-white leading-tight">Copilot</span>
+              <span className="text-sm font-semibold text-white leading-tight">{COPILOT_NAME}</span>
             </div>
             <p className="text-xs text-slate-400 leading-tight">AI-powered · full analysis access</p>
           </div>
@@ -154,7 +155,7 @@ export default function CopilotChatPanel({
             <button
               type="button"
               onClick={onToggleCollapse}
-              title="Collapse Copilot"
+              title={`Collapse ${COPILOT_NAME}`}
               className="flex items-center justify-center w-6 h-6 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded transition-colors"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
