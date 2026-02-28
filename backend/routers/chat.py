@@ -8,7 +8,7 @@ Deducts tokens from the user's balance based on the number of agent trajectory s
 import asyncio
 import json
 import logging
-from typing import AsyncIterator, List
+from typing import AsyncIterator, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
@@ -32,6 +32,7 @@ class ChatMessageIn(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: List[ChatMessageIn]
+    context: Optional[Dict] = None  # optional context (e.g. {"tickers": ["AAPL", "MSFT"]})
 
 
 class ChatResponse(BaseModel):
@@ -64,11 +65,12 @@ async def chat(
 
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
     user_id = current_user.id
+    context = body.context or {}
 
     # Run the agent in a thread pool (blocking LangChain calls)
     try:
         service = get_chat_service()
-        result = await asyncio.to_thread(service.chat, messages, user_id, db)
+        result = await asyncio.to_thread(service.chat, messages, user_id, db, context)
     except Exception as e:
         logger.exception("Chat agent failed for user_id=%s: %s", current_user.id, e)
         raise HTTPException(
@@ -116,6 +118,7 @@ async def chat_stream(
 
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
     user_id = current_user.id
+    context = body.context or {}
 
     async def event_generator() -> AsyncIterator[str]:
         service = get_chat_service()
@@ -127,7 +130,7 @@ async def chat_stream(
 
             def run_generator():
                 try:
-                    for chunk in service.chat_stream(messages, user_id=user_id, db=db):
+                    for chunk in service.chat_stream(messages, user_id=user_id, db=db, context=context):
                         loop.call_soon_threadsafe(queue.put_nowait, chunk)
                 except Exception as exc:
                     err_event = f"data: {json.dumps({'type': 'error', 'content': str(exc)})}\n\n"

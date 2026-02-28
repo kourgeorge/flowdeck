@@ -38,8 +38,36 @@ def _tool_get_stock_quote(symbol: str) -> str:
         return f"Error fetching quote for {symbol}: {e}"
 
 
-def _tool_get_platform_reports(ticker: str) -> str:
-    """Get FlowDeck AI analysis reports for a ticker."""
+# Canonical report keys and their display labels
+_REPORT_LABELS = {
+    "market_report": "Market Analysis",
+    "fundamentals_report": "Fundamentals Analysis",
+    "technical_report": "Technical Analysis",
+    "news_report": "News Analysis",
+    "sec_report": "SEC Analysis",
+    "investment_plan": "Investment Plan",
+    "trader_investment_plan": "Trader Plan",
+    "final_trade_decision": "Final Decision",
+}
+# Aliases the LLM might pass for report_type
+_REPORT_ALIASES: dict[str, str] = {
+    "market": "market_report",
+    "fundamentals": "fundamentals_report",
+    "fundamental": "fundamentals_report",
+    "technical": "technical_report",
+    "news": "news_report",
+    "sec": "sec_report",
+    "investment": "investment_plan",
+    "plan": "investment_plan",
+    "trader": "trader_investment_plan",
+    "trader_plan": "trader_investment_plan",
+    "final": "final_trade_decision",
+    "decision": "final_trade_decision",
+    "recommendation": "final_trade_decision",
+}
+
+def _tool_get_platform_reports(ticker: str, report_type: str | None = None) -> str:
+    """Get FlowDeck AI analysis reports for a ticker, optionally filtered to a specific report."""
     try:
         from services.report_service import ReportService
         svc = ReportService()
@@ -52,20 +80,19 @@ def _tool_get_platform_reports(ticker: str) -> str:
         if not reports:
             return f"No report content found for {ticker_upper}."
 
-        REPORT_LABELS = {
-            "market_report": "Market Analysis",
-            "fundamentals_report": "Fundamentals Analysis",
-            "technical_report": "Technical Analysis",
-            "news_report": "News Analysis",
-            "sec_report": "SEC Analysis",
-            "investment_plan": "Investment Plan",
-            "trader_investment_plan": "Trader Plan",
-            "final_trade_decision": "Final Decision",
-        }
+        # Resolve report_type alias → canonical key
+        filter_key: str | None = None
+        if report_type:
+            rt = report_type.strip().lower()
+            filter_key = _REPORT_ALIASES.get(rt, rt)  # try alias map, else use as-is
+            if filter_key not in _REPORT_LABELS:
+                # Try partial match
+                matches = [k for k in _REPORT_LABELS if rt in k]
+                filter_key = matches[0] if matches else None
 
         lines = [f"# FlowDeck AI Reports for {ticker_upper} ({latest_date})", ""]
 
-        # Recommendation summary
+        # Recommendation summary (always shown)
         tip = reports.get("trader_investment_plan") or {}
         ftd = reports.get("final_trade_decision") or {}
         rec = tip.get("recommendation") or ftd.get("recommendation")
@@ -74,53 +101,63 @@ def _tool_get_platform_reports(ticker: str) -> str:
             conf_str = f" ({conf*100:.0f}% confidence)" if conf else ""
             lines.append(f"**Recommendation: {rec}{conf_str}**")
 
-        # Return scenarios
+        # Return scenarios (always shown)
         inv = reports.get("investment_plan") or {}
         exp = inv.get("expected_return_pct")
-        bear = inv.get("bear_case_return_pct")
-        bull = inv.get("bull_case_return_pct")
-        if any(v is not None for v in [exp, bear, bull]):
+        bear_ret = inv.get("bear_case_return_pct")
+        bull_ret = inv.get("bull_case_return_pct")
+        if any(v is not None for v in [exp, bear_ret, bull_ret]):
             parts = []
             if exp is not None: parts.append(f"Expected: {exp:+.1f}%")
-            if bear is not None: parts.append(f"Bear: {bear:+.1f}%")
-            if bull is not None: parts.append(f"Bull: {bull:+.1f}%")
+            if bear_ret is not None: parts.append(f"Bear: {bear_ret:+.1f}%")
+            if bull_ret is not None: parts.append(f"Bull: {bull_ret:+.1f}%")
             lines.append("Return scenarios: " + " | ".join(parts))
 
         lines.append("")
 
-        # Each report: label + score + key takeaways + truncated content
-        REPORT_ORDER = ["final_trade_decision", "investment_plan", "trader_investment_plan",
-                        "market_report", "fundamentals_report", "technical_report",
-                        "news_report", "sec_report"]
-        ordered = [k for k in REPORT_ORDER if k in reports] + [k for k in reports if k not in REPORT_ORDER]
+        if filter_key:
+            # Single-report mode
+            if filter_key not in reports:
+                available = ", ".join(_REPORT_LABELS.get(k, k) for k in reports)
+                return (
+                    f"Report '{report_type}' not found for {ticker_upper}. "
+                    f"Available reports: {available}."
+                )
+            keys_to_render = [filter_key]
+        else:
+            # All reports
+            REPORT_ORDER = ["final_trade_decision", "investment_plan", "trader_investment_plan",
+                            "market_report", "fundamentals_report", "technical_report",
+                            "news_report", "sec_report"]
+            keys_to_render = [k for k in REPORT_ORDER if k in reports] + [k for k in reports if k not in REPORT_ORDER]
 
-        for key in ordered:
+        for key in keys_to_render:
             data = reports.get(key)
             if not data:
                 continue
-            label = REPORT_LABELS.get(key, key.replace("_", " ").title())
+            label = _REPORT_LABELS.get(key, key.replace("_", " ").title())
             score = data.get("score")
             takeaways = data.get("key_takeaways") or []
             content = (data.get("content") or "").strip()
 
             lines.append(f"## {label}" + (f" (Score: {score}/10)" if score is not None else ""))
 
-            # Key takeaways
+            # Key takeaways (always shown)
             if takeaways:
                 lines.append("**Key Takeaways:**")
                 for t in takeaways:
                     lines.append(f"- {t}")
 
             # Researcher viewpoints (investment_plan)
-            bull = data.get("bull_viewpoint") or []
-            bear = data.get("bear_viewpoint") or []
-            if bull:
+            bull_vp = data.get("bull_viewpoint") or []
+            bear_vp = data.get("bear_viewpoint") or []
+            if bull_vp:
                 lines.append("**Bull Viewpoint:**")
-                for p in bull:
+                for p in bull_vp:
                     lines.append(f"- {p}")
-            if bear:
+            if bear_vp:
                 lines.append("**Bear Viewpoint:**")
-                for p in bear:
+                for p in bear_vp:
                     lines.append(f"- {p}")
 
             # Risk analyst viewpoints (final_trade_decision)
@@ -140,10 +177,10 @@ def _tool_get_platform_reports(ticker: str) -> str:
                 for p in safe:
                     lines.append(f"- {p}")
 
-            # Report content (truncated to 2000 chars)
-            if content:
-                if len(content) > 2000:
-                    content = content[:2000] + " [...]"
+            # Full report content — only included when a specific report_type was requested
+            if filter_key and content:
+                if len(content) > 8000:
+                    content = content[:8000] + " [...]"
                 lines.append(content)
             lines.append("")
 
@@ -218,7 +255,7 @@ def _tool_get_indicators(ticker: str) -> str:
     try:
         from ai_engine.tradingagents.agents.utils.technical_indicators_tools import get_indicators
         today = datetime.date.today().isoformat()
-        return get_indicators.invoke({"ticker": ticker.upper(), "curr_date": today, "look_back_days": 30})
+        return get_indicators.invoke({"symbol": ticker.upper(), "indicator": "all", "curr_date": today, "look_back_days": 30})
     except Exception as e:
         return f"Error fetching indicators for {ticker}: {e}"
 
@@ -522,16 +559,33 @@ TOOLS = [
             "ALWAYS call this first when the user asks about a stock's analysis, recommendation, outlook, "
             "investment thesis, bull/bear case, risk assessment, or any AI-generated insight. "
             "Retrieves FlowDeck's proprietary AI analysis reports from the platform database for a given ticker. "
-            "Returns: BUY/SELL/HOLD recommendation with confidence score, expected/bull/bear return scenarios, "
-            "and the full content of all available reports: Final Trade Decision (risk-adjusted), "
+            "Without report_type: returns a summary of ALL reports — recommendation, return scenarios, "
+            "scores, and key takeaways for each report (no full text). "
+            "With report_type: returns the full content of that specific report. "
+            "Available reports: Final Trade Decision (risk-adjusted recommendation), "
             "Investment Plan (bull vs bear researcher debate), Trader Plan, Market Analysis, "
-            "Fundamentals Analysis, Technical Analysis, News Analysis, and SEC/Regulatory Analysis. "
-            "Each report includes a quality score (0-10) and key takeaways."
+            "Fundamentals Analysis, Technical Analysis, News Analysis, SEC/Regulatory Analysis. "
+            "Use report_type when the user asks to 'read', 'show', 'summarize', or 'deep dive' into a specific report."
         ),
         "parameters": {
             "type": "object",
             "properties": {
-                "ticker": {"type": "string", "description": "Stock ticker symbol, e.g. AAPL, MSFT, TSLA, NVDA"}
+                "ticker": {"type": "string", "description": "Stock ticker symbol, e.g. AAPL, MSFT, TSLA, NVDA"},
+                "report_type": {
+                    "type": "string",
+                    "description": (
+                        "Optional. Fetch only a specific report instead of all reports. "
+                        "Accepted values: 'final_trade_decision' (or 'final'/'decision'/'recommendation'), "
+                        "'investment_plan' (or 'investment'/'plan'), "
+                        "'trader_investment_plan' (or 'trader'/'trader_plan'), "
+                        "'market_report' (or 'market'), "
+                        "'fundamentals_report' (or 'fundamentals'/'fundamental'), "
+                        "'technical_report' (or 'technical'), "
+                        "'news_report' (or 'news'), "
+                        "'sec_report' (or 'sec'). "
+                        "Omit or leave null to fetch all available reports."
+                    ),
+                },
             },
             "required": ["ticker"],
         },
@@ -828,6 +882,7 @@ class ChatService:
         messages: List[Dict[str, str]],
         user_id: Optional[int] = None,
         db: Optional[Any] = None,
+        context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Run a chat turn with the LLM + tool-calling loop.
@@ -836,6 +891,7 @@ class ChatService:
             messages: List of {role: "user"|"assistant", content: str} dicts.
             user_id:  Optional user ID for user-context tools.
             db:       Optional SQLAlchemy session for user-context tools.
+            context:  Optional context dict (e.g. {"tickers": ["AAPL", "MSFT"]}).
 
         Returns:
             dict with reply (str) and tokens_used (int).
@@ -869,6 +925,19 @@ class ChatService:
 12. Call `get_user_subscriptions` to see which stocks the user is subscribed/watching on FlowDeck.
 13. Call `get_portfolio_overview` to get live quotes AND AI recommendations for ALL of the user's subscribed stocks at once — use this when the user asks about their portfolio or how their stocks are doing.""" if has_user_ctx else ""
 
+        # Build watchlist context section if tickers are provided
+        watchlist_tickers: List[str] = (context or {}).get("tickers", [])
+        watchlist_section = ""
+        if watchlist_tickers:
+            tickers_str = ", ".join(watchlist_tickers)
+            watchlist_section = f"""
+
+## User's Current Watchlist
+The user is currently viewing the Vibe Trading page with the following tickers in their list: **{tickers_str}**
+- When the user says "my stocks", "my list", "these stocks", or asks about their watchlist without specifying tickers, they are referring to these tickers.
+- When asked for a comparison, overview, or analysis of their portfolio/watchlist, cover ALL of these tickers: {tickers_str}
+- You may proactively mention relevant insights across all watchlist tickers when appropriate."""
+
         system_content = f"""You are FlowDeck's Stock Market Analyst AI — an expert in equity analysis, trading strategy, and financial markets. Today is {today}.
 
 ## Your Role
@@ -884,7 +953,7 @@ You help users understand stocks, markets, and investment opportunities using re
 7. Call `get_global_news` for macro/market-wide news and trends.
 8. Call `get_insider_transactions` or `get_insider_sentiment` for insider trading activity.
 9. Call `web_search` to find breaking news, recent earnings, analyst upgrades/downgrades, regulatory filings, macroeconomic data releases, or any information not covered by the other tools. Use it for general financial questions or when you need the latest web information.
-10. You may call multiple tools in sequence to build a comprehensive answer.{user_ctx_section}
+10. You may call multiple tools in sequence to build a comprehensive answer.{user_ctx_section}{watchlist_section}
 
 ## Response Style
 - Be concise and data-driven. Lead with the most important insight.
@@ -971,8 +1040,7 @@ This is for informational and educational purposes only. Not personalized invest
                     fn = tool_fn_map.get(tool_name)
                     if fn:
                         try:
-                            arg_val = next(iter(tool_args.values()), "") if tool_args else ""
-                            tool_result = fn(str(arg_val))
+                            tool_result = fn(**tool_args) if tool_args else fn()
                             logger.debug(
                                 "chat() tool result | user_id=%s | tool=%s | result_len=%d",
                                 user_id,
@@ -1027,6 +1095,7 @@ This is for informational and educational purposes only. Not personalized invest
         messages: List[Dict[str, str]],
         user_id: Optional[int] = None,
         db: Optional[Any] = None,
+        context: Optional[Dict[str, Any]] = None,
     ) -> Generator[str, None, None]:
         """
         Run the tool-calling loop and yield SSE events as tools execute.
@@ -1061,6 +1130,19 @@ This is for informational and educational purposes only. Not personalized invest
 12. Call `get_user_subscriptions` to see which stocks the user is subscribed/watching on FlowDeck.
 13. Call `get_portfolio_overview` to get live quotes AND AI recommendations for ALL of the user's subscribed stocks at once — use this when the user asks about their portfolio or how their stocks are doing.""" if has_user_ctx else ""
 
+        # Build watchlist context section if tickers are provided
+        watchlist_tickers: List[str] = (context or {}).get("tickers", [])
+        watchlist_section = ""
+        if watchlist_tickers:
+            tickers_str = ", ".join(watchlist_tickers)
+            watchlist_section = f"""
+
+## User's Current Watchlist
+The user is currently viewing the Vibe Trading page with the following tickers in their list: **{tickers_str}**
+- When the user says "my stocks", "my list", "these stocks", or asks about their watchlist without specifying tickers, they are referring to these tickers.
+- When asked for a comparison, overview, or analysis of their portfolio/watchlist, cover ALL of these tickers: {tickers_str}
+- You may proactively mention relevant insights across all watchlist tickers when appropriate."""
+
         system_content = f"""You are FlowDeck's Stock Market Analyst AI — an expert in equity analysis, trading strategy, and financial markets. Today is {today}.
 
 ## Your Role
@@ -1076,7 +1158,7 @@ You help users understand stocks, markets, and investment opportunities using re
 7. Call `get_global_news` for macro/market-wide news and trends.
 8. Call `get_insider_transactions` or `get_insider_sentiment` for insider trading activity.
 9. Call `web_search` to find breaking news, recent earnings, analyst upgrades/downgrades, regulatory filings, macroeconomic data releases, or any information not covered by the other tools. Use it for general financial questions or when you need the latest web information.
-10. You may call multiple tools in sequence to build a comprehensive answer.{user_ctx_section}
+10. You may call multiple tools in sequence to build a comprehensive answer.{user_ctx_section}{watchlist_section}
 
 ## Response Style
 - Be concise and data-driven. Lead with the most important insight.
@@ -1141,8 +1223,7 @@ This is for informational and educational purposes only. Not personalized invest
                     fn = tool_fn_map.get(tool_name)
                     if fn:
                         try:
-                            arg_val = next(iter(tool_args.values()), "") if tool_args else ""
-                            tool_result = fn(str(arg_val))
+                            tool_result = fn(**tool_args) if tool_args else fn()
                         except Exception as e:
                             logger.warning("chat_stream() tool exception | tool=%s | error=%s", tool_name, e)
                             tool_result = f"Tool error: {e}"
@@ -1159,6 +1240,9 @@ This is for informational and educational purposes only. Not personalized invest
 
                     lc_messages.append(ToolMessage(content=str(tool_result), tool_call_id=tool_id))
                     tool_calls_made += 1
+
+                # After all tools in this round complete, signal that the LLM is now reasoning
+                yield f"data: {json.dumps({'type': 'thinking', 'content': 'Reasoning'})}\n\n"
 
             # Max rounds reached — get final answer without tools
             logger.warning("chat_stream() max tool rounds reached | user_id=%s | tools_called=%d", user_id, tool_calls_made)
