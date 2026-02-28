@@ -3,7 +3,6 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { APP_NAME, LOGO_PATH } from '../config';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
-import SignInPromoBanner from './SignInPromoBanner';
 
 const navItems: { to: string; label: string; authOnly?: boolean }[] = [
   { to: '/dashboard', label: 'Dashboard', authOnly: true },
@@ -150,13 +149,18 @@ export default function Layout() {
                   Log out
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => { setAuthModalOpen(true); setSidebarOpen(false); }}
-                  className="block w-full text-left px-4 py-2 rounded-lg text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-                >
-                  Log in
-                </button>
+                <div className="mt-2 rounded-lg bg-blue-950/60 border border-blue-700/40 p-3 flex flex-col gap-2">
+                  <p className="text-xs text-gray-300 leading-snug">
+                    <span className="font-medium text-white">Sign in</span> to run AI analysis on any stock and access your personalized dashboard.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => { setAuthModalOpen(true); setSidebarOpen(false); }}
+                    className="w-full px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                  >
+                    Sign in
+                  </button>
+                </div>
               )}
             </li>
           </ul>
@@ -193,7 +197,6 @@ export default function Layout() {
             <HamburgerIcon open={sidebarOpen} />
           </button>
         </div>
-        <SignInPromoBanner onSignInClick={() => setAuthModalOpen(true)} />
         <main className="flex-1 min-w-0 min-h-0 overflow-auto">
           <Outlet />
         </main>
