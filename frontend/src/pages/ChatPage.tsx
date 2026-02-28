@@ -379,7 +379,7 @@ export default function ChatPage() {
       {/* Token notice */}
       <div className="shrink-0 px-4 py-1.5 bg-gray-800/60 border-t border-gray-700/50">
         <p className="text-xs text-slate-500 text-center">
-          Each message uses tokens based on data fetched · For informational purposes only
+          AI can make mistakes — always verify important information · Not financial advice
         </p>
       </div>
 
@@ -405,7 +405,7 @@ export default function ChatPage() {
               className="shrink-0 w-8 h-8 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
               aria-label="Send message"
             >
-              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 text-white rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
               </svg>
             </button>
