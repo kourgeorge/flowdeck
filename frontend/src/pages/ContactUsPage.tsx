@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { contactApi } from '../services/api';
 
 export default function ContactUsPage() {
@@ -32,13 +31,6 @@ export default function ContactUsPage() {
   return (
     <div className="min-h-screen p-8">
       <div className="max-w-3xl mx-auto text-gray-300">
-        <Link
-          to="/"
-          className="inline-flex items-center text-sm text-gray-400 hover:text-white transition-colors mb-8"
-        >
-          ← Back to Flowdeck
-        </Link>
-
         <h1 className="text-3xl font-bold text-white mb-2">Contact Us</h1>
         <p className="text-gray-500 text-sm mb-10">
           Have a question, feedback, or need support? We’d love to hear from you.
@@ -115,14 +107,6 @@ export default function ContactUsPage() {
           </section>
         </div>
 
-        <div className="mt-12 pt-8 border-t border-gray-700">
-          <Link
-            to="/"
-            className="inline-flex items-center text-sm text-gray-400 hover:text-white transition-colors"
-          >
-            ← Back to Flowdeck
-          </Link>
-        </div>
       </div>
     </div>
   );
