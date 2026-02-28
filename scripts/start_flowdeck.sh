@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start Flowdeck backend and frontend on Ubuntu.
+# Start Flowdeck backend and frontend (macOS and Ubuntu compatible).
 # Prerequisites: venv activated (or conda flowdeck), frontend built (npm run build).
 # Usage: ./scripts/start_flowdeck.sh [--foreground]
 #   --foreground: Run both in foreground (Ctrl+C stops both)
@@ -26,6 +26,16 @@ elif command -v conda &>/dev/null && conda env list | grep -q "flowdeck"; then
 fi
 
 export PYTHONPATH="$ROOT_DIR${PYTHONPATH:+:$PYTHONPATH}"
+
+# Portable new-session launcher: use setsid on Linux, plain subshell on macOS
+new_session() {
+  if command -v setsid &>/dev/null; then
+    setsid "$@"
+  else
+    # macOS: run in background subshell; process group separation via job control
+    "$@"
+  fi
+}
 
 # Kill a saved PID and its entire process group
 kill_group() {
@@ -58,12 +68,12 @@ if [ "$1" = "--foreground" ]; then
   echo "[$(date '+%H:%M:%S')] Press Ctrl+C to stop both."
   # Start backend in a new session so it leads its own process group
   cd "$BACKEND_DIR"
-  setsid python -m uvicorn main:app --host 0.0.0.0 --port 8002 --log-config "$BACKEND_DIR/uvicorn_logging.json" &
+  new_session python -m uvicorn main:app --host 0.0.0.0 --port 8002 --log-config "$BACKEND_DIR/uvicorn_logging.json" &
   BACKEND_PID=$!
   echo $BACKEND_PID > "$PID_FILE"
   # Start frontend in a new session so npm + vite child share a process group
   cd "$FRONTEND_DIR"
-  setsid npm run preview -- --host &
+  new_session npm run preview -- --host &
   FRONTEND_PID=$!
   echo $FRONTEND_PID >> "$PID_FILE"
   wait $BACKEND_PID $FRONTEND_PID
@@ -72,10 +82,10 @@ else
   stop_services 2>/dev/null || true
   echo "[$(date '+%H:%M:%S')] Starting Flowdeck in background..."
   cd "$BACKEND_DIR"
-  setsid nohup python -m uvicorn main:app --host 0.0.0.0 --port 8002 --log-config "$BACKEND_DIR/uvicorn_logging.json" > "$ROOT_DIR/backend.log" 2>&1 &
+  new_session nohup python -m uvicorn main:app --host 0.0.0.0 --port 8002 --log-config "$BACKEND_DIR/uvicorn_logging.json" > "$ROOT_DIR/backend.log" 2>&1 &
   echo $! > "$PID_FILE"
   cd "$FRONTEND_DIR"
-  setsid nohup npm run preview -- --host >> "$ROOT_DIR/frontend.log" 2>&1 &
+  new_session nohup npm run preview -- --host >> "$ROOT_DIR/frontend.log" 2>&1 &
   echo $! >> "$PID_FILE"
   sleep 2
   if kill -0 $(head -1 "$PID_FILE") 2>/dev/null; then
