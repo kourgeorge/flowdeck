@@ -84,9 +84,9 @@ export default function StockPage() {
             </button>
           </div>
 
-          {/* Search — centered, narrower */}
+          {/* Search — centered */}
           <div className="flex-1 flex justify-center">
-            <div className="w-full max-w-sm">
+            <div className="w-full max-w-lg">
               <StockSearch compact />
             </div>
           </div>
