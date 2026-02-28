@@ -240,6 +240,11 @@ export default function StockAnalystChat({ ticker, companyName }: StockAnalystCh
       (status) => {
         setThinkingStatus(status);
       },
+      // onToolCall — tool completed; clear the stale thinking status so the UI
+      // doesn't keep showing the tool name while the LLM reasons over results
+      () => {
+        setThinkingStatus(null);
+      },
     );
   };
 
