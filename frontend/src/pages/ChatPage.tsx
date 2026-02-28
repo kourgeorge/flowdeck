@@ -260,7 +260,7 @@ export default function ChatPage() {
           </div>
           <div>
             <h1 className="text-base font-semibold text-white">AI Analyst Agent</h1>
-            <p className="text-xs text-slate-400">AI-powered · live data · full analysis access</p>
+            <p className="text-xs text-slate-400">AI-powered · full analysis access</p>
           </div>
         </div>
         {user && (
@@ -376,15 +376,8 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* Token notice */}
-      <div className="shrink-0 px-4 py-1.5 bg-gray-800/60 border-t border-gray-700/50">
-        <p className="text-xs text-slate-500 text-center">
-          AI can make mistakes — always verify important information · Not financial advice
-        </p>
-      </div>
-
       {/* Input area */}
-      <div className="shrink-0 px-4 pb-4 pt-3 bg-gray-800/80 border-t border-gray-700">
+      <div className="shrink-0 px-4 pb-2 pt-3 bg-gray-800/80 border-t border-gray-700">
         <div className="max-w-3xl mx-auto">
           <div className="flex items-end gap-2 bg-slate-700/80 rounded-xl border border-slate-600 focus-within:border-blue-500 transition-colors px-3 py-2">
             <textarea
@@ -410,6 +403,9 @@ export default function ChatPage() {
               </svg>
             </button>
           </div>
+          <p className="text-xs text-slate-500 text-center mt-2">
+            AI can make mistakes — always verify important information · Not financial advice
+          </p>
         </div>
       </div>
     </div>
