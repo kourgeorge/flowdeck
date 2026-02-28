@@ -12,9 +12,35 @@ def _is_valid_price(price: float) -> bool:
     """Return True if price is a valid positive number (not NaN, not zero or negative)."""
     try:
         p = float(price)
-        return p > 0 and not math.isnan(p)
+        return p > 0 and not math.isnan(p) and not math.isinf(p)
     except (TypeError, ValueError):
         return False
+
+
+def _safe_float(value, default: Optional[float] = None) -> Optional[float]:
+    """Convert value to float, returning default if NaN/Inf/None/error."""
+    if value is None:
+        return default
+    try:
+        f = float(value)
+        if math.isnan(f) or math.isinf(f):
+            return default
+        return f
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(value) -> Optional[int]:
+    """Convert value to int, returning None if NaN/Inf/None/error."""
+    if value is None:
+        return None
+    try:
+        f = float(value)
+        if math.isnan(f) or math.isinf(f):
+            return None
+        return int(f)
+    except (TypeError, ValueError):
+        return None
 
 
 class MarketDataService:
@@ -175,13 +201,13 @@ class MarketDataService:
                     low_series = data["Low"] if "Low" in data.columns else None
 
                 if close_series is not None and len(close_series) >= 2:
-                    current = float(close_series.iloc[-1])
-                    if not _is_valid_price(current):
+                    current = _safe_float(close_series.iloc[-1])
+                    if current is None or not _is_valid_price(current):
                         pass
                     else:
-                        prev = float(close_series.iloc[-2])
-                        daily_change = current - prev
-                        daily_change_percent = (daily_change / prev) * 100 if prev else 0.0
+                        prev = _safe_float(close_series.iloc[-2], default=current)
+                        daily_change = current - prev if prev is not None else 0.0
+                        daily_change_percent = (daily_change / prev * 100) if prev else 0.0
                         results[t] = StockQuote(
                             ticker=t,
                             current_price=round(current, 2),
@@ -191,18 +217,18 @@ class MarketDataService:
                             ask_price=None,
                             bid_size=None,
                             ask_size=None,
-                            volume=int(volume_series.iloc[-1]) if volume_series is not None else None,
-                            previous_close=round(prev, 2),
-                            day_high=round(float(high_series.iloc[-1]), 2) if high_series is not None else None,
-                            day_low=round(float(low_series.iloc[-1]), 2) if low_series is not None else None,
+                            volume=_safe_int(volume_series.iloc[-1]) if volume_series is not None else None,
+                            previous_close=round(prev, 2) if prev is not None else None,
+                            day_high=_safe_float(high_series.iloc[-1]) if high_series is not None else None,
+                            day_low=_safe_float(low_series.iloc[-1]) if low_series is not None else None,
                             fifty_two_week_high=None,
                             fifty_two_week_low=None,
                             market_status="UNKNOWN",
                             last_update_time=datetime.now(),
                         )
                 elif close_series is not None and len(close_series) == 1:
-                    current = float(close_series.iloc[-1])
-                    if _is_valid_price(current):
+                    current = _safe_float(close_series.iloc[-1])
+                    if current is not None and _is_valid_price(current):
                         results[t] = StockQuote(
                             ticker=t,
                             current_price=round(current, 2),
@@ -212,10 +238,10 @@ class MarketDataService:
                             ask_price=None,
                             bid_size=None,
                             ask_size=None,
-                            volume=int(volume_series.iloc[-1]) if volume_series is not None else None,
+                            volume=_safe_int(volume_series.iloc[-1]) if volume_series is not None else None,
                             previous_close=round(current, 2),
-                            day_high=round(float(high_series.iloc[-1]), 2) if high_series is not None else None,
-                            day_low=round(float(low_series.iloc[-1]), 2) if low_series is not None else None,
+                            day_high=_safe_float(high_series.iloc[-1]) if high_series is not None else None,
+                            day_low=_safe_float(low_series.iloc[-1]) if low_series is not None else None,
                             fifty_two_week_high=None,
                             fifty_two_week_low=None,
                             market_status="UNKNOWN",
@@ -234,28 +260,28 @@ class MarketDataService:
                         close_series = close_col if hasattr(close_col, "iloc") else close_col
                         if len(close_series) < 1:
                             continue
-                        current = float(close_series.iloc[-1])
-                        if not _is_valid_price(current):
+                        current = _safe_float(close_series.iloc[-1])
+                        if current is None or not _is_valid_price(current):
                             continue
-                        prev = float(close_series.iloc[-2]) if len(close_series) >= 2 else current
-                        daily_change = current - prev
-                        daily_change_percent = (daily_change / prev) * 100 if prev else 0.0
+                        prev = _safe_float(close_series.iloc[-2], default=current) if len(close_series) >= 2 else current
+                        daily_change = current - prev if prev is not None else 0.0
+                        daily_change_percent = (daily_change / prev * 100) if prev else 0.0
                         vol = None
                         high = low = None
                         if isinstance(data.columns, pd.MultiIndex):
                             if (t, "Volume") in data.columns:
-                                vol = int(data[(t, "Volume")].iloc[-1])
+                                vol = _safe_int(data[(t, "Volume")].iloc[-1])
                             if (t, "High") in data.columns:
-                                high = round(float(data[(t, "High")].iloc[-1]), 2)
+                                high = _safe_float(data[(t, "High")].iloc[-1])
                             if (t, "Low") in data.columns:
-                                low = round(float(data[(t, "Low")].iloc[-1]), 2)
+                                low = _safe_float(data[(t, "Low")].iloc[-1])
                         else:
                             if "Volume" in data.columns and t in data["Volume"].columns:
-                                vol = int(data["Volume"][t].iloc[-1])
+                                vol = _safe_int(data["Volume"][t].iloc[-1])
                             if "High" in data.columns and t in data["High"].columns:
-                                high = round(float(data["High"][t].iloc[-1]), 2)
+                                high = _safe_float(data["High"][t].iloc[-1])
                             if "Low" in data.columns and t in data["Low"].columns:
-                                low = round(float(data["Low"][t].iloc[-1]), 2)
+                                low = _safe_float(data["Low"][t].iloc[-1])
                         results[t] = StockQuote(
                             ticker=t,
                             current_price=round(current, 2),
@@ -266,9 +292,9 @@ class MarketDataService:
                             bid_size=None,
                             ask_size=None,
                             volume=vol,
-                            previous_close=round(prev, 2),
-                            day_high=high,
-                            day_low=low,
+                            previous_close=round(prev, 2) if prev is not None else None,
+                            day_high=round(high, 2) if high is not None else None,
+                            day_low=round(low, 2) if low is not None else None,
                             fifty_two_week_high=None,
                             fifty_two_week_low=None,
                             market_status="UNKNOWN",

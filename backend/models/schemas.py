@@ -1,8 +1,22 @@
 """Pydantic models for API schemas."""
 
-from pydantic import BaseModel
+import math
+from pydantic import BaseModel, field_validator
 from typing import Optional, List, Dict
 from datetime import datetime
+
+
+def _sanitize_float(v: Optional[float]) -> Optional[float]:
+    """Replace NaN/Inf float values with None to keep JSON serialization valid."""
+    if v is None:
+        return None
+    try:
+        f = float(v)
+        if math.isnan(f) or math.isinf(f):
+            return None
+        return f
+    except (TypeError, ValueError):
+        return None
 
 
 # --- Structured insights layer ---
@@ -45,6 +59,23 @@ class StockQuote(BaseModel):
     market_status: str  # "OPEN", "CLOSED", "PRE_MARKET", "AFTER_HOURS"
     last_update_time: datetime
 
+    @field_validator(
+        'bid_price', 'ask_price', 'previous_close',
+        'day_high', 'day_low', 'fifty_two_week_high', 'fifty_two_week_low',
+        mode='before',
+    )
+    @classmethod
+    def sanitize_optional_floats(cls, v):
+        """Replace NaN/Inf with None for optional float fields."""
+        return _sanitize_float(v)
+
+    @field_validator('current_price', 'daily_change', 'daily_change_percent', mode='before')
+    @classmethod
+    def sanitize_required_floats(cls, v):
+        """Replace NaN/Inf with 0.0 for required float fields."""
+        result = _sanitize_float(v)
+        return result if result is not None else 0.0
+
 
 class Recommendation(BaseModel):
     """Stock recommendation data."""
@@ -76,6 +107,17 @@ class StockWidget(BaseModel):
     report_scores: Optional[Dict[str, ReportScoreSummary]] = None
     # True when ticker is in MAJOR_STOCKS (only set when widgets requested without explicit tickers)
     is_major: Optional[bool] = None
+
+    @field_validator('confidence', mode='before')
+    @classmethod
+    def sanitize_optional_floats(cls, v):
+        return _sanitize_float(v)
+
+    @field_validator('current_price', 'daily_change', 'daily_change_percent', mode='before')
+    @classmethod
+    def sanitize_required_floats(cls, v):
+        result = _sanitize_float(v)
+        return result if result is not None else 0.0
 
 
 class WidgetsResponse(BaseModel):
@@ -135,4 +177,9 @@ class StockPageData(BaseModel):
     # Token economy: unique view count and tokens earned for this report run
     report_view_count: Optional[int] = None
     report_earned_tokens: Optional[int] = None
+
+    @field_validator('expected_return_pct', 'bear_case_return_pct', 'bull_case_return_pct', mode='before')
+    @classmethod
+    def sanitize_return_pcts(cls, v):
+        return _sanitize_float(v)
 
