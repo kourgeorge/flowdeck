@@ -77,8 +77,8 @@ export default function ReturnScenarioBar({
         {/* Zero line */}
         {showZero && (
           <div
-            className="absolute top-0 bottom-0 w-px bg-gray-400/60"
-            style={{ left: `${zeroPos}%` }}
+            className="absolute -translate-x-1/2"
+            style={{ left: `${zeroPos}%`, top: '-4px', bottom: '-4px', width: 3, background: 'rgba(209,213,219,0.75)', borderRadius: 1 }}
           />
         )}
 
