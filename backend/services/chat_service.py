@@ -10,9 +10,11 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional
 
+import requests
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
@@ -249,6 +251,88 @@ def _tool_get_global_news() -> str:
         return get_global_news.invoke({"curr_date": today, "look_back_days": 7, "limit": 10})
     except Exception as e:
         return f"Error fetching global news: {e}"
+
+
+def _tool_web_search(query: str) -> str:
+    """Search the web using Serper API for any query."""
+    api_key = os.environ.get("SERPAPI_KEY", "")
+    if not api_key:
+        return "Web search is unavailable: SERPAPI_KEY is not configured."
+    try:
+        response = requests.post(
+            "https://google.serper.dev/search",
+            headers={
+                "X-API-KEY": api_key,
+                "Content-Type": "application/json",
+            },
+            json={"q": query, "num": 10},
+            timeout=15,
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        lines = [f"## Web Search Results for: {query}", ""]
+
+        # Answer box (direct answer)
+        answer_box = data.get("answerBox")
+        if answer_box:
+            title = answer_box.get("title", "")
+            answer = answer_box.get("answer") or answer_box.get("snippet", "")
+            if title:
+                lines.append(f"**{title}**")
+            if answer:
+                lines.append(answer)
+            lines.append("")
+
+        # Knowledge graph
+        kg = data.get("knowledgeGraph")
+        if kg:
+            kg_title = kg.get("title", "")
+            kg_desc = kg.get("description", "")
+            if kg_title:
+                lines.append(f"**{kg_title}**: {kg_desc}")
+                lines.append("")
+
+        # Organic results
+        organic = data.get("organic", [])
+        for i, result in enumerate(organic[:8], 1):
+            title = result.get("title", "")
+            link = result.get("link", "")
+            snippet = result.get("snippet", "")
+            date = result.get("date", "")
+            date_str = f" ({date})" if date else ""
+            lines.append(f"**{i}. {title}**{date_str}")
+            if snippet:
+                lines.append(snippet)
+            if link:
+                lines.append(f"Source: {link}")
+            lines.append("")
+
+        # Top stories
+        top_stories = data.get("topStories", [])
+        if top_stories:
+            lines.append("### Top Stories")
+            for story in top_stories[:5]:
+                title = story.get("title", "")
+                source = story.get("source", "")
+                date = story.get("date", "")
+                link = story.get("link", "")
+                date_str = f" ({date})" if date else ""
+                source_str = f" — {source}" if source else ""
+                lines.append(f"- **{title}**{source_str}{date_str}")
+                if link:
+                    lines.append(f"  {link}")
+            lines.append("")
+
+        if len(lines) <= 2:
+            return f"No results found for: {query}"
+
+        return "\n".join(lines)
+    except requests.exceptions.HTTPError as e:
+        return f"Web search HTTP error: {e}"
+    except Exception as e:
+        logger.exception("web_search error for query '%s': %s", query, e)
+        return f"Error performing web search: {e}"
 
 
 # ---------------------------------------------------------------------------
@@ -622,6 +706,28 @@ TOOLS = [
         },
         "fn": _tool_get_insider_sentiment,
     },
+    {
+        "name": "web_search",
+        "description": (
+            "Search the web using Google (via Serper) for any query. "
+            "Use when the user asks about recent events, news, or information that may not be covered by other tools, "
+            "such as breaking news, earnings announcements, analyst upgrades/downgrades, regulatory filings, "
+            "macroeconomic data releases, company announcements, or any general financial/market question "
+            "that requires up-to-date web information. "
+            "Also use for questions about companies, industries, or topics not directly tied to a specific ticker."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The search query, e.g. 'Apple Q1 2025 earnings results', 'Fed interest rate decision March 2025', 'NVDA analyst price target upgrade'"
+                }
+            },
+            "required": ["query"],
+        },
+        "fn": _tool_web_search,
+    },
 ]
 
 # OpenAI-format tool schemas for bind_tools
@@ -742,9 +848,9 @@ class ChatService:
         today = datetime.date.today().isoformat()
         has_user_ctx = user_id is not None and db is not None
         user_ctx_section = """
-10. Call `get_user_context` to retrieve the current user's profile (email, name, token balance, member since).
-11. Call `get_user_subscriptions` to see which stocks the user is subscribed/watching on FlowDeck.
-12. Call `get_portfolio_overview` to get live quotes AND AI recommendations for ALL of the user's subscribed stocks at once — use this when the user asks about their portfolio or how their stocks are doing.""" if has_user_ctx else ""
+11. Call `get_user_context` to retrieve the current user's profile (email, name, token balance, member since).
+12. Call `get_user_subscriptions` to see which stocks the user is subscribed/watching on FlowDeck.
+13. Call `get_portfolio_overview` to get live quotes AND AI recommendations for ALL of the user's subscribed stocks at once — use this when the user asks about their portfolio or how their stocks are doing.""" if has_user_ctx else ""
 
         system_content = f"""You are FlowDeck's Stock Market Analyst AI — an expert in equity analysis, trading strategy, and financial markets. Today is {today}.
 
@@ -760,7 +866,8 @@ You help users understand stocks, markets, and investment opportunities using re
 6. Call `get_news` for recent company-specific news and catalysts.
 7. Call `get_global_news` for macro/market-wide news and trends.
 8. Call `get_insider_transactions` or `get_insider_sentiment` for insider trading activity.
-9. You may call multiple tools in sequence to build a comprehensive answer.{user_ctx_section}
+9. Call `web_search` to find breaking news, recent earnings, analyst upgrades/downgrades, regulatory filings, macroeconomic data releases, or any information not covered by the other tools. Use it for general financial questions or when you need the latest web information.
+10. You may call multiple tools in sequence to build a comprehensive answer.{user_ctx_section}
 
 ## Response Style
 - Be concise and data-driven. Lead with the most important insight.
