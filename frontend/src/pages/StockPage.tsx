@@ -10,9 +10,9 @@ export default function StockPage() {
   return (
     <div>
       {/* Search header */}
-      <div className="bg-gray-800/80 border-b border-gray-700 px-4 py-3">
+      <div className="bg-gray-800/80 border-b border-gray-700 px-4 py-2">
         <div className="max-w-layout mx-auto">
-          <StockSearch />
+          <StockSearch compact />
         </div>
       </div>
 

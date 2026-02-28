@@ -168,7 +168,9 @@ export default function StockSearch({ compact = false }: StockSearchProps) {
                 }
               }}
               placeholder="Ticker search…"
-              className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className={`w-full bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                compact ? 'px-3 py-1.5 text-sm' : 'px-4 py-3'
+              }`}
             />
             {showSuggestions && suggestions.length > 0 && (
               <div
@@ -179,7 +181,9 @@ export default function StockSearch({ compact = false }: StockSearchProps) {
                   <div
                     key={`${stock.ticker}-${index}`}
                     onClick={() => handleSelectSuggestion(stock)}
-                    className={`px-4 py-3 cursor-pointer transition-colors ${
+                    className={`px-4 cursor-pointer transition-colors ${
+                      compact ? 'py-2' : 'py-3'
+                    } ${
                       index === selectedIndex
                         ? 'bg-blue-600/50'
                         : 'hover:bg-gray-700'
@@ -187,10 +191,10 @@ export default function StockSearch({ compact = false }: StockSearchProps) {
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <div className="font-semibold text-white">
+                        <div className={`font-semibold text-white ${compact ? 'text-sm' : ''}`}>
                           {highlightMatch(stock.ticker, searchTerm)}
                         </div>
-                        <div className="text-sm text-gray-400">
+                        <div className="text-xs text-gray-400">
                           {highlightMatch(stock.name, searchTerm)}
                         </div>
                       </div>
@@ -202,7 +206,9 @@ export default function StockSearch({ compact = false }: StockSearchProps) {
           </div>
           <button
             type="submit"
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+            className={`bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors ${
+              compact ? 'px-4 py-1.5 text-sm' : 'px-6 py-3'
+            }`}
           >
             Search
           </button>
