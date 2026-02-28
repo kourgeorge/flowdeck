@@ -151,7 +151,7 @@ export default function Layout() {
               ) : (
                 <div className="mt-2 rounded-lg bg-blue-950/60 border border-blue-700/40 p-3 flex flex-col gap-2">
                   <p className="text-xs text-gray-300 leading-snug">
-                    <span className="font-medium text-white">Sign in</span> to run AI analysis on any stock and access your personalized dashboard.
+                    <span className="font-medium text-white">Sign in</span> to run AI analysis on any stock, access your personalized dashboard, and get a personalized trader copilot.
                   </p>
                   <button
                     type="button"
