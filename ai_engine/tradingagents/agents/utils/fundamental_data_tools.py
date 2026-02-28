@@ -1,5 +1,5 @@
 from langchain_core.tools import tool
-from typing import Annotated
+from typing import Annotated, Optional
 import json
 
 from ...dataflows.interface import route_to_vendor
@@ -27,14 +27,14 @@ def _statement_to_str(statements: dict, key: str) -> str:
 @tool
 def get_fundamentals(
     ticker: Annotated[str, "ticker symbol"],
-    curr_date: Annotated[str, "current date you are trading at, yyyy-mm-dd"],
+    curr_date: Annotated[Optional[str], "current date you are trading at, yyyy-mm-dd"] = None,
 ) -> str:
     """
     Retrieve comprehensive fundamental data for a given ticker symbol.
     Uses the Information Service API when INFO_SERVICE_URL is set, otherwise the configured fundamental_data vendor.
     Args:
         ticker (str): Ticker symbol of the company
-        curr_date (str): Current date you are trading at, yyyy-mm-dd
+        curr_date (str): Current date you are trading at, yyyy-mm-dd (optional when using info service)
     Returns:
         str: A formatted report containing comprehensive fundamental data
     """
@@ -47,7 +47,7 @@ def get_fundamentals(
 def get_balance_sheet(
     ticker: Annotated[str, "ticker symbol"],
     freq: Annotated[str, "reporting frequency: annual/quarterly"] = "quarterly",
-    curr_date: Annotated[str, "current date you are trading at, yyyy-mm-dd"] = None,
+    curr_date: Annotated[Optional[str], "current date you are trading at, yyyy-mm-dd"] = None,
 ) -> str:
     """
     Retrieve balance sheet data for a given ticker symbol.
@@ -70,7 +70,7 @@ def get_balance_sheet(
 def get_cashflow(
     ticker: Annotated[str, "ticker symbol"],
     freq: Annotated[str, "reporting frequency: annual/quarterly"] = "quarterly",
-    curr_date: Annotated[str, "current date you are trading at, yyyy-mm-dd"] = None,
+    curr_date: Annotated[Optional[str], "current date you are trading at, yyyy-mm-dd"] = None,
 ) -> str:
     """
     Retrieve cash flow statement data for a given ticker symbol.
@@ -93,7 +93,7 @@ def get_cashflow(
 def get_income_statement(
     ticker: Annotated[str, "ticker symbol"],
     freq: Annotated[str, "reporting frequency: annual/quarterly"] = "quarterly",
-    curr_date: Annotated[str, "current date you are trading at, yyyy-mm-dd"] = None,
+    curr_date: Annotated[Optional[str], "current date you are trading at, yyyy-mm-dd"] = None,
 ) -> str:
     """
     Retrieve income statement data for a given ticker symbol.
