@@ -321,7 +321,7 @@ export default function ChatPage() {
                     </div>
                     <h2 className="text-lg font-semibold text-white mb-2">Ask me anything about stocks</h2>
                     <p className="text-sm text-slate-400 leading-relaxed">
-                      I have access to live prices, AI analysis reports, fundamentals, news, technical indicators, and insider activity.
+                      I have access to live prices, specialized AI reports & recommendations, fundamentals, news, technical indicators, insider activity, and your preferred tickers.
                     </p>
                   </div>
                   <div className="w-full max-w-xl space-y-2">
