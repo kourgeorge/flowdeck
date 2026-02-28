@@ -603,19 +603,19 @@ async def get_stock_widgets(
 @app.get("/api/tickers/{ticker}", response_model=StockPageData)
 async def get_stock_page(
     ticker: str,
-    current_user=Depends(get_current_user),
+    current_user=Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
-    """Get complete stock page data. Requires authentication. Runs in thread pool (non-blocking). Views are recorded for creator rewards."""
+    """Get complete stock page data. Accessible without authentication. Runs in thread pool (non-blocking). Views are recorded for creator rewards when user is logged in."""
     ticker = ticker.upper()
     try:
         result = await asyncio.to_thread(_get_stock_page_sync, ticker)
-        if result.report_date:
+        if result.report_date and current_user is not None:
             try:
                 token_service.record_view(ticker, result.report_date, current_user.id, db)
             except Exception:
                 pass  # Don't fail the response if view recording fails
-        if result.report_date:
+        if result.report_date and current_user is not None:
             try:
                 result = result.model_copy(
                     update={
