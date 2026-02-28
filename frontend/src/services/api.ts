@@ -301,12 +301,22 @@ export interface ChatResponse {
   balance: number;
 }
 
+export interface ToolCallEvent {
+  name: string;
+  input: string;
+  output: string;
+}
+
 export interface ChatStreamEvent {
-  type: 'token' | 'done' | 'error' | 'thinking';
+  type: 'token' | 'done' | 'error' | 'thinking' | 'tool_call';
   content?: string;
   tokens_used?: number;
   tools_called?: number;
   balance?: number;
+  // tool_call fields
+  name?: string;
+  input?: string;
+  output?: string;
 }
 
 export const chatApi = {
@@ -328,6 +338,7 @@ export const chatApi = {
    * Stream a chat response via SSE.
    * Calls `onToken` for each incremental text chunk,
    * `onThinking` for tool-call progress status messages,
+   * `onToolCall` for each tool execution (name, input, output),
    * `onDone` when the stream finishes (with tokens_used and balance),
    * and `onError` on failure.
    * Returns an AbortController so the caller can cancel the stream.
@@ -338,6 +349,7 @@ export const chatApi = {
     onDone: (tokensUsed: number, balance: number, toolsCalled: number) => void,
     onError: (message: string) => void,
     onThinking?: (status: string) => void,
+    onToolCall?: (toolCall: ToolCallEvent) => void,
   ): AbortController => {
     const controller = new AbortController();
     const token = getStoredToken();
@@ -390,6 +402,8 @@ export const chatApi = {
                 onToken(event.content);
               } else if (event.type === 'thinking' && event.content) {
                 onThinking?.(event.content);
+              } else if (event.type === 'tool_call' && event.name) {
+                onToolCall?.({ name: event.name, input: event.input ?? '', output: event.output ?? '' });
               } else if (event.type === 'done') {
                 onDone(event.tokens_used ?? 1, event.balance ?? 0, event.tools_called ?? 0);
               } else if (event.type === 'error') {

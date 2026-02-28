@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { chatApi, type ChatMessage } from '../services/api';
+import { chatApi, type ChatMessage, type ToolCallEvent } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { profileApi } from '../services/authApi';
 
@@ -47,11 +47,95 @@ function TypingIndicator({ status }: { status?: string | null }) {
   );
 }
 
+// Friendly display names for tool names
+const TOOL_DISPLAY_NAMES: Record<string, string> = {
+  get_stock_quote: 'Stock Quote',
+  get_platform_reports: 'AI Reports',
+  get_news: 'Company News',
+  get_fundamentals: 'Fundamentals',
+  get_balance_sheet: 'Balance Sheet',
+  get_cashflow: 'Cash Flow',
+  get_income_statement: 'Income Statement',
+  get_stock_data: 'Historical Data',
+  get_indicators: 'Technical Indicators',
+  get_insider_transactions: 'Insider Transactions',
+  get_insider_sentiment: 'Insider Sentiment',
+  get_global_news: 'Global News',
+  web_search: 'Web Search',
+  get_user_context: 'User Profile',
+  get_user_subscriptions: 'Watchlist',
+  get_portfolio_overview: 'Portfolio Overview',
+};
+
+function ToolCallBlock({ toolCall }: { toolCall: ToolCallEvent }) {
+  const [expanded, setExpanded] = useState(false);
+  const displayName = TOOL_DISPLAY_NAMES[toolCall.name] ?? toolCall.name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+  // Parse input for display
+  let inputDisplay = toolCall.input;
+  try {
+    const parsed = JSON.parse(toolCall.input);
+    const vals = Object.values(parsed);
+    if (vals.length === 1) inputDisplay = String(vals[0]);
+    else if (vals.length > 1) inputDisplay = Object.entries(parsed).map(([k, v]) => `${k}: ${v}`).join(', ');
+  } catch { /* use raw */ }
+
+  return (
+    <div className="mb-2 rounded-lg border border-slate-600/60 bg-slate-800/60 overflow-hidden text-xs">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-700/50 transition-colors text-left"
+      >
+        {/* Tool icon */}
+        <svg className="w-3.5 h-3.5 text-violet-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        <span className="font-medium text-violet-300">{displayName}</span>
+        {inputDisplay && (
+          <span className="text-slate-400 truncate flex-1">
+            <span className="text-slate-500 mr-1">·</span>{inputDisplay}
+          </span>
+        )}
+        {/* Expand/collapse chevron */}
+        <svg
+          className={`w-3.5 h-3.5 text-slate-500 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-slate-600/60 divide-y divide-slate-700/60">
+          {/* Input section */}
+          {toolCall.input && (
+            <div className="px-3 py-2">
+              <div className="text-slate-500 uppercase tracking-wide text-[10px] font-semibold mb-1">Input</div>
+              <pre className="text-slate-300 whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed max-h-24 overflow-y-auto">
+                {toolCall.input}
+              </pre>
+            </div>
+          )}
+          {/* Output section */}
+          <div className="px-3 py-2">
+            <div className="text-slate-500 uppercase tracking-wide text-[10px] font-semibold mb-1">Output</div>
+            <pre className="text-slate-300 whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed max-h-48 overflow-y-auto">
+              {toolCall.output || '(empty)'}
+            </pre>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MessageBubble({
   message,
   isStreaming = false,
 }: {
-  message: ChatMessage & { tokens_used?: number; tools_called?: number };
+  message: ChatMessage & { tokens_used?: number; tools_called?: number; tool_call_events?: ToolCallEvent[] };
   isStreaming?: boolean;
 }) {
   const isUser = message.role === 'user';
@@ -74,6 +158,14 @@ function MessageBubble({
         </svg>
       </div>
       <div className="flex-1 min-w-0">
+        {/* Tool calls — shown above the reply bubble */}
+        {message.tool_call_events && message.tool_call_events.length > 0 && (
+          <div className="mb-2 space-y-1">
+            {message.tool_call_events.map((tc, i) => (
+              <ToolCallBlock key={i} toolCall={tc} />
+            ))}
+          </div>
+        )}
         <div className="bg-slate-700/80 text-slate-100 rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed">
           <div className="prose prose-invert prose-sm max-w-none">
             <ReactMarkdown
@@ -115,7 +207,7 @@ function MessageBubble({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
-                {message.tools_called} tool{message.tools_called !== 1 ? 's' : ''} accessed
+                {message.tools_called} tool{message.tools_called !== 1 ? 's' : ''} used
               </span>
             )}
             {message.tokens_used != null && (
@@ -130,7 +222,7 @@ function MessageBubble({
 
 export default function ChatPage() {
   const { user } = useAuth();
-  const [messages, setMessages] = useState<(ChatMessage & { tokens_used?: number; tools_called?: number })[]>([]);
+  const [messages, setMessages] = useState<(ChatMessage & { tokens_used?: number; tools_called?: number; tool_call_events?: ToolCallEvent[] })[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -229,6 +321,27 @@ export default function ChatPage() {
       },
       (status) => {
         setThinkingStatus(status);
+      },
+      (toolCall) => {
+        // Append tool call event to the assistant message being built
+        setMessages((prev) => {
+          const updated = [...prev];
+          if (updated[assistantIndex]?.role === 'assistant') {
+            const existing = updated[assistantIndex].tool_call_events ?? [];
+            updated[assistantIndex] = {
+              ...updated[assistantIndex],
+              tool_call_events: [...existing, toolCall],
+            };
+          } else {
+            // Assistant message not yet created — create a placeholder
+            updated.splice(assistantIndex, 0, {
+              role: 'assistant',
+              content: '',
+              tool_call_events: [toolCall],
+            });
+          }
+          return updated;
+        });
       },
     );
   };
