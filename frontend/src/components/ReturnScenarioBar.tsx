@@ -53,7 +53,6 @@ export default function ReturnScenarioBar({
   const showZero = axisMin < 0 && axisMax > 0;
   const zeroPos = toPos(0, axisMin, axisMax);
 
-  const textSm = compact ? 'text-[10px]' : 'text-xs';
   const barH = compact ? 'h-1.5' : 'h-2';
 
   return (
