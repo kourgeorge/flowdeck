@@ -63,11 +63,12 @@ async def chat(
         )
 
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
+    user_id = current_user.id
 
     # Run the agent in a thread pool (blocking LangChain calls)
     try:
         service = get_chat_service()
-        result = await asyncio.to_thread(service.chat, messages)
+        result = await asyncio.to_thread(service.chat, messages, user_id, db)
     except Exception as e:
         logger.exception("Chat agent failed for user_id=%s: %s", current_user.id, e)
         raise HTTPException(
@@ -126,7 +127,7 @@ async def chat_stream(
 
             def run_generator():
                 try:
-                    for chunk in service.chat_stream(messages):
+                    for chunk in service.chat_stream(messages, user_id=user_id, db=db):
                         loop.call_soon_threadsafe(queue.put_nowait, chunk)
                 except Exception as exc:
                     err_event = f"data: {json.dumps({'type': 'error', 'content': str(exc)})}\n\n"
@@ -140,15 +141,21 @@ async def chat_stream(
                 item = await queue.get()
                 if item is None:
                     break
-                # Parse tokens_used from done event so we can deduct after streaming
+                # Parse tokens_used from done event, deduct immediately, then send updated balance
                 if '"type":"done"' in item or '"type": "done"' in item:
                     try:
                         payload = json.loads(item.removeprefix("data: ").strip())
                         tokens_used = payload.get("tokens_used", 1)
-                        # Append current balance to the done event
+                        # Deduct tokens now so the balance we send is post-deduction
+                        try:
+                            token_service.deduct_for_chat(user_id, tokens_used, db)
+                        except Exception as deduct_err:
+                            logger.warning("Failed to deduct tokens for user_id=%s: %s", user_id, deduct_err)
+                        # Send the updated (post-deduction) balance to the client
                         new_balance = token_service.get_balance(user_id, db)
                         payload["balance"] = new_balance
                         yield f"data: {json.dumps(payload)}\n\n"
+                        tokens_used = 0  # mark as already deducted
                         continue
                     except Exception:
                         pass
@@ -160,11 +167,12 @@ async def chat_stream(
             logger.exception("Chat stream failed for user_id=%s: %s", user_id, e)
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
         finally:
-            # Deduct tokens after streaming completes
-            try:
-                token_service.deduct_for_chat(user_id, tokens_used, db)
-            except Exception as e:
-                logger.warning("Failed to deduct tokens for user_id=%s: %s", user_id, e)
+            # Deduct tokens only if not already deducted in the done-event handler
+            if tokens_used > 0:
+                try:
+                    token_service.deduct_for_chat(user_id, tokens_used, db)
+                except Exception as e:
+                    logger.warning("Failed to deduct tokens for user_id=%s: %s", user_id, e)
 
     return StreamingResponse(
         event_generator(),
