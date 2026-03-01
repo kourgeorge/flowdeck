@@ -4,7 +4,7 @@ import { COPILOT_NAME } from '../config';
 export default function HowItWorksPage() {
   return (
     <div className="min-h-screen p-8">
-      <div className="max-w-3xl mx-auto text-gray-300">
+      <div className="max-w-5xl mx-auto text-gray-300">
         <Link
           to="/"
           className="inline-flex items-center text-sm text-gray-400 hover:text-white transition-colors mb-8"

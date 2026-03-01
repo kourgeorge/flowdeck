@@ -32,6 +32,7 @@ function App() {
           <Route path="admin" element={<AdminDashboardPage />} />
           <Route path="how-it-works" element={<HowItWorksPage />} />
           <Route path="how-it-works/tps" element={<TpsPage />} />
+          <Route path="tps" element={<TpsPage />} />
           <Route path="architecture" element={<ArchitecturePage />} />
           <Route path="terms" element={<TermsOfUsePage />} />
           <Route path="contact" element={<ContactUsPage />} />

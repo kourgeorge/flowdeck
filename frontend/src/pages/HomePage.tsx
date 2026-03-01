@@ -347,6 +347,90 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* SECTION 3b: TPS — TRADING PLAN SPECIFICATION */}
+      <section className="px-4 py-12 sm:py-16 bg-gray-900 border-t border-gray-700">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+            {/* Left: TPS JSON mockup */}
+            <div className="rounded-2xl border border-indigo-700/50 bg-indigo-950/20 overflow-hidden shadow-2xl order-2 lg:order-1">
+              {/* Window chrome */}
+              <div className="flex items-center justify-between px-4 py-2.5 bg-indigo-900/30 border-b border-indigo-700/40">
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  <span className="text-xs font-semibold uppercase tracking-widest text-indigo-300">TPS v0.1 — Trader Tab</span>
+                </div>
+                <span className="text-xs text-indigo-500 font-mono">JSON</span>
+              </div>
+              {/* JSON body */}
+              <div className="p-4 font-mono text-xs leading-relaxed">
+                <pre className="bg-slate-900/80 rounded-lg p-4 overflow-x-auto whitespace-pre text-left">
+                  <span className="text-slate-400">{'{'}</span>{'\n'}
+                  <span className="text-slate-400">{'  '}</span><span className="text-sky-300">"instrument"</span><span className="text-slate-400">: </span><span className="text-amber-300">"NVDA"</span><span className="text-slate-400">,</span>{'\n'}
+                  <span className="text-slate-400">{'  '}</span><span className="text-sky-300">"timeframe"</span><span className="text-slate-400">: </span><span className="text-amber-300">"1D"</span><span className="text-slate-400">,</span>{'\n'}
+                  <span className="text-slate-400">{'  '}</span><span className="text-sky-300">"side"</span><span className="text-slate-400">: </span><span className="text-amber-300">"long"</span><span className="text-slate-400">,</span>{'\n'}
+                  <span className="text-slate-400">{'  '}</span><span className="text-sky-300">"entry"</span><span className="text-slate-400">: {'{'}</span>{'\n'}
+                  <span className="text-slate-400">{'    '}</span><span className="text-sky-300">"near"</span><span className="text-slate-400">: </span><span className="text-amber-300">"875.40 ±1%"</span><span className="text-slate-400">,</span>{'\n'}
+                  <span className="text-slate-400">{'    '}</span><span className="text-sky-300">"scale"</span><span className="text-slate-400">: </span><span className="text-amber-300">"40/30/30"</span>{'\n'}
+                  <span className="text-slate-400">{'  }'}</span><span className="text-slate-400">,</span>{'\n'}
+                  <span className="text-slate-400">{'  '}</span><span className="text-sky-300">"risk"</span><span className="text-slate-400">: {'{'}</span>{'\n'}
+                  <span className="text-slate-400">{'    '}</span><span className="text-sky-300">"max_loss"</span><span className="text-slate-400">: </span><span className="text-amber-300">"1%"</span><span className="text-slate-400">,</span>{'\n'}
+                  <span className="text-slate-400">{'    '}</span><span className="text-sky-300">"stop"</span><span className="text-slate-400">: </span><span className="text-green-300">850.00</span><span className="text-slate-400">,</span>{'\n'}
+                  <span className="text-slate-400">{'    '}</span><span className="text-sky-300">"max_position"</span><span className="text-slate-400">: </span><span className="text-amber-300">"5%"</span>{'\n'}
+                  <span className="text-slate-400">{'  }'}</span><span className="text-slate-400">,</span>{'\n'}
+                  <span className="text-slate-400">{'  '}</span><span className="text-sky-300">"take_profit"</span><span className="text-slate-400">: {'{'}</span>{'\n'}
+                  <span className="text-slate-400">{'    '}</span><span className="text-sky-300">"tp1"</span><span className="text-slate-400">: </span><span className="text-amber-300">"940.00 sell 50%"</span><span className="text-slate-400">,</span>{'\n'}
+                  <span className="text-slate-400">{'    '}</span><span className="text-sky-300">"trail"</span><span className="text-slate-400">: </span><span className="text-amber-300">"4%"</span>{'\n'}
+                  <span className="text-slate-400">{'  }'}</span>{'\n'}
+                  <span className="text-slate-400">{'}'}</span>
+                </pre>
+              </div>
+            </div>
+
+            {/* Right: copy */}
+            <div className="order-1 lg:order-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-900/40 border border-indigo-700/50 mb-5">
+                <svg className="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <span className="text-indigo-300 text-xs font-semibold uppercase tracking-wider">TPS v0.1 — Trading Plan Specification</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4 leading-tight">
+                Every Analysis Includes<br />
+                <span className="text-indigo-400">a Structured Trade Plan</span>
+              </h2>
+              <p className="text-gray-400 text-base leading-relaxed mb-6">
+                After the AI Trader agent produces its narrative recommendation, FlowDeck automatically generates a <strong className="text-white">TPS (Trading Plan Specification)</strong> — a compact, machine-readable JSON object that captures the full trade decision without ambiguity.
+              </p>
+              <ul className="space-y-3 mb-8">
+                {[
+                  { icon: '🎯', text: 'Entry zone, stop-loss, and take-profit levels — all in one structured object' },
+                  { icon: '📐', text: 'Tranche sizing (e.g. 40/30/30), max position size, and risk per trade' },
+                  { icon: '🛡️', text: 'Volatility guards and invalidation rules that auto-expire the plan if the thesis breaks' },
+                  { icon: '✅', text: 'Schema-validated by Pydantic — required fields are always present, no fabricated prices' },
+                  { icon: '📋', text: 'Found in the Trader tab of every AI Analysis report' },
+                ].map(({ icon, text }) => (
+                  <li key={text} className="flex items-start gap-3">
+                    <span className="text-lg leading-none mt-0.5">{icon}</span>
+                    <span className="text-gray-300 text-sm leading-relaxed">{text}</span>
+                  </li>
+                ))}
+              </ul>
+              <Link
+                to="/tps"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-700 hover:bg-indigo-600 text-white rounded-lg font-semibold transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                Read the TPS Specification →
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* SECTION 4: PLATFORM OVERVIEW (How It Works + Features) */}
       <section className="px-4 py-12 sm:py-16 bg-gray-900 border-t border-gray-700">
         <div className="max-w-6xl mx-auto">
@@ -392,6 +476,14 @@ export default function HomePage() {
               <h4 className="text-lg font-semibold text-white mb-2">On-Demand Reports</h4>
               <p className="text-gray-400 text-sm">
                 Generate fresh AI analysis for any stock, any time — using your token balance.
+              </p>
+            </div>
+            <div className="bg-indigo-900/20 border border-indigo-700/50 rounded-xl p-6">
+              <h4 className="text-lg font-semibold text-white mb-2">
+                <Link to="/tps" className="hover:text-indigo-300 transition-colors">TPS — Structured Trade Plans</Link>
+              </h4>
+              <p className="text-gray-400 text-sm">
+                Every AI analysis automatically produces a <strong className="text-white">Trading Plan Specification (TPS)</strong> — a schema-validated JSON object with entry zone, stop-loss, take-profit targets, position sizing, and invalidation rules. No ambiguity, no prose to interpret.
               </p>
             </div>
             <div className="bg-blue-900/20 border border-blue-700/50 rounded-xl p-6">
