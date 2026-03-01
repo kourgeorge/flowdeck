@@ -55,3 +55,7 @@ CORS_ORIGINS = (
 
 # Backend base URL (used by analysis service when INFO_SERVICE_URL/BACKEND_URL not set)
 BACKEND_URL = os.environ.get("BACKEND_URL", "").strip() or "http://127.0.0.1:8002"
+
+# Whether to write AI agent reports as markdown files inside the results folder.
+# Disabled by default; set WRITE_AI_REPORTS_TO_RESULTS=true to enable.
+WRITE_AI_REPORTS_TO_RESULTS = os.environ.get("WRITE_AI_REPORTS_TO_RESULTS", "false").strip().lower() in ("1", "true", "yes")
