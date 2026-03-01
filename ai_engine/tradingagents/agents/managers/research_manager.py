@@ -56,15 +56,15 @@ def create_research_manager(llm, memory):
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
 
-        prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate and make a definitive directional call: align with the bear analyst, the bull analyst, or choose a hold-bias only if strongly justified by the arguments.
+        prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate and make an honest directional call: align with the bear analyst (bearish/sell), the bull analyst (bullish/buy), or recommend a hold stance when the evidence is genuinely mixed, uncertain, or when the risk/reward does not clearly favor action.
 
-Summarize the key points from both sides concisely, focusing on the most compelling evidence or reasoning. Your directional stance must be clear and actionable for the Trader. Avoid defaulting to hold-bias simply because both sides have valid points; commit to a stance grounded in the debate's strongest arguments.
+Summarize the key points from both sides concisely, focusing on the most compelling evidence or reasoning. Your directional stance must be clear and actionable for the Trader. Avoid defaulting to hold-bias simply because both sides have valid points; commit to a stance grounded in the debate's strongest arguments. That said, a HOLD is the right call when signals are genuinely conflicting, conviction is low, or the risk/reward does not clearly favor entering or exiting a position.
 
 Additionally, develop a detailed investment plan for the trader. This should include:
 
-Directional Stance: A decisive thesis supported by the most convincing arguments.
+Directional Stance: A clear thesis (bullish, bearish, or hold/neutral) supported by the most convincing arguments.
 Rationale: An explanation of why these arguments lead to your conclusion.
-Strategic Actions: Concrete steps the Trader can use to implement the plan.
+Strategic Actions: Concrete steps the Trader can use to implement the plan (including waiting/monitoring if the stance is hold).
 Take into account your past mistakes on similar situations. Use these insights to refine your decision-making and ensure you are learning and improving. Present your analysis conversationally, as if speaking naturally.
 
 **Formatting:** Structure the investment plan for readability: use clear paragraphs and subparagraphs, Markdown tables for key data or comparisons (e.g. bull vs bear points, return scenarios), and headings (## or ###) to organize sections. Avoid long unbroken blocks of text so the output is well organized and easy to scan. 
@@ -86,10 +86,6 @@ Take into account your past mistakes on similar situations. Use these insights t
 - bear_case_return_pct: Downside scenario percentage return (e.g. -12.87 for -12.87%).
 - bull_case_return_pct: Upside scenario percentage return (e.g. 9.41 for +9.41%).
 Use the debate and your view to estimate these three numbers. They must be numeric (can be negative for bear).
-
-{f"Additional Context - SEC/Regulatory Analysis: {sec_report}" if sec_report else ""}
-
-{f"Additional Context - Advanced Technical Analysis: {technical_report}" if technical_report else ""}
 
 Here are your past reflections on mistakes:
 \"{past_memory_str}\"
