@@ -413,7 +413,7 @@ class AnalysisService:
                     bear = chunk.get("bear_summary") or []
                     content = chunk["investment_plan"]
                     analysis_info["reports"]["investment_plan"] = content
-                    meta = _build_report_json(content, chunk.get("recommendation_score"), "Recommendation Score", _takeaways(content),
+                    meta = _build_report_json(content, chunk.get("recommendation_score"), "Conviction Score", _takeaways(content),
                         expected_return_pct=chunk.get("expected_return_pct"),
                         bear_case_return_pct=chunk.get("bear_case_return_pct"),
                         bull_case_return_pct=chunk.get("bull_case_return_pct"))

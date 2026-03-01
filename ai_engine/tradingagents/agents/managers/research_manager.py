@@ -69,7 +69,7 @@ Take into account your past mistakes on similar situations. Use these insights t
 
 **Formatting:** Structure the investment plan for readability: use clear paragraphs and subparagraphs, Markdown tables for key data or comparisons (e.g. bull vs bear points, return scenarios), and headings (## or ###) to organize sections. Avoid long unbroken blocks of text so the output is well organized and easy to scan. 
 
-**CRITICAL: You MUST provide a Recommendation Score between 1-10 as part of your structured output.**
+**CRITICAL: You MUST provide a Conviction Score between 1-10 as part of your structured output. This score measures how strongly and clearly the directional thesis (bullish, bearish, or hold) is supported by the debate — it is NOT a quality rating of the recommendation, but a measure of directional conviction.**
 - Scoring guidelines:
   * 1-3: Very weak directional conviction, highly mixed signals, unclear direction
   * 4-5: Moderate directional conviction, balanced arguments, moderate clarity
