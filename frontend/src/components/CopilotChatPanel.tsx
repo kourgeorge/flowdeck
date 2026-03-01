@@ -81,7 +81,7 @@ export default function CopilotChatPanel({
   // ── Collapsed state: show a vertical strip with a toggle button ──
   if (collapsed) {
     return (
-      <div className="flex flex-col items-center w-6 shrink-0 border-l border-gray-700 bg-gray-800/50 py-3 gap-2">
+      <div className="flex flex-col items-center w-6 shrink-0 bg-gray-800/50 py-3 gap-2">
         <button
           type="button"
           onClick={onToggleCollapse}
@@ -105,7 +105,7 @@ export default function CopilotChatPanel({
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0 border-l border-gray-700 bg-gray-900">
+    <div className="flex flex-col h-full min-h-0 bg-gray-900">
       {/* Header */}
       <div className="shrink-0 border-b border-gray-700 bg-gray-800/80 px-3 py-2.5 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">

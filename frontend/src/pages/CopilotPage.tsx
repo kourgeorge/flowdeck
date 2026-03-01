@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import DashboardStockSidebar from '../components/DashboardStockSidebar';
 import StockDetailPanel from '../components/StockDetailPanel';
@@ -12,6 +12,36 @@ export default function CopilotPage() {
   const { user } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
+  const [chatWidth, setChatWidth] = useState(384); // default w-96
+  const isResizing = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+
+  const onResizeStart = useCallback((e: React.MouseEvent) => {
+    isResizing.current = true;
+    startX.current = e.clientX;
+    startWidth.current = chatWidth;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isResizing.current) return;
+      const delta = startX.current - ev.clientX; // dragging left increases width
+      const newWidth = Math.min(800, Math.max(240, startWidth.current + delta));
+      setChatWidth(newWidth);
+    };
+
+    const onMouseUp = () => {
+      isResizing.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [chatWidth]);
 
   const {
     widgets,
@@ -145,16 +175,25 @@ export default function CopilotPage() {
 
         {/* ── Right: AI Trading Copilot — Deck ── */}
         <div
-          className={`shrink-0 hidden md:flex flex-col min-h-0 transition-all duration-200 ${
-            chatCollapsed ? 'w-6' : 'w-96'
-          }`}
+          className="shrink-0 hidden md:flex flex-row min-h-0"
+          style={{ width: chatCollapsed ? 24 : chatWidth }}
         >
-          <CopilotChatPanel
-            selectedTicker={selectedTicker}
-            tickers={allTickers}
-            collapsed={chatCollapsed}
-            onToggleCollapse={() => setChatCollapsed((c) => !c)}
-          />
+          {/* Resize handle */}
+          {!chatCollapsed && (
+            <div
+              onMouseDown={onResizeStart}
+              className="shrink-0 w-1 self-stretch cursor-col-resize bg-gray-700 hover:bg-blue-500 transition-colors"
+              title="Drag to resize chat panel"
+            />
+          )}
+          <div className="flex-1 min-w-0 flex flex-col min-h-0">
+            <CopilotChatPanel
+              selectedTicker={selectedTicker}
+              tickers={allTickers}
+              collapsed={chatCollapsed}
+              onToggleCollapse={() => setChatCollapsed((c) => !c)}
+            />
+          </div>
         </div>
 
         {/* ── Mobile layout: stacked ── */}
