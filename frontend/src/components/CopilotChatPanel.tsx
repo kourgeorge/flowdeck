@@ -12,6 +12,7 @@ function getSuggestedQuestions(ticker?: string | null, tickers?: string[]): stri
       `What are the key risks and opportunities for ${ticker}?`,
       `What do the technical indicators say about ${ticker}?`,
       `Show me the latest news and insider activity for ${ticker}`,
+      `Calculate ${ticker}'s total return and max drawdown over the past year`,
     ];
   }
   if (tickers && tickers.length > 0) {
@@ -22,6 +23,7 @@ function getSuggestedQuestions(ticker?: string | null, tickers?: string[]): stri
       `Compare the fundamentals of ${sample.join(' and ')}`,
       `What are the key risks across my focus tickers?`,
       `Show me the latest news for my focus tickers`,
+      `Calculate the correlation between ${sample[0]} and ${sample[1] ?? 'SPY'} daily returns over the past year`,
     ];
   }
   return [
@@ -31,6 +33,7 @@ function getSuggestedQuestions(ticker?: string | null, tickers?: string[]): stri
     'Show me recent insider activity for NVDA',
     "What is FlowDeck's recommendation for TSLA?",
     'Summarize the latest news for AMZN',
+    'Calculate the Pearson correlation between META and IBM daily returns over the past year',
   ];
 }
 

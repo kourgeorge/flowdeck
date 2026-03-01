@@ -10,6 +10,7 @@ const SUGGESTED_QUESTIONS = [
   'Show me recent insider activity for NVDA',
   "What is FlowDeck's recommendation for TSLA?",
   'Summarize the latest news for AMZN',
+  'Calculate the Pearson correlation between META and IBM daily returns over the past year',
 ];
 
 export default function ChatPage() {
