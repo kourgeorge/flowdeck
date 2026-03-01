@@ -101,7 +101,7 @@ So the loop is: **Bull Researcher ⇄ Bear Researcher** until `count >= 2 * max_
 
 - **Research Manager**
   - Inputs: all reports (including sec_report when SEC analyst ran), full debate `history`, judge memory.
-  - Produces: `investment_plan`, `recommendation_score` (1–10), `expected_return_pct`, `bear_case_return_pct`, `bull_case_return_pct` (optional), and updates `investment_debate_state` (e.g. `judge_decision`).
+  - Produces: `investment_plan`, `recommendation_score` (1–10, also labelled **Conviction Score** in the UI — measures how strongly the directional thesis is supported by the debate, not the quality of the recommendation), `expected_return_pct`, `bear_case_return_pct`, `bull_case_return_pct` (optional), and updates `investment_debate_state` (e.g. `judge_decision`).
   - Edge: **Trader** (fixed).
 
 - **Trader**
@@ -125,7 +125,7 @@ So the loop is: **Bull Researcher ⇄ Bear Researcher** until `count >= 2 * max_
     - Or go to **Risk Judge** when round limit is reached.
 
 - **Risk Judge**
-  - Produces final risk decision, **`final_trade_decision`** (text), and optionally **`recommendation`** (BUY/HOLD/SELL), **`risk_score`**, **`risky_summary`**, **`safe_summary`**, **`neutral_summary`**, **`final_report_key_takeaways`**.
+  - Produces final risk decision, **`final_trade_decision`** (text — a risk analysis and refined plan, does **not** issue BUY/SELL/HOLD), and optionally **`recommendation`** (BUY/HOLD/SELL extracted separately), **`risk_score`** (1–10, labelled **Risk Score** in the UI — measures confidence in the quality and clarity of the risk assessment, quantitatively anchored to the average and standard deviation of all upstream scores: market, sentiment, news, fundamentals, SEC, technical, and conviction), **`risky_summary`**, **`safe_summary`**, **`neutral_summary`**, **`final_report_key_takeaways`**.
   - Edge: **END**.
 
 So: **Risky Analyst → Safe Analyst → Neutral Analyst → Risky Analyst → …** (round-robin via `should_continue_risk_analysis`) until `count >= 3 * max_risk_discuss_rounds`, then → **Risk Judge** → **END**.

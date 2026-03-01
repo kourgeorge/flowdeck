@@ -10,4 +10,12 @@ run analysis on the top 500 stocks
 add the token accounting in the db to track the earming nd usage and purchase/
 
 
+make sure  the tps is clear.
+allow the agent to execute analysis code.
+make the insights clearer and comprehensive.
 
+tradignagents learning from mistakes - how?
+
+make sure the server is multithreaded and can handlke multiple requests
+
+adding skills to the deck
