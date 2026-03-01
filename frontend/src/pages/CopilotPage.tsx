@@ -75,7 +75,7 @@ export default function CopilotPage() {
           <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
-          <span className="text-sm font-semibold text-white">{COPILOT_NAME}</span>
+          <span className="text-sm font-semibold text-white">{COPILOT_NAME} - Trading assistant</span>
         </div>
         <div className="ml-auto" />
       </div>
