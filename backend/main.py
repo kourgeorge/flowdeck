@@ -601,6 +601,51 @@ async def get_stock_widgets(
         raise HTTPException(status_code=500, detail=f"Failed to load widget data: {str(e)}")
 
 
+@app.get("/api/tickers/{ticker}/reports/{run_id}")
+async def get_stock_reports_for_run(
+    ticker: str,
+    run_id: str,
+    current_user=Depends(get_current_user_optional),
+):
+    """Get reports_with_scores for a specific historical run_id. Experimental."""
+    from models.schemas import ReportData
+    ticker = ticker.upper()
+
+    def _fetch():
+        scores_raw = report_service.get_reports_with_scores(ticker, run_id)
+        if not scores_raw:
+            return None
+        return {
+            k: ReportData(
+                content=v.get("content"),
+                score=v.get("score"),
+                score_label=v.get("score_label"),
+                key_takeaways=v.get("key_takeaways") or [],
+                analysis_date=v.get("analysis_date"),
+                generated_at=v.get("generated_at"),
+                days_ago=v.get("days_ago"),
+                models_used=v.get("models_used"),
+                bull_viewpoint=v.get("bull_viewpoint"),
+                bear_viewpoint=v.get("bear_viewpoint"),
+                risky_viewpoint=v.get("risky_viewpoint"),
+                safe_viewpoint=v.get("safe_viewpoint"),
+                neutral_viewpoint=v.get("neutral_viewpoint"),
+                tps_plan=v.get("tps_plan"),
+            )
+            for k, v in scores_raw.items()
+        }
+
+    try:
+        result = await asyncio.to_thread(_fetch)
+        if result is None:
+            raise HTTPException(status_code=404, detail="No reports found for this run")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load reports: {str(e)}")
+
+
 @app.get("/api/tickers/{ticker}", response_model=StockPageData)
 async def get_stock_page(
     ticker: str,
@@ -850,9 +895,9 @@ async def sync_major_stocks(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        app,
+        "main:app",
         host="0.0.0.0",
         port=8002,
-        reload=True,
+        workers=4,
         log_config=str(Path(__file__).with_name("uvicorn_logging.json")),
     )

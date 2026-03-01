@@ -272,6 +272,32 @@ export const stockApi = {
     return response.data;
   },
 
+  // Get reports for a specific historical run (experimental)
+  getHistoricalReports: async (ticker: string, runId: string): Promise<Record<string, {
+    content: string | null;
+    score: number | null;
+    score_label: string | null;
+    key_takeaways: string[];
+    analysis_date: string | null;
+    generated_at: string | null;
+    days_ago: number | null;
+    models_used: { provider?: string; deep_think?: string; quick_think?: string } | null;
+    bull_viewpoint: string[] | null;
+    bear_viewpoint: string[] | null;
+    risky_viewpoint: string[] | null;
+    safe_viewpoint: string[] | null;
+    neutral_viewpoint: string[] | null;
+    tps_plan: string | null;
+  }>> => {
+    const token = getStoredToken();
+    const response = await api.get(`/api/tickers/${ticker}/reports/${encodeURIComponent(runId)}`, {
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    return response.data;
+  },
+
   // Get public stats (no auth required)
   getPublicStats: async (): Promise<{
     total_analyses: number;

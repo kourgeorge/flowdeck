@@ -73,7 +73,7 @@ if [ "$1" = "--foreground" ]; then
   echo "[$(date '+%H:%M:%S')] Press Ctrl+C to stop both."
   # Start backend in a new session so it leads its own process group
   cd "$BACKEND_DIR"
-  new_session python -m uvicorn main:app --host 0.0.0.0 --port 8002 --log-config "$BACKEND_DIR/uvicorn_logging.json" &
+  new_session python -m uvicorn main:app --host 0.0.0.0 --port 8002 --workers 4 --log-config "$BACKEND_DIR/uvicorn_logging.json" &
   BACKEND_PID=$!
   echo $BACKEND_PID > "$PID_FILE"
   # Start frontend in a new session so npm + vite child share a process group
@@ -87,7 +87,7 @@ else
   stop_services 2>/dev/null || true
   echo "[$(date '+%H:%M:%S')] Starting Flowdeck in background..."
   cd "$BACKEND_DIR"
-  new_session nohup python -m uvicorn main:app --host 0.0.0.0 --port 8002 --log-config "$BACKEND_DIR/uvicorn_logging.json" > "$ROOT_DIR/backend.log" 2>&1 &
+  new_session nohup python -m uvicorn main:app --host 0.0.0.0 --port 8002 --workers 4 --log-config "$BACKEND_DIR/uvicorn_logging.json" > "$ROOT_DIR/backend.log" 2>&1 &
   echo $! > "$PID_FILE"
   cd "$FRONTEND_DIR"
   new_session nohup npm run preview -- --host >> "$ROOT_DIR/frontend.log" 2>&1 &

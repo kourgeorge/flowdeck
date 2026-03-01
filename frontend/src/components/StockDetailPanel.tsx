@@ -52,6 +52,11 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const [extendedInfo, setExtendedInfo] = useState<ExtendedInfo | null>(null);
   const [isLoading, setIsLoading] = useState(!prefetchedData);
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
+  // EXPERIMENTAL: historical run selector — remove this block + related JSX to disable
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [historicalReportsData, setHistoricalReportsData] = useState<Record<string, any> | null>(null);
+  const [isLoadingHistoricalRun, setIsLoadingHistoricalRun] = useState(false);
+  // END EXPERIMENTAL
   const [activeTab, setActiveTab] = useState('ai-analysis');
   const [fundamentalsData, setFundamentalsData] = useState<string | object | null>(null);
   const [financialStatements, setFinancialStatements] = useState<any>(null);
@@ -113,6 +118,9 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
 
   const applyStockData = (data: StockPageData) => {
     setStockData(data);
+    // Reset historical run selection when stock data refreshes
+    setSelectedRunId(null);
+    setHistoricalReportsData(null);
     if (data.reports && Object.keys(data.reports).length > 0) {
       const reports = Object.keys(data.reports);
       setSelectedReport(reports.includes('final_trade_decision') ? 'final_trade_decision' : reports[0]);
@@ -167,6 +175,9 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     setInsiderTransactionsError(null); setFundamentalsSubTab('charts'); setFundInfo(null);
     setAnalysisProgress(null); setEdgarFilings(null); setEdgarFilingsError(null); setFutureEvents(null);
     setActiveTab('ai-analysis'); setSelectedReport(null); setLoadError(null); setAnalysisError(null);
+    // EXPERIMENTAL: reset historical run state
+    setSelectedRunId(null); setHistoricalReportsData(null);
+    // END EXPERIMENTAL
     if (wsClientRef.current) { wsClientRef.current.disconnect(); wsClientRef.current = null; }
 
     if (prefetchedData) {
@@ -266,6 +277,38 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     finally { setEmailPreferenceToggling(false); }
   }, [ticker]);
 
+  // EXPERIMENTAL: load reports for a historical run
+  const handleSelectHistoricalRun = useCallback(async (runId: string | null) => {
+    if (!runId) {
+      setSelectedRunId(null);
+      setHistoricalReportsData(null);
+      // Reset to latest report tab
+      if (stockData?.reports) {
+        const reports = Object.keys(stockData.reports);
+        setSelectedReport(reports.includes('final_trade_decision') ? 'final_trade_decision' : reports[0] ?? null);
+      }
+      return;
+    }
+    setSelectedRunId(runId);
+    setIsLoadingHistoricalRun(true);
+    try {
+      const data = await stockApi.getHistoricalReports(ticker, runId);
+      setHistoricalReportsData(data);
+      const keys = Object.keys(data).sort((a, b) => {
+        const ia = REPORT_PROCESS_ORDER.indexOf(a), ib = REPORT_PROCESS_ORDER.indexOf(b);
+        if (ia === -1 && ib === -1) return a.localeCompare(b);
+        if (ia === -1) return 1; if (ib === -1) return -1;
+        return ia - ib;
+      });
+      setSelectedReport(keys.includes('final_trade_decision') ? 'final_trade_decision' : keys[0] ?? null);
+    } catch {
+      setHistoricalReportsData(null);
+    } finally {
+      setIsLoadingHistoricalRun(false);
+    }
+  }, [ticker, stockData]);
+  // END EXPERIMENTAL
+
   useEffect(() => { if (activeTab === 'news' && ticker && !isLoadingNews) fetchNews(); }, [activeTab, ticker, fetchNews]);
   useEffect(() => { if (activeTab === 'news' && ticker && !isLoadingInsiderTransactions) fetchInsiderTransactions(); }, [activeTab, ticker, fetchInsiderTransactions]);
 
@@ -322,20 +365,27 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     </div>
   );
 
-  const allReports = Object.keys(stockData.reports || {});
+  // EXPERIMENTAL: when a historical run is selected, use its data instead of the latest
+  const activeReportsSource = (selectedRunId && historicalReportsData) ? historicalReportsData : stockData.reports_with_scores;
+  const activeReportsRaw = (selectedRunId && historicalReportsData)
+    ? Object.fromEntries(Object.entries(historicalReportsData).map(([k, v]) => [k, v.content ?? '']))
+    : stockData.reports;
+  // END EXPERIMENTAL
+
+  const allReports = Object.keys(activeReportsRaw || {});
   const availableReports = [...allReports].sort((a, b) => {
     const idxA = REPORT_PROCESS_ORDER.indexOf(a), idxB = REPORT_PROCESS_ORDER.indexOf(b);
     if (idxA === -1 && idxB === -1) return a.localeCompare(b);
     if (idxA === -1) return 1; if (idxB === -1) return -1;
     return idxA - idxB;
   });
-  const currentReportData = selectedReport && stockData.reports_with_scores ? stockData.reports_with_scores[selectedReport] : null;
-  const currentReportContent = currentReportData?.content || (selectedReport ? stockData.reports[selectedReport] : null);
+  const currentReportData = selectedReport && activeReportsSource ? activeReportsSource[selectedReport] : null;
+  const currentReportContent = currentReportData?.content || (selectedReport ? activeReportsRaw?.[selectedReport] : null);
   const currentReportScore = currentReportData?.score;
   const currentReportScoreLabel = currentReportData?.score_label;
   const reportScores: Record<string, { score: number | null; score_label: string | null }> = {};
-  if (stockData.reports_with_scores) Object.entries(stockData.reports_with_scores).forEach(([k, v]) => { reportScores[k] = { score: v.score, score_label: v.score_label }; });
-  const modelsUsed = stockData.reports_with_scores ? (Object.values(stockData.reports_with_scores).find((r) => r.models_used)?.models_used ?? null) : null;
+  if (activeReportsSource) Object.entries(activeReportsSource).forEach(([k, v]) => { reportScores[k] = { score: v.score, score_label: v.score_label }; });
+  const modelsUsed = activeReportsSource ? (Object.values(activeReportsSource).find((r) => r.models_used)?.models_used ?? null) : null;
   const quote = refreshedQuote ?? stockData.quote;
   const lastUpdateTime = quote?.last_update_time ? new Date(quote.last_update_time).toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '';
 
@@ -568,7 +618,40 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                 </div>
               ) : (
                 <>
-                  <p className="text-sm text-amber-400/90 bg-amber-950/30 border border-amber-700/40 rounded-lg px-4 py-2">For informational purposes only. Not investment advice.</p>
+                  {/* EXPERIMENTAL: historical run selector lives in the disclaimer panel — remove this block to disable */}
+                  <div className="text-sm text-amber-400/90 bg-amber-950/30 border border-amber-700/40 rounded-lg px-4 py-2 flex flex-wrap items-center gap-2">
+                    <span className="shrink-0">For informational purposes only. Not investment advice.</span>
+                    {stockData.has_reports && !stockData.is_generating && (stockData.historical_analyses?.length ?? 0) > 1 && (
+                      <>
+                        <span className="text-amber-700/60 shrink-0 hidden sm:inline">·</span>
+                        <div className="flex items-center gap-1.5 ml-auto">
+                          <svg className="w-3 h-3 text-amber-600/70 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <select
+                            value={selectedRunId ?? ''}
+                            onChange={(e) => handleSelectHistoricalRun(e.target.value || null)}
+                            disabled={isLoadingHistoricalRun}
+                            className="text-xs bg-amber-950/50 border border-amber-700/50 text-amber-300 rounded px-2 py-0.5 focus:outline-none focus:border-amber-500 disabled:opacity-50 max-w-[180px]"
+                          >
+                            <option value="">Latest ({stockData.report_date ?? ''})</option>
+                            {stockData.historical_analyses.slice(1).map((h) => (
+                              <option key={h.date} value={h.date}>
+                                {h.date}{h.recommendation ? ` · ${h.recommendation}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          {isLoadingHistoricalRun && (
+                            <svg className="w-3 h-3 animate-spin text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                            </svg>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {/* END EXPERIMENTAL */}
                   {analysisError && (
                     <div className="flex items-center gap-3 rounded-lg border border-red-800 bg-red-950/50 px-4 py-3 text-red-200" role="alert">
                       <svg className="h-5 w-5 shrink-0 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>

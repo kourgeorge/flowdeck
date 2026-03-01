@@ -27,4 +27,4 @@ if __name__ == "__main__":
     log_config_path = backend_dir / "uvicorn_logging.json"
 
     # Use import string so reload/workers work (uvicorn re-imports in subprocess)
-    uvicorn.run("main:app", host="0.0.0.0", port=8002, reload=True, log_config=str(log_config_path))
+    uvicorn.run("main:app", host="0.0.0.0", port=8002, workers=4, log_config=str(log_config_path))
