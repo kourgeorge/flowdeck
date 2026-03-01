@@ -69,6 +69,9 @@ export default function HowItWorksPage() {
             <p className="mb-2">
               After the debate, a <strong className="text-white">research manager</strong> step weighs the bull and bear arguments and produces an <strong className="text-white">investment plan</strong>: a summary view, a recommendation score (e.g. 1–10), and where relevant an idea of expected return and downside. Then a <strong className="text-white">trader</strong> perspective turns that into a concrete stance—how to act on the plan given real-world execution and risk. So by this point the AI has moved from "raw reports" to "plan" to "actionable view."
             </p>
+            <p className="mb-2">
+              As part of the trader step, the system also produces a <strong className="text-white">TPS (Trading Plan Specification)</strong> — a compact, structured JSON object that encodes the trade decision unambiguously: instrument, direction, entry zone, stop-loss, risk limit, and optional execution rules. You can find it in the <strong className="text-white">Trader tab</strong> of any AI Analysis report. <Link to="/how-it-works/tps" className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2">Learn more about TPS →</Link>
+            </p>
 
             <h3 className="text-base font-medium text-white mt-4 mb-2">Step 4 — Risk debate and final recommendation</h3>
             <p className="mb-2">
@@ -163,6 +166,12 @@ export default function HowItWorksPage() {
             className="inline-flex items-center text-sm text-gray-400 hover:text-white transition-colors"
           >
             AI Analyst Agent →
+          </Link>
+          <Link
+            to="/how-it-works/tps"
+            className="inline-flex items-center text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
+          >
+            TPS Trading Plan Spec →
           </Link>
           <Link
             to="/terms"

@@ -14,6 +14,7 @@ import PaymentSuccessPage from './pages/PaymentSuccessPage';
 import PaymentCancelPage from './pages/PaymentCancelPage';
 import ChatPage from './pages/ChatPage';
 import CopilotPage from './pages/CopilotPage';
+import TpsPage from './pages/TpsPage';
 
 function App() {
   return (
@@ -30,6 +31,7 @@ function App() {
           <Route path="subscriptions" element={<Navigate to="/dashboard" replace />} />
           <Route path="admin" element={<AdminDashboardPage />} />
           <Route path="how-it-works" element={<HowItWorksPage />} />
+          <Route path="how-it-works/tps" element={<TpsPage />} />
           <Route path="architecture" element={<ArchitecturePage />} />
           <Route path="terms" element={<TermsOfUsePage />} />
           <Route path="contact" element={<ContactUsPage />} />
