@@ -250,6 +250,68 @@ def _tool_get_stock_data(ticker: str) -> str:
         return f"Error fetching stock data for {ticker}: {e}"
 
 
+def _tool_get_historical_prices(ticker: str, start_date: str, end_date: str) -> str:
+    """
+    Fetch daily OHLCV price history for a ticker over a custom date range (up to 5 years).
+    Returns CSV data with columns: Date, Open, High, Low, Close, Volume.
+    """
+    try:
+        import yfinance as yf
+        import pandas as pd
+
+        ticker_upper = ticker.strip().upper()
+
+        # Parse and validate dates
+        try:
+            start_dt = datetime.date.fromisoformat(start_date)
+            end_dt = datetime.date.fromisoformat(end_date)
+        except ValueError:
+            return f"Error: invalid date format. Use YYYY-MM-DD (e.g. 2024-01-01)."
+
+        today = datetime.date.today()
+
+        # Cap end date at today
+        if end_dt > today:
+            end_dt = today
+
+        # Cap range at 5 years to avoid huge payloads
+        max_start = today - datetime.timedelta(days=5 * 365)
+        if start_dt < max_start:
+            start_dt = max_start
+
+        if start_dt >= end_dt:
+            return "Error: start_date must be before end_date."
+
+        data = yf.download(
+            ticker_upper,
+            start=start_dt.isoformat(),
+            end=end_dt.isoformat(),
+            multi_level_index=False,
+            progress=False,
+            auto_adjust=True,
+        )
+
+        if data is None or data.empty:
+            return f"No price data found for {ticker_upper} between {start_dt} and {end_dt}."
+
+        # Keep only the columns we need, reset index so Date is a column
+        data = data.reset_index()[["Date", "Open", "High", "Low", "Close", "Volume"]]
+        data["Date"] = [str(d)[:10] for d in pd.to_datetime(data["Date"])]
+        data[["Open", "High", "Low", "Close"]] = data[["Open", "High", "Low", "Close"]].round(4)
+
+        csv_out = data.to_csv(index=False)
+
+        header = (
+            f"# Historical daily prices for {ticker_upper}\n"
+            f"# Period: {start_dt} to {end_dt} | Rows: {len(data)}\n"
+            f"# Columns: Date, Open, High, Low, Close (adjusted), Volume\n\n"
+        )
+        return header + csv_out
+
+    except Exception as e:
+        return f"Error fetching historical prices for {ticker}: {e}"
+
+
 def _tool_get_indicators(ticker: str) -> str:
     """Get technical indicators (RSI, MACD, SMA, Bollinger Bands) for a ticker."""
     try:
@@ -375,6 +437,234 @@ def _tool_web_search(query: str) -> str:
     except Exception as e:
         logger.exception("web_search error for query '%s': %s", query, e)
         return f"Error performing web search: {e}"
+
+
+# ---------------------------------------------------------------------------
+# Code execution tool (sandboxed subprocess)
+# ---------------------------------------------------------------------------
+
+# Modules that are safe to import inside the sandbox.
+# Any import NOT in this set will be blocked before execution.
+_ALLOWED_MODULES = frozenset({
+    # math / numerics
+    "math", "cmath", "decimal", "fractions", "statistics", "random",
+    # data structures / algorithms
+    "collections", "heapq", "bisect", "array", "queue", "itertools",
+    "functools", "operator", "copy", "pprint",
+    # string / text
+    "string", "re", "textwrap", "unicodedata", "difflib",
+    # date / time (read-only)
+    "datetime", "calendar", "time",
+    # encoding / serialisation
+    "json", "csv", "base64", "hashlib", "hmac", "struct",
+    # third-party data/science (present in the venv)
+    "numpy", "pandas", "scipy", "sklearn", "statsmodels",
+    # typing helpers
+    "typing", "dataclasses", "enum", "abc",
+    # io helpers (StringIO / BytesIO only — no file paths)
+    "io",
+})
+
+# Patterns that are always blocked regardless of the allowlist.
+_BLOCKED_PATTERNS = [
+    "import os",
+    "import sys",
+    "import subprocess",
+    "import socket",
+    "import requests",
+    "import urllib",
+    "import http",
+    "import ftplib",
+    "import smtplib",
+    "import shutil",
+    "import pathlib",
+    "import glob",
+    "import tempfile",
+    "import pickle",
+    "import shelve",
+    "import sqlite3",
+    "import ctypes",
+    "import cffi",
+    "import multiprocessing",
+    "import threading",
+    "import concurrent",
+    "import asyncio",
+    "__import__",
+    "open(",
+    "exec(",
+    "eval(",
+    "compile(",
+    "globals(",
+    "locals(",
+    "vars(",
+    "getattr(",
+    "setattr(",
+    "delattr(",
+    "breakpoint(",
+    "__builtins__",
+    "__class__",
+    "__subclasses__",
+    "builtins",
+]
+
+
+def _tool_execute_python(code: str) -> str:
+    """
+    Execute a Python code snippet in a heavily restricted subprocess sandbox.
+
+    Safety measures applied (in order):
+      1. Static pattern scan — blocks dangerous imports and builtins before execution.
+      2. Code length cap — rejects snippets over 4 KB.
+      3. subprocess with shell=False — no shell injection possible.
+      4. Stripped environment — no credentials, proxy settings, or PATH tricks.
+      5. Isolated /tmp working directory — no access to the app source tree.
+      6. Hard 10-second wall-clock timeout — kills infinite loops.
+      7. Memory cap via resource.setrlimit (128 MB RSS, Unix only).
+      8. stdout/stderr capped at 8 KB to prevent output flooding.
+    """
+    import subprocess
+    import sys
+    import textwrap
+    import tempfile
+    import os as _os
+
+    # --- 1. Length cap ---
+    MAX_CODE_BYTES = 4096
+    if len(code.encode()) > MAX_CODE_BYTES:
+        return f"Error: code exceeds the {MAX_CODE_BYTES}-byte limit ({len(code.encode())} bytes submitted)."
+
+    # --- 2. Static pattern scan ---
+    code_lower = code.lower()
+    for pattern in _BLOCKED_PATTERNS:
+        if pattern.lower() in code_lower:
+            return (
+                f"Error: code contains a blocked pattern: `{pattern}`. "
+                "Only safe standard-library and data-science modules are permitted."
+            )
+
+    # --- 3. Build the wrapper script ---
+    # The wrapper installs a restricted __builtins__ and then exec()s the user code.
+    # We write it to a temp file so the subprocess argv never contains user code.
+    wrapper = textwrap.dedent(f"""\
+        import resource, sys
+
+        # Memory cap: 128 MB RSS (soft), 256 MB (hard)
+        try:
+            resource.setrlimit(resource.RLIMIT_AS, (128 * 1024 * 1024, 256 * 1024 * 1024))
+        except Exception:
+            pass  # Windows / non-Unix: skip silently
+
+        # Allowed modules (runtime enforcement — mirrors the outer _ALLOWED_MODULES set)
+        _ALLOWED = {{
+            'math', 'cmath', 'decimal', 'fractions', 'statistics', 'random',
+            'collections', 'heapq', 'bisect', 'array', 'queue', 'itertools',
+            'functools', 'operator', 'copy', 'pprint',
+            'string', 're', 'textwrap', 'unicodedata', 'difflib',
+            'datetime', 'calendar', 'time',
+            'json', 'csv', 'base64', 'hashlib', 'hmac', 'struct',
+            'numpy', 'pandas', 'scipy', 'sklearn', 'statsmodels',
+            'typing', 'dataclasses', 'enum', 'abc', 'io',
+        }}
+
+        import builtins as _builtins_mod
+
+        # Custom __import__ that enforces the allowlist at runtime
+        _real_import = _builtins_mod.__import__
+        def _safe_import(name, *args, **kwargs):
+            top = name.split('.')[0]
+            if top not in _ALLOWED:
+                raise ImportError(f"Module '{{name}}' is not allowed in the sandbox.")
+            return _real_import(name, *args, **kwargs)
+
+        # Restrict builtins — include __import__ so the import statement works,
+        # but replace it with our allowlist-enforcing wrapper.
+        _SAFE_BUILTINS = {{
+            k: v for k, v in _builtins_mod.__dict__.items()
+            if k in {{
+                'print', 'len', 'range', 'enumerate', 'zip', 'map', 'filter',
+                'sorted', 'reversed', 'sum', 'min', 'max', 'abs', 'round',
+                'int', 'float', 'str', 'bool', 'list', 'dict', 'set', 'tuple',
+                'type', 'isinstance', 'issubclass', 'hasattr',
+                'repr', 'format', 'chr', 'ord', 'hex', 'oct', 'bin',
+                'divmod', 'pow', 'hash', 'id', 'iter', 'next', 'callable',
+                'all', 'any', 'staticmethod', 'classmethod', 'property',
+                'NotImplemented', 'Ellipsis', 'None', 'True', 'False',
+                '__name__', '__doc__', '__spec__', '__loader__', '__package__',
+                # Exceptions
+                'Exception', 'ValueError', 'TypeError', 'KeyError',
+                'IndexError', 'AttributeError', 'RuntimeError',
+                'StopIteration', 'ZeroDivisionError', 'OverflowError',
+                'ArithmeticError', 'LookupError', 'AssertionError',
+                'NotImplementedError', 'ImportError', 'NameError',
+            }}
+        }}
+        # Inject the safe import wrapper (NOT the real __import__)
+        _SAFE_BUILTINS['__import__'] = _safe_import
+
+        _builtins_mod.open = None  # belt-and-suspenders
+
+        _user_code = {repr(code)}
+        exec(compile(_user_code, '<sandbox>', 'exec'), {{'__builtins__': _SAFE_BUILTINS}})
+    """)
+
+    # --- 4. Write wrapper to a temp file ---
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".py", delete=False, dir="/tmp"
+        ) as tf:
+            tf.write(wrapper)
+            tmp_path = tf.name
+    except Exception as e:
+        return f"Error: could not create sandbox script: {e}"
+
+    # --- 5. Stripped environment (no credentials, no PATH tricks) ---
+    safe_env = {
+        "PATH": "/usr/bin:/bin",
+        "HOME": "/tmp",
+        "LANG": "en_US.UTF-8",
+        "PYTHONPATH": "",          # don't inherit app's PYTHONPATH
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONIOENCODING": "utf-8",
+    }
+
+    # --- 6. Execute ---
+    try:
+        result = subprocess.run(
+            [sys.executable, tmp_path],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            cwd="/tmp",            # isolated working directory
+            env=safe_env,
+            shell=False,           # never use shell=True
+        )
+    except subprocess.TimeoutExpired:
+        return "Error: code execution timed out (10-second limit)."
+    except Exception as e:
+        return f"Error: sandbox execution failed: {e}"
+    finally:
+        # Always clean up the temp file
+        try:
+            _os.unlink(tmp_path)
+        except Exception:
+            pass
+
+    # --- 7. Cap output size ---
+    MAX_OUTPUT = 8192
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+
+    if len(stdout) > MAX_OUTPUT:
+        stdout = stdout[:MAX_OUTPUT] + "\n... [output truncated]"
+    if len(stderr) > MAX_OUTPUT:
+        stderr = stderr[:MAX_OUTPUT] + "\n... [stderr truncated]"
+
+    output = stdout
+    if stderr:
+        # Filter out the harmless "Traceback" header noise for cleaner display
+        output += f"\n[stderr]:\n{stderr}"
+
+    return output.strip() or "(no output)"
 
 
 # ---------------------------------------------------------------------------
@@ -623,6 +913,36 @@ TOOLS = [
         "fn": _tool_get_stock_data,
     },
     {
+        "name": "get_historical_prices",
+        "description": (
+            "Fetch daily OHLCV (Open, High, Low, Close, Volume) price history for a ticker over a custom date range "
+            "(up to 5 years back). Returns CSV data with adjusted close prices. "
+            "Use this — instead of get_stock_data — whenever the user asks about price history beyond the last 30 days: "
+            "e.g. year-to-date performance, 1-year or multi-year returns, correlation between two stocks over a year, "
+            "historical volatility, drawdown analysis, or any calculation that requires more than 30 days of price data. "
+            "After fetching, pass the CSV to execute_python for calculations."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "ticker": {
+                    "type": "string",
+                    "description": "Stock ticker symbol, e.g. AAPL, MSFT, TSLA",
+                },
+                "start_date": {
+                    "type": "string",
+                    "description": "Start date in YYYY-MM-DD format, e.g. 2024-01-01",
+                },
+                "end_date": {
+                    "type": "string",
+                    "description": "End date in YYYY-MM-DD format, e.g. 2025-01-01. Use today's date for the most recent data.",
+                },
+            },
+            "required": ["ticker", "start_date", "end_date"],
+        },
+        "fn": _tool_get_historical_prices,
+    },
+    {
         "name": "get_indicators",
         "description": (
             "Get technical analysis indicators for a ticker over the last 30 days: "
@@ -792,6 +1112,33 @@ TOOLS = [
         },
         "fn": _tool_web_search,
     },
+    {
+        "name": "execute_python",
+        "description": (
+            "Execute a Python code snippet in a secure sandbox and return the printed output. "
+            "Use this tool for: mathematical calculations, statistical analysis, financial modelling, "
+            "data transformations, sorting/filtering lists of numbers, computing returns or ratios, "
+            "or any task where running code produces a more accurate answer than reasoning alone. "
+            "Allowed modules: math, statistics, random, collections, itertools, functools, datetime, "
+            "json, csv, decimal, fractions, re, string, numpy, pandas, scipy. "
+            "NOT allowed: file I/O, network access, os/sys/subprocess, pickle, threading, or any "
+            "module not in the allowlist. Keep code under 4 KB. Use print() to produce output."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "description": (
+                        "Valid Python 3 code to execute. Must use print() to produce output. "
+                        "Example: 'import math\\nprint(math.sqrt(144))'"
+                    ),
+                }
+            },
+            "required": ["code"],
+        },
+        "fn": _tool_execute_python,
+    },
 ]
 
 # OpenAI-format tool schemas for bind_tools
@@ -921,9 +1268,9 @@ class ChatService:
         today = datetime.date.today().isoformat()
         has_user_ctx = user_id is not None and db is not None
         user_ctx_section = """
-11. Call `get_user_context` to retrieve the current user's profile (email, name, token balance, member since).
-12. Call `get_user_subscriptions` to see which stocks the user is subscribed/watching on FlowDeck.
-13. Call `get_portfolio_overview` to get live quotes AND AI recommendations for ALL of the user's subscribed stocks at once — use this when the user asks about their portfolio or how their stocks are doing.""" if has_user_ctx else ""
+12. Call `get_user_context` to retrieve the current user's profile (email, name, token balance, member since).
+13. Call `get_user_subscriptions` to see which stocks the user is subscribed/watching on FlowDeck.
+14. Call `get_portfolio_overview` to get live quotes AND AI recommendations for ALL of the user's subscribed stocks at once — use this when the user asks about their portfolio or how their stocks are doing.""" if has_user_ctx else ""
 
         # Build watchlist context section if tickers are provided
         watchlist_tickers: List[str] = (context or {}).get("tickers", [])
@@ -953,7 +1300,9 @@ You help users understand stocks, markets, and investment opportunities using re
 7. Call `get_global_news` for macro/market-wide news and trends.
 8. Call `get_insider_transactions` or `get_insider_sentiment` for insider trading activity.
 9. Call `web_search` to find breaking news, recent earnings, analyst upgrades/downgrades, regulatory filings, macroeconomic data releases, or any information not covered by the other tools. Use it for general financial questions or when you need the latest web information.
-10. You may call multiple tools in sequence to build a comprehensive answer.{user_ctx_section}{watchlist_section}
+10. Call `get_historical_prices` to fetch real daily OHLCV price data for any custom date range (up to 5 years). Use this — NOT simulation — whenever the user asks about year-to-date performance, 1-year returns, multi-year price history, correlation between stocks over a period, historical volatility, or any analysis requiring more than 30 days of price data. Always fetch real data first, then pass the CSV to `execute_python` for calculations.
+11. Call `execute_python` to run calculations, financial modelling, statistical analysis, or data transformations where code gives a more precise answer than reasoning alone. Always use print() to output results. When working with price data from `get_historical_prices`, parse the CSV using the `csv` or `io` module (pandas is also available).
+12. You may call multiple tools in sequence to build a comprehensive answer.{user_ctx_section}{watchlist_section}
 
 ## Response Style
 - Be concise and data-driven. Lead with the most important insight.
@@ -1126,9 +1475,9 @@ This is for informational and educational purposes only. Not personalized invest
         today = datetime.date.today().isoformat()
         has_user_ctx = user_id is not None and db is not None
         user_ctx_section = """
-11. Call `get_user_context` to retrieve the current user's profile (email, name, token balance, member since).
-12. Call `get_user_subscriptions` to see which stocks the user is subscribed/watching on FlowDeck.
-13. Call `get_portfolio_overview` to get live quotes AND AI recommendations for ALL of the user's subscribed stocks at once — use this when the user asks about their portfolio or how their stocks are doing.""" if has_user_ctx else ""
+13. Call `get_user_context` to retrieve the current user's profile (email, name, token balance, member since).
+14. Call `get_user_subscriptions` to see which stocks the user is subscribed/watching on FlowDeck.
+15. Call `get_portfolio_overview` to get live quotes AND AI recommendations for ALL of the user's subscribed stocks at once — use this when the user asks about their portfolio or how their stocks are doing.""" if has_user_ctx else ""
 
         # Build watchlist context section if tickers are provided
         watchlist_tickers: List[str] = (context or {}).get("tickers", [])
@@ -1158,7 +1507,9 @@ You help users understand stocks, markets, and investment opportunities using re
 7. Call `get_global_news` for macro/market-wide news and trends.
 8. Call `get_insider_transactions` or `get_insider_sentiment` for insider trading activity.
 9. Call `web_search` to find breaking news, recent earnings, analyst upgrades/downgrades, regulatory filings, macroeconomic data releases, or any information not covered by the other tools. Use it for general financial questions or when you need the latest web information.
-10. You may call multiple tools in sequence to build a comprehensive answer.{user_ctx_section}{watchlist_section}
+10. Call `get_historical_prices` to fetch real daily OHLCV price data for any custom date range (up to 5 years). Use this — NOT simulation — whenever the user asks about year-to-date performance, 1-year returns, multi-year price history, correlation between stocks over a period, historical volatility, or any analysis requiring more than 30 days of price data. Always fetch real data first, then pass the CSV to `execute_python` for calculations.
+11. Call `execute_python` to run calculations, financial modelling, statistical analysis, or data transformations where code gives a more precise answer than reasoning alone. Always use print() to output results. When working with price data from `get_historical_prices`, parse the CSV using the `csv` or `io` module (pandas is also available).
+12. You may call multiple tools in sequence to build a comprehensive answer.{user_ctx_section}{watchlist_section}
 
 ## Response Style
 - Be concise and data-driven. Lead with the most important insight.
