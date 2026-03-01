@@ -130,7 +130,7 @@ export default function HomePage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
               <span className="text-blue-300 text-sm font-medium">New: {COPILOT_NAME}</span>
-              <span className="text-gray-500 text-sm">— your Trading Copilot, research & chat side by side</span>
+              <span className="text-gray-500 text-sm">— searches the web, runs analysis code, and chats side by side</span>
               <svg className="w-3.5 h-3.5 text-blue-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
@@ -221,6 +221,8 @@ export default function HomePage() {
                 {[
                   { icon: '📊', text: 'Live quote, AI recommendation, and all report tabs in one view' },
                   { icon: '🤖', text: 'AI chat with full context — selected ticker, watchlist, live data, and reports' },
+                  { icon: '🌐', text: 'Searches the live web for breaking news, earnings, analyst upgrades, and macro events' },
+                  { icon: '🐍', text: 'Writes and executes Python analysis code — correlations, return scenarios, statistical models' },
                   { icon: '💬', text: 'Ask anything: risks, technicals, news, fundamentals, comparisons' },
                   { icon: '⚡', text: 'Responses stream in real-time with transparent tool usage' },
                 ].map(({ icon, text }) => (
@@ -393,9 +395,9 @@ export default function HomePage() {
               </p>
             </div>
             <div className="bg-blue-900/20 border border-blue-700/50 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">{COPILOT_NAME} — Trading Copilot & AI Analyst</h4>
+              <h4 className="text-lg font-semibold text-white mb-2">{COPILOT_NAME} — A Truly Powerful AI Analyst</h4>
               <p className="text-gray-400 text-sm">
-                Research stocks and chat with the AI side by side in {COPILOT_NAME}, your Trading Copilot, or use the standalone AI Analyst Agent for deep-dive conversations with live market data access.
+                {COPILOT_NAME} can <strong className="text-white">search the live web</strong> for breaking news and analyst updates, <strong className="text-white">write and execute Python code</strong> for financial modelling and statistical analysis, and access all of FlowDeck's proprietary reports — all in one conversation.
               </p>
             </div>
           </div>
