@@ -155,6 +155,7 @@ class ReportData(BaseModel):
     risky_viewpoint: Optional[List[str]] = None
     safe_viewpoint: Optional[List[str]] = None
     neutral_viewpoint: Optional[List[str]] = None
+    tps_plan: Optional[str] = None
 
 
 class StockPageData(BaseModel):

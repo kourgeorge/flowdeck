@@ -341,7 +341,8 @@ def _get_stock_page_sync(ticker: str) -> StockPageData:
                 bear_viewpoint=v.get('bear_viewpoint'),
                 risky_viewpoint=v.get('risky_viewpoint'),
                 safe_viewpoint=v.get('safe_viewpoint'),
-                neutral_viewpoint=v.get('neutral_viewpoint')
+                neutral_viewpoint=v.get('neutral_viewpoint'),
+                tps_plan=v.get('tps_plan'),
             )
             for k, v in latest_reports_with_scores_raw.items()
         }

@@ -13,6 +13,8 @@ interface ReportViewerProps {
   riskyViewpoint?: string[] | null;
   safeViewpoint?: string[] | null;
   neutralViewpoint?: string[] | null;
+  /** TPS-YAML v0.1 structured trading plan (trader report only) */
+  tpsPlan?: string | null;
 }
 
 const REPORT_METADATA: Record<string, { title: string; contains: string; aspects: string; methodology: string }> = {
@@ -120,7 +122,7 @@ function ReportMoreInfo({ reportType }: { reportType: string }) {
   );
 }
 
-export default function ReportViewer({ content, score, scoreLabel, keyTakeaways, reportType, bullViewpoint, bearViewpoint, riskyViewpoint, safeViewpoint, neutralViewpoint }: ReportViewerProps) {
+export default function ReportViewer({ content, score, scoreLabel, keyTakeaways, reportType, bullViewpoint, bearViewpoint, riskyViewpoint, safeViewpoint, neutralViewpoint, tpsPlan }: ReportViewerProps) {
   const hasContent = content && content.trim().length > 0;
   const hasBullBear = (bullViewpoint && bullViewpoint.length > 0) || (bearViewpoint && bearViewpoint.length > 0);
   const hasRiskViewpoints = (riskyViewpoint && riskyViewpoint.length > 0) || (safeViewpoint && safeViewpoint.length > 0) || (neutralViewpoint && neutralViewpoint.length > 0);
@@ -184,6 +186,58 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
           </ul>
         </div>
       )}
+      {reportType === 'trader_investment_plan' && tpsPlan && tpsPlan.trim().length > 0 && (() => {
+        let parsed: unknown = null;
+        try { parsed = JSON.parse(tpsPlan); } catch { /* not JSON, render raw */ }
+        const displayText = parsed !== null
+          ? JSON.stringify(parsed, null, 2)
+          : tpsPlan;
+        return (
+          <div className="rounded-lg border border-indigo-700/60 bg-indigo-950/30 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-indigo-700/40 bg-indigo-900/30">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <span className="text-xs font-semibold uppercase tracking-widest text-indigo-300">
+                  TPS v0.1 — Structured Trading Plan
+                </span>
+              </div>
+              <span className="text-xs text-indigo-500 font-mono">JSON</span>
+            </div>
+            <div className="p-4">
+              <pre className="bg-slate-900 rounded-lg p-4 overflow-x-auto text-sm font-mono leading-relaxed whitespace-pre">
+                {displayText.split('\n').map((line, i) => {
+                  // Simple JSON syntax colouring
+                  const keyMatch = line.match(/^(\s*)("[\w_]+")(\s*:\s*)(.*)$/);
+                  if (keyMatch) {
+                    const [, indent, key, colon, val] = keyMatch;
+                    const isString = val.startsWith('"');
+                    const isNumber = /^-?\d/.test(val.trim());
+                    const isBool = val.trim() === 'true' || val.trim() === 'false';
+                    const isNull = val.trim() === 'null';
+                    return (
+                      <span key={i}>
+                        {indent}
+                        <span className="text-sky-300">{key}</span>
+                        <span className="text-slate-400">{colon}</span>
+                        <span className={
+                          isString ? 'text-amber-300' :
+                          isNumber ? 'text-green-300' :
+                          isBool || isNull ? 'text-purple-300' :
+                          'text-slate-300'
+                        }>{val}</span>
+                        {'\n'}
+                      </span>
+                    );
+                  }
+                  return <span key={i} className="text-slate-400">{line}{'\n'}</span>;
+                })}
+              </pre>
+            </div>
+          </div>
+        );
+      })()}
       {reportType === 'investment_plan' && (bullViewpoint?.length || bearViewpoint?.length) ? (
         <div className="rounded-lg border border-slate-600 bg-slate-900/40 p-4 space-y-4">
           <div className="text-xs font-semibold uppercase tracking-widest text-slate-500 pb-1 border-b border-slate-700">

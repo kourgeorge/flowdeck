@@ -243,6 +243,7 @@ class TradingAgentsGraph:
                 ],
             },
             "trader_investment_decision": final_state["trader_investment_plan"],
+            "trader_tps_plan": final_state.get("trader_tps_plan", ""),
             "risk_debate_state": {
                 "risky_history": final_state["risk_debate_state"]["risky_history"],
                 "safe_history": final_state["risk_debate_state"]["safe_history"],

@@ -79,6 +79,8 @@ export interface ReportData {
   risky_viewpoint?: string[] | null;
   safe_viewpoint?: string[] | null;
   neutral_viewpoint?: string[] | null;
+  /** TPS-YAML v0.1 structured trading plan emitted by the Trader agent */
+  tps_plan?: string | null;
 }
 
 export interface StockPageData {

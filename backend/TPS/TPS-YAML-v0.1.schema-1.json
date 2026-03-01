@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/tps-yaml/v0.1/schema.json",
+  "title": "TPS-YAML v0.1 (Compact)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "instrument",
+    "timeframe",
+    "side",
+    "entry",
+    "risk"
+  ],
+  "properties": {
+    "instrument": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Symbol or unique instrument identifier (e.g., META)."
+    },
+    "timeframe": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Candle resolution at which rules are evaluated (e.g., 1D, 4H, 15m)."
+    },
+    "side": {
+      "type": "string",
+      "enum": [
+        "long",
+        "short"
+      ],
+      "description": "Trade direction."
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "near"
+      ],
+      "properties": {
+        "near": {
+          "description": "Entry trigger as a price or a price band like '607.99 \u00b11%'.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/price"
+            },
+            {
+              "$ref": "#/$defs/nearBand"
+            }
+          ]
+        },
+        "scale": {
+          "type": "string",
+          "pattern": "^\\d+(\\.\\d+)?(\\/\\d+(\\.\\d+)?)*$",
+          "description": "Tranche allocation as '100' or '40/30/30' (percent-of-intended position per tranche)."
+        },
+        "confirm": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "List of confirmation conditions; all must evaluate true to allow entry."
+        }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_loss",
+        "stop"
+      ],
+      "properties": {
+        "max_loss": {
+          "$ref": "#/$defs/percent"
+        },
+        "max_position": {
+          "$ref": "#/$defs/percent"
+        },
+        "stop": {
+          "$ref": "#/$defs/price"
+        },
+        "invalidate": {
+          "$ref": "#/$defs/ruleExit"
+        }
+      }
+    },
+    "take_profit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tp1": {
+          "$ref": "#/$defs/tpRule"
+        },
+        "trail": {
+          "$ref": "#/$defs/percent"
+        }
+      }
+    },
+    "vol_guard": {
+      "$ref": "#/$defs/ruleReduce"
+    },
+    "add_if": {
+      "$ref": "#/$defs/ruleMaxPos"
+    }
+  },
+  "$defs": {
+    "price": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "A positive price level."
+    },
+    "percent": {
+      "type": "string",
+      "pattern": "^\\d+(\\.\\d+)?%$",
+      "description": "Percentage string like '1%' or '5.5%'."
+    },
+    "nearBand": {
+      "type": "string",
+      "pattern": "^\\d+(\\.\\d+)?\\s*\u00b1\\s*\\d+(\\.\\d+)?%$",
+      "description": "Price band string like '607.99 \u00b11%'."
+    },
+    "tpRule": {
+      "type": "string",
+      "pattern": "^\\d+(\\.\\d+)?\\s+sell\\s+\\d+(\\.\\d+)?%$",
+      "description": "Take-profit rule like '640.64 sell 50%'."
+    },
+    "ruleExit": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^.+->\\s*(exit|exit_all)\\s*$",
+      "description": "Rule that results in exiting, e.g., 'close < 595.83 for 2d -> exit'."
+    },
+    "ruleReduce": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^.+->\\s*reduce\\s+\\d+(\\.\\d+)?%\\s*$",
+      "description": "Rule that reduces exposure, e.g., 'atr20 > 1.5x avg -> reduce 30%'."
+    },
+    "ruleMaxPos": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^.+->\\s*max_position\\s+\\d+(\\.\\d+)?%\\s*$",
+      "description": "Rule that sets a new max position, e.g., 'macd bull & close > ma50 -> max_position 7%'."
+    }
+  }
+}

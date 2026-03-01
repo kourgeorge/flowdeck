@@ -1,0 +1,166 @@
+
+# TPS-YAML v0.1
+# Minimal Human-Readable Trading Plan Specification
+
+version: 0.1
+name: TPS-YAML
+description: >
+  A minimal, human-readable, YAML-based trading plan specification
+  designed to be both machine-parseable and concise.
+
+# =========================
+# REQUIRED FIELDS
+# =========================
+
+required_fields:
+  - instrument        # string, e.g., META
+  - timeframe         # string, e.g., 1D, 4H, 15m
+  - side              # enum: long | short
+  - entry.near        # price or "price ±percent%"
+  - risk.max_loss     # percent, e.g., 1%
+  - risk.stop         # price
+
+# =========================
+# OPTIONAL FIELDS
+# =========================
+
+optional_fields:
+  entry:
+    scale: >
+      string, e.g., "100" or "40/30/30"
+      Defines tranche allocation of intended position.
+    confirm: >
+      list of condition strings, all must evaluate true to allow entry.
+
+  risk:
+    max_position: >
+      percent, e.g., 5%
+      Maximum exposure allowed for this instrument.
+    invalidate: >
+      rule string format:
+      "close < X for Nd -> exit"
+
+  take_profit:
+    tp1: >
+      rule string format:
+      "X sell P%"
+    trail: >
+      percent, e.g., 4%
+
+  vol_guard: >
+    rule string format:
+    "CONDITION -> reduce P%"
+
+  add_if: >
+    rule string format:
+    "CONDITION -> max_position P%"
+
+# =========================
+# SEMANTIC DEFINITIONS
+# =========================
+
+semantics:
+
+  instrument:
+    type: string
+    description: Symbol or unique instrument identifier.
+
+  timeframe:
+    type: string
+    description: Candle resolution at which rules are evaluated.
+
+  side:
+    type: enum
+    allowed: [long, short]
+
+  entry.near:
+    type: price | price_band
+    examples:
+      - "607.99"
+      - "607.99 ±1%"
+    description: >
+      Defines entry zone. Entry is permitted when price is within band.
+
+  entry.scale:
+    type: string
+    example: "40/30/30"
+    description: >
+      Percentage allocation of intended max position per tranche.
+
+  entry.confirm:
+    type: list[string]
+    example:
+      - "rsi < 45"
+      - "macd_hist rising_2"
+    description: >
+      All conditions must evaluate true before entry.
+
+  risk.max_loss:
+    type: percent
+    example: "1%"
+    description: >
+      Maximum allowed portfolio loss for the trade.
+
+  risk.stop:
+    type: price
+    example: "595.83"
+    description: >
+      Hard stop level. Exit when breached.
+
+  risk.invalidate:
+    type: rule_string
+    example: "close < 595.83 for 2d -> exit"
+    description: >
+      Persistence-based invalidation of the trade thesis.
+
+  take_profit.tp1:
+    type: rule_string
+    example: "640.64 sell 50%"
+    description: >
+      First target and partial reduction rule.
+
+  take_profit.trail:
+    type: percent
+    example: "4%"
+    description: >
+      Trailing stop distance applied to remaining position.
+
+  vol_guard:
+    type: rule_string
+    example: "atr20 > 1.5x avg -> reduce 30%"
+    description: >
+      Exposure adjustment triggered by volatility condition.
+
+  add_if:
+    type: rule_string
+    example: "macd bull & close > ma50 -> max_position 7%"
+    description: >
+      Conditional increase in maximum allowed exposure.
+
+# =========================
+# VALID EXAMPLE
+# =========================
+
+example:
+
+  instrument: META
+  timeframe: 1D
+  side: long
+
+  entry:
+    near: 607.99 ±1%
+    scale: 40/30/30
+    confirm: [rsi < 45, macd_hist rising_2]
+
+  risk:
+    max_loss: 1%
+    max_position: 5%
+    stop: 595.83
+    invalidate: close < 595.83 for 2d -> exit
+
+  take_profit:
+    tp1: 640.64 sell 50%
+    trail: 4%
+
+  vol_guard: atr20 > 1.5x avg -> reduce 30%
+  add_if: macd bull & close > ma50 -> max_position 7%
