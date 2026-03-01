@@ -243,26 +243,28 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
           <div className="text-xs font-semibold uppercase tracking-widest text-slate-500 pb-1 border-b border-slate-700">
             Researcher Viewpoints
           </div>
-          {bullViewpoint && bullViewpoint.length > 0 && (
-            <div className="rounded-lg border border-green-900/50 bg-green-950/30 p-4">
-              <div className="mb-2 text-sm font-semibold text-green-400">Bull Viewpoint</div>
-              <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
-                {bullViewpoint.map((p, i) => (
-                  <li key={i}>{p}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {bearViewpoint && bearViewpoint.length > 0 && (
-            <div className="rounded-lg border border-red-900/50 bg-red-950/30 p-4">
-              <div className="mb-2 text-sm font-semibold text-red-400">Bear Viewpoint</div>
-              <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
-                {bearViewpoint.map((p, i) => (
-                  <li key={i}>{p}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {bullViewpoint && bullViewpoint.length > 0 && (
+              <div className="rounded-lg border border-green-900/50 bg-green-950/30 p-4">
+                <div className="mb-2 text-sm font-semibold text-green-400">Bull Viewpoint</div>
+                <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
+                  {bullViewpoint.map((p, i) => (
+                    <li key={i}>{p}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {bearViewpoint && bearViewpoint.length > 0 && (
+              <div className="rounded-lg border border-red-900/50 bg-red-950/30 p-4">
+                <div className="mb-2 text-sm font-semibold text-red-400">Bear Viewpoint</div>
+                <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
+                  {bearViewpoint.map((p, i) => (
+                    <li key={i}>{p}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         </div>
       ) : null}
       {reportType === 'final_trade_decision' && hasRiskViewpoints ? (
