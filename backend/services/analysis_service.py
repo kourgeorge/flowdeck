@@ -10,6 +10,7 @@ import threading
 from typing import Dict, Optional, Callable, Any
 from pathlib import Path
 from dotenv import load_dotenv
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -258,7 +259,10 @@ class AnalysisService:
         )
 
         try:
-            
+            # Check if AI reports should be written to the results folder
+            from config import WRITE_AI_REPORTS_TO_RESULTS
+            write_reports_to_results = WRITE_AI_REPORTS_TO_RESULTS
+
             # Initialize state
             init_agent_state = graph.propagator.create_initial_state(ticker, analysis_date)
             args = graph.propagator.get_graph_args()
@@ -278,6 +282,22 @@ class AnalysisService:
                 meta.update({k: v for k, v in extra.items() if v is not None})
                 return {"metadata": meta, "content": content or ""}
 
+            def _write_report_to_filesystem(key, content, report_dir: Path):
+                """Write report content as a markdown file in the results folder."""
+                try:
+                    safe_key = re.sub(r"[^\w\-]", "_", key)
+                    report_file = report_dir / f"{safe_key}.md"
+                    report_file.write_text(content or "", encoding="utf-8")
+                    logger.debug(
+                        "Report written to filesystem analysis_id=%s report_type=%s path=%s",
+                        analysis_id, key, report_file,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Failed to write report to filesystem analysis_id=%s report_type=%s error=%s",
+                        analysis_id, key, e,
+                    )
+
             def _write_report(key, content, score, label, **extra):
                 try:
                     data = _build_report_json(content, score, label, _takeaways(content), **extra)
@@ -294,6 +314,8 @@ class AnalysisService:
                         "Report saved analysis_id=%s ticker=%s run_id=%s report_type=%s",
                         analysis_id, analysis_info["ticker"], analysis_info["run_id"], key,
                     )
+                    if write_reports_to_results:
+                        _write_report_to_filesystem(key, data.get("content", ""), analysis_info["report_dir"])
                 except Exception as e:
                     logger.exception(
                         "Failed to save report analysis_id=%s report_type=%s error=%s",
@@ -404,11 +426,16 @@ class AnalysisService:
                         content=content,
                         metadata={**inner, "bull_viewpoint": bull, "bear_viewpoint": bear},
                     )
+                    if write_reports_to_results:
+                        _write_report_to_filesystem("investment_plan", content, analysis_info["report_dir"])
                     _progress_log("Investment plan ready → saved")
 
                 if "trader_investment_plan" in chunk and chunk["trader_investment_plan"]:
                     c = chunk["trader_investment_plan"]
+                    tps = chunk.get("trader_tps_plan") or ""
                     analysis_info["reports"]["trader_investment_plan"] = c
+                    if tps:
+                        analysis_info["reports"]["trader_tps_plan"] = tps
                     analysis_info["agent_statuses"]["Trader"] = "completed"
                     _write_report(
                         "trader_investment_plan",
@@ -416,6 +443,7 @@ class AnalysisService:
                         None,
                         "Trader Plan",
                         recommendation=chunk.get("trader_recommendation"),
+                        tps_plan=tps or None,
                     )
                     analysis_info["agent_statuses"]["Risky Analyst"] = "in_progress"
                     analysis_info["agent_statuses"]["Safe Analyst"] = "in_progress"
@@ -455,6 +483,8 @@ class AnalysisService:
                         content=content,
                         metadata={**inner, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral},
                     )
+                    if write_reports_to_results:
+                        _write_report_to_filesystem("final_trade_decision", content, analysis_info["report_dir"])
                     analysis_info["recommendation"] = final_rec
                     analysis_info["confidence"] = (chunk.get("risk_score") / 10.0) if chunk.get("risk_score") is not None else None
                     rec = final_rec or ""

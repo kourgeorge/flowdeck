@@ -80,6 +80,8 @@ def _report_row_to_dict(row: Report, date: str) -> Dict[str, Any]:
         out["safe_viewpoint"] = meta["safe_viewpoint"]
     if meta.get("neutral_viewpoint") is not None:
         out["neutral_viewpoint"] = meta["neutral_viewpoint"]
+    if meta.get("tps_plan") is not None:
+        out["tps_plan"] = meta["tps_plan"]
     return out
 
 
