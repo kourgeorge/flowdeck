@@ -66,17 +66,32 @@ _REPORT_ALIASES: dict[str, str] = {
     "recommendation": "final_trade_decision",
 }
 
-def _tool_get_platform_reports(ticker: str, report_type: str | None = None) -> str:
-    """Get FlowDeck AI analysis reports for a ticker, optionally filtered to a specific report."""
+def _tool_get_platform_reports(ticker: str, report_type: str | None = None, date: str | None = None) -> str:
+    """Get FlowDeck AI analysis reports for a ticker, optionally filtered to a specific report and/or date."""
     try:
         from services.report_service import ReportService
         svc = ReportService()
         ticker_upper = ticker.strip().upper()
-        latest_date = svc.get_latest_report_date(ticker_upper)
-        if not latest_date:
-            return f"No AI analysis reports found for {ticker_upper} on this platform."
 
-        reports = svc.get_reports_with_scores(ticker_upper, latest_date)
+        if date:
+            # Use the specified date (can be YYYY-MM-DD or full run_id YYYY-MM-DD_HH-MM-SS)
+            target_date = date.strip()
+            if not svc.has_report_for_date(ticker_upper, target_date):
+                # List available dates to help the agent
+                analyses = svc.get_historical_analyses(ticker_upper)
+                if analyses:
+                    available = ", ".join(a["date"] for a in analyses[:10])
+                    return (
+                        f"No reports found for {ticker_upper} on date '{target_date}'. "
+                        f"Available report dates: {available}."
+                    )
+                return f"No AI analysis reports found for {ticker_upper} on this platform."
+        else:
+            target_date = svc.get_latest_report_date(ticker_upper)
+            if not target_date:
+                return f"No AI analysis reports found for {ticker_upper} on this platform."
+
+        reports = svc.get_reports_with_scores(ticker_upper, target_date)
         if not reports:
             return f"No report content found for {ticker_upper}."
 
@@ -90,7 +105,7 @@ def _tool_get_platform_reports(ticker: str, report_type: str | None = None) -> s
                 matches = [k for k in _REPORT_LABELS if rt in k]
                 filter_key = matches[0] if matches else None
 
-        lines = [f"# FlowDeck AI Reports for {ticker_upper} ({latest_date})", ""]
+        lines = [f"# FlowDeck AI Reports for {ticker_upper} ({target_date})", ""]
 
         # Recommendation summary (always shown)
         tip = reports.get("trader_investment_plan") or {}
@@ -188,6 +203,34 @@ def _tool_get_platform_reports(ticker: str, report_type: str | None = None) -> s
     except Exception as e:
         logger.exception("get_platform_reports error for %s: %s", ticker, e)
         return f"Error fetching platform reports for {ticker}: {e}"
+
+
+def _tool_get_historical_report_dates(ticker: str) -> str:
+    """List all historical AI analysis report dates available for a ticker on the platform."""
+    try:
+        from services.report_service import ReportService
+        svc = ReportService()
+        ticker_upper = ticker.strip().upper()
+        analyses = svc.get_historical_analyses(ticker_upper)
+        if not analyses:
+            return f"No AI analysis reports found for {ticker_upper} on this platform."
+        lines = [f"# Historical AI Report Dates for {ticker_upper}", ""]
+        lines.append(f"Total analyses available: {len(analyses)}", )
+        lines.append("")
+        for a in analyses:
+            run_id = a["date"]
+            report_types = a.get("available_reports", [])
+            labels = [_REPORT_LABELS.get(rt) or rt.replace("_", " ").title() for rt in report_types]
+            lines.append(f"- **{run_id}**: {', '.join(labels)}")
+        lines.append("")
+        lines.append(
+            "To read reports from a specific date, call get_platform_reports with "
+            "the ticker and the desired date (e.g. '2025-01-15' or the full run_id)."
+        )
+        return "\n".join(lines)
+    except Exception as e:
+        logger.exception("get_historical_report_dates error for %s: %s", ticker, e)
+        return f"Error fetching historical report dates for {ticker}: {e}"
 
 
 def _tool_get_news(ticker: str) -> str:
@@ -855,7 +898,9 @@ TOOLS = [
             "Available reports: Final Trade Decision (risk-adjusted recommendation), "
             "Investment Plan (bull vs bear researcher debate), Trader Plan, Market Analysis, "
             "Fundamentals Analysis, Technical Analysis, News Analysis, SEC/Regulatory Analysis. "
-            "Use report_type when the user asks to 'read', 'show', 'summarize', or 'deep dive' into a specific report."
+            "Use report_type when the user asks to 'read', 'show', 'summarize', or 'deep dive' into a specific report. "
+            "By default returns the LATEST report. Use the 'date' parameter to access historical reports — "
+            "first call get_historical_report_dates to discover available dates, then pass the desired date here."
         ),
         "parameters": {
             "type": "object",
@@ -876,10 +921,37 @@ TOOLS = [
                         "Omit or leave null to fetch all available reports."
                     ),
                 },
+                "date": {
+                    "type": "string",
+                    "description": (
+                        "Optional. Fetch reports from a specific historical analysis date instead of the latest. "
+                        "Accepts YYYY-MM-DD (e.g. '2025-01-15') or a full run_id (e.g. '2025-01-15_10-30-00'). "
+                        "Use get_historical_report_dates first to discover available dates for a ticker. "
+                        "Omit or leave null to fetch the most recent reports."
+                    ),
+                },
             },
             "required": ["ticker"],
         },
         "fn": _tool_get_platform_reports,
+    },
+    {
+        "name": "get_historical_report_dates",
+        "description": (
+            "List all historical AI analysis report dates available for a ticker on the FlowDeck platform. "
+            "Returns a chronological list of run dates (newest first) with the report types available for each date. "
+            "Use this tool when the user asks about: past analyses, historical recommendations, how the outlook "
+            "has changed over time, previous reports, or any question involving a specific past date. "
+            "After calling this, use get_platform_reports with the 'date' parameter to fetch reports from a specific date."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "ticker": {"type": "string", "description": "Stock ticker symbol, e.g. AAPL, MSFT, TSLA, NVDA"},
+            },
+            "required": ["ticker"],
+        },
+        "fn": _tool_get_historical_report_dates,
     },
     {
         "name": "get_stock_quote",
