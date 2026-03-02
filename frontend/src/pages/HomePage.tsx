@@ -120,7 +120,7 @@ export default function HomePage() {
             then delivers a clear recommendation with full reasoning.
           </p>
 
-          {/* Trading Copilot — Deck pill */}
+          {/* Trading Copilot — {COPILOT_NAME} pill */}
           <div className="flex justify-center mb-5">
             <Link
               to="/copilot"
@@ -223,6 +223,7 @@ export default function HomePage() {
                   { icon: '🤖', text: 'AI chat with full context — selected ticker, watchlist, live data, and reports' },
                   { icon: '🌐', text: 'Searches the live web for breaking news, earnings, analyst upgrades, and macro events' },
                   { icon: '🐍', text: 'Writes and executes Python analysis code — correlations, return scenarios, statistical models' },
+                  { icon: '📈', text: 'Generates interactive charts — line, bar, area, and scatter — rendered inline in the chat' },
                   { icon: '💬', text: 'Ask anything: risks, technicals, news, fundamentals, comparisons' },
                   { icon: '⚡', text: 'Responses stream in real-time with transparent tool usage' },
                 ].map(({ icon, text }) => (
@@ -455,9 +456,9 @@ export default function HomePage() {
               </p>
             </div>
             <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">Multi-Agent AI Analysis</h4>
+              <h4 className="text-lg font-semibold text-white mb-2">Deep AI Analysis, On Demand</h4>
               <p className="text-gray-400 text-sm">
-                Specialized agents collaborate to analyze every angle before making a recommendation.
+                Trigger a full multi-agent analysis for any stock, any time. A committee of specialized AI analysts — covering market data, news, fundamentals, technicals, and risk — each produce their own report before a final recommendation is synthesized. Every angle covered, every time.
               </p>
             </div>
             <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
@@ -472,12 +473,6 @@ export default function HomePage() {
                 Subscribe to stocks and get email updates when new analysis reports are available. Track your watchlist and portfolio performance from a personalized dashboard.
               </p>
             </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">On-Demand Reports</h4>
-              <p className="text-gray-400 text-sm">
-                Generate fresh AI analysis for any stock, any time — using your token balance.
-              </p>
-            </div>
             <div className="bg-indigo-900/20 border border-indigo-700/50 rounded-xl p-6">
               <h4 className="text-lg font-semibold text-white mb-2">
                 <Link to="/tps" className="hover:text-indigo-300 transition-colors">TPS — Structured Trade Plans</Link>
@@ -489,7 +484,7 @@ export default function HomePage() {
             <div className="bg-blue-900/20 border border-blue-700/50 rounded-xl p-6">
               <h4 className="text-lg font-semibold text-white mb-2">{COPILOT_NAME} — A Truly Powerful AI Analyst</h4>
               <p className="text-gray-400 text-sm">
-                {COPILOT_NAME} can <strong className="text-white">search the live web</strong> for breaking news and analyst updates, <strong className="text-white">write and execute Python code</strong> for financial modelling and statistical analysis, and access all of FlowDeck's proprietary reports — all in one conversation.
+                {COPILOT_NAME} can <strong className="text-white">search the live web</strong> for breaking news and analyst updates, <strong className="text-white">write and execute Python code</strong> for financial modelling and statistical analysis, and <strong className="text-white">generate interactive charts</strong> — line, bar, area, and scatter — rendered directly in the chat. All of FlowDeck's proprietary reports are accessible in the same conversation.
               </p>
             </div>
           </div>
@@ -501,24 +496,21 @@ export default function HomePage() {
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-                <h4 className="text-lg font-semibold text-white mb-2">1. Specialized Analysts</h4>
+                <h4 className="text-lg font-semibold text-white mb-2">1. Analyst Chain</h4>
                 <p className="text-gray-400 text-sm leading-relaxed">
-                  Market, News, Fundamentals, Technical, and Sentiment analysts each produce
-                  focused reports with scores. No single perspective dominates.
+                  A sequential pipeline of specialized agents — Market, News, Fundamentals, SEC, Technical, and Social — each independently fetch live data, run their own tool calls, and produce a scored report. Every angle is covered before any debate begins.
                 </p>
               </div>
               <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-                <h4 className="text-lg font-semibold text-white mb-2">2. Bull vs. Bear Debate</h4>
+                <h4 className="text-lg font-semibold text-white mb-2">2. Investment Debate → Trade Plan</h4>
                 <p className="text-gray-400 text-sm leading-relaxed">
-                  AI researchers argue both sides across multiple rounds, stress-testing
-                  the investment case. What could go right? What could go wrong?
+                  Bull and Bear researchers argue the investment case across multiple rounds using all analyst reports. A Research Manager then adjudicates, producing a conviction score, return scenarios, and a structured investment plan — which a Trader agent refines into an actionable trade strategy.
                 </p>
               </div>
               <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-                <h4 className="text-lg font-semibold text-white mb-2">3. Risk Check → Recommendation</h4>
+                <h4 className="text-lg font-semibold text-white mb-2">3. Risk Debate → Final Decision</h4>
                 <p className="text-gray-400 text-sm leading-relaxed">
-                  A final risk debate (aggressive, cautious, neutral) produces the
-                  recommendation you see: <strong className="text-green-400">BUY</strong>, <strong className="text-red-400">SELL</strong>, or <strong className="text-yellow-400">HOLD</strong>.
+                  Three risk agents — Aggressive, Cautious, and Neutral — debate the trade plan in round-robin. A Risk Judge weighs all upstream scores and risk arguments to produce the final verdict: <strong className="text-green-400">BUY</strong>, <strong className="text-red-400">SELL</strong>, or <strong className="text-yellow-400">HOLD</strong>.
                 </p>
               </div>
             </div>

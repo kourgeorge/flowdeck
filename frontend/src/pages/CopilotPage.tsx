@@ -173,7 +173,7 @@ export default function CopilotPage() {
           )}
         </main>
 
-        {/* ── Right: AI Trading Copilot — Deck ── */}
+        {/* ── Right: AI Trading Copilot — {COPILOT_NAME} ── */}
         <div
           className="shrink-0 hidden md:flex flex-row min-h-0"
           style={{ width: chatCollapsed ? 24 : chatWidth }}
@@ -241,7 +241,7 @@ export default function CopilotPage() {
   );
 }
 
-/** Mobile-only tabbed view: Stock Detail | Deck */
+/** Mobile-only tabbed view: Stock Detail | {COPILOT_NAME} */
 function MobileStockChatTabs({
   selectedTicker,
   tickers,

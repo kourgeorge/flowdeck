@@ -97,7 +97,7 @@ export default function HowItWorksPage() {
             </p>
           </section>
 
-          {/* Trading Copilot — Deck */}
+          {/* Trading Copilot — {COPILOT_NAME} */}
           <section>
             <h2 className="text-lg font-semibold text-white mb-3">{COPILOT_NAME} — Your Trading Copilot</h2>
             <p className="mb-3">

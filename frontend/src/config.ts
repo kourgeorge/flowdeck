@@ -8,4 +8,4 @@ export const LOGO_PATH = '/logo.png';
  * Trading Copilot brand name. Change VITE_COPILOT_NAME in .env to rename it everywhere.
  * The concept is "Trading Copilot"; this is the product name shown in the UI.
  */
-export const COPILOT_NAME = import.meta.env.VITE_COPILOT_NAME ?? 'Deck';
+export const COPILOT_NAME = import.meta.env.VITE_COPILOT_NAME ?? 'Ted';
