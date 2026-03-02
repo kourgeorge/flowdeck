@@ -482,7 +482,7 @@ export default function HomePage() {
               </p>
             </div>
             <div className="bg-blue-900/20 border border-blue-700/50 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">{COPILOT_NAME} — A Truly Powerful AI Analyst</h4>
+              <h4 className="text-lg font-semibold text-white mb-2">{COPILOT_NAME} — A Powerful Trading Assistant</h4>
               <p className="text-gray-400 text-sm">
                 {COPILOT_NAME} can <strong className="text-white">search the live web</strong> for breaking news and analyst updates, <strong className="text-white">write and execute Python code</strong> for financial modelling and statistical analysis, and <strong className="text-white">generate interactive charts</strong> — line, bar, area, and scatter — rendered directly in the chat. All of FlowDeck's proprietary reports are accessible in the same conversation.
               </p>
