@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -130,12 +130,113 @@ export type ChatMessageWithMeta = ChatMessage & {
   charts?: ChartSpec[];
 };
 
+// ── Copy helpers ───────────────────────────────────────────────────────────
+
+/** One-click copy with a brief "Copied!" flash. Returns [copied, triggerCopy]. */
+function useCopyText(text: string): [boolean, () => void] {
+  const [copied, setCopied] = useState(false);
+  const trigger = useCallback(() => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  }, [text]);
+  return [copied, trigger];
+}
+
+/** Copy icon button — shows a checkmark for 2 s after copying. */
+function CopyButton({ onClick, copied, title = 'Copy' }: { onClick: () => void; copied: boolean; title?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className="flex items-center justify-center w-6 h-6 rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-600/60 transition-colors"
+      aria-label={title}
+    >
+      {copied ? (
+        <svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
+      ) : (
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
+/** Copy a chart SVG element as a PNG image to the clipboard. */
+async function copyChartAsImage(containerEl: HTMLElement | null): Promise<boolean> {
+  if (!containerEl) return false;
+  const svgEl = containerEl.querySelector('svg');
+  if (!svgEl) return false;
+
+  try {
+    const svgRect = svgEl.getBoundingClientRect();
+    const width = svgRect.width || 600;
+    const height = svgRect.height || 240;
+
+    // Serialize SVG with explicit dimensions and white-on-dark background
+    const svgClone = svgEl.cloneNode(true) as SVGElement;
+    svgClone.setAttribute('width', String(width));
+    svgClone.setAttribute('height', String(height));
+    svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+    // Prepend a dark background rect
+    const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    bg.setAttribute('width', '100%');
+    bg.setAttribute('height', '100%');
+    bg.setAttribute('fill', '#1e293b');
+    svgClone.insertBefore(bg, svgClone.firstChild);
+
+    const svgData = new XMLSerializer().serializeToString(svgClone);
+    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+
+    const img = new Image();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = reject;
+      img.src = url;
+    });
+
+    const canvas = document.createElement('canvas');
+    const scale = window.devicePixelRatio || 1;
+    canvas.width = width * scale;
+    canvas.height = height * scale;
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(scale, scale);
+    ctx.drawImage(img, 0, 0, width, height);
+    URL.revokeObjectURL(url);
+
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/png'));
+    if (!blob) return false;
+
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ── ChartBlock ─────────────────────────────────────────────────────────────
 
 const DEFAULT_COLORS = ['#60a5fa', '#34d399', '#f59e0b', '#f87171', '#a78bfa', '#fb923c'];
 
 export function ChartBlock({ spec }: { spec: ChartSpec }) {
   const colors = spec.colors?.length ? spec.colors : DEFAULT_COLORS;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [imgCopied, setImgCopied] = useState(false);
+
+  const handleCopyImage = useCallback(async () => {
+    const ok = await copyChartAsImage(containerRef.current);
+    if (ok) {
+      setImgCopied(true);
+      setTimeout(() => setImgCopied(false), 2000);
+    }
+  }, []);
 
   // Format X-axis tick labels: shorten ISO dates to MM/DD or MM/DD/YY
   const formatXTick = (val: string | number) => {
@@ -248,12 +349,33 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
 
   return (
     <div className="mt-3 rounded-xl border border-slate-600/60 bg-slate-800/60 overflow-hidden">
-      {spec.title && (
-        <div className="px-4 py-2.5 border-b border-slate-700/60">
-          <span className="text-xs font-semibold text-slate-300">{spec.title}</span>
-        </div>
-      )}
-      <div className="px-2 py-3">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-700/60">
+        <span className="text-xs font-semibold text-slate-300">{spec.title ?? ''}</span>
+        <button
+          type="button"
+          onClick={handleCopyImage}
+          title="Copy chart as image"
+          className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-200 hover:bg-slate-600/60 px-1.5 py-0.5 rounded transition-colors"
+          aria-label="Copy chart as image"
+        >
+          {imgCopied ? (
+            <>
+              <svg className="w-3 h-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="text-green-400">Copied!</span>
+            </>
+          ) : (
+            <>
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <span>Copy image</span>
+            </>
+          )}
+        </button>
+      </div>
+      <div className="px-2 py-3" ref={containerRef}>
         <ResponsiveContainer width="100%" height={220}>
           {renderChart()}
         </ResponsiveContainer>
@@ -301,6 +423,7 @@ export function MessageBubble({
   isStreaming?: boolean;
 }) {
   const isUser = message.role === 'user';
+  const [copied, triggerCopy] = useCopyText(message.content);
 
   if (isUser) {
     return (
@@ -363,22 +486,29 @@ export function MessageBubble({
             </div>
           )}
         </div>
-        {(message.tokens_used != null || (message.tools_called != null && message.tools_called > 0)) && (
-          <div className="flex items-center gap-2.5 text-xs text-slate-500 mt-1 ml-1">
-            {message.tools_called != null && message.tools_called > 0 && (
-              <span className="flex items-center gap-1">
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                {message.tools_called} tool{message.tools_called !== 1 ? 's' : ''} used
-              </span>
-            )}
-            {message.tokens_used != null && (
-              <span>{message.tokens_used} token{message.tokens_used !== 1 ? 's' : ''} used</span>
-            )}
-          </div>
-        )}
+        {/* Copy button + token/tool metadata row */}
+        <div className="flex items-center gap-2.5 mt-1 ml-1">
+          {/* Copy text button — always visible once message is complete */}
+          {!isStreaming && message.content && (
+            <CopyButton onClick={triggerCopy} copied={copied} title="Copy message" />
+          )}
+          {(message.tokens_used != null || (message.tools_called != null && message.tools_called > 0)) && (
+            <div className="flex items-center gap-2.5 text-xs text-slate-500">
+              {message.tools_called != null && message.tools_called > 0 && (
+                <span className="flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  {message.tools_called} tool{message.tools_called !== 1 ? 's' : ''} used
+                </span>
+              )}
+              {message.tokens_used != null && (
+                <span>{message.tokens_used} token{message.tokens_used !== 1 ? 's' : ''} used</span>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
