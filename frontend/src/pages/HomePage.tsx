@@ -545,7 +545,7 @@ export default function HomePage() {
               <ul className="text-left text-gray-300 space-y-2 inline-block">
                 <li className="flex items-start">
                   <span className="text-blue-400 mr-2">✓</span>
-                  <span><strong className="text-white">1,000 free tokens</strong> to generate AI analysis reports</span>
+                  <span><strong className="text-white">1,000 free tokens</strong> to generate AI analysis reports and chat with {COPILOT_NAME}</span>
                 </li>
                 <li className="flex items-start">
                   <span className="text-blue-400 mr-2">✓</span>
@@ -610,7 +610,7 @@ export default function HomePage() {
             </h2>
             <p className="text-gray-400 text-base sm:text-lg max-w-2xl mx-auto">
               Each AI analysis report costs tokens. New users get <strong className="text-blue-400">1,000 free tokens</strong> on
-              sign-up — enough to generate <strong className="text-white">multiple reports</strong> and fully explore the platform.
+              sign-up — enough to generate <strong className="text-white">multiple reports</strong>, chat with <strong className="text-white">{COPILOT_NAME}</strong> the trader assistant, and fully explore the platform.
             </p>
           </div>
 
