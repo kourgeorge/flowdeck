@@ -108,6 +108,49 @@ body {
   outline: none !important;
 }
 
+/* RTL (Right-to-Left) support for bidirectional text */
+[dir="rtl"] {
+  direction: rtl;
+  text-align: right;
+}
+
+[dir="ltr"] {
+  direction: ltr;
+  text-align: left;
+}
+
+/* Auto-detect RTL content in chat messages */
+.chat-message-content {
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+
+/* Ensure markdown content respects text direction */
+.chat-message-content p,
+.chat-message-content li,
+.chat-message-content blockquote {
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+
+/* RTL-aware list styling */
+.chat-message-content ul,
+.chat-message-content ol {
+  unicode-bidi: plaintext;
+}
+
+[dir="rtl"] .chat-message-content ul,
+[dir="rtl"] .chat-message-content ol {
+  padding-right: 1.5rem;
+  padding-left: 0;
+}
+
+[dir="ltr"] .chat-message-content ul,
+[dir="ltr"] .chat-message-content ol {
+  padding-left: 1.5rem;
+  padding-right: 0;
+}
+
 @keyframes heartbeat {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.25; }

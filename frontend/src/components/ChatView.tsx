@@ -8,6 +8,18 @@ import {
 import { chatApi, type ChatMessage, type ToolCallEvent, type ChartSpec, type SkillActivationEvent } from '../services/api';
 import TickerMentionInput from './TickerMentionInput';
 
+// ── RTL Detection Utility ──────────────────────────────────────────────────
+/**
+ * Detects if text contains RTL (Right-to-Left) characters.
+ * Checks for Hebrew, Arabic, and other RTL scripts.
+ */
+function detectRTL(text: string): boolean {
+  // RTL Unicode ranges: Hebrew (0590-05FF), Arabic (0600-06FF, 0750-077F, 08A0-08FF),
+  // Syriac (0700-074F), Thaana (0780-07BF), N'Ko (07C0-07FF)
+  const rtlRegex = /[\u0590-\u05FF\u0600-\u06FF\u0700-\u074F\u0750-\u077F\u0780-\u07BF\u07C0-\u07FF\u08A0-\u08FF]/;
+  return rtlRegex.test(text);
+}
+
 // ── Friendly display names for tool names ──────────────────────────────────
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
   get_stock_quote: 'Stock Quote',
@@ -501,11 +513,18 @@ export function MessageBubble({
 }) {
   const isUser = message.role === 'user';
   const [copied, triggerCopy] = useCopyText(message.content);
+  
+  // Detect if message contains RTL text
+  const isRTL = detectRTL(message.content);
+  const direction = isRTL ? 'rtl' : 'ltr';
 
   if (isUser) {
     return (
       <div className="flex justify-end mb-4">
-        <div className="max-w-[85%] bg-blue-600 text-white rounded-2xl rounded-br-sm px-4 py-2.5 text-sm leading-relaxed">
+        <div
+          className="max-w-[85%] bg-blue-600 text-white rounded-2xl rounded-br-sm px-4 py-2.5 text-sm leading-relaxed chat-message-content"
+          dir={direction}
+        >
           {renderUserMessage(message.content)}
         </div>
       </div>
@@ -530,8 +549,11 @@ export function MessageBubble({
             ))}
           </div>
         )}
-        <div className="bg-slate-700/80 text-slate-100 rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed">
-          <div className="prose prose-invert prose-sm max-w-none">
+        <div
+          className="bg-slate-700/80 text-slate-100 rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed"
+          dir={direction}
+        >
+          <div className="prose prose-invert prose-sm max-w-none chat-message-content">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{

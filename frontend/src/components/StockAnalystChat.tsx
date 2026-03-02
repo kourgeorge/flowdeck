@@ -3,6 +3,16 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { chatApi, type ChatMessage } from '../services/api';
 
+// ── RTL Detection Utility ──────────────────────────────────────────────────
+/**
+ * Detects if text contains RTL (Right-to-Left) characters.
+ * Checks for Hebrew, Arabic, and other RTL scripts.
+ */
+function detectRTL(text: string): boolean {
+  const rtlRegex = /[\u0590-\u05FF\u0600-\u06FF\u0700-\u074F\u0750-\u077F\u0780-\u07BF\u07C0-\u07FF\u08A0-\u08FF]/;
+  return rtlRegex.test(text);
+}
+
 // Blinking cursor shown while streaming
 function StreamingCursor() {
   return <span className="inline-block w-0.5 h-3.5 bg-blue-400 ml-0.5 align-middle animate-pulse" />;
@@ -63,11 +73,18 @@ function MessageBubble({
   isStreaming?: boolean;
 }) {
   const isUser = message.role === 'user';
+  
+  // Detect if message contains RTL text
+  const isRTL = detectRTL(message.content);
+  const direction = isRTL ? 'rtl' : 'ltr';
 
   if (isUser) {
     return (
       <div className="flex justify-end mb-4">
-        <div className="max-w-[80%] bg-blue-600 text-white rounded-2xl rounded-br-sm px-4 py-2.5 text-sm leading-relaxed">
+        <div
+          className="max-w-[80%] bg-blue-600 text-white rounded-2xl rounded-br-sm px-4 py-2.5 text-sm leading-relaxed chat-message-content"
+          dir={direction}
+        >
           {message.content}
         </div>
       </div>
@@ -82,8 +99,11 @@ function MessageBubble({
         </svg>
       </div>
       <div className="flex-1 min-w-0">
-        <div className="bg-slate-700/80 text-slate-100 rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed">
-          <div className="prose prose-invert prose-sm max-w-none">
+        <div
+          className="bg-slate-700/80 text-slate-100 rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed"
+          dir={direction}
+        >
+          <div className="prose prose-invert prose-sm max-w-none chat-message-content">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
