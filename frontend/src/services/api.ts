@@ -333,8 +333,18 @@ export interface ToolCallEvent {
   output: string;
 }
 
+/** Chart spec emitted by the agent via execute_python CHART_JSON output */
+export interface ChartSpec {
+  title: string;
+  type: 'line' | 'bar' | 'area' | 'scatter';
+  xKey: string;
+  yKeys: string[];
+  data: Record<string, string | number>[];
+  colors?: string[];
+}
+
 export interface ChatStreamEvent {
-  type: 'token' | 'done' | 'error' | 'thinking' | 'tool_call';
+  type: 'token' | 'done' | 'error' | 'thinking' | 'tool_call' | 'chart';
   content?: string;
   tokens_used?: number;
   tools_called?: number;
@@ -343,6 +353,8 @@ export interface ChatStreamEvent {
   name?: string;
   input?: string;
   output?: string;
+  // chart fields
+  spec?: ChartSpec;
 }
 
 export const chatApi = {
@@ -365,6 +377,7 @@ export const chatApi = {
    * Calls `onToken` for each incremental text chunk,
    * `onThinking` for tool-call progress status messages,
    * `onToolCall` for each tool execution (name, input, output),
+   * `onChart` for each chart spec emitted by execute_python,
    * `onDone` when the stream finishes (with tokens_used and balance),
    * and `onError` on failure.
    * Returns an AbortController so the caller can cancel the stream.
@@ -377,6 +390,7 @@ export const chatApi = {
     onThinking?: (status: string) => void,
     onToolCall?: (toolCall: ToolCallEvent) => void,
     context?: Record<string, unknown>,
+    onChart?: (spec: ChartSpec) => void,
   ): AbortController => {
     const controller = new AbortController();
     const token = getStoredToken();
@@ -431,6 +445,8 @@ export const chatApi = {
                 onThinking?.(event.content);
               } else if (event.type === 'tool_call' && event.name) {
                 onToolCall?.({ name: event.name, input: event.input ?? '', output: event.output ?? '' });
+              } else if (event.type === 'chart' && event.spec) {
+                onChart?.(event.spec);
               } else if (event.type === 'done') {
                 onDone(event.tokens_used ?? 1, event.balance ?? 0, event.tools_called ?? 0);
               } else if (event.type === 'error') {

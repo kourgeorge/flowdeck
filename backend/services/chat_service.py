@@ -711,6 +711,51 @@ def _tool_execute_python(code: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Chart extraction helper
+# ---------------------------------------------------------------------------
+
+def _extract_chart_specs(text: str) -> tuple[list[dict], str]:
+    """
+    Scan text for ``CHART_JSON:`` markers and extract chart specs.
+
+    Handles two forms:
+      1. Bare line:  ``CHART_JSON:{...}``
+      2. Code-fenced: a line inside a ``` block that starts with CHART_JSON:
+
+    Returns:
+        (chart_specs, cleaned_text) where chart_specs is a list of parsed
+        chart dicts and cleaned_text has the CHART_JSON lines (and any
+        surrounding empty code-fence lines) removed.
+    """
+    import json as _json
+    import re as _re
+
+    charts: list[dict] = []
+
+    # First pass: extract bare CHART_JSON: lines
+    def _replace_bare(m: "_re.Match") -> str:
+        payload = m.group(1).strip()
+        try:
+            spec = _json.loads(payload)
+            charts.append(spec)
+            return ""  # remove the line
+        except Exception:
+            return m.group(0)  # keep if malformed
+
+    # Match a full line that starts with CHART_JSON: (possibly inside a code block)
+    cleaned = _re.sub(r"(?m)^[ \t]*CHART_JSON:(.+)$", _replace_bare, text)
+
+    # Second pass: remove orphaned empty code fences left after extraction
+    # e.g. ```\n\n``` or ```python\n\n```
+    cleaned = _re.sub(r"(?m)^```[^\n]*\n(\s*\n)*```\n?", "", cleaned)
+
+    # Collapse runs of 3+ blank lines down to 2
+    cleaned = _re.sub(r"\n{3,}", "\n\n", cleaned)
+
+    return charts, cleaned
+
+
+# ---------------------------------------------------------------------------
 # User-context tool factories (require user_id + db session)
 # ---------------------------------------------------------------------------
 
@@ -1583,6 +1628,28 @@ You help users understand stocks, markets, and investment opportunities using re
 11. Call `execute_python` to run calculations, financial modelling, statistical analysis, or data transformations where code gives a more precise answer than reasoning alone. Always use print() to output results. When working with price data from `get_historical_prices`, parse the CSV using the `csv` or `io` module (pandas is also available).
 12. You may call multiple tools in sequence to build a comprehensive answer.{user_ctx_section}{watchlist_section}
 
+## Producing Charts
+When the user asks for a chart, graph, or visual, include a chart spec **directly in your reply** on its own line using this exact format (one line, no line breaks inside the JSON, no code fences around it):
+
+CHART_JSON:{{"title":"...","type":"line|bar|area|scatter","xKey":"...","yKeys":["..."],"data":[{{"xKey_value":"...","yKey_value":0}}],"colors":["#60a5fa"]}}
+
+Schema:
+- `title` (string): chart title shown above the chart
+- `type` (string): one of `line`, `bar`, `area`, `scatter`
+- `xKey` (string): the key in each data object used for the X axis
+- `yKeys` (array of strings): one or more keys used for Y series (one per series)
+- `data` (array of objects): each object has the xKey field plus all yKey fields as numbers
+- `colors` (optional array of hex strings): one colour per yKey series
+
+Rules:
+- Output the CHART_JSON line **bare** — not inside a code block, not wrapped in backticks.
+- You may write explanatory text before or after the CHART_JSON line.
+- When you already have the data (e.g. from get_historical_prices), output CHART_JSON directly — do NOT call execute_python just to produce a chart.
+- When you need to compute derived data first (e.g. rolling averages, correlations), call execute_python and have it print the CHART_JSON line.
+
+Example — monthly price comparison:
+CHART_JSON:{{"title":"META vs IBM (1Y)","type":"line","xKey":"date","yKeys":["META","IBM"],"data":[{{"date":"2025-03","META":650,"IBM":245}},{{"date":"2025-04","META":670,"IBM":250}}],"colors":["#60a5fa","#f97316"]}}
+
 ## Response Style
 - Be concise and data-driven. Lead with the most important insight.
 - Format numbers clearly: prices as $182.50, changes as +2.3%, large numbers as $2.1B or $450M.
@@ -1620,7 +1687,13 @@ This is for informational and educational purposes only. Not personalized invest
                     # No tool calls — final answer
                     reply = response.content if hasattr(response, "content") else str(response)
                     if reply:
-                        yield f"data: {json.dumps({'type': 'token', 'content': reply})}\n\n"
+                        # Extract any CHART_JSON lines the LLM wrote directly in its reply
+                        chart_specs, reply = _extract_chart_specs(reply)
+                        for spec in chart_specs:
+                            yield f"data: {json.dumps({'type': 'chart', 'spec': spec})}\n\n"
+                        reply = reply.strip()
+                        if reply:
+                            yield f"data: {json.dumps({'type': 'token', 'content': reply})}\n\n"
                     yield f"data: {json.dumps({'type': 'done', 'tokens_used': max(1, 1 + tool_calls_made), 'tools_called': tool_calls_made})}\n\n"
                     return
 
@@ -1653,15 +1726,24 @@ This is for informational and educational purposes only. Not personalized invest
                     else:
                         tool_result = f"Unknown tool: {tool_name}"
 
+                    # If execute_python was called, extract any CHART_JSON lines and
+                    # emit them as chart events before the tool_call event.
+                    tool_result_str = str(tool_result)
+                    if tool_name == "execute_python":
+                        chart_specs, tool_result_str = _extract_chart_specs(tool_result_str)
+                        for spec in chart_specs:
+                            yield f"data: {json.dumps({'type': 'chart', 'spec': spec})}\n\n"
+
                     # Emit tool_call event with input and truncated output
                     tool_input_str = json.dumps(tool_args) if tool_args else ""
-                    tool_output_str = str(tool_result)
+                    tool_output_str = tool_result_str
                     # Truncate output to keep SSE events manageable (max 2000 chars)
                     if len(tool_output_str) > 2000:
                         tool_output_str = tool_output_str[:2000] + "…"
                     yield f"data: {json.dumps({'type': 'tool_call', 'name': tool_name, 'input': tool_input_str, 'output': tool_output_str})}\n\n"
 
-                    lc_messages.append(ToolMessage(content=str(tool_result), tool_call_id=tool_id))
+                    # Pass cleaned output (no CHART_JSON lines) back to the LLM
+                    lc_messages.append(ToolMessage(content=tool_result_str, tool_call_id=tool_id))
                     tool_calls_made += 1
 
                 # After all tools in this round complete, signal that the LLM is now reasoning
@@ -1672,7 +1754,12 @@ This is for informational and educational purposes only. Not personalized invest
             final_response = _invoke_with_retry(llm.invoke, lc_messages)
             reply = final_response.content if hasattr(final_response, "content") else str(final_response)
             if reply:
-                yield f"data: {json.dumps({'type': 'token', 'content': reply})}\n\n"
+                chart_specs, reply = _extract_chart_specs(reply)
+                for spec in chart_specs:
+                    yield f"data: {json.dumps({'type': 'chart', 'spec': spec})}\n\n"
+                reply = reply.strip()
+                if reply:
+                    yield f"data: {json.dumps({'type': 'token', 'content': reply})}\n\n"
             yield f"data: {json.dumps({'type': 'done', 'tokens_used': max(1, 1 + tool_calls_made), 'tools_called': tool_calls_made})}\n\n"
 
         except Exception as e:

@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { chatApi, type ChatMessage, type ToolCallEvent } from '../services/api';
+import {
+  AreaChart, Area, BarChart, Bar, LineChart, Line, ScatterChart, Scatter,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+} from 'recharts';
+import { chatApi, type ChatMessage, type ToolCallEvent, type ChartSpec } from '../services/api';
 import TickerMentionInput from './TickerMentionInput';
 
 // ── Friendly display names for tool names ──────────────────────────────────
@@ -123,7 +127,140 @@ export type ChatMessageWithMeta = ChatMessage & {
   tokens_used?: number;
   tools_called?: number;
   tool_call_events?: ToolCallEvent[];
+  charts?: ChartSpec[];
 };
+
+// ── ChartBlock ─────────────────────────────────────────────────────────────
+
+const DEFAULT_COLORS = ['#60a5fa', '#34d399', '#f59e0b', '#f87171', '#a78bfa', '#fb923c'];
+
+export function ChartBlock({ spec }: { spec: ChartSpec }) {
+  const colors = spec.colors?.length ? spec.colors : DEFAULT_COLORS;
+
+  // Format X-axis tick labels: shorten ISO dates to MM/DD or MM/DD/YY
+  const formatXTick = (val: string | number) => {
+    if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) {
+      const d = new Date(val);
+      return `${d.getMonth() + 1}/${d.getDate()}`;
+    }
+    return String(val);
+  };
+
+  const commonProps = {
+    data: spec.data,
+    margin: { top: 4, right: 8, left: 0, bottom: 4 },
+  };
+
+  const axes = (
+    <>
+      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+      <XAxis
+        dataKey={spec.xKey}
+        tickFormatter={formatXTick}
+        tick={{ fill: '#9ca3af', fontSize: 11 }}
+        axisLine={{ stroke: '#4b5563' }}
+        tickLine={false}
+        interval="preserveStartEnd"
+      />
+      <YAxis
+        tick={{ fill: '#9ca3af', fontSize: 11 }}
+        axisLine={false}
+        tickLine={false}
+        width={48}
+        tickFormatter={(v: number) =>
+          Math.abs(v) >= 1_000_000
+            ? `${(v / 1_000_000).toFixed(1)}M`
+            : Math.abs(v) >= 1_000
+            ? `${(v / 1_000).toFixed(1)}K`
+            : String(v)
+        }
+      />
+      <Tooltip
+        contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }}
+        labelStyle={{ color: '#e2e8f0' }}
+        itemStyle={{ color: '#94a3b8' }}
+        labelFormatter={(label) => formatXTick(label)}
+      />
+      {spec.yKeys.length > 1 && (
+        <Legend wrapperStyle={{ fontSize: 12, color: '#94a3b8', paddingTop: 4 }} />
+      )}
+    </>
+  );
+
+  const renderChart = () => {
+    if (spec.type === 'bar') {
+      return (
+        <BarChart {...commonProps}>
+          {axes}
+          {spec.yKeys.map((key, i) => (
+            <Bar key={key} dataKey={key} fill={colors[i % colors.length]} radius={[3, 3, 0, 0]} />
+          ))}
+        </BarChart>
+      );
+    }
+    if (spec.type === 'area') {
+      return (
+        <AreaChart {...commonProps}>
+          {axes}
+          {spec.yKeys.map((key, i) => (
+            <Area
+              key={key}
+              type="monotone"
+              dataKey={key}
+              stroke={colors[i % colors.length]}
+              fill={colors[i % colors.length]}
+              fillOpacity={0.15}
+              strokeWidth={2}
+              dot={false}
+            />
+          ))}
+        </AreaChart>
+      );
+    }
+    if (spec.type === 'scatter') {
+      return (
+        <ScatterChart {...commonProps}>
+          {axes}
+          {spec.yKeys.map((key, i) => (
+            <Scatter key={key} name={key} dataKey={key} fill={colors[i % colors.length]} />
+          ))}
+        </ScatterChart>
+      );
+    }
+    // default: line
+    return (
+      <LineChart {...commonProps}>
+        {axes}
+        {spec.yKeys.map((key, i) => (
+          <Line
+            key={key}
+            type="monotone"
+            dataKey={key}
+            stroke={colors[i % colors.length]}
+            strokeWidth={2}
+            dot={false}
+            activeDot={{ r: 4 }}
+          />
+        ))}
+      </LineChart>
+    );
+  };
+
+  return (
+    <div className="mt-3 rounded-xl border border-slate-600/60 bg-slate-800/60 overflow-hidden">
+      {spec.title && (
+        <div className="px-4 py-2.5 border-b border-slate-700/60">
+          <span className="text-xs font-semibold text-slate-300">{spec.title}</span>
+        </div>
+      )}
+      <div className="px-2 py-3">
+        <ResponsiveContainer width="100%" height={220}>
+          {renderChart()}
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
 
 // ── Ticker mention helpers ─────────────────────────────────────────────────
 
@@ -217,6 +354,14 @@ export function MessageBubble({
             </ReactMarkdown>
             {isStreaming && <StreamingCursor />}
           </div>
+          {/* Render any charts attached to this message */}
+          {message.charts && message.charts.length > 0 && (
+            <div className="space-y-2 -mx-1">
+              {message.charts.map((spec, i) => (
+                <ChartBlock key={i} spec={spec} />
+              ))}
+            </div>
+          )}
         </div>
         {(message.tokens_used != null || (message.tools_called != null && message.tools_called > 0)) && (
           <div className="flex items-center gap-2.5 text-xs text-slate-500 mt-1 ml-1">
@@ -383,6 +528,26 @@ export function useChatState(onBalanceUpdate?: (balance: number) => void, contex
         });
       },
       mergedContext,
+      (chartSpec) => {
+        // Chart emitted by execute_python — attach to the assistant message
+        setMessages((prev) => {
+          const updated = [...prev];
+          if (updated[assistantIndex]?.role === 'assistant') {
+            const existing = updated[assistantIndex].charts ?? [];
+            updated[assistantIndex] = {
+              ...updated[assistantIndex],
+              charts: [...existing, chartSpec],
+            };
+          } else {
+            updated.splice(assistantIndex, 0, {
+              role: 'assistant',
+              content: '',
+              charts: [chartSpec],
+            });
+          }
+          return updated;
+        });
+      },
     );
   };
 
