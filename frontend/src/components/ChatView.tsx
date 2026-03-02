@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { chatApi, type ChatMessage, type ToolCallEvent } from '../services/api';
+import TickerMentionInput from './TickerMentionInput';
 
 // ── Friendly display names for tool names ──────────────────────────────────
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
@@ -124,6 +125,37 @@ export type ChatMessageWithMeta = ChatMessage & {
   tool_call_events?: ToolCallEvent[];
 };
 
+// ── Ticker mention helpers ─────────────────────────────────────────────────
+
+/** Extract all @TICKER mentions from a message string (uppercase, deduplicated). */
+export function extractMentionedTickers(text: string): string[] {
+  const matches = text.match(/@([A-Z0-9.]{1,10})/gi) ?? [];
+  const tickers = matches.map((m) => m.slice(1).toUpperCase());
+  return [...new Set(tickers)];
+}
+
+/**
+ * Render a user message, turning @TICKER tokens into styled badge chips
+ * and leaving the rest as plain text.
+ */
+function renderUserMessage(content: string) {
+  // Split on @TICKER patterns, keeping the delimiters
+  const parts = content.split(/(@[A-Za-z0-9.]{1,10})/g);
+  return parts.map((part, i) => {
+    if (/^@[A-Za-z0-9.]{1,10}$/.test(part)) {
+      return (
+        <span
+          key={i}
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-blue-400/25 border border-blue-300/40 text-blue-100 font-mono font-semibold text-xs mx-0.5"
+        >
+          {part}
+        </span>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
 export function MessageBubble({
   message,
   isStreaming = false,
@@ -137,7 +169,7 @@ export function MessageBubble({
     return (
       <div className="flex justify-end mb-4">
         <div className="max-w-[85%] bg-blue-600 text-white rounded-2xl rounded-br-sm px-4 py-2.5 text-sm leading-relaxed">
-          {message.content}
+          {renderUserMessage(message.content)}
         </div>
       </div>
     );
@@ -263,6 +295,17 @@ export function useChatState(onBalanceUpdate?: (balance: number) => void, contex
     const assistantIndex = newMessages.length;
     const apiMessages = newMessages.map((m) => ({ role: m.role, content: m.content }));
 
+    // Extract @TICKER mentions from the user's message and merge into context
+    const mentionedTickers = extractMentionedTickers(trimmed);
+    const existingTickers: string[] = (context?.tickers as string[]) ?? [];
+    const mergedTickers = mentionedTickers.length > 0
+      ? [...new Set([...existingTickers, ...mentionedTickers])]
+      : existingTickers;
+    const mergedContext: Record<string, unknown> = {
+      ...(context ?? {}),
+      ...(mergedTickers.length > 0 ? { tickers: mergedTickers } : {}),
+    };
+
     abortRef.current = chatApi.streamMessage(
       apiMessages,
       (chunk) => {
@@ -339,7 +382,7 @@ export function useChatState(onBalanceUpdate?: (balance: number) => void, contex
           return updated;
         });
       },
-      context,
+      mergedContext,
     );
   };
 
@@ -506,29 +549,40 @@ export default function ChatView({
 
       {/* Input area */}
       <div className="shrink-0 px-3 pt-2">
-        <div className="flex items-end gap-2 bg-slate-700/80 rounded-lg border border-slate-600 focus-within:border-blue-500 transition-colors px-3 py-2">
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={inputPlaceholder ?? (isAuthenticated ? 'Ask about any stock…' : 'Sign in to start chatting…')}
-            rows={4}
-            disabled={isLoading || isStreaming || !isAuthenticated}
-            className="flex-1 bg-transparent text-sm text-white placeholder-slate-400 resize-none outline-none min-h-[80px] max-h-[200px] leading-6 disabled:opacity-50"
-            style={{ overflowY: input.split('\n').length > 8 ? 'auto' : 'hidden' }}
-          />
-          <button
-            type="button"
-            onClick={() => sendMessage(input)}
-            disabled={!input.trim() || isLoading || isStreaming || !isAuthenticated}
-            className="shrink-0 w-8 h-8 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
-            aria-label="Send message"
-          >
-            <svg className="w-4 h-4 text-white rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-            </svg>
-          </button>
+        <div className="flex flex-col bg-slate-700/80 rounded-lg border border-slate-600 focus-within:border-blue-500 transition-colors">
+          {/* Textarea row */}
+          <div className="px-3 pt-2">
+            <TickerMentionInput
+              inputRef={inputRef}
+              value={input}
+              onChange={setInput}
+              onKeyDown={handleKeyDown}
+              placeholder={inputPlaceholder ?? (isAuthenticated ? 'Ask about any stock…' : 'Sign in to start chatting…')}
+              disabled={isLoading || isStreaming || !isAuthenticated}
+              className="bg-transparent text-sm text-white placeholder-slate-400 resize-none outline-none min-h-[60px] max-h-[200px] leading-6 disabled:opacity-50"
+            />
+          </div>
+          {/* Bottom bar: hint + send button */}
+          <div className="flex items-center justify-between px-3 py-1.5 border-t border-slate-600/50">
+            {isAuthenticated ? (
+              <span className="text-[11px] text-slate-500 select-none">
+                Type <kbd className="px-1 py-0.5 rounded bg-slate-600/60 text-slate-400 font-mono text-[10px]">@</kbd> to mention a ticker
+              </span>
+            ) : (
+              <span />
+            )}
+            <button
+              type="button"
+              onClick={() => sendMessage(input)}
+              disabled={!input.trim() || isLoading || isStreaming || !isAuthenticated}
+              className="shrink-0 w-8 h-8 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+              aria-label="Send message"
+            >
+              <svg className="w-4 h-4 text-white rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
