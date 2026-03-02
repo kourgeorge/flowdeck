@@ -492,7 +492,7 @@ export default function HomePage() {
           {/* How It Works — 3 steps */}
           <div className="border border-gray-700 rounded-2xl p-8 bg-gray-800/30">
             <h3 className="text-lg font-semibold text-gray-300 uppercase tracking-wider mb-6">
-              How the AI Works
+              How the AI Analysis Team Works
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
