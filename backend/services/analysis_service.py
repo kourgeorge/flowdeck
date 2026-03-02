@@ -467,12 +467,14 @@ class AnalysisService:
                     risky = chunk.get("risky_summary") or []
                     safe = chunk.get("safe_summary") or []
                     neutral = chunk.get("neutral_summary") or []
-                    final_rec = chunk.get("recommendation") or chunk.get("trader_recommendation")
+                    # Risk Manager now outputs the final recommendation (with fallback to trader if not provided)
+                    final_rec = chunk.get("recommendation") or chunk.get("trader_recommendation") or "HOLD"
                     analysis_info["reports"]["final_trade_decision"] = content
+                    analysis_info["recommendation"] = final_rec
                     rscore = chunk.get("risk_score")
                     kt = (chunk.get("final_report_key_takeaways") or [])[:5] or extract_key_takeaways(content)
                     meta = _build_report_json(content, rscore, "Confidence", kt,
-                        recommendation=chunk.get("recommendation"),
+                        recommendation=final_rec,
                         confidence=(rscore / 10.0) if rscore is not None else None)
                     data = {**meta, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral}
                     inner = meta.get("metadata", meta)

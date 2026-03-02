@@ -29,6 +29,14 @@ class AgentState(TypedDict):
     system_prompt:  The full system prompt for this turn.
     context:        Arbitrary extra context dict (e.g. watchlist tickers).
     error:          Set if a fatal error occurred.
+    
+    # Planning & Todo Management
+    task_type:      Task complexity: "simple" | "complex" | "long-horizon"
+    planning_phase: Current phase: "analyzing" | "planning" | "awaiting_approval" | "executing" | "completed"
+    todo_list:      List of todo items with status, dependencies, and metadata.
+    current_step:   Index of the current step being executed (0-based).
+    plan_approved:  Whether the user has approved the execution plan.
+    discoveries:    New findings discovered during execution that may affect the plan.
     """
 
     messages: Annotated[Sequence[BaseMessage], add_messages]
@@ -42,5 +50,13 @@ class AgentState(TypedDict):
     system_prompt: str
     context: Optional[Dict[str, Any]]
     error: Optional[str]
+    
+    # Planning & Todo Management
+    task_type: Optional[str]
+    planning_phase: Optional[str]
+    todo_list: Optional[List[Dict[str, Any]]]
+    current_step: Optional[int]
+    plan_approved: bool
+    discoveries: Optional[List[str]]
 
 # Made with Bob

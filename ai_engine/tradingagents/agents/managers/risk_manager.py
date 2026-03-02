@@ -1,13 +1,16 @@
-from typing import List
+from typing import List, Literal
 from statistics import pstdev
 from pydantic import BaseModel, Field
 
 
 class RiskManagerOutput(BaseModel):
-    """Structured output for risk manager: risk analysis text, risk score, key takeaways, analyst summaries."""
+    """Structured output for risk manager: risk analysis text, risk score, recommendation, key takeaways, analyst summaries."""
 
     final_trade_decision: str = Field(
         description="Final risk analysis including detailed reasoning and refined trader plan (narrative)."
+    )
+    recommendation: Literal["BUY", "SELL", "HOLD"] = Field(
+        description="Final trade recommendation after risk analysis: BUY, SELL, or HOLD. Can agree with or override the trader's initial recommendation based on risk assessment."
     )
     risk_score: int = Field(
         ge=1,
@@ -46,6 +49,7 @@ def create_risk_manager(llm, memory):
         sentiment_report = state["sentiment_report"]
         sec_report = state.get("sec_report") or ""
         trader_plan = state["investment_plan"]
+        trader_recommendation = state.get("trader_recommendation", "HOLD")
         score_candidates = {
             "market_score": state.get("market_score"),
             "sentiment_score": state.get("sentiment_score"),
@@ -84,6 +88,8 @@ def create_risk_manager(llm, memory):
 
         prompt = f"""As the Risk Management Judge and Debate Facilitator, your goal is to evaluate the debate between three risk analysts—Risky, Neutral, and Safe/Conservative—and produce a clear risk analysis for the trader's plan. Focus on risk quality, vulnerabilities, and practical risk controls.
 
+**Trader's Initial Recommendation:** {trader_recommendation}
+
 Guidelines for Decision-Making:
 1. **Context**: The situation may include an SEC/regulatory report (management discussion, competition, risk factors from EDGAR). Factor regulatory and disclosure risk into your final decision when that report is present.
 2. **Summarize Key Arguments**: Extract the strongest points from each analyst, focusing on relevance to the context.
@@ -91,10 +97,14 @@ Guidelines for Decision-Making:
 4. **Refine the Trader's Plan**: Start with the trader's original plan, **{trader_plan}**, and adjust it based on the analysts' insights.
 5. **Learn from Past Mistakes**: Use lessons from **{past_memory_str}** to address prior misjudgments and improve the risk assessment.
 6. **Use Quantitative Score Context**: You must incorporate all available upstream report scores and their statistics when deciding the final risk_score.
-7. **Do Not Output Trade Recommendation**: Do NOT output BUY, SELL, or HOLD as a final recommendation. The trader's recommendation is handled upstream.
+7. **Output Final Recommendation**: Based on your risk analysis, output a final recommendation (BUY, SELL, or HOLD). You can agree with the trader's recommendation or override it based on risk assessment. For example:
+   - If trader says BUY but risk is very high (risk_score < 5), consider downgrading to HOLD
+   - If trader says SELL but risk analysis shows opportunity is strong (risk_score > 7), consider upgrading to HOLD or BUY
+   - If risk assessment aligns with trader's view, confirm their recommendation
 
 Deliverables:
-- final_trade_decision: Detailed risk analysis and refined plan (narrative text, without issuing a BUY/SELL/HOLD recommendation).
+- final_trade_decision: Detailed risk analysis and refined plan (narrative text).
+- recommendation: Final trade recommendation (BUY, SELL, or HOLD) after considering risk analysis.
 - risk_score: An integer 1-10.
 - key_takeaways: A list of 3-5 short one-sentence takeaways for traders.
 
@@ -105,8 +115,7 @@ Deliverables:
 - safe_summary: Summarize the safe/conservative analyst's key arguments in a short list (each item one sentence).
 - neutral_summary: Summarize the neutral analyst's key arguments in a short list (each item one sentence).
 
-**CRITICAL: You MUST provide risk_score (1-10) and key_takeaways (3-5 items) in your structured output.**
-**CRITICAL: Do NOT provide a BUY/SELL/HOLD recommendation in your structured output.**
+**CRITICAL: You MUST provide recommendation (BUY/SELL/HOLD), risk_score (1-10), and key_takeaways (3-5 items) in your structured output.**
 - Scoring guidelines:
   * 1-3: Very weak decision, low confidence, highly uncertain risk assessment, unclear direction
   * 4-5: Moderate decision, some confidence, balanced risk assessment, moderate clarity
@@ -136,15 +145,17 @@ Deliverables:
 
 Focus on actionable insights and continuous improvement. Build on past lessons, critically evaluate all perspectives, and ensure each decision advances better outcomes."""
 
-        # Use structured output for final_trade_decision, risk_score, key_takeaways, analyst summaries
+        # Use structured output for final_trade_decision, recommendation, risk_score, key_takeaways, analyst summaries
         key_takeaways = []
         risky_summary = []
         safe_summary = []
         neutral_summary = []
+        recommendation = None
         try:
             structured_llm = llm.with_structured_output(RiskManagerOutput)
             structured_response = structured_llm.invoke(prompt)
             final_trade_decision = structured_response.final_trade_decision
+            recommendation = structured_response.recommendation
             risk_score = structured_response.risk_score
             key_takeaways = list(getattr(structured_response, "key_takeaways", []) or [])[:5]
             risky_summary = list(getattr(structured_response, "risky_summary", []) or [])
@@ -157,6 +168,7 @@ Focus on actionable insights and continuous improvement. Build on past lessons, 
         except Exception:
             response = llm.invoke(prompt)
             final_trade_decision = response.content
+            recommendation = None
             risk_score = None
 
         new_risk_debate_state = {
@@ -175,6 +187,7 @@ Focus on actionable insights and continuous improvement. Build on past lessons, 
         return {
             "risk_debate_state": new_risk_debate_state,
             "final_trade_decision": final_trade_decision,
+            "recommendation": recommendation,
             "risk_score": risk_score,
             "final_report_key_takeaways": key_takeaways,
             "risky_summary": risky_summary,

@@ -131,7 +131,24 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       setAnalysisProgress(null);
       const client = new WebSocketClient(data.generation_analysis_id);
       client.on('status', (msg: any) => { const s = msg?.data?.agent_statuses; if (s) setAnalysisProgress({ agent_statuses: s, current_agent: null }); });
-      client.on('progress', (msg: any) => { const s = msg?.data?.agent_statuses; const c = msg?.data?.current_agent; if (s) setAnalysisProgress({ agent_statuses: s, current_agent: c ?? null }); loadStockData(); });
+      client.on('progress', (msg: any) => {
+        const s = msg?.data?.agent_statuses;
+        const c = msg?.data?.current_agent;
+        if (s) setAnalysisProgress({ agent_statuses: s, current_agent: c ?? null });
+        // Update stock data to get new reports, but keep the existing data structure
+        stockApi.getStockPage(ticker).then((freshData) => {
+          setStockData(freshData);
+          // Update selected report if new reports are available
+          if (freshData.reports && Object.keys(freshData.reports).length > 0) {
+            const keys = Object.keys(freshData.reports);
+            setSelectedReport((prev) => {
+              // Keep current selection if it still exists, otherwise pick final_trade_decision or first
+              if (prev && keys.includes(prev)) return prev;
+              return keys.includes('final_trade_decision') ? 'final_trade_decision' : keys[0];
+            });
+          }
+        }).catch(() => {});
+      });
       client.on('completed', () => { setAnalysisProgress(null); loadStockData(); });
       client.connect();
       wsClientRef.current = client;
@@ -217,16 +234,33 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   }, [ticker]);
 
   useEffect(() => {
+    // Fallback polling mechanism:
+    // 1. If WebSocket is not connected, poll immediately
+    // 2. If WebSocket is connected, still poll but less frequently (every 30s) as a safety net
     if (!ticker || !stockData?.is_generating) return;
+    
+    const hasWebSocket = !!wsClientRef.current;
+    const pollInterval = hasWebSocket ? 30000 : 3500; // 30s with WS, 3.5s without
+    
     const interval = setInterval(() => {
       stockApi.getStockPage(ticker).then((data) => {
-        setStockData(data);
-        if (data.reports && Object.keys(data.reports).length > 0) {
-          const keys = Object.keys(data.reports);
-          setSelectedReport(keys.includes('final_trade_decision') ? 'final_trade_decision' : keys[0]);
+        // If generation is no longer running, update everything
+        if (!data.is_generating) {
+          setStockData(data);
+          if (data.reports && Object.keys(data.reports).length > 0) {
+            const keys = Object.keys(data.reports);
+            setSelectedReport(keys.includes('final_trade_decision') ? 'final_trade_decision' : keys[0]);
+          }
+        } else if (!hasWebSocket) {
+          // Only update during generation if WebSocket is not available
+          setStockData(data);
+          if (data.reports && Object.keys(data.reports).length > 0) {
+            const keys = Object.keys(data.reports);
+            setSelectedReport(keys.includes('final_trade_decision') ? 'final_trade_decision' : keys[0]);
+          }
         }
       }).catch(() => {});
-    }, 3500);
+    }, pollInterval);
     return () => clearInterval(interval);
   }, [ticker, stockData?.is_generating]);
 

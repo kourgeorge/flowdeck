@@ -106,6 +106,17 @@ def get_indicators(ticker: str, config: _InjectedConfig = None) -> str:
     return IndicatorsTool().execute(ctx, ticker=ticker).to_str()
 
 
+@tool
+def get_specific_indicator(ticker: str, indicator: str, config: _InjectedConfig = None) -> str:
+    """Get a specific technical indicator for a stock. Use when you need only one indicator
+    instead of all indicators. Available indicators: rsi, macd, macds, macdh, boll, boll_ub,
+    boll_lb, close_50_sma, close_200_sma, close_10_ema, atr, vwma, mfi.
+    More efficient than get_indicators when analyzing a specific technical signal."""
+    from ai_engine.agent.tools.market_data import SpecificIndicatorTool
+    ctx = _ctx_from_config(config)
+    return SpecificIndicatorTool().execute(ctx, ticker=ticker, indicator=indicator).to_str()
+
+
 # ---------------------------------------------------------------------------
 # Fundamental / financial statement tools
 # ---------------------------------------------------------------------------
@@ -310,6 +321,7 @@ ALL_LC_TOOLS = [
     get_historical_prices,
     get_multi_historical_prices,
     get_indicators,
+    get_specific_indicator,
     get_fundamentals,
     get_income_statement,
     get_balance_sheet,

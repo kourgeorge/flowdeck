@@ -210,8 +210,11 @@ def _fetch_platform_reports(
         conf = ftd.get("confidence")
         conf_str = f" ({conf*100:.0f}% confidence)" if conf else ""
         lines.append(f"## 🎯 Final Trade Decision: **{rec}**{conf_str}")
-        if ftd.get("summary"):
-            lines.append(ftd["summary"])
+        # Show key takeaways if available
+        kt = ftd.get("key_takeaways")
+        if kt and isinstance(kt, list):
+            for item in kt[:3]:  # Show top 3 takeaways
+                lines.append(f"- {item}")
         lines.append("")
 
     # Investment plan return scenarios

@@ -1,6 +1,6 @@
 Insights for your own portfolio - build a portfolio and let the ai give you recommendation
 stability of the analysis
-protgolio management
+protfolio management
 synopsys giving last report
 
 understanding makor stock events
@@ -16,6 +16,13 @@ make the insights clearer and comprehensive.
 
 tradignagents learning from mistakes - how?
 
-make sure the server is multithreaded and can handlke multiple requests
+make sure the server is multithreaded and can handlke multiple requests [done]
+show graphs in the chat[done]
 
+
+Conversation history.
 adding skills to the deck
+the trading agents be able to access the do analysis on sector and the entire market condition
+
+The agent behaviour - add guardrails - not Out of scope and always hedge the response if asked to give predictions.
+canvas

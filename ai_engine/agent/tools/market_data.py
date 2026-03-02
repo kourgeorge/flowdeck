@@ -224,4 +224,67 @@ class IndicatorsTool(BaseTool):
         except Exception as exc:
             return ToolResult(ok=False, error={"code": "TOOL_ERROR", "message": str(exc)})
 
+# ---------------------------------------------------------------------------
+# SpecificIndicatorTool
+# ---------------------------------------------------------------------------
+
+_SPECIFIC_INDICATOR_SPEC = ToolSpec(
+    name="get_specific_indicator",
+    version="1.0",
+    description=(
+        "Get a specific technical indicator for a stock. Use when you need only one indicator "
+        "instead of all indicators. Available indicators: rsi, macd, macds, macdh, boll, boll_ub, "
+        "boll_lb, close_50_sma, close_200_sma, close_10_ema, atr, vwma, mfi. "
+        "More efficient than get_indicators when you only need one specific indicator."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "ticker": {
+                "type": "string",
+                "description": "Stock ticker symbol, e.g. AAPL, MSFT, TSLA",
+            },
+            "indicator": {
+                "type": "string",
+                "description": (
+                    "Technical indicator name. Choose from: rsi, macd, macds, macdh, boll, boll_ub, "
+                    "boll_lb, close_50_sma, close_200_sma, close_10_ema, atr, vwma, mfi"
+                ),
+            },
+        },
+        "required": ["ticker", "indicator"],
+    },
+    tags=["technical", "indicators", "market"],
+)
+
+
+class SpecificIndicatorTool(BaseTool):
+    spec = _SPECIFIC_INDICATOR_SPEC
+
+    def execute(self, ctx: ExecutionContext, *, ticker: str, indicator: str, **_) -> ToolResult:
+        try:
+            from ai_engine.tradingagents.dataflows.y_finance import get_stock_stats_indicators_window
+            
+            # Validate indicator
+            if indicator not in _DEFAULT_INDICATORS:
+                return ToolResult(
+                    ok=False,
+                    error={
+                        "code": "INVALID_INDICATOR",
+                        "message": f"Invalid indicator '{indicator}'. Choose from: {', '.join(_DEFAULT_INDICATORS)}"
+                    }
+                )
+            
+            today = datetime.date.today().isoformat()
+            result = get_stock_stats_indicators_window(
+                symbol=ticker.upper(),
+                indicator=indicator,
+                curr_date=today,
+                look_back_days=5,  # last 5 trading days is enough for a snapshot
+            )
+            return ToolResult(ok=True, data=result)
+        except Exception as exc:
+            return ToolResult(ok=False, error={"code": "TOOL_ERROR", "message": str(exc)})
+
+
 # Made with Bob

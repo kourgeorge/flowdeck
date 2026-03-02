@@ -55,6 +55,345 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Planning & Task Complexity Analysis
+# ---------------------------------------------------------------------------
+
+_TASK_COMPLEXITY_PROMPT = """\
+You are a task complexity analyzer for the FlowDeck financial assistant.
+
+Analyze this user request and classify its complexity:
+
+User Request: {user_message}
+
+Classify as:
+- "simple": Single-step query that can be answered directly
+  Examples: "What's AAPL's price?", "Show me TSLA news", "What's the market doing?"
+  
+- "complex": Multi-step analysis requiring coordination but no user approval
+  Examples: "Compare AAPL and MSFT performance", "Analyze my portfolio health"
+  
+- "long-horizon": Multi-phase task requiring planning and user approval
+  Examples: "Build a comprehensive investment strategy for tech stocks",
+           "Create a detailed quarterly market analysis report",
+           "Develop a risk-adjusted portfolio allocation plan"
+
+Consider:
+1. Number of distinct steps required (1 = simple, 2-4 = complex, 5+ = long-horizon)
+2. Need for user approval checkpoints
+3. Multiple data sources and analysis phases
+4. Iterative refinement requirements
+5. Report generation or strategic planning
+
+Respond ONLY with valid JSON:
+{{
+    "complexity": "simple|complex|long-horizon",
+    "reasoning": "brief explanation",
+    "estimated_steps": number,
+    "requires_planning": boolean
+}}
+"""
+
+_PLAN_CREATION_PROMPT = """\
+Create a detailed execution plan for this long-horizon task:
+
+User Request: {user_message}
+
+Available Tools:
+{tool_descriptions}
+
+Available Skills:
+{skill_descriptions}
+
+Create a step-by-step plan with clear, actionable steps. Each step should:
+1. Have a clear objective
+2. Specify expected tools or skills to use
+3. Include verification criteria
+4. Note any dependencies on previous steps
+
+Respond ONLY with valid JSON:
+{{
+    "todos": [
+        {{
+            "id": 1,
+            "description": "Clear, actionable step description",
+            "dependencies": [],
+            "estimated_complexity": "low|medium|high",
+            "expected_tools": ["tool1", "tool2"],
+            "verification": "How to verify this step succeeded"
+        }}
+    ],
+    "explanation": "Brief overview of the plan for the user",
+    "estimated_duration": "estimated time (e.g., '2-3 minutes')"
+}}
+"""
+
+
+def _analyze_task_complexity(llm: Any, user_message: str) -> Dict[str, Any]:
+    """
+    Use LLM to classify task complexity.
+    
+    Returns dict with: complexity, reasoning, estimated_steps, requires_planning
+    """
+    try:
+        prompt = _TASK_COMPLEXITY_PROMPT.format(user_message=user_message)
+        response = llm.invoke([SystemMessage(content=prompt)])
+        content = response.content if isinstance(response.content, str) else str(response.content)
+        
+        # Strip markdown code fences if present
+        content = content.strip()
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+            content = content.strip()
+        
+        result = json.loads(content)
+        logger.info("Task complexity analysis: %s", result)
+        return result
+    except Exception as exc:
+        logger.warning("Task complexity analysis failed: %s — defaulting to simple", exc)
+        return {
+            "complexity": "simple",
+            "reasoning": "Analysis failed, treating as simple query",
+            "estimated_steps": 1,
+            "requires_planning": False
+        }
+
+
+def _create_task_plan(llm: Any, user_message: str, state: AgentState) -> Dict[str, Any]:
+    """
+    Create a detailed execution plan for a long-horizon task.
+    
+    Returns dict with: todos, explanation, estimated_duration
+    """
+    from ai_engine.agent.skills import SKILL_DESCRIPTIONS
+    from ai_engine.agent.lc_tools import get_all_lc_tools
+    
+    # Get tool descriptions
+    user_id = state.get("user_id")
+    db = state.get("db")
+    tools = get_all_lc_tools(user_id=user_id, db=db)
+    tool_descriptions = "\n".join([f"- {t.name}: {t.description}" for t in tools[:15]])  # Limit to avoid token overflow
+    
+    # Get skill descriptions
+    skill_descriptions = "\n".join([f"- {name}: {desc}" for name, desc in SKILL_DESCRIPTIONS.items()])
+    
+    try:
+        prompt = _PLAN_CREATION_PROMPT.format(
+            user_message=user_message,
+            tool_descriptions=tool_descriptions,
+            skill_descriptions=skill_descriptions
+        )
+        response = llm.invoke([SystemMessage(content=prompt)])
+        content = response.content if isinstance(response.content, str) else str(response.content)
+        
+        # Strip markdown code fences
+        content = content.strip()
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+            content = content.strip()
+        
+        plan = json.loads(content)
+        
+        # Add status field to each todo
+        for todo in plan.get("todos", []):
+            todo["status"] = "pending"
+            todo["actual_tools_used"] = []
+        
+        logger.info("Created plan with %d steps", len(plan.get("todos", [])))
+        return plan
+    except Exception as exc:
+        logger.error("Plan creation failed: %s", exc)
+        return {
+            "todos": [],
+            "explanation": "Failed to create plan. Will proceed with direct execution.",
+            "estimated_duration": "unknown"
+        }
+
+
+def _format_plan_for_user(todo_list: List[Dict[str, Any]]) -> str:
+    """Format the todo list as a readable plan for the user."""
+    if not todo_list:
+        return "No steps planned."
+    
+    lines = []
+    for i, todo in enumerate(todo_list, 1):
+        status_icon = {
+            "pending": "⏳",
+            "in_progress": "🔄",
+            "completed": "✅",
+            "blocked": "❌"
+        }.get(todo.get("status", "pending"), "⏳")
+        
+        lines.append(f"{status_icon} **Step {i}**: {todo.get('description', 'Unknown step')}")
+        
+        if todo.get("dependencies"):
+            dep_str = ", ".join([f"Step {d}" for d in todo["dependencies"]])
+            lines.append(f"   *Depends on: {dep_str}*")
+        
+        complexity = todo.get("estimated_complexity", "medium")
+        lines.append(f"   *Complexity: {complexity}*")
+        lines.append("")
+    
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Node: planning_node
+# ---------------------------------------------------------------------------
+
+def planning_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
+    """
+    Analyze the user's request and determine if planning is needed.
+    For long-horizon tasks, create a detailed todo list.
+    """
+    messages = state.get("messages", [])
+    
+    # Get last user message
+    last_user_msg = ""
+    for msg in reversed(messages):
+        if isinstance(msg, HumanMessage):
+            last_user_msg = msg.content if isinstance(msg.content, str) else ""
+            break
+    
+    if not last_user_msg:
+        return {
+            "task_type": "simple",
+            "planning_phase": "executing"
+        }
+    
+    llm = (config or {}).get("configurable", {}).get("llm")
+    if llm is None:
+        logger.warning("planning_node | no LLM in config, skipping planning")
+        return {
+            "task_type": "simple",
+            "planning_phase": "executing"
+        }
+    
+    # Analyze task complexity
+    analysis = _analyze_task_complexity(llm, last_user_msg)
+    complexity = analysis.get("complexity", "simple")
+    
+    if complexity == "simple":
+        logger.info("planning_node | simple task, skipping planning")
+        return {
+            "task_type": "simple",
+            "planning_phase": "executing"
+        }
+    
+    if complexity == "complex":
+        # Complex tasks don't need approval, just proceed
+        logger.info("planning_node | complex task, proceeding without approval")
+        return {
+            "task_type": "complex",
+            "planning_phase": "executing"
+        }
+    
+    # Long-horizon task: create a plan
+    logger.info("planning_node | long-horizon task, creating plan")
+    plan = _create_task_plan(llm, last_user_msg, state)
+    
+    if not plan.get("todos"):
+        # Plan creation failed, fall back to simple execution
+        return {
+            "task_type": "simple",
+            "planning_phase": "executing"
+        }
+    
+    return {
+        "task_type": "long-horizon",
+        "planning_phase": "awaiting_approval",
+        "todo_list": plan["todos"],
+        "plan_approved": False,
+        "current_step": 0,
+        "discoveries": [],
+        "messages": [SystemMessage(
+            content=f"[PLAN_CREATED] {plan['explanation']}\n\nEstimated duration: {plan.get('estimated_duration', 'unknown')}"
+        )]
+    }
+
+
+def route_after_planning(state: AgentState) -> Literal["plan_approval", "skill_router"]:
+    """Route after planning: if long-horizon, go to approval; otherwise continue to skill_router."""
+    task_type = state.get("task_type")
+    if task_type == "long-horizon" and state.get("planning_phase") == "awaiting_approval":
+        return "plan_approval"
+    return "skill_router"
+
+
+# ---------------------------------------------------------------------------
+# Node: plan_approval_node
+# ---------------------------------------------------------------------------
+
+def plan_approval_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
+    """
+    Present the plan to the user and wait for approval.
+    This node emits the plan and then waits for the next user message.
+    """
+    todo_list = state.get("todo_list", [])
+    
+    if not todo_list:
+        return {
+            "planning_phase": "executing",
+            "plan_approved": True
+        }
+    
+    # Format plan for user
+    plan_text = _format_plan_for_user(todo_list)
+    
+    approval_msg = AIMessage(content=f"""I've analyzed your request and created this execution plan:
+
+{plan_text}
+
+**Total Steps**: {len(todo_list)}
+
+Would you like me to proceed with this plan? You can:
+- Say "yes" or "proceed" to start execution
+- Request modifications (e.g., "skip step 2" or "add analysis of X")
+- Say "cancel" to try a different approach
+""")
+    
+    return {
+        "messages": [approval_msg],
+        "planning_phase": "awaiting_approval"
+    }
+
+
+def route_after_plan_approval(state: AgentState) -> Literal["skill_router", "END"]:
+    """
+    After presenting the plan, check if user approved.
+    This is called after the user responds to the approval request.
+    """
+    # Check if the user's response indicates approval
+    messages = state.get("messages", [])
+    last_user_msg = ""
+    for msg in reversed(messages):
+        if isinstance(msg, HumanMessage):
+            last_user_msg = msg.content if isinstance(msg.content, str) else ""
+            break
+    
+    # Simple approval detection (can be enhanced with LLM)
+    approval_keywords = ["yes", "proceed", "go ahead", "start", "continue", "ok", "sure"]
+    cancel_keywords = ["no", "cancel", "stop", "nevermind", "different"]
+    
+    last_user_lower = last_user_msg.lower()
+    
+    if any(kw in last_user_lower for kw in cancel_keywords):
+        logger.info("plan_approval | user cancelled plan")
+        return "END"
+    
+    if any(kw in last_user_lower for kw in approval_keywords):
+        logger.info("plan_approval | user approved plan")
+        return "skill_router"
+    
+    # If unclear, assume approval for now (can be enhanced)
+    logger.info("plan_approval | unclear response, assuming approval")
+    return "skill_router"
+
+
+# ---------------------------------------------------------------------------
 # Skill router: LLM-based selection using SKILL.md descriptions
 # ---------------------------------------------------------------------------
 
@@ -380,6 +719,8 @@ def build_graph(tools: list) -> Any:
     graph = StateGraph(AgentState)
 
     # Add nodes
+    graph.add_node("planning", planning_node)
+    graph.add_node("plan_approval", plan_approval_node)
     graph.add_node("skill_router", skill_router_node)
     graph.add_node("skill_node", skill_node)
     graph.add_node("llm_synthesize", llm_synthesize_node)
@@ -387,12 +728,29 @@ def build_graph(tools: list) -> Any:
     graph.add_node("call_model", _call_model_node)
 
     # Edges
-    graph.add_edge(START, "skill_router")
+    # START → planning → (plan_approval if long-horizon | skill_router otherwise)
+    graph.add_edge(START, "planning")
+    graph.add_conditional_edges(
+        "planning",
+        route_after_planning,
+        {"plan_approval": "plan_approval", "skill_router": "skill_router"},
+    )
+    
+    # plan_approval → (skill_router if approved | END if cancelled)
+    graph.add_conditional_edges(
+        "plan_approval",
+        route_after_plan_approval,
+        {"skill_router": "skill_router", "END": END},
+    )
+    
+    # skill_router → (skill_node if skill matched | call_model for ReAct)
     graph.add_conditional_edges(
         "skill_router",
         route_after_skill_router,
         {"skill_node": "skill_node", "react_agent": "call_model"},
     )
+    
+    # skill_node → (llm_synthesize if succeeded | call_model if failed)
     graph.add_conditional_edges(
         "skill_node",
         route_after_skill_node,
@@ -558,6 +916,13 @@ class FlowDeckAgent:
             "system_prompt": system_prompt,
             "context": None,
             "error": None,
+            # Planning & Todo Management
+            "task_type": None,
+            "planning_phase": None,
+            "todo_list": None,
+            "current_step": None,
+            "plan_approved": False,
+            "discoveries": None,
         }
 
     def run(
@@ -648,8 +1013,25 @@ class FlowDeckAgent:
             ):
                 for node_name, event_data in chunk.items():
 
+                    # planning node analyzed task
+                    if node_name == "planning":
+                        task_type = event_data.get("task_type")
+                        if task_type == "long-horizon":
+                            yield f"data: {json.dumps({'type': 'thinking', 'content': 'Analyzing task complexity...'})}\n\n"
+                            todo_list = event_data.get("todo_list", [])
+                            if todo_list:
+                                yield f"data: {json.dumps({'type': 'plan_created', 'todos': todo_list, 'task_type': task_type})}\n\n"
+                        elif task_type in ["simple", "complex"]:
+                            yield f"data: {json.dumps({'type': 'thinking', 'content': f'Task classified as {task_type}, proceeding...'})}\n\n"
+                    
+                    # plan_approval node presented plan
+                    elif node_name == "plan_approval":
+                        planning_phase = event_data.get("planning_phase")
+                        if planning_phase == "awaiting_approval":
+                            yield f"data: {json.dumps({'type': 'awaiting_approval', 'content': 'Plan ready for your review'})}\n\n"
+
                     # skill_router fired
-                    if node_name == "skill_router":
+                    elif node_name == "skill_router":
                         matched = event_data.get("skill_used")
                         if matched:
                             skill_used = matched
