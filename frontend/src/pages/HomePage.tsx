@@ -496,9 +496,9 @@ export default function HomePage() {
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-                <h4 className="text-lg font-semibold text-white mb-2">1. Analyst Chain</h4>
+                <h4 className="text-lg font-semibold text-white mb-2">1. Analyst Team</h4>
                 <p className="text-gray-400 text-sm leading-relaxed">
-                  A sequential pipeline of specialized agents — Market, News, Fundamentals, SEC, Technical, and Social — each independently fetch live data, run their own tool calls, and produce a scored report. Every angle is covered before any debate begins.
+                  Six specialized AI analysts — covering market trends, news, fundamentals, SEC filings, technicals, and social sentiment — each independently research the stock and produce a scored report. Every angle is covered before any debate begins.
                 </p>
               </div>
               <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
