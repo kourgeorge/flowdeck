@@ -205,25 +205,13 @@ class SkillRegistry:
 
     def match_intent(self, user_message: str) -> Optional[object]:
         """
-        Simple keyword-based intent matcher.
+        Skill intent matching is handled by the LLM in the skill_router_node
+        (graph.py), which reads skill descriptions from SKILL.md files
+        following the agentskills.io standard.
 
-        Checks each enabled skill's ``intent_patterns`` attribute (list of
-        lowercase keyword strings) against the user message.  Returns the
-        first matching skill, or None if no skill matches.
-
-        Skills can override this by implementing a ``matches(message)``
-        method that returns True/False.
+        This method is kept for backward compatibility but always returns None.
+        The LangGraph skill_router_node is the authoritative skill selector.
         """
-        msg_lower = user_message.lower()
-        for skill in self.list(enabled_only=True):
-            # Custom matcher takes priority
-            if hasattr(skill, "matches") and callable(skill.matches):
-                if skill.matches(msg_lower):
-                    return skill
-            # Fallback: keyword list
-            patterns = getattr(skill, "intent_patterns", [])
-            if any(p in msg_lower for p in patterns):
-                return skill
         return None
 
     def __len__(self) -> int:

@@ -163,9 +163,10 @@ _INDICATORS_SPEC = ToolSpec(
     name="get_indicators",
     version="1.0",
     description=(
-        "Get technical analysis indicators for a ticker over the last 30 days: "
-        "RSI (momentum/overbought-oversold), MACD (trend/momentum), SMA/EMA (moving averages), "
-        "Bollinger Bands (volatility), ATR (average true range), VWMA (volume-weighted). "
+        "Get all key technical analysis indicators for a ticker (last 5 trading days): "
+        "RSI, MACD, MACD Signal, MACD Histogram, Bollinger Bands (middle/upper/lower), "
+        "50 SMA, 200 SMA, 10 EMA, ATR, VWMA, MFI. "
+        "Pass only the ticker symbol — all indicators are returned together. "
         "Use when the user asks about technical analysis, chart patterns, momentum, or support/resistance."
     ),
     input_schema={
@@ -182,20 +183,44 @@ _INDICATORS_SPEC = ToolSpec(
 )
 
 
+# Indicators fetched when the agent calls get_indicators(ticker=...)
+_DEFAULT_INDICATORS = [
+    "rsi", "macd", "macds", "macdh",
+    "boll", "boll_ub", "boll_lb",
+    "close_50_sma", "close_200_sma", "close_10_ema",
+    "atr", "vwma", "mfi",
+]
+
+
 class IndicatorsTool(BaseTool):
     spec = _INDICATORS_SPEC
 
     def execute(self, ctx: ExecutionContext, *, ticker: str, **_) -> ToolResult:
         try:
-            from ai_engine.tradingagents.agents.utils.technical_indicators_tools import get_indicators
+            from ai_engine.tradingagents.dataflows.y_finance import get_stock_stats_indicators_window
             today = datetime.date.today().isoformat()
-            data = get_indicators.invoke({
-                "symbol": ticker.upper(),
-                "indicator": "all",
-                "curr_date": today,
-                "look_back_days": 30,
-            })
-            return ToolResult(ok=True, data=data)
+            parts: list[str] = []
+            errors: list[str] = []
+            for ind in _DEFAULT_INDICATORS:
+                try:
+                    result = get_stock_stats_indicators_window(
+                        symbol=ticker.upper(),
+                        indicator=ind,
+                        curr_date=today,
+                        look_back_days=5,  # last 5 trading days is enough for a snapshot
+                    )
+                    parts.append(result)
+                except Exception as ind_exc:
+                    errors.append(f"{ind}: {ind_exc}")
+            if not parts:
+                raise RuntimeError(
+                    f"All indicators failed for {ticker}: " + "; ".join(errors)
+                )
+            combined = f"# Technical Indicators for {ticker.upper()} (as of {today})\n\n"
+            combined += "\n\n---\n\n".join(parts)
+            if errors:
+                combined += f"\n\n_Note: the following indicators could not be fetched: {', '.join(errors)}_"
+            return ToolResult(ok=True, data=combined)
         except Exception as exc:
             return ToolResult(ok=False, error={"code": "TOOL_ERROR", "message": str(exc)})
 

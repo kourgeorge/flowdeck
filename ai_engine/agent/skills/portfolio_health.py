@@ -9,6 +9,10 @@ Steps (per subscribed ticker):
 
 Synthesizes all results into a portfolio health summary with
 overall sentiment (bullish/bearish/mixed) and top movers.
+
+Skill discovery and activation is handled via portfolio-health/SKILL.md
+following the agentskills.io standard — the LLM reads the description
+and selects this skill; no regex or keyword matching is used.
 """
 
 from __future__ import annotations
@@ -24,35 +28,23 @@ _SPEC = SkillSpec(
     name="portfolio_health",
     version="1.0",
     description=(
-        "Run a multi-step portfolio health check for the current user: "
-        "fetch all subscribed tickers, get live quotes and AI recommendations "
-        "for each, then synthesize into a portfolio summary with overall sentiment."
+        "Run a portfolio health check for the current user: fetch all subscribed tickers, "
+        "get live quotes and AI recommendations for each, then synthesize into a portfolio "
+        "summary with overall sentiment. Use when the user asks about their portfolio, "
+        "watchlist, subscribed stocks, or how their stocks are doing."
     ),
     input_schema={
         "type": "object",
         "properties": {},
         "required": [],
     },
-    tags=["portfolio", "user", "overview"],
+    tags=["portfolio", "user", "overview", "health"],
     uses_tools=["get_user_subscriptions", "get_stock_quote", "get_platform_reports"],
 )
-
-_INTENT_PATTERNS = [
-    "portfolio health",
-    "how is my portfolio",
-    "how are my stocks",
-    "portfolio check",
-    "portfolio summary",
-    "my portfolio",
-    "all my stocks",
-    "watchlist health",
-    "portfolio overview",
-]
 
 
 class PortfolioHealthSkill(BaseSkill):
     spec = _SPEC
-    intent_patterns = _INTENT_PATTERNS
 
     def run(
         self,

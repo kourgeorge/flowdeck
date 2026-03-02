@@ -1,10 +1,10 @@
 """
 Chat service: LLM-based stock market analyst chat with tool-calling.
 
-Delegates to the SkillAgent runtime (ai_engine/agent/) which manages:
-  - 16 hardcoded tools (stock data, financials, news, web search, code execution)
-  - 3 hardcoded skills (deep dive, portfolio health, stock comparison)
-  - LLM tool-calling loop with timeout + validation
+Delegates to the FlowDeckAgent LangGraph runtime (ai_engine/agent/graph.py) which manages:
+  - 17 LangChain tools (stock data, financials, news, web search, code execution)
+  - 4 skills (deep dive, portfolio health, stock comparison, portfolio performance)
+  - LangGraph ReAct tool-calling loop with ToolNode
   - SSE streaming with thinking/tool_call/token/done events
 """
 
@@ -15,7 +15,10 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, Generator, List, Optional
+
+if TYPE_CHECKING:
+    from ai_engine.agent.graph import FlowDeckAgent
 
 from dotenv import load_dotenv
 
@@ -191,15 +194,16 @@ def _last_user_message(messages: List[Dict[str, Any]]) -> str:
 
 class ChatService:
     """
-    Service for running stock market chat via the SkillAgent runtime.
+    Service for running stock market chat via the FlowDeckAgent LangGraph runtime.
 
-    Wraps SkillAgent with the FlowDeck system prompt, chart extraction,
+    Wraps FlowDeckAgent with the FlowDeck system prompt, chart extraction,
     and token accounting.  The public interface (chat / chat_stream) is
     unchanged so the router requires no modifications.
     """
 
     def __init__(self):
         self._llm = None
+        self._agent = None
 
     def _get_llm(self):
         """Lazy-initialize the LLM."""
@@ -207,43 +211,12 @@ class ChatService:
             self._llm = _build_llm()
         return self._llm
 
-    def _get_agent(
-        self,
-        user_id: Optional[int] = None,
-        db: Optional[Any] = None,
-    ):
-        """
-        Build a SkillAgent for this request.
-
-        User-context tools are added per-request (not cached) because they
-        are bound to a specific user_id + db session.
-        """
-        from ai_engine.agent.agent import SkillAgent
-        from ai_engine.agent.executor import SkillExecutor, ToolExecutor
-        from ai_engine.agent.registry import SkillRegistry, ToolRegistry
-        from ai_engine.agent.tools import ALL_TOOLS
-        from ai_engine.agent.tools.user_context import make_user_context_tools
-        from ai_engine.agent.skills import ALL_SKILLS
-
-        tool_registry = ToolRegistry()
-        tool_registry.register_many(ALL_TOOLS)
-        if user_id is not None and db is not None:
-            tool_registry.register_many(make_user_context_tools(user_id, db))
-
-        skill_registry = SkillRegistry()
-        skill_registry.register_many(ALL_SKILLS)
-
-        tool_executor = ToolExecutor()
-        skill_executor = SkillExecutor(tool_executor=tool_executor)
-
-        return SkillAgent(
-            tool_registry=tool_registry,
-            skill_registry=skill_registry,
-            llm=self._get_llm(),
-            tool_executor=tool_executor,
-            skill_executor=skill_executor,
-            max_tool_rounds=8,
-        )
+    def _get_agent(self) -> "FlowDeckAgent":
+        """Lazy-initialize the FlowDeckAgent (graph is compiled once per process)."""
+        if self._agent is None:
+            from ai_engine.agent.graph import FlowDeckAgent
+            self._agent = FlowDeckAgent(llm=self._get_llm())
+        return self._agent  # type: ignore[return-value]
 
     def chat(
         self,
@@ -281,11 +254,14 @@ class ChatService:
             last_user_msg[:200],
         )
 
-        from ai_engine.agent.tool import ExecutionContext
         system_prompt = _build_system_prompt(user_id, db, context)
-        ctx = ExecutionContext(user_id=user_id, db=db, max_tool_calls=15)
-        agent = self._get_agent(user_id=user_id, db=db)
-        result = agent.run(messages, ctx, system_prompt)
+        result = self._get_agent().run(
+            messages,
+            user_id=user_id,
+            db=db,
+            system_prompt=system_prompt,
+            max_tool_calls=15,
+        )
         return {
             "reply": result.get("reply", ""),
             "tokens_used": result.get("tokens_used", 1),
@@ -320,13 +296,16 @@ class ChatService:
             yield 'data: {"type":"done","tokens_used":1,"tools_called":0}\n\n'
             return
 
-        from ai_engine.agent.tool import ExecutionContext
         system_prompt = _build_system_prompt(user_id, db, context)
-        ctx = ExecutionContext(user_id=user_id, db=db, max_tool_calls=15)
-        agent = self._get_agent(user_id=user_id, db=db)
 
         try:
-            for event in agent.run_stream(messages, ctx, system_prompt):
+            for event in self._get_agent().stream(
+                messages,
+                user_id=user_id,
+                db=db,
+                system_prompt=system_prompt,
+                max_tool_calls=15,
+            ):
                 # For token events, extract any CHART_JSON lines the LLM embedded
                 if '"type":"token"' in event or '"type": "token"' in event:
                     try:

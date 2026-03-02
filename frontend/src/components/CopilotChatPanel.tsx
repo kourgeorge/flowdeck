@@ -46,6 +46,8 @@ export interface CopilotChatPanelProps {
   collapsed?: boolean;
   /** Called when the user clicks the collapse/expand toggle */
   onToggleCollapse?: () => void;
+  /** Display name shown in the panel header and collapsed strip. Defaults to COPILOT_NAME. */
+  title?: string;
 }
 
 export default function CopilotChatPanel({
@@ -53,7 +55,9 @@ export default function CopilotChatPanel({
   tickers = [],
   collapsed = false,
   onToggleCollapse,
+  title,
 }: CopilotChatPanelProps) {
+  const panelTitle = title ?? COPILOT_NAME;
   const { user } = useAuth();
   // Build context object with all tickers so the AI knows the full watchlist
   const context = useMemo(
@@ -81,11 +85,11 @@ export default function CopilotChatPanel({
   // ── Collapsed state: show a vertical strip with a toggle button ──
   if (collapsed) {
     return (
-      <div className="flex flex-col items-center w-6 shrink-0 bg-gray-800/50 py-3 gap-2">
+      <div className="flex flex-col items-center w-8 shrink-0 border-l border-gray-700 bg-gray-800/50 py-3 gap-2">
         <button
           type="button"
           onClick={onToggleCollapse}
-          title={`Expand ${COPILOT_NAME}`}
+          title={`Expand ${panelTitle}`}
           className="flex items-center justify-center w-6 h-6 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded transition-colors"
         >
           <svg className="w-3.5 h-3.5 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -97,7 +101,7 @@ export default function CopilotChatPanel({
             className="text-xs text-gray-500 font-medium select-none"
             style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
           >
-            {COPILOT_NAME}
+            {panelTitle}
           </span>
         </div>
       </div>
@@ -105,7 +109,7 @@ export default function CopilotChatPanel({
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-gray-900">
+    <div className="flex flex-col h-full min-h-0 border-l border-gray-700 bg-gray-900">
       {/* Header */}
       <div className="shrink-0 border-b border-gray-700 bg-gray-800/80 px-3 py-2.5 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
@@ -116,7 +120,7 @@ export default function CopilotChatPanel({
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="text-sm font-semibold text-white leading-tight">{COPILOT_NAME}</span>
+              <span className="text-sm font-semibold text-white leading-tight">{panelTitle}</span>
             </div>
             <p className="text-xs text-slate-400 leading-tight">AI-powered · full analysis access</p>
           </div>
@@ -158,7 +162,7 @@ export default function CopilotChatPanel({
             <button
               type="button"
               onClick={onToggleCollapse}
-              title={`Collapse ${COPILOT_NAME}`}
+              title={`Collapse ${panelTitle}`}
               className="flex items-center justify-center w-6 h-6 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded transition-colors"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -5,7 +5,7 @@ import {
   AreaChart, Area, BarChart, Bar, LineChart, Line, ScatterChart, Scatter,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { chatApi, type ChatMessage, type ToolCallEvent, type ChartSpec } from '../services/api';
+import { chatApi, type ChatMessage, type ToolCallEvent, type ChartSpec, type SkillActivationEvent } from '../services/api';
 import TickerMentionInput from './TickerMentionInput';
 
 // ── Friendly display names for tool names ──────────────────────────────────
@@ -123,10 +123,87 @@ export function ToolCallBlock({ toolCall }: { toolCall: ToolCallEvent }) {
   );
 }
 
+// ── Skill display names ────────────────────────────────────────────────────
+const SKILL_DISPLAY_NAMES: Record<string, string> = {
+  compare_stocks: 'Compare Markets',
+  stock_deep_dive: 'Stock Deep Dive',
+  portfolio_health: 'Portfolio Health',
+  portfolio_performance: 'Portfolio Performance',
+};
+
+// ── Tool display names for skill steps (reuse TOOL_DISPLAY_NAMES) ──────────
+
+export function SkillActivationBlock({ event }: { event: SkillActivationEvent }) {
+  const [expanded, setExpanded] = useState(false);
+  const displayName =
+    SKILL_DISPLAY_NAMES[event.name] ??
+    event.name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const stepCount = event.steps.length;
+  const failedCount = event.steps.filter((s) => !s.ok).length;
+
+  return (
+    <div className="mb-1.5 rounded-lg border border-blue-500/40 bg-blue-950/30 overflow-hidden text-xs">
+      {/* Header row */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-blue-900/30 transition-colors text-left"
+      >
+        {/* ⚡ Lightning bolt — distinct from the ⚙️ gear used for tool calls */}
+        <svg className="w-3.5 h-3.5 text-blue-400 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+        </svg>
+        <span className="font-medium text-blue-300">{displayName}</span>
+        <span className="text-blue-400/70 ml-1">
+          · {stepCount} step{stepCount !== 1 ? 's' : ''}
+          {failedCount > 0 && <span className="text-red-400 ml-1">({failedCount} failed)</span>}
+        </span>
+        <svg
+          className={`w-3.5 h-3.5 text-slate-500 shrink-0 ml-auto transition-transform ${expanded ? 'rotate-180' : ''}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {/* Expanded: show each step */}
+      {expanded && stepCount > 0 && (
+        <div className="border-t border-blue-500/30 divide-y divide-blue-900/40">
+          {event.steps.map((step, i) => {
+            const toolDisplay =
+              TOOL_DISPLAY_NAMES[step.tool] ??
+              step.tool.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+            return (
+              <div key={i} className="px-3 py-2">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${step.ok ? 'bg-green-400' : 'bg-red-400'}`} />
+                  <span className="font-medium text-blue-200">{toolDisplay}</span>
+                  {step.input && (
+                    <span className="text-slate-400 truncate flex-1">
+                      <span className="text-slate-500 mr-1">·</span>{step.input.slice(0, 80)}
+                    </span>
+                  )}
+                </div>
+                {step.output && (
+                  <pre className="text-slate-400 whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed max-h-20 overflow-y-auto pl-3">
+                    {step.output.slice(0, 300)}
+                  </pre>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export type ChatMessageWithMeta = ChatMessage & {
   tokens_used?: number;
   tools_called?: number;
   tool_call_events?: ToolCallEvent[];
+  skill_activation_events?: SkillActivationEvent[];
   charts?: ChartSpec[];
 };
 
@@ -438,6 +515,14 @@ export function MessageBubble({
   return (
     <div className="flex items-start gap-2.5 mb-4">
       <div className="flex-1 min-w-0">
+        {/* Skill activation blocks — shown above tool calls, with ⚡ icon */}
+        {message.skill_activation_events && message.skill_activation_events.length > 0 && (
+          <div className="mb-2 space-y-1">
+            {message.skill_activation_events.map((ev, i) => (
+              <SkillActivationBlock key={i} event={ev} />
+            ))}
+          </div>
+        )}
         {message.tool_call_events && message.tool_call_events.length > 0 && (
           <div className="mb-2 space-y-1">
             {message.tool_call_events.map((tc, i) => (
@@ -673,6 +758,27 @@ export function useChatState(onBalanceUpdate?: (balance: number) => void, contex
               role: 'assistant',
               content: '',
               charts: [chartSpec],
+            });
+          }
+          return updated;
+        });
+      },
+      (skillEvent) => {
+        // Skill workflow completed — attach to the assistant message
+        setThinkingStatus(null);
+        setMessages((prev) => {
+          const updated = [...prev];
+          if (updated[assistantIndex]?.role === 'assistant') {
+            const existing = updated[assistantIndex].skill_activation_events ?? [];
+            updated[assistantIndex] = {
+              ...updated[assistantIndex],
+              skill_activation_events: [...existing, skillEvent],
+            };
+          } else {
+            updated.splice(assistantIndex, 0, {
+              role: 'assistant',
+              content: '',
+              skill_activation_events: [skillEvent],
             });
           }
           return updated;

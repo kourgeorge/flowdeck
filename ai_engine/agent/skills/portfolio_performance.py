@@ -4,13 +4,14 @@ PortfolioPerformanceSkill — real-data weekly/monthly/yearly performance rankin
 Steps:
   1. get_user_subscriptions  — fetch the user's subscribed tickers
   2. get_multi_historical_prices — fetch real closing prices for ALL tickers at once
-  3. execute_python — compute % returns, rank gainers/losers, emit CHART_JSON
-
-This skill is triggered when the user asks about top gainers, top losers,
-best/worst performers, or weekly/monthly/yearly performance of their portfolio.
+  3. Compute % returns, rank gainers/losers, emit CHART_JSON
 
 IMPORTANT: This skill NEVER simulates or estimates returns — it always fetches
 real historical price data via get_multi_historical_prices.
+
+Skill discovery and activation is handled via portfolio-performance/SKILL.md
+following the agentskills.io standard — the LLM reads the description
+and selects this skill; no regex or keyword matching is used.
 """
 
 from __future__ import annotations
@@ -27,60 +28,29 @@ _SPEC = SkillSpec(
     name="portfolio_performance",
     version="1.0",
     description=(
-        "Compute real portfolio performance (top gainers/losers) over a given period "
-        "by fetching actual historical prices for all subscribed tickers. "
-        "Never simulates or estimates — always uses real market data."
+        "Compute real portfolio performance — top gainers, top losers, and % returns — "
+        "over a specified time period using actual historical price data. "
+        "Use when the user asks about portfolio performance, top gainers, top losers, "
+        "best or worst performers, weekly/monthly/yearly returns, or wants to rank their stocks. "
+        "Never simulates or estimates — always fetches real market data."
     ),
     input_schema={
         "type": "object",
         "properties": {
             "period": {
                 "type": "string",
-                "description": "Period: 'week', 'month', 'ytd', '1y', or a date range like '2026-02-23:2026-02-27'",
+                "description": "Period: 'week', 'this week', 'month', 'this month', 'ytd', '1y', '3m', '6m', or 'YYYY-MM-DD:YYYY-MM-DD'",
             }
         },
         "required": [],
     },
-    tags=["portfolio", "performance", "gainers", "losers", "returns"],
-    uses_tools=["get_user_subscriptions", "get_multi_historical_prices", "execute_python"],
+    tags=["portfolio", "performance", "gainers", "losers", "returns", "ranking"],
+    uses_tools=["get_user_subscriptions", "get_multi_historical_prices"],
 )
-
-_INTENT_PATTERNS = [
-    "top gainer",
-    "top loser",
-    "best performer",
-    "worst performer",
-    "biggest gainer",
-    "biggest loser",
-    "best stock",
-    "worst stock",
-    "portfolio performance",
-    "how did my stocks",
-    "how did my portfolio",
-    "portfolio last week",
-    "portfolio this week",
-    "portfolio last month",
-    "portfolio this month",
-    "weekly performance",
-    "monthly performance",
-    "yearly performance",
-    "ytd performance",
-    "year to date",
-    "which stock gained",
-    "which stock lost",
-    "gainers in my",
-    "losers in my",
-    "performance last week",
-    "performance this week",
-    "performance last month",
-    "show me the top",
-    "rank my",
-]
 
 
 class PortfolioPerformanceSkill(BaseSkill):
     spec = _SPEC
-    intent_patterns = _INTENT_PATTERNS
 
     def run(
         self,
@@ -168,11 +138,6 @@ class PortfolioPerformanceSkill(BaseSkill):
                 "period": period_label,
             },
         )
-
-    def matches(self, message: str) -> bool:
-        msg_lower = message.lower()
-        return any(p in msg_lower for p in self.intent_patterns)
-
 
 # ---------------------------------------------------------------------------
 # Helpers

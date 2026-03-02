@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import DashboardStockSidebar from '../components/DashboardStockSidebar';
 import StockDetailPanel from '../components/StockDetailPanel';
-import VibeChatPanel from '../components/VibeChatPanel';
+import CopilotChatPanel from '../components/CopilotChatPanel';
 import { useSubscribedStocks } from '../hooks/useSubscribedStocks';
 import { useAuth } from '../contexts/AuthContext';
 import type { StockPageData, StockWidget } from '../services/types';
@@ -153,11 +153,12 @@ export default function VibeTradingPage() {
             chatCollapsed ? 'w-8' : 'w-96'
           }`}
         >
-          <VibeChatPanel
+          <CopilotChatPanel
             selectedTicker={selectedTicker}
             tickers={allTickers}
             collapsed={chatCollapsed}
             onToggleCollapse={() => setChatCollapsed((c) => !c)}
+            title="AI Analyst"
           />
         </div>
 
@@ -268,7 +269,7 @@ function MobileStockChatTabs({
         )}
         {activeTab === 'chat' && (
           <div className="h-full">
-            <VibeChatPanel selectedTicker={selectedTicker} tickers={tickers} />
+            <CopilotChatPanel selectedTicker={selectedTicker} tickers={tickers} title="AI Analyst" />
           </div>
         )}
       </div>

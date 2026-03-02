@@ -9,6 +9,10 @@ Steps:
   5. get_fundamentals      — key valuation metrics
 
 Synthesizes all results into a structured deep-dive report.
+
+Skill discovery and activation is handled via stock-deep-dive/SKILL.md
+following the agentskills.io standard — the LLM reads the description
+and selects this skill; no regex or keyword matching is used.
 """
 
 from __future__ import annotations
@@ -25,7 +29,8 @@ _SPEC = SkillSpec(
     description=(
         "Run a comprehensive multi-step analysis of a single stock: "
         "current quote, AI platform reports, recent news, technical indicators, "
-        "and fundamental metrics — all synthesized into one structured report."
+        "and fundamental metrics — all synthesized into one structured report. "
+        "Use when the user asks for a deep dive, full analysis, or complete report on a stock."
     ),
     input_schema={
         "type": "object",
@@ -37,7 +42,7 @@ _SPEC = SkillSpec(
         },
         "required": ["ticker"],
     },
-    tags=["analysis", "stock", "comprehensive"],
+    tags=["analysis", "stock", "comprehensive", "deep-dive"],
     uses_tools=[
         "get_stock_quote",
         "get_platform_reports",
@@ -47,22 +52,9 @@ _SPEC = SkillSpec(
     ],
 )
 
-_INTENT_PATTERNS = [
-    "deep dive",
-    "deep-dive",
-    "full analysis",
-    "comprehensive analysis",
-    "complete analysis",
-    "full report",
-    "everything about",
-    "tell me everything",
-    "deep analysis",
-]
-
 
 class StockDeepDiveSkill(BaseSkill):
     spec = _SPEC
-    intent_patterns = _INTENT_PATTERNS
 
     def run(
         self,

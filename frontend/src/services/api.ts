@@ -333,6 +333,22 @@ export interface ToolCallEvent {
   output: string;
 }
 
+/** A skill activation event — emitted when a skill workflow starts */
+export interface SkillActivationEvent {
+  /** Skill name, e.g. "compare_stocks" */
+  name: string;
+  /** Individual tool steps the skill executed */
+  steps: SkillStepEvent[];
+}
+
+/** One tool step executed inside a skill workflow */
+export interface SkillStepEvent {
+  tool: string;
+  input: string;
+  output: string;
+  ok: boolean;
+}
+
 /** Chart spec emitted by the agent via execute_python CHART_JSON output */
 export interface ChartSpec {
   title: string;
@@ -344,7 +360,7 @@ export interface ChartSpec {
 }
 
 export interface ChatStreamEvent {
-  type: 'token' | 'done' | 'error' | 'thinking' | 'tool_call' | 'chart';
+  type: 'token' | 'done' | 'error' | 'thinking' | 'tool_call' | 'chart' | 'skill_start' | 'skill_step' | 'skill_done';
   content?: string;
   tokens_used?: number;
   tools_called?: number;
@@ -355,6 +371,12 @@ export interface ChatStreamEvent {
   output?: string;
   // chart fields
   spec?: ChartSpec;
+  // skill_step fields
+  skill?: string;
+  tool?: string;
+  ok?: boolean;
+  // skill_done fields
+  steps?: number;
 }
 
 export const chatApi = {
@@ -378,6 +400,7 @@ export const chatApi = {
    * `onThinking` for tool-call progress status messages,
    * `onToolCall` for each tool execution (name, input, output),
    * `onChart` for each chart spec emitted by execute_python,
+   * `onSkillActivation` when a skill workflow starts (name + accumulated steps),
    * `onDone` when the stream finishes (with tokens_used and balance),
    * and `onError` on failure.
    * Returns an AbortController so the caller can cancel the stream.
@@ -391,11 +414,13 @@ export const chatApi = {
     onToolCall?: (toolCall: ToolCallEvent) => void,
     context?: Record<string, unknown>,
     onChart?: (spec: ChartSpec) => void,
+    onSkillActivation?: (event: SkillActivationEvent) => void,
   ): AbortController => {
     const controller = new AbortController();
     const token = getStoredToken();
 
     const run = async () => {
+      let pendingSkill: SkillActivationEvent | null = null;
       try {
         const res = await fetch(`${API_BASE_URL}/api/chat/stream`, {
           method: 'POST',
@@ -447,6 +472,20 @@ export const chatApi = {
                 onToolCall?.({ name: event.name, input: event.input ?? '', output: event.output ?? '' });
               } else if (event.type === 'chart' && event.spec) {
                 onChart?.(event.spec);
+              } else if (event.type === 'skill_start' && event.name) {
+                // Skill workflow started — accumulate steps until skill_done
+                pendingSkill = { name: event.name, steps: [] };
+                onThinking?.(`Running ${event.name.replace(/_/g, ' ')} workflow…`);
+              } else if (event.type === 'skill_step' && pendingSkill) {
+                pendingSkill.steps.push({
+                  tool: event.tool ?? '',
+                  input: event.input ?? '',
+                  output: event.output ?? '',
+                  ok: event.ok !== false,
+                });
+              } else if (event.type === 'skill_done' && pendingSkill) {
+                onSkillActivation?.(pendingSkill);
+                pendingSkill = null;
               } else if (event.type === 'done') {
                 onDone(event.tokens_used ?? 1, event.balance ?? 0, event.tools_called ?? 0);
               } else if (event.type === 'error') {
