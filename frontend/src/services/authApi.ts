@@ -127,3 +127,66 @@ export const profileApi = {
     return res.data;
   },
 };
+
+// API Key Management
+export interface ApiKey {
+  id: number;
+  name: string;
+  key_prefix: string;
+  is_active: boolean;
+  created_at: string;
+  last_used_at: string | null;
+  expires_at: string | null;
+}
+
+export interface CreateApiKeyRequest {
+  name: string;
+  expires_at?: string | null;
+}
+
+export interface CreateApiKeyResponse extends ApiKey {
+  key: string;  // Full key - only shown once!
+  warning: string;
+}
+
+export const apiKeyApi = {
+  list: async (): Promise<ApiKey[]> => {
+    const token = getStoredToken();
+    if (!token) throw new Error('Not authenticated');
+    const res = await api.get<ApiKey[]>('/api/api-keys', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.data;
+  },
+  create: async (body: CreateApiKeyRequest): Promise<CreateApiKeyResponse> => {
+    const token = getStoredToken();
+    if (!token) throw new Error('Not authenticated');
+    const res = await api.post<CreateApiKeyResponse>('/api/api-keys', body, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.data;
+  },
+  delete: async (keyId: number): Promise<void> => {
+    const token = getStoredToken();
+    if (!token) throw new Error('Not authenticated');
+    await api.delete(`/api/api-keys/${keyId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  },
+  deactivate: async (keyId: number): Promise<ApiKey> => {
+    const token = getStoredToken();
+    if (!token) throw new Error('Not authenticated');
+    const res = await api.patch<ApiKey>(`/api/api-keys/${keyId}/deactivate`, {}, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.data;
+  },
+  activate: async (keyId: number): Promise<ApiKey> => {
+    const token = getStoredToken();
+    if (!token) throw new Error('Not authenticated');
+    const res = await api.patch<ApiKey>(`/api/api-keys/${keyId}/activate`, {}, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.data;
+  },
+};

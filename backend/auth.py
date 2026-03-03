@@ -47,10 +47,40 @@ def get_current_user_optional(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(http_bearer),
     db: Session = Depends(get_db),
 ) -> Optional[User]:
-    """Return current user if valid token, else None. Use for optional auth."""
+    """Return current user if valid token or API key, else None. Use for optional auth."""
     if not credentials or not credentials.credentials:
         return None
-    sub = decode_token(credentials.credentials)
+    
+    token = credentials.credentials
+    
+    # Check if it's an API key (starts with "fd_live_")
+    if token.startswith("fd_live_"):
+        from models.db_models import ApiKey
+        from datetime import datetime, timezone
+        
+        key_hash = ApiKey.hash_key(token)
+        api_key = db.query(ApiKey).filter(ApiKey.key_hash == key_hash).first()
+        
+        if not api_key:
+            return None
+        
+        # Check if key is active
+        if not api_key.is_active:
+            return None
+        
+        # Check if key has expired
+        if api_key.expires_at and api_key.expires_at < datetime.now(timezone.utc):
+            return None
+        
+        # Update last_used_at
+        api_key.last_used_at = datetime.now(timezone.utc)
+        db.commit()
+        
+        # Return the user associated with this API key
+        return db.query(User).filter(User.id == api_key.user_id).first()
+    
+    # Otherwise, treat as JWT token
+    sub = decode_token(token)
     if not sub:
         return None
     try:

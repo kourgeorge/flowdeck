@@ -5,6 +5,7 @@ import { profileApi, type MeProfile } from '../services/authApi';
 import { subscriptionApi, type Subscription } from '../services/subscriptionApi';
 import TokenPurchase from '../components/TokenPurchase';
 import UserStatsSection from '../components/UserStatsSection';
+import ApiKeyManagement from '../components/ApiKeyManagement';
 
 const DELETE_CONFIRM_TEXT = 'DELETE';
 
@@ -256,6 +257,15 @@ export default function ProfilePage() {
             <TokenPurchase />
           </section>
         )}
+
+        {/* API Keys */}
+        <section id="api-keys" className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
+          <h2 className="text-lg font-semibold text-white mb-4">API Keys</h2>
+          <p className="text-sm text-gray-400 mb-6">
+            Create API keys for programmatic access to FlowDeck. Use them in bots, scripts, and integrations.
+          </p>
+          <ApiKeyManagement />
+        </section>
 
         {/* Subscription email preferences */}
         <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">

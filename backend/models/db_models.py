@@ -3,6 +3,7 @@
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, UniqueConstraint, DateTime, Index, Boolean
 from sqlalchemy.orm import relationship
+import secrets
 
 from database import Base
 
@@ -87,3 +88,47 @@ class Subscription(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "ticker", name="uq_subscription_user_ticker"),
     )
+
+
+class ApiKey(Base):
+    """API keys for programmatic access to FlowDeck."""
+    __tablename__ = "api_keys"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    key_hash = Column(String(255), unique=True, nullable=False, index=True)  # SHA256 hash of the key
+    key_prefix = Column(String(16), nullable=False)  # First 8 chars for display (e.g., "fd_live_12345678")
+    name = Column(String(255), nullable=False)  # User-friendly name (e.g., "Production Bot", "Dev Testing")
+    last_used_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)  # Optional expiration date
+
+    __table_args__ = (
+        Index("idx_api_keys_user_id", "user_id"),
+        Index("idx_api_keys_key_hash", "key_hash"),
+    )
+
+    @staticmethod
+    def generate_key() -> tuple[str, str]:
+        """
+        Generate a new API key and its hash.
+        
+        Returns:
+            tuple: (full_key, key_hash) where full_key is "fd_live_..." and key_hash is SHA256
+        """
+        import hashlib
+        # Generate 32 random bytes (256 bits) for strong security
+        key_secret = secrets.token_urlsafe(32)
+        full_key = f"fd_live_{key_secret}"
+        # Hash the full key for storage
+        key_hash = hashlib.sha256(full_key.encode()).hexdigest()
+        return full_key, key_hash
+
+    @staticmethod
+    def hash_key(key: str) -> str:
+        """Hash an API key for comparison."""
+        import hashlib
+        return hashlib.sha256(key.encode()).hexdigest()
+
+# Made with Bob

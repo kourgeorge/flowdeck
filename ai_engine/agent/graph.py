@@ -1050,6 +1050,8 @@ class FlowDeckAgent:
                             # Emit each tool step the skill executed
                             skill_steps = event_data.get("skill_steps", [])
                             for step in skill_steps:
+                                # Count tools executed within skills
+                                tools_called += 1
                                 yield f"data: {json.dumps({'type': 'skill_step', 'skill': skill_used, 'tool': step.get('tool', ''), 'input': step.get('input', ''), 'output': step.get('output', ''), 'ok': step.get('ok', True)})}\n\n"
                             yield f"data: {json.dumps({'type': 'skill_done', 'name': skill_used, 'steps': len(skill_steps)})}\n\n"
 

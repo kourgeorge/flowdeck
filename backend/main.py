@@ -43,6 +43,7 @@ from routers.admin import router as admin_router
 from routers.contact import router as contact_router
 from routers.payments import router as payments_router
 from routers.chat import router as chat_router
+from routers.api_keys import router as api_keys_router
 from sync_major_stocks import get_missing_and_skipped, run_analyses_for_tickers
 from database import init_db, get_db
 from models.db_models import User
@@ -109,6 +110,7 @@ app.include_router(admin_router)
 app.include_router(contact_router)
 app.include_router(payments_router)
 app.include_router(chat_router, prefix="/api")
+app.include_router(api_keys_router)
 
 # WebSocket connections
 active_connections: dict[str, WebSocket] = {}
@@ -306,15 +308,31 @@ def _get_stock_page_sync(ticker: str) -> StockPageData:
 
     # When analysis is generating, use the in-progress run_id so reports count increments 1→2→…→7
     # instead of switching from the previous run (e.g. 5 reports) to the new run (1 report).
+    # Check filesystem for running analyses (works reliably across all workers)
     is_generating = False
     generation_analysis_id = None
     generating_run_id = None
-    for aid, info in analysis_service.running_analyses.items():
-        if info["ticker"] == ticker and info["status"] == "running":
-            is_generating = True
-            generation_analysis_id = aid
-            generating_run_id = info.get("run_id")
-            break
+    
+    try:
+        ticker_dir = analysis_service.results_dir / ticker.upper()
+        if ticker_dir.exists():
+            for run_dir in ticker_dir.glob("*"):
+                if not run_dir.is_dir():
+                    continue
+                status_file = run_dir / "status.json"
+                if status_file.exists():
+                    import json
+                    with open(status_file, 'r') as f:
+                        status_data = json.load(f)
+                        if status_data.get("status") == "running" and status_data.get("ticker") == ticker.upper():
+                            is_generating = True
+                            generation_analysis_id = status_data.get("analysis_id")
+                            generating_run_id = status_data.get("run_id")
+                            break
+    except Exception as e:
+        # Log but don't fail the request
+        import logging
+        logging.getLogger(__name__).warning(f"Error checking filesystem for running analysis: {e}")
 
     latest_date = generating_run_id if is_generating and generating_run_id else report_service.get_latest_report_date(ticker)
     latest_reports = {}
@@ -836,12 +854,31 @@ async def websocket_endpoint(websocket: WebSocket, analysis_id: str, token: Opti
                 }
             })
         
-        # Keep connection alive
+        # Keep connection alive and handle status requests
         while True:
             try:
                 data = await websocket.receive_text()
                 if data == "ping":
                     await websocket.send_json({"type": "pong"})
+                elif data == "get_status":
+                    # Handle status request (for reconnection)
+                    status = analysis_service.get_analysis_status(analysis_id)
+                    if status:
+                        await websocket.send_json({
+                            "type": "status",
+                            "data": {
+                                "status": status.get("status"),
+                                "ticker": status.get("ticker"),
+                                "date": status.get("date"),
+                                "agent_statuses": status.get("agent_statuses", {}),
+                                "current_agent": status.get("current_agent"),
+                            }
+                        })
+                    else:
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": "Analysis not found or completed"
+                        })
             except WebSocketDisconnect:
                 break
     except Exception:

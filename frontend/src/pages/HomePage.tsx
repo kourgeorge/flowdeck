@@ -130,7 +130,7 @@ export default function HomePage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
               <span className="text-blue-300 text-sm font-medium">New: {COPILOT_NAME}</span>
-              <span className="text-gray-500 text-sm">— searches the web, runs analysis code, and chats side by side</span>
+              <span className="text-gray-500 text-sm">— your trading assistant - an agent that accesses all information needed to answer your trading questions</span>
               <svg className="w-3.5 h-3.5 text-blue-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>

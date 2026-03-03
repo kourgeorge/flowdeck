@@ -549,50 +549,53 @@ export function MessageBubble({
             ))}
           </div>
         )}
-        <div
-          className="bg-slate-700/80 text-slate-100 rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed"
-          dir={direction}
-        >
-          <div className="prose prose-invert prose-sm max-w-none chat-message-content">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                p: ({ node, ...props }) => <p className="mb-2 last:mb-0 text-slate-100 text-sm leading-relaxed" {...props} />,
-                ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-2 space-y-0.5 text-slate-100" {...props} />,
-                ol: ({ node, ...props }) => <ol className="list-decimal list-outside pl-4 mb-2 space-y-0.5 text-slate-100" {...props} />,
-                li: ({ node, ...props }) => <li className="text-slate-100 text-sm" {...props} />,
-                strong: ({ node, ...props }) => <strong className="font-semibold text-white" {...props} />,
-                em: ({ node, ...props }) => <em className="italic text-slate-200" {...props} />,
-                code: ({ node, ...props }) => <code className="bg-slate-800 px-1 py-0.5 rounded text-xs text-green-400 font-mono" {...props} />,
-                h1: ({ node, ...props }) => <h1 className="text-base font-bold text-white mb-2 mt-3 first:mt-0" {...props} />,
-                h2: ({ node, ...props }) => <h2 className="text-sm font-bold text-white mb-1.5 mt-3 first:mt-0" {...props} />,
-                h3: ({ node, ...props }) => <h3 className="text-sm font-semibold text-slate-200 mb-1 mt-2 first:mt-0" {...props} />,
-                blockquote: ({ node, ...props }) => <blockquote className="border-l-2 border-blue-500 pl-3 text-slate-300 italic my-2" {...props} />,
-                table: ({ node, ...props }) => (
-                  <div className="overflow-x-auto my-2 rounded border border-slate-600">
-                    <table className="min-w-full text-xs border-collapse" {...props} />
-                  </div>
-                ),
-                thead: ({ node, ...props }) => <thead className="bg-slate-800 text-slate-200" {...props} />,
-                tbody: ({ node, ...props }) => <tbody className="divide-y divide-slate-600" {...props} />,
-                tr: ({ node, ...props }) => <tr className="hover:bg-slate-600/40" {...props} />,
-                th: ({ node, ...props }) => <th className="px-2 py-1.5 text-left font-semibold text-white" {...props} />,
-                td: ({ node, ...props }) => <td className="px-2 py-1.5 text-slate-300" {...props} />,
-              }}
-            >
-              {message.content}
-            </ReactMarkdown>
-            {isStreaming && <StreamingCursor />}
-          </div>
-          {/* Render any charts attached to this message */}
-          {message.charts && message.charts.length > 0 && (
-            <div className="space-y-2 -mx-1">
-              {message.charts.map((spec, i) => (
-                <ChartBlock key={i} spec={spec} />
-              ))}
+        {/* Only render message bubble if there's content, streaming, or charts */}
+        {(message.content || isStreaming || (message.charts && message.charts.length > 0)) && (
+          <div
+            className="bg-slate-700/80 text-slate-100 rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed"
+            dir={direction}
+          >
+            <div className="prose prose-invert prose-sm max-w-none chat-message-content">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  p: ({ node, ...props }) => <p className="mb-2 last:mb-0 text-slate-100 text-sm leading-relaxed" {...props} />,
+                  ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-2 space-y-0.5 text-slate-100" {...props} />,
+                  ol: ({ node, ...props }) => <ol className="list-decimal list-outside pl-4 mb-2 space-y-0.5 text-slate-100" {...props} />,
+                  li: ({ node, ...props }) => <li className="text-slate-100 text-sm" {...props} />,
+                  strong: ({ node, ...props }) => <strong className="font-semibold text-white" {...props} />,
+                  em: ({ node, ...props }) => <em className="italic text-slate-200" {...props} />,
+                  code: ({ node, ...props }) => <code className="bg-slate-800 px-1 py-0.5 rounded text-xs text-green-400 font-mono" {...props} />,
+                  h1: ({ node, ...props }) => <h1 className="text-base font-bold text-white mb-2 mt-3 first:mt-0" {...props} />,
+                  h2: ({ node, ...props }) => <h2 className="text-sm font-bold text-white mb-1.5 mt-3 first:mt-0" {...props} />,
+                  h3: ({ node, ...props }) => <h3 className="text-sm font-semibold text-slate-200 mb-1 mt-2 first:mt-0" {...props} />,
+                  blockquote: ({ node, ...props }) => <blockquote className="border-l-2 border-blue-500 pl-3 text-slate-300 italic my-2" {...props} />,
+                  table: ({ node, ...props }) => (
+                    <div className="overflow-x-auto my-2 rounded border border-slate-600">
+                      <table className="min-w-full text-xs border-collapse" {...props} />
+                    </div>
+                  ),
+                  thead: ({ node, ...props }) => <thead className="bg-slate-800 text-slate-200" {...props} />,
+                  tbody: ({ node, ...props }) => <tbody className="divide-y divide-slate-600" {...props} />,
+                  tr: ({ node, ...props }) => <tr className="hover:bg-slate-600/40" {...props} />,
+                  th: ({ node, ...props }) => <th className="px-2 py-1.5 text-left font-semibold text-white" {...props} />,
+                  td: ({ node, ...props }) => <td className="px-2 py-1.5 text-slate-300" {...props} />,
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
+              {isStreaming && <StreamingCursor />}
             </div>
-          )}
-        </div>
+            {/* Render any charts attached to this message */}
+            {message.charts && message.charts.length > 0 && (
+              <div className="space-y-2 -mx-1">
+                {message.charts.map((spec, i) => (
+                  <ChartBlock key={i} spec={spec} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {/* Copy button + token/tool metadata row */}
         <div className="flex items-center gap-2.5 mt-1 ml-1">
           {/* Copy text button — always visible once message is complete */}

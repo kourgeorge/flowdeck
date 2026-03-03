@@ -25,6 +25,8 @@ export class WebSocketClient {
       this.ws.onopen = () => {
         console.log('WebSocket connected');
         this.reconnectAttempts = 0;
+        // Request current status immediately on connect/reconnect
+        this.send('get_status');
         this.emit('open', {});
       };
 

@@ -7,6 +7,7 @@ import sys
 import uuid
 import datetime
 import threading
+import json
 from typing import Dict, Optional, Callable, Any
 from pathlib import Path
 from dotenv import load_dotenv
@@ -81,7 +82,54 @@ class AnalysisService:
         if not self.results_dir.is_absolute():
             backend_dir = Path(__file__).parent.parent
             self.results_dir = backend_dir.parent / self.results_dir  # repo root
+        # Keep minimal in-memory state for active analysis context (callbacks, graph objects)
+        # Status queries read from filesystem only
         self.running_analyses: Dict[str, Dict] = {}
+        self._lock = threading.Lock()  # Lock to prevent race conditions
+    
+    def _write_status_file(self, analysis_id: str) -> None:
+        """Write current status to file in results folder."""
+        analysis_info = self.running_analyses.get(analysis_id)
+        if not analysis_info:
+            return
+        
+        results_dir = analysis_info.get("results_dir")
+        if not results_dir:
+            return
+        
+        try:
+            status_file = Path(results_dir) / "status.json"
+            status_data = {
+                "analysis_id": analysis_id,
+                "ticker": analysis_info["ticker"],
+                "date": analysis_info["date"],
+                "run_id": analysis_info["run_id"],
+                "status": analysis_info["status"],
+                "agent_statuses": analysis_info.get("agent_statuses", {}),
+                "current_agent": analysis_info.get("current_agent"),
+                "updated_at": datetime.datetime.utcnow().isoformat(),
+            }
+            with open(status_file, 'w') as f:
+                json.dump(status_data, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to write status file for {analysis_id}: {e}")
+    
+    def _delete_status_file(self, analysis_id: str) -> None:
+        """Delete status file when analysis completes."""
+        analysis_info = self.running_analyses.get(analysis_id)
+        if not analysis_info:
+            return
+        
+        results_dir = analysis_info.get("results_dir")
+        if not results_dir:
+            return
+        
+        try:
+            status_file = Path(results_dir) / "status.json"
+            if status_file.exists():
+                status_file.unlink()
+        except Exception as e:
+            logger.warning(f"Failed to delete status file for {analysis_id}: {e}")
     
     def get_running_analysis_id(self, ticker: str, analysis_date: str) -> Optional[str]:
         """Return analysis_id if an analysis is already running for this (ticker, date)."""
@@ -107,114 +155,125 @@ class AnalysisService:
     ) -> tuple[str, bool]:
         """Start a new analysis and return (analysis_id, existing). existing=True if already running for (ticker, date)."""
         ticker = ticker.upper()
-        existing_id = self.get_running_analysis_id(ticker, analysis_date)
-        if existing_id is not None:
-            return (existing_id, True)
         
-        analysis_id = str(uuid.uuid4())
-        logger.info(
-            "Starting analysis analysis_id=%s ticker=%s date=%s analysts=%s",
-            analysis_id, ticker, analysis_date, analysts,
-        )
+        # Use lock to prevent race condition when checking and starting analysis
+        with self._lock:
+            existing_id = self.get_running_analysis_id(ticker, analysis_date)
+            if existing_id is not None:
+                logger.info(
+                    "Analysis already running analysis_id=%s ticker=%s date=%s",
+                    existing_id, ticker, analysis_date,
+                )
+                return (existing_id, True)
+            
+            analysis_id = str(uuid.uuid4())
+            logger.info(
+                "Starting analysis analysis_id=%s ticker=%s date=%s analysts=%s",
+                analysis_id, ticker, analysis_date, analysts,
+            )
 
-        # Default analysts if not provided
-        if analysts is None:
-            analysts = ["market", "news", "fundamentals", "technical", "sec"]
-        # Exclude SEC analyst for non-US tickers (crypto, forex, non-US stocks, indices)
-        if "sec" in analysts and not _is_us_company_with_sec(ticker):
-            analysts = [a for a in analysts if a != "sec"]
-            logger.info("SEC analyst excluded for non-US ticker ticker=%s", ticker)
+            # Default analysts if not provided
+            if analysts is None:
+                analysts = ["market", "news", "fundamentals", "technical", "sec"]
+            # Exclude SEC analyst for non-US tickers (crypto, forex, non-US stocks, indices)
+            if "sec" in analysts and not _is_us_company_with_sec(ticker):
+                analysts = [a for a in analysts if a != "sec"]
+                logger.info("SEC analyst excluded for non-US ticker ticker=%s", ticker)
 
-        # Create config
-        config = DEFAULT_CONFIG.copy()
-        config["max_debate_rounds"] = research_depth
-        config["max_risk_discuss_rounds"] = research_depth
-        
-        # Resolve provider + model defaults from env (with request overrides).
-        llm_overrides: Dict[str, Any] = {"llm_provider": llm_provider.lower()}
-        if shallow_thinker:
-            llm_overrides["quick_think_llm"] = shallow_thinker
-        if deep_thinker:
-            llm_overrides["deep_think_llm"] = deep_thinker
-        if backend_url:
-            llm_overrides["backend_url"] = backend_url
-        config.update(get_config_from_env(llm_overrides))
-        
-        config["results_dir"] = str(self.results_dir)
-        
-        # Use the app's data API for news, fundamentals, stock data, etc. (same as dashboard UI).
-        # Agents will call back to this backend via /api/data/* so analysis uses the same infrastructure.
-        from config import BACKEND_URL
-        info_url = os.getenv("INFO_SERVICE_URL", "").strip() or os.getenv("BACKEND_URL", "").strip() or BACKEND_URL
-        config["info_service_url"] = info_url.rstrip("/")
-        
-        # Initialize graph
-        graph = TradingAgentsGraph(
-            selected_analysts=analysts,
-            config=config,
-            debug=True
-        )
-        
-        # Include time in run id so multiple runs per day don't overwrite (or use provided run_id from API)
-        if run_id is None:
-            run_id = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
-        results_dir = self.results_dir / ticker.upper() / run_id
-        results_dir.mkdir(parents=True, exist_ok=True)
-        report_dir = results_dir / "reports"
-        report_dir.mkdir(parents=True, exist_ok=True)
-        log_file = results_dir / "message_tool.log"
-        log_file.touch(exist_ok=True)
-        
-        # Initialize agent statuses
-        agent_statuses = {
-            "Market Analyst": "pending",
-            "Social Analyst": "pending",
-            "News Analyst": "pending",
-            "Fundamentals Analyst": "pending",
-            "Technical Analyst": "pending",
-            "SEC Analyst": "pending",
-            "Bull Researcher": "pending",
-            "Bear Researcher": "pending",
-            "Research Manager": "pending",
-            "Trader": "pending",
-            "Risky Analyst": "pending",
-            "Neutral Analyst": "pending",
-            "Safe Analyst": "pending",
-            "Portfolio Manager": "pending",
-        }
-        
-        # Set first selected analyst to in_progress
-        analyst_status_map = {
-            "market": "Market Analyst",
-            "social": "Social Analyst",
-            "news": "News Analyst",
-            "fundamentals": "Fundamentals Analyst",
-            "technical": "Technical Analyst",
-            "sec": "SEC Analyst",
-        }
-        first_selected = next((a for a in analysts if a in analyst_status_map), None)
-        if first_selected:
-            agent_statuses[analyst_status_map[first_selected]] = "in_progress"
-        
-        # Store analysis info
-        self.running_analyses[analysis_id] = {
-            "ticker": ticker.upper(),
-            "date": analysis_date,
-            "run_id": run_id,
-            "status": "running",
-            "graph": graph,
-            "results_dir": results_dir,
-            "report_dir": report_dir,
-            "log_file": log_file,
-            "progress_callback": progress_callback,
-            "agent_statuses": agent_statuses,
-            "current_agent": None,
-            "reports": {},
-            "analysts": analysts,
-            "messages": [],
-            "tool_calls": [],
-            "initiator_email": initiator_email,
-        }
+            # Create config
+            config = DEFAULT_CONFIG.copy()
+            config["max_debate_rounds"] = research_depth
+            config["max_risk_discuss_rounds"] = research_depth
+            
+            # Resolve provider + model defaults from env (with request overrides).
+            llm_overrides: Dict[str, Any] = {"llm_provider": llm_provider.lower()}
+            if shallow_thinker:
+                llm_overrides["quick_think_llm"] = shallow_thinker
+            if deep_thinker:
+                llm_overrides["deep_think_llm"] = deep_thinker
+            if backend_url:
+                llm_overrides["backend_url"] = backend_url
+            config.update(get_config_from_env(llm_overrides))
+            
+            config["results_dir"] = str(self.results_dir)
+            
+            # Use the app's data API for news, fundamentals, stock data, etc. (same as dashboard UI).
+            # Agents will call back to this backend via /api/data/* so analysis uses the same infrastructure.
+            from config import BACKEND_URL
+            info_url = os.getenv("INFO_SERVICE_URL", "").strip() or os.getenv("BACKEND_URL", "").strip() or BACKEND_URL
+            config["info_service_url"] = info_url.rstrip("/")
+            
+            # Initialize graph
+            graph = TradingAgentsGraph(
+                selected_analysts=analysts,
+                config=config,
+                debug=True
+            )
+            
+            # Include time in run id so multiple runs per day don't overwrite (or use provided run_id from API)
+            if run_id is None:
+                run_id = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+            results_dir = self.results_dir / ticker.upper() / run_id
+            results_dir.mkdir(parents=True, exist_ok=True)
+            report_dir = results_dir / "reports"
+            report_dir.mkdir(parents=True, exist_ok=True)
+            log_file = results_dir / "message_tool.log"
+            log_file.touch(exist_ok=True)
+            
+            # Initialize agent statuses
+            agent_statuses = {
+                "Market Analyst": "pending",
+                "Social Analyst": "pending",
+                "News Analyst": "pending",
+                "Fundamentals Analyst": "pending",
+                "Technical Analyst": "pending",
+                "SEC Analyst": "pending",
+                "Bull Researcher": "pending",
+                "Bear Researcher": "pending",
+                "Research Manager": "pending",
+                "Trader": "pending",
+                "Risky Analyst": "pending",
+                "Neutral Analyst": "pending",
+                "Safe Analyst": "pending",
+                "Portfolio Manager": "pending",
+            }
+            
+            # Set first selected analyst to in_progress
+            analyst_status_map = {
+                "market": "Market Analyst",
+                "social": "Social Analyst",
+                "news": "News Analyst",
+                "fundamentals": "Fundamentals Analyst",
+                "technical": "Technical Analyst",
+                "sec": "SEC Analyst",
+            }
+            first_selected = next((a for a in analysts if a in analyst_status_map), None)
+            if first_selected:
+                agent_statuses[analyst_status_map[first_selected]] = "in_progress"
+            
+            # Store analysis info immediately to prevent race condition
+            # This must be done within the lock before starting the background thread
+            self.running_analyses[analysis_id] = {
+                "ticker": ticker.upper(),
+                "date": analysis_date,
+                "run_id": run_id,
+                "status": "running",
+                "graph": graph,
+                "results_dir": results_dir,
+                "report_dir": report_dir,
+                "log_file": log_file,
+                "progress_callback": progress_callback,
+                "agent_statuses": agent_statuses,
+                "current_agent": None,
+                "reports": {},
+                "analysts": analysts,
+                "messages": [],
+                "tool_calls": [],
+                "initiator_email": initiator_email,
+            }
+            
+            # Write initial status to file
+            self._write_status_file(analysis_id)
         
         # Start analysis in background
         # Create a new event loop in a thread to run the async analysis
@@ -389,12 +448,14 @@ class AnalysisService:
                         c = chunk[chunk_key]
                         analysis_info["reports"][key] = c
                         analysis_info["agent_statuses"][agent] = "completed"
+                        self._write_status_file(analysis_id)
                         _write_report(key, c, chunk.get(score_key), label)
                         _progress_log(f"{agent} completed → {key} saved")
                         if last_analyst_report_key and key == last_analyst_report_key:
                             analysis_info["agent_statuses"]["Bull Researcher"] = "in_progress"
                             analysis_info["agent_statuses"]["Bear Researcher"] = "in_progress"
                             analysis_info["agent_statuses"]["Research Manager"] = "in_progress"
+                            self._write_status_file(analysis_id)
                             _progress_log("Bull/Bear researchers & Research Manager started")
 
                 if "investment_debate_state" in chunk and chunk["investment_debate_state"]:
@@ -406,6 +467,7 @@ class AnalysisService:
                         analysis_info["agent_statuses"]["Bear Researcher"] = "completed"
                         analysis_info["agent_statuses"]["Research Manager"] = "completed"
                         analysis_info["agent_statuses"]["Trader"] = "in_progress"
+                        self._write_status_file(analysis_id)
                         _progress_log("Bull/Bear/Research Manager completed → Trader started")
                 
                 if "investment_plan" in chunk and chunk["investment_plan"]:
@@ -448,6 +510,7 @@ class AnalysisService:
                     analysis_info["agent_statuses"]["Risky Analyst"] = "in_progress"
                     analysis_info["agent_statuses"]["Safe Analyst"] = "in_progress"
                     analysis_info["agent_statuses"]["Neutral Analyst"] = "in_progress"
+                    self._write_status_file(analysis_id)
                     _progress_log("Trader completed → Risk debate (Risky/Safe/Neutral) started")
                 
                 if "risk_debate_state" in chunk and chunk["risk_debate_state"]:
@@ -459,10 +522,12 @@ class AnalysisService:
                         analysis_info["agent_statuses"]["Safe Analyst"] = "completed"
                         analysis_info["agent_statuses"]["Neutral Analyst"] = "completed"
                         analysis_info["agent_statuses"]["Portfolio Manager"] = "in_progress"
+                        self._write_status_file(analysis_id)
                         _progress_log("Risk analysts completed → Portfolio Manager started")
                 
                 if "final_trade_decision" in chunk and chunk["final_trade_decision"]:
                     analysis_info["agent_statuses"]["Portfolio Manager"] = "completed"
+                    self._write_status_file(analysis_id)
                     content = chunk["final_trade_decision"]
                     risky = chunk.get("risky_summary") or []
                     safe = chunk.get("safe_summary") or []
@@ -521,6 +586,7 @@ class AnalysisService:
             
             # Mark as completed
             analysis_info["status"] = "completed"
+            self._write_status_file(analysis_id)
             logger.info(
                 "Analysis completed analysis_id=%s ticker=%s run_id=%s reports=%s",
                 analysis_id, ticker, run_id, list(analysis_info.get("reports", {}).keys()),
@@ -530,6 +596,9 @@ class AnalysisService:
                 file=sys.stderr,
                 flush=True,
             )
+            
+            # Delete status file after completion (analysis is done)
+            self._delete_status_file(analysis_id)
 
             # Notify subscribed users and initiator by email (best-effort; do not fail analysis)
             try:
@@ -564,12 +633,31 @@ class AnalysisService:
             if analysis_info:
                 analysis_info["status"] = "error"
                 analysis_info["error"] = str(e)
+                self._write_status_file(analysis_id)
                 if analysis_info["progress_callback"]:
                     try:
                         analysis_info["progress_callback"]({"type": "error", "error": str(e)}, analysis_info)
                     except Exception:
                         pass
+                # Delete status file after error (analysis is done)
+                self._delete_status_file(analysis_id)
     
     def get_analysis_status(self, analysis_id: str) -> Optional[Dict]:
-        """Get current status of a running analysis."""
-        return self.running_analyses.get(analysis_id)
+        """Get current status of a running analysis from filesystem only (works across workers)."""
+        try:
+            for ticker_dir in self.results_dir.glob("*"):
+                if not ticker_dir.is_dir():
+                    continue
+                for run_dir in ticker_dir.glob("*"):
+                    if not run_dir.is_dir():
+                        continue
+                    status_file = run_dir / "status.json"
+                    if status_file.exists():
+                        with open(status_file, 'r') as f:
+                            data = json.load(f)
+                            if data.get("analysis_id") == analysis_id:
+                                return data
+        except Exception as e:
+            logger.warning(f"Error searching for status file {analysis_id}: {e}")
+        
+        return None

@@ -205,9 +205,12 @@ class MarketDataService:
                     if current is None or not _is_valid_price(current):
                         pass
                     else:
-                        prev = _safe_float(close_series.iloc[-2], default=current)
-                        daily_change = current - prev if prev is not None else 0.0
-                        daily_change_percent = (daily_change / prev * 100) if prev else 0.0
+                        prev = _safe_float(close_series.iloc[-2])
+                        if prev is None or not _is_valid_price(prev):
+                            # If previous close is invalid, use current as both (0% change)
+                            prev = current
+                        daily_change = current - prev
+                        daily_change_percent = (daily_change / prev * 100) if prev and prev > 0 else 0.0
                         results[t] = StockQuote(
                             ticker=t,
                             current_price=round(current, 2),
@@ -263,9 +266,14 @@ class MarketDataService:
                         current = _safe_float(close_series.iloc[-1])
                         if current is None or not _is_valid_price(current):
                             continue
-                        prev = _safe_float(close_series.iloc[-2], default=current) if len(close_series) >= 2 else current
-                        daily_change = current - prev if prev is not None else 0.0
-                        daily_change_percent = (daily_change / prev * 100) if prev else 0.0
+                        if len(close_series) >= 2:
+                            prev = _safe_float(close_series.iloc[-2])
+                            if prev is None or not _is_valid_price(prev):
+                                prev = current
+                        else:
+                            prev = current
+                        daily_change = current - prev
+                        daily_change_percent = (daily_change / prev * 100) if prev and prev > 0 else 0.0
                         vol = None
                         high = low = None
                         if isinstance(data.columns, pd.MultiIndex):
