@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import DashboardStockSidebar from '../components/DashboardStockSidebar';
 import StockDetailPanel from '../components/StockDetailPanel';
@@ -7,6 +7,8 @@ import { useSubscribedStocks } from '../hooks/useSubscribedStocks';
 import { useAuth } from '../contexts/AuthContext';
 import { COPILOT_NAME } from '../config';
 import type { StockPageData, StockWidget } from '../services/types';
+import { useChatState } from '../components/ChatView';
+import { profileApi } from '../services/authApi';
 
 export default function CopilotPage() {
   const { user } = useAuth();
@@ -16,6 +18,39 @@ export default function CopilotPage() {
   const isResizing = useRef(false);
   const startX = useRef(0);
   const startWidth = useRef(0);
+
+  const {
+    widgets,
+    tickerToName,
+    isLoading,
+    selectedTicker,
+    setSelectedTicker,
+    prefetchCache,
+    handleSubscriptionChange,
+    addTicker,
+    removeTicker,
+  } = useSubscribedStocks();
+
+  // All tickers in the user's watchlist — passed to the AI analyst for full context
+  const allTickers = widgets.map((w: StockWidget) => w.ticker);
+
+  // Build context object with all tickers so the AI knows the full watchlist
+  const context = useMemo(
+    () => (allTickers.length > 0 ? { tickers: allTickers } : undefined),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allTickers.join(',')],
+  );
+
+  // Lift chat state to parent component so it persists across tab switches in mobile mode
+  const chatState = useChatState(undefined, context);
+
+  // Fetch token balance when user logs in
+  useEffect(() => {
+    if (!user) { chatState.setTokenBalance(null); return; }
+    profileApi.getMe().then((me) => {
+      chatState.setTokenBalance(me.token_balance);
+    }).catch(() => {});
+  }, [user, chatState]);
 
   const onResizeStart = useCallback((e: React.MouseEvent) => {
     isResizing.current = true;
@@ -42,21 +77,6 @@ export default function CopilotPage() {
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
   }, [chatWidth]);
-
-  const {
-    widgets,
-    tickerToName,
-    isLoading,
-    selectedTicker,
-    setSelectedTicker,
-    prefetchCache,
-    handleSubscriptionChange,
-    addTicker,
-    removeTicker,
-  } = useSubscribedStocks();
-
-  // All tickers in the user's watchlist — passed to the AI analyst for full context
-  const allTickers = widgets.map((w: StockWidget) => w.ticker);
 
   // ── Not logged in ──
   if (!user) {
@@ -192,6 +212,7 @@ export default function CopilotPage() {
               tickers={allTickers}
               collapsed={chatCollapsed}
               onToggleCollapse={() => setChatCollapsed((c) => !c)}
+              chatState={chatState}
             />
           </div>
         </div>
@@ -234,6 +255,7 @@ export default function CopilotPage() {
             tickers={allTickers}
             prefetchCache={prefetchCache}
             onSubscriptionChange={handleSubscriptionChange}
+            chatState={chatState}
           />
         </div>
       </div>
@@ -247,11 +269,13 @@ function MobileStockChatTabs({
   tickers,
   prefetchCache,
   onSubscriptionChange,
+  chatState,
 }: {
   selectedTicker: string | null;
   tickers: string[];
   prefetchCache: Record<string, StockPageData>;
   onSubscriptionChange: () => void;
+  chatState: ReturnType<typeof useChatState>;
 }) {
   const [activeTab, setActiveTab] = useState<'stock' | 'chat'>('stock');
 
@@ -303,7 +327,11 @@ function MobileStockChatTabs({
         )}
         {activeTab === 'chat' && (
           <div className="h-full">
-            <CopilotChatPanel selectedTicker={selectedTicker} tickers={tickers} />
+            <CopilotChatPanel
+              selectedTicker={selectedTicker}
+              tickers={tickers}
+              chatState={chatState}
+            />
           </div>
         )}
       </div>

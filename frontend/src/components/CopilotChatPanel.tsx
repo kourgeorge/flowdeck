@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import ChatView, { useChatState } from './ChatView';
+import ChatView, { useChatState, type UseChatStateReturn } from './ChatView';
 import { useAuth } from '../contexts/AuthContext';
 import { profileApi } from '../services/authApi';
 import { COPILOT_NAME } from '../config';
@@ -48,6 +48,8 @@ export interface CopilotChatPanelProps {
   onToggleCollapse?: () => void;
   /** Display name shown in the panel header and collapsed strip. Defaults to COPILOT_NAME. */
   title?: string;
+  /** Optional external chat state for persistence across component unmounts */
+  chatState?: UseChatStateReturn;
 }
 
 export default function CopilotChatPanel({
@@ -56,6 +58,7 @@ export default function CopilotChatPanel({
   collapsed = false,
   onToggleCollapse,
   title,
+  chatState: externalChatState,
 }: CopilotChatPanelProps) {
   const panelTitle = title ?? COPILOT_NAME;
   const { user } = useAuth();
@@ -65,7 +68,8 @@ export default function CopilotChatPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [tickers.join(',')],
   );
-  const chat = useChatState(undefined, context);
+  const internalChat = useChatState(undefined, context);
+  const chat = externalChatState ?? internalChat;
 
   // Fetch token balance when user logs in
   useEffect(() => {
