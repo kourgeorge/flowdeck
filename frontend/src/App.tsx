@@ -2,8 +2,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import HomePage from './pages/HomePage';
-import HowItWorksPage from './pages/HowItWorksPage';
-import ArchitecturePage from './pages/ArchitecturePage';
 import ProfilePage from './pages/ProfilePage';
 import StockPage from './pages/StockPage';
 import TermsOfUsePage from './pages/TermsOfUsePage';
@@ -14,8 +12,6 @@ import PaymentSuccessPage from './pages/PaymentSuccessPage';
 import PaymentCancelPage from './pages/PaymentCancelPage';
 import ChatPage from './pages/ChatPage';
 import CopilotPage from './pages/CopilotPage';
-import TpsPage from './pages/TpsPage';
-import ApiDocsPage from './pages/ApiDocsPage';
 import DocsPage from './pages/DocsPage';
 
 function App() {
