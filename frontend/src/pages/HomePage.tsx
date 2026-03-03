@@ -432,6 +432,100 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* SECTION 3c: API ACCESS */}
+      <section className="px-4 py-12 sm:py-16 bg-gray-900 border-t border-gray-700">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+            {/* Left: Code example */}
+            <div className="rounded-2xl border border-emerald-700/50 bg-emerald-950/20 overflow-hidden shadow-2xl order-2 lg:order-1">
+              {/* Window chrome */}
+              <div className="flex items-center justify-between px-4 py-2.5 bg-emerald-900/30 border-b border-emerald-700/40">
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                  </svg>
+                  <span className="text-xs font-semibold uppercase tracking-widest text-emerald-300">API Example</span>
+                </div>
+                <span className="text-xs text-emerald-500 font-mono">Python</span>
+              </div>
+              {/* Code body */}
+              <div className="p-4 font-mono text-xs leading-relaxed">
+                <pre className="bg-slate-900/80 rounded-lg p-4 overflow-x-auto whitespace-pre text-left">
+                  <span className="text-purple-400">import</span> <span className="text-white">requests</span>{'\n\n'}
+                  <span className="text-slate-400"># Your API key from Profile page</span>{'\n'}
+                  <span className="text-sky-300">API_KEY</span> <span className="text-slate-400">=</span> <span className="text-amber-300">"fd_live_your_key_here"</span>{'\n'}
+                  <span className="text-sky-300">BASE_URL</span> <span className="text-slate-400">=</span> <span className="text-amber-300">"https://flowdeck.biz"</span>{'\n\n'}
+                  <span className="text-sky-300">headers</span> <span className="text-slate-400">=</span> {'{'}{'\n'}
+                  <span className="text-slate-400">    </span><span className="text-amber-300">"Authorization"</span><span className="text-slate-400">:</span> <span className="text-green-300">f</span><span className="text-amber-300">"Bearer </span>{'{'}<span className="text-sky-300">API_KEY</span>{'}'}<span className="text-amber-300">"</span>{'\n'}
+                  <span className="text-slate-400">{'}'}</span>{'\n\n'}
+                  <span className="text-slate-400"># Get AI analysis report</span>{'\n'}
+                  <span className="text-sky-300">response</span> <span className="text-slate-400">=</span> <span className="text-white">requests</span><span className="text-slate-400">.</span><span className="text-green-300">get</span><span className="text-slate-400">(</span>{'\n'}
+                  <span className="text-slate-400">    </span><span className="text-green-300">f</span><span className="text-amber-300">"</span>{'{'}<span className="text-sky-300">BASE_URL</span>{'}'}<span className="text-amber-300">/api/data/reports/AAPL"</span><span className="text-slate-400">,</span>{'\n'}
+                  <span className="text-slate-400">    </span><span className="text-sky-300">headers</span><span className="text-slate-400">=</span><span className="text-sky-300">headers</span>{'\n'}
+                  <span className="text-slate-400">)</span>{'\n\n'}
+                  <span className="text-sky-300">report</span> <span className="text-slate-400">=</span> <span className="text-sky-300">response</span><span className="text-slate-400">.</span><span className="text-green-300">json</span><span className="text-slate-400">()</span>{'\n'}
+                  <span className="text-purple-400">print</span><span className="text-slate-400">(</span><span className="text-sky-300">report</span><span className="text-slate-400">[</span><span className="text-amber-300">'reports'</span><span className="text-slate-400">][</span><span className="text-amber-300">'final_trade_decision'</span><span className="text-slate-400">])</span>
+                </pre>
+              </div>
+            </div>
+
+            {/* Right: copy */}
+            <div className="order-1 lg:order-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-900/40 border border-emerald-700/50 mb-5">
+                <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span className="text-emerald-300 text-xs font-semibold uppercase tracking-wider">Programmatic API Access</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4 leading-tight">
+                Integrate FlowDeck<br />
+                <span className="text-emerald-400">Into Your Trading Systems</span>
+              </h2>
+              <p className="text-gray-400 text-base leading-relaxed mb-6">
+                Access FlowDeck's AI-powered analysis programmatically with our REST API. Perfect for algorithmic trading systems, portfolio management tools, and custom integrations.
+              </p>
+              <ul className="space-y-3 mb-8">
+                {[
+                  { icon: '🔑', text: 'Secure API keys with optional expiration — never expire by default' },
+                  { icon: '📊', text: 'Access all AI reports, recommendations, and TPS trade plans via REST endpoints' },
+                  { icon: '💬', text: 'Chat with the AI analyst programmatically — get answers to any trading question' },
+                  { icon: '📈', text: 'Fetch real-time quotes, fundamentals, and news for any stock' },
+                  { icon: '🔄', text: 'Batch requests for multiple tickers in a single API call' },
+                  { icon: '🐍', text: 'Python, JavaScript, cURL examples — easy integration in any language' },
+                  { icon: '⚡', text: 'Same token economy — use your existing token balance' },
+                ].map(({ icon, text }) => (
+                  <li key={text} className="flex items-start gap-3">
+                    <span className="text-lg leading-none mt-0.5">{icon}</span>
+                    <span className="text-gray-300 text-sm leading-relaxed">{text}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="flex flex-wrap gap-3">
+                <Link
+                  to="/api-docs"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-semibold transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  View API Documentation
+                </Link>
+                <Link
+                  to={user ? '/profile#api-keys' : '#'}
+                  onClick={!user ? () => setShowAuthModal(true) : undefined}
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                  Create API Key
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* SECTION 4: PLATFORM OVERVIEW (How It Works + Features) */}
       <section className="px-4 py-12 sm:py-16 bg-gray-900 border-t border-gray-700">
         <div className="max-w-6xl mx-auto">
@@ -485,6 +579,14 @@ export default function HomePage() {
               <h4 className="text-lg font-semibold text-white mb-2">{COPILOT_NAME} — A Powerful Trading Assistant</h4>
               <p className="text-gray-400 text-sm">
                 {COPILOT_NAME} can <strong className="text-white">search the live web</strong> for breaking news and analyst updates, <strong className="text-white">write and execute Python code</strong> for financial modelling and statistical analysis, and <strong className="text-white">generate interactive charts</strong> — line, bar, area, and scatter — rendered directly in the chat. All of FlowDeck's proprietary reports are accessible in the same conversation.
+              </p>
+            </div>
+            <div className="bg-emerald-900/20 border border-emerald-700/50 rounded-xl p-6">
+              <h4 className="text-lg font-semibold text-white mb-2">
+                <Link to="/api-docs" className="hover:text-emerald-300 transition-colors">REST API — Programmatic Access</Link>
+              </h4>
+              <p className="text-gray-400 text-sm">
+                Integrate FlowDeck into your trading systems with our <strong className="text-white">REST API</strong>. Create secure API keys, access all AI reports and recommendations programmatically, chat with the AI analyst via API, and fetch real-time market data. Perfect for algorithmic trading, portfolio management tools, and custom integrations.
               </p>
             </div>
           </div>
