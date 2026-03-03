@@ -1,14 +1,20 @@
 ---
 name: flowdeck
 version: 1.0.0
-description: Stock dashboard and AI analysis API for agents. Fetch market data, run AI stock analyses, manage subscriptions, and track token balance.
-homepage: https://github.com/your-org/flowdeck
-metadata: {"emoji":"📊","category":"trading","api_base":"http://localhost:8002"}
+description: AI-powered stock analysis platform with multi-agent analysis, conversational AI analyst, market data API, and token-based economy for agents.
+homepage: https://flowdeck.biz
+metadata: {"emoji":"📊","category":"trading","api_base":"https://flowdeck.biz"}
 ---
 
 # Flowdeck
 
-Stock dashboard API for AI agents. Fetch quotes, fundamentals, news, and SEC data; start AI-powered stock analyses (BUY/SELL/HOLD); manage ticker subscriptions; and use a token economy for report creation.
+AI-powered stock analysis platform for agents. Features include:
+- **Multi-agent AI analysis** (BUY/SELL/HOLD recommendations)
+- **Conversational AI Analyst** (chat with streaming responses)
+- **Comprehensive market data** (quotes, fundamentals, news, SEC filings, technical indicators)
+- **Trader Copilot** workspace (watchlist + stock detail + AI chat)
+- **Token economy** (1000 free tokens on signup; 200 tokens per analysis, variable cost for chat)
+- **API key management** for programmatic access
 
 ## Skill file
 
@@ -16,7 +22,7 @@ Stock dashboard API for AI agents. Fetch quotes, fundamentals, news, and SEC dat
 |------|-------------|
 | **SKILL.md** (this file) | API guide for agents interacting with Flowdeck |
 
-**Base URL:** `http://localhost:8002` (or set `FLOWDECK_API_URL` / your deployment URL for production)
+**Base URL:** `https://flowdeck.biz`
 
 **Check for updates:** Re-fetch this file to see new endpoints or behavior.
 
@@ -28,10 +34,11 @@ Stock dashboard API for AI agents. Fetch quotes, fundamentals, news, and SEC dat
 
 ## Quick start
 
-1. **Register or login** → get a JWT `access_token`.
+1. **Register or login** → get a JWT `access_token` or create an API key for programmatic access.
 2. **Use public endpoints** (no auth) for market data: quote, company, news, fundamentals, etc.
-3. **Use authenticated endpoints** with `Authorization: Bearer <access_token>` for profile, subscriptions, and starting analyses.
+3. **Use authenticated endpoints** with `Authorization: Bearer <access_token>` for profile, subscriptions, chat, and starting analyses.
 4. **Start an analysis** (costs 200 tokens) → poll status until complete → initiator is emailed when the report is ready.
+5. **Chat with AI Analyst** (variable token cost based on tool usage) → get streaming or non-streaming responses with live market data access.
 
 ---
 
@@ -40,7 +47,7 @@ Stock dashboard API for AI agents. Fetch quotes, fundamentals, news, and SEC dat
 ### Register
 
 ```bash
-curl -X POST http://localhost:8002/api/auth/register \
+curl -X POST https://flowdeck.biz/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email": "agent@example.com", "password": "your-secure-password"}'
 ```
@@ -60,7 +67,7 @@ New users receive **1000 tokens** for running analyses.
 ### Login
 
 ```bash
-curl -X POST http://localhost:8002/api/auth/login \
+curl -X POST https://flowdeck.biz/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email": "agent@example.com", "password": "your-secure-password"}'
 ```
@@ -72,7 +79,7 @@ Same response shape: `access_token`, `token_type`, `user_id`, `email`.
 **Recommended:** Store the token in environment variable `FLOWDECK_ACCESS_TOKEN` or in your secrets store. Use it in all authenticated requests:
 
 ```bash
-curl http://localhost:8002/api/me \
+curl https://flowdeck.biz/api/me \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -130,10 +137,10 @@ All under `/api/data/`. No auth required.
 Example:
 
 ```bash
-curl "http://localhost:8002/api/data/quote/AAPL"
-curl "http://localhost:8002/api/data/company/AAPL"
-curl "http://localhost:8002/api/data/news?ticker=AAPL&lookback_days=7"
-curl "http://localhost:8002/api/data/historical/AAPL?period=1y&interval=1d"
+curl "https://flowdeck.biz/api/data/quote/AAPL"
+curl "https://flowdeck.biz/api/data/company/AAPL"
+curl "https://flowdeck.biz/api/data/news?ticker=AAPL&lookback_days=7"
+curl "https://flowdeck.biz/api/data/historical/AAPL?period=1y&interval=1d"
 ```
 
 ---
@@ -188,6 +195,67 @@ Unsubscribe:
 ```bash
 DELETE /api/subscriptions/AAPL
 ```
+
+---
+
+## Chat with AI Analyst (authenticated, costs tokens)
+
+Flowdeck provides a conversational AI analyst agent with live access to market data, fundamentals, news, technical indicators, and your reports.
+
+### Chat (non-streaming)
+
+```bash
+POST /api/chat
+Authorization: Bearer YOUR_ACCESS_TOKEN
+Content-Type: application/json
+
+{
+  "messages": [
+    {"role": "user", "content": "What are the key risks for NVDA?"}
+  ],
+  "context": {
+    "tickers": ["NVDA"]
+  }
+}
+```
+
+Response:
+```json
+{
+  "reply": "Based on current data...",
+  "tokens_used": 5,
+  "balance": 995
+}
+```
+
+### Chat (streaming)
+
+```bash
+POST /api/chat/stream
+Authorization: Bearer YOUR_ACCESS_TOKEN
+Content-Type: application/json
+
+{
+  "messages": [
+    {"role": "user", "content": "Compare AAPL and MSFT fundamentals"}
+  ],
+  "context": {
+    "tickers": ["AAPL", "MSFT"]
+  }
+}
+```
+
+Returns Server-Sent Events (SSE) stream with:
+- `data: {"type": "token", "content": "..."}` - streaming response tokens
+- `data: {"type": "tool_start", "tool": "get_quote", "args": {...}}` - tool execution start
+- `data: {"type": "tool_end", "tool": "get_quote", "result": {...}}` - tool execution result
+- `data: {"type": "done", "tokens_used": 8, "balance": 992}` - final message
+
+**Token cost**: Variable based on agent trajectory (tool calls + LLM steps). Minimum 1 token per message. Returns **402** if insufficient balance.
+
+**Context**: Optional `context` object can include:
+- `tickers`: Array of ticker symbols for context-aware responses
+- Other metadata as needed
 
 ---
 
@@ -259,11 +327,67 @@ Connect after starting the analysis to receive progress updates.
 
 ---
 
+## API key management (authenticated)
+
+For programmatic access, you can create API keys instead of using JWT tokens.
+
+### Create API key
+
+```bash
+POST /api/api-keys
+Authorization: Bearer YOUR_ACCESS_TOKEN
+Content-Type: application/json
+
+{
+  "name": "My Agent Key",
+  "expires_at": "2026-12-31T23:59:59Z"
+}
+```
+
+Response (key shown only once):
+```json
+{
+  "id": 1,
+  "name": "My Agent Key",
+  "key": "fdk_1234567890abcdef...",
+  "key_prefix": "fdk_123",
+  "is_active": true,
+  "created_at": "2026-03-03T20:00:00Z",
+  "expires_at": "2026-12-31T23:59:59Z",
+  "warning": "Save this key now - it won't be shown again!"
+}
+```
+
+### List API keys
+
+```bash
+GET /api/api-keys
+Authorization: Bearer YOUR_ACCESS_TOKEN
+```
+
+### Revoke API key
+
+```bash
+DELETE /api/api-keys/{key_id}
+Authorization: Bearer YOUR_ACCESS_TOKEN
+```
+
+### Use API key
+
+Include in requests as:
+```bash
+curl https://flowdeck.biz/api/me \
+  -H "X-API-Key: fdk_1234567890abcdef..."
+```
+
+---
+
 ## Token economy
 
 - **Registration:** New users get **1000 tokens**.
 - **Start analysis:** **200 tokens** are deducted per run. If the same analysis (ticker + date) is already running, you get its `analysis_id` and tokens are not deducted again.
-- **Insufficient balance:** `POST /api/analyses/start` returns **402** with message about needing 200 tokens.
+- **Chat:** Variable cost based on agent trajectory (tool calls + LLM steps). Minimum **1 token** per message. Typical range: 1-20 tokens per chat turn depending on complexity.
+- **Insufficient balance:** Returns **402** with message about insufficient tokens.
 - **Top-up:** Admin-only endpoint (e.g. `POST /api/tokens/top-up` with `{"amount": N}`). Agents typically rely on initial balance or human top-up.
 
 Check balance via `GET /api/me` → `token_balance`.
@@ -285,6 +409,11 @@ Check balance via `GET /api/me` → `token_balance`.
 | GET | `/api/subscriptions` | Yes | List subscriptions |
 | POST | `/api/subscriptions` | Yes | Subscribe to ticker |
 | DELETE | `/api/subscriptions/{ticker}` | Yes | Unsubscribe |
+| POST | `/api/chat` | Yes | Chat with AI analyst (variable tokens) |
+| POST | `/api/chat/stream` | Yes | Chat with streaming (variable tokens) |
+| POST | `/api/api-keys` | Yes | Create API key |
+| GET | `/api/api-keys` | Yes | List API keys |
+| DELETE | `/api/api-keys/{key_id}` | Yes | Revoke API key |
 | POST | `/api/analyses/start` | Yes | Start AI analysis (200 tokens) |
 | GET | `/api/analyses/{analysis_id}/status` | No | Analysis status |
 
@@ -295,12 +424,15 @@ Check balance via `GET /api/me` → `token_balance`.
 | Action | Endpoint / flow |
 |--------|------------------|
 | **Register / login** | `POST /api/auth/register` or `/api/auth/login` |
+| **Create API key** | `POST /api/api-keys` (for programmatic access) |
 | **Get market data** | `GET /api/data/quote/{ticker}`, `/company`, `/news`, `/fundamentals`, `/historical`, etc. |
 | **Get stock page** | `GET /api/tickers/{ticker}` (optional auth for view tracking) |
 | **Check token balance** | `GET /api/me` → `token_balance` |
+| **Chat with AI analyst** | `POST /api/chat` or `/api/chat/stream` (variable tokens) |
 | **Start AI analysis** | `POST /api/analyses/start` (200 tokens); poll `GET /api/analyses/{id}/status` |
 | **Manage watchlist** | `GET/POST/DELETE /api/subscriptions` |
 | **Update profile** | `PATCH /api/me` (name, password) |
+| **Manage API keys** | `GET/POST/DELETE /api/api-keys` |
 
 ---
 
@@ -308,19 +440,19 @@ Check balance via `GET /api/me` → `token_balance`.
 
 ```bash
 # 1. Register (or login)
-TOKEN=$(curl -s -X POST http://localhost:8002/api/auth/register \
+TOKEN=$(curl -s -X POST https://flowdeck.biz/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email":"bot@example.com","password":"secure123"}' | jq -r '.access_token')
 
 # 2. Check balance
-curl -s http://localhost:8002/api/me -H "Authorization: Bearer $TOKEN" | jq '.token_balance'
+curl -s https://flowdeck.biz/api/me -H "Authorization: Bearer $TOKEN" | jq '.token_balance'
 
 # 3. Get quote and company (no auth)
-curl -s "http://localhost:8002/api/data/quote/AAPL"
-curl -s "http://localhost:8002/api/data/company/AAPL"
+curl -s "https://flowdeck.biz/api/data/quote/AAPL"
+curl -s "https://flowdeck.biz/api/data/company/AAPL"
 
 # 4. Start analysis (uses 200 tokens)
-RESULT=$(curl -s -X POST http://localhost:8002/api/analyses/start \
+RESULT=$(curl -s -X POST https://flowdeck.biz/api/analyses/start \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"ticker":"AAPL"}')
@@ -329,7 +461,7 @@ ANALYSIS_ID=$(echo $RESULT | jq -r '.analysis_id')
 
 # 5. Poll status until done
 while true; do
-  STATUS=$(curl -s "http://localhost:8002/api/analyses/$ANALYSIS_ID/status")
+  STATUS=$(curl -s "https://flowdeck.biz/api/analyses/$ANALYSIS_ID/status")
   echo "$STATUS" | jq .
   if echo "$STATUS" | jq -e '.status == "completed" or .status == "failed"' >/dev/null 2>&1; then break; fi
   sleep 10
@@ -340,7 +472,11 @@ done
 
 ## Tips for agents
 
-- Use **public data endpoints** (`/api/data/*`) for all market research; use authenticated endpoints for identity, subscriptions, and starting analyses.
-- **Check `token_balance`** before starting an analysis to avoid 402.
+- Use **public data endpoints** (`/api/data/*`) for all market research; use authenticated endpoints for identity, subscriptions, chat, and starting analyses.
+- **Check `token_balance`** before starting an analysis or chat to avoid 402.
 - **Reuse `analysis_id`**: if you get `existing: true`, poll that same `analysis_id` instead of starting a new run.
-- Store the JWT securely and only send it to your Flowdeck API base URL.
+- **Use streaming chat** (`/api/chat/stream`) for real-time responses and tool visibility.
+- **Create API keys** for long-running agents instead of managing JWT refresh.
+- **Provide context** in chat requests (e.g. `{"tickers": ["AAPL"]}`) for better responses.
+- Store credentials securely and only send them to your Flowdeck API base URL.
+- **Monitor token usage**: Chat responses include `tokens_used` and updated `balance`.
