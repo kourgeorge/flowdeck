@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { APP_NAME, LOGO_PATH, COPILOT_NAME } from '../config';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
