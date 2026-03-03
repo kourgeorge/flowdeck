@@ -9,6 +9,7 @@ logging.getLogger("services.analysis_service").setLevel(logging.INFO)
 logging.getLogger("services.report_service").setLevel(logging.INFO)
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Request, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timezone
@@ -434,6 +435,27 @@ async def root():
 async def health():
     """Health check endpoint."""
     return {"status": "healthy", "service": "tradingagents-api"}
+
+
+@app.get("/SKILL.md")
+async def get_skill_md():
+    """Serve the SKILL.md file for AI agents."""
+    from fastapi.responses import Response
+    
+    skill_path = Path(__file__).parent / "SKILL.md"
+    try:
+        with open(skill_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return Response(
+            content=content,
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": 'inline; filename="SKILL.md"',
+                "Cache-Control": "public, max-age=3600"
+            }
+        )
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="SKILL.md not found")
 
 
 class PublicConfigResponse(BaseModel):
