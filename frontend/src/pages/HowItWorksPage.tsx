@@ -4,14 +4,7 @@ import { COPILOT_NAME } from '../config';
 export default function HowItWorksPage() {
   return (
     <div className="min-h-screen p-8">
-      <div className="max-w-5xl mx-auto text-gray-300">
-        <Link
-          to="/"
-          className="inline-flex items-center text-sm text-gray-400 hover:text-white transition-colors mb-8"
-        >
-          ← Back to Flowdeck
-        </Link>
-
+      <div className="text-gray-300">
         <h1 className="text-3xl font-bold text-white mb-2">How Flowdeck Works</h1>
         <p className="text-gray-500 text-sm mb-10">
           How we use AI to produce insights and recommendations you see on your stock pages — and how {COPILOT_NAME} (your Trading Copilot) and the AI Analyst Agent help you dig deeper.
@@ -149,12 +142,6 @@ export default function HowItWorksPage() {
         </div>
 
         <div className="mt-12 pt-8 border-t border-gray-700 flex flex-wrap gap-6">
-          <Link
-            to="/"
-            className="inline-flex items-center text-sm text-gray-400 hover:text-white transition-colors"
-          >
-            ← Back to Flowdeck
-          </Link>
           <Link
             to="/copilot"
             className="inline-flex items-center text-sm text-gray-400 hover:text-white transition-colors"

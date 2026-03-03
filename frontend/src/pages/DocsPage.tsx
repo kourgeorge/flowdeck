@@ -32,14 +32,7 @@ export default function DocsPage() {
 
   return (
     <div className="min-h-screen px-4 py-6 sm:p-6 lg:p-8">
-      <div className="max-w-6xl mx-auto">
-        <Link
-          to="/"
-          className="inline-flex items-center text-sm text-gray-400 hover:text-white transition-colors mb-6"
-        >
-          ← Back to Flowdeck
-        </Link>
-
+      <div className="w-full">
         <h1 className="text-3xl font-bold text-white mb-2">FlowDeck Documentation</h1>
         <p className="text-gray-400 mb-8">
           Complete guide to understanding and using FlowDeck's AI-powered stock analysis platform.

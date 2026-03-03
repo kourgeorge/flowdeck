@@ -31,14 +31,7 @@ export default function ApiDocsPage() {
 
   return (
     <div className="min-h-screen px-4 py-6 sm:p-6 lg:p-8">
-      <div className="max-w-4xl mx-auto">
-        <Link
-          to="/"
-          className="inline-flex items-center text-sm text-gray-400 hover:text-white transition-colors mb-8"
-        >
-          ← Back to Flowdeck
-        </Link>
-
+      <div>
         <h1 className="text-3xl font-bold text-white mb-4">FlowDeck API Documentation</h1>
         <p className="text-gray-400 mb-8">
           Access FlowDeck's AI-powered stock analysis programmatically using our REST API.

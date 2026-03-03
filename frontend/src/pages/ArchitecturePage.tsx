@@ -495,22 +495,7 @@ function AgentContractCard({ agent }: { agent: AgentContract }) {
 export default function ArchitecturePage() {
   return (
     <div className="min-h-screen px-4 py-6 sm:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto text-gray-300">
-        <div className="mb-6 flex flex-wrap items-center gap-3">
-          <Link
-            to="/"
-            className="inline-flex items-center rounded-md border border-gray-600 px-3 py-1.5 text-sm text-gray-300 hover:text-white hover:border-gray-400 transition-colors"
-          >
-            Back Home
-          </Link>
-          <Link
-            to="/how-it-works"
-            className="inline-flex items-center rounded-md border border-gray-600 px-3 py-1.5 text-sm text-gray-300 hover:text-white hover:border-gray-400 transition-colors"
-          >
-            How It Works
-          </Link>
-        </div>
-
+      <div className="text-gray-300">
         <section className="rounded-2xl border border-gray-700 bg-gradient-to-b from-gray-800/80 to-gray-900/90 p-6 md:p-8">
           <p className="text-xs uppercase tracking-[0.2em] text-blue-300">TradingAgents Graph</p>
           <h1 className="mt-2 text-3xl md:text-4xl font-bold text-white">Architecture Blueprint</h1>

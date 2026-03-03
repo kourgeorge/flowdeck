@@ -151,14 +151,7 @@ function JsonLine({ line }: { line: string }) {
 export default function TpsPage() {
   return (
     <div className="min-h-screen p-8">
-      <div className="max-w-5xl mx-auto text-gray-300">
-        <Link
-          to="/how-it-works"
-          className="inline-flex items-center text-sm text-gray-400 hover:text-white transition-colors mb-8"
-        >
-          ← Back to How It Works
-        </Link>
-
+      <div className="text-gray-300">
         <div className="flex items-center gap-3 mb-2">
           <span className="text-xs font-semibold uppercase tracking-widest text-indigo-400 bg-indigo-900/40 border border-indigo-700/50 rounded px-2 py-0.5">
             TPS v0.1
