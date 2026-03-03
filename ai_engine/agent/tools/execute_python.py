@@ -3,7 +3,7 @@ ExecutePythonTool — run Python code in a sandboxed subprocess.
 
 Safety measures (identical to the original chat_service implementation):
   1. Static pattern scan — blocks dangerous imports/builtins before execution.
-  2. Code length cap — rejects snippets over 4 KB.
+  2. Code length cap — rejects snippets over 16 KB.
   3. subprocess with shell=False — no shell injection.
   4. Stripped environment — no credentials or PATH tricks.
   5. Isolated /tmp working directory.
@@ -59,7 +59,12 @@ _EXECUTE_PYTHON_SPEC = ToolSpec(
         "Allowed modules: math, statistics, random, collections, itertools, functools, datetime, "
         "json, csv, decimal, fractions, re, string, numpy, pandas, scipy. "
         "NOT allowed: file I/O, network access, os/sys/subprocess, pickle, threading, or any "
-        "module not in the allowlist. Keep code under 4 KB. Use print() to produce output."
+        "module not in the allowlist. Keep code under 16 KB. Use print() to produce output. "
+        "When working with data from get_multi_historical_prices, parse the JSON using the json module. "
+        "To produce a chart, print a line starting with CHART_JSON: followed by the chart spec JSON. "
+        "IMPORTANT: When creating charts, ALWAYS adapt the Y-axis by calculating appropriate min/max "
+        "values from the data and including yAxisConfig in the chart spec (e.g., add 5-10% padding "
+        "above/below the data range for visual clarity)."
     ),
     input_schema={
         "type": "object",
@@ -102,7 +107,7 @@ def _run_sandboxed(code: str) -> str:
     import os as _os
 
     # 1. Length cap
-    MAX_CODE_BYTES = 4096
+    MAX_CODE_BYTES = 16384
     if len(code.encode()) > MAX_CODE_BYTES:
         return (
             f"Error: code exceeds the {MAX_CODE_BYTES}-byte limit "
@@ -139,6 +144,21 @@ def _run_sandboxed(code: str) -> str:
         }}
 
         import builtins as _builtins_mod
+        _real_open = _builtins_mod.open
+        
+        # Mock open to prevent pandas from accessing macOS system files
+        def _safe_open(file, *args, **kwargs):
+            file_str = str(file)
+            # Block access to macOS system files that pandas tries to read
+            if '/System/Library/CoreServices/SystemVersion.plist' in file_str:
+                raise PermissionError(f"Access to system files is not allowed: {{file_str}}")
+            # Block any absolute paths outside /tmp
+            if file_str.startswith('/') and not file_str.startswith('/tmp'):
+                raise PermissionError(f"Access to files outside /tmp is not allowed: {{file_str}}")
+            return _real_open(file, *args, **kwargs)
+        
+        _builtins_mod.open = _safe_open
+        
         _real_import = _builtins_mod.__import__
         def _safe_import(name, *args, **kwargs):
             top = name.split('.')[0]
@@ -166,7 +186,7 @@ def _run_sandboxed(code: str) -> str:
             }}
         }}
         _SAFE_BUILTINS['__import__'] = _safe_import
-        _builtins_mod.open = None
+        _SAFE_BUILTINS['open'] = None
 
         _user_code = {repr(code)}
         exec(compile(_user_code, '<sandbox>', 'exec'), {{'__builtins__': _SAFE_BUILTINS}})
@@ -188,6 +208,9 @@ def _run_sandboxed(code: str) -> str:
         "PYTHONPATH": "",
         "PYTHONDONTWRITEBYTECODE": "1",
         "PYTHONIOENCODING": "utf-8",
+        # Prevent pandas from accessing macOS system files
+        "_PYTHON_HOST_PLATFORM": "linux-x86_64",
+        "SYSTEM_VERSION_COMPAT": "0",
     }
 
     # 6. Execute
