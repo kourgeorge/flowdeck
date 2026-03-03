@@ -224,7 +224,7 @@ export default function CopilotPage() {
             <button
               type="button"
               onClick={() => setSidebarCollapsed((c) => !c)}
-              className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-gray-700/50 transition-colors"
+              className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-gray-300 hover:text-white bg-blue-900/20 hover:bg-blue-800/30 transition-colors"
             >
               <span className="font-medium">Focus Tickers</span>
               <svg
