@@ -437,7 +437,7 @@ async def health():
     return {"status": "healthy", "service": "tradingagents-api"}
 
 
-@app.get("/SKILL.md")
+@app.get("/api/SKILL.md")
 async def get_skill_md():
     """Serve the SKILL.md file for AI agents."""
     from fastapi.responses import Response

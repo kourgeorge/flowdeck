@@ -591,7 +591,7 @@ export default function HomePage() {
             </div>
             <div className="bg-purple-900/20 border border-purple-700/50 rounded-xl p-6">
               <h4 className="text-lg font-semibold text-white mb-2">
-                <a href="https://flowdeck.biz/SKILL.md" target="_blank" rel="noopener noreferrer" className="hover:text-purple-300 transition-colors inline-flex items-center gap-1">
+                <a href="https://flowdeck.biz/api/SKILL.md" target="_blank" rel="noopener noreferrer" className="hover:text-purple-300 transition-colors inline-flex items-center gap-1">
                   SKILL.md — Autonomous Agent Integration
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -599,7 +599,7 @@ export default function HomePage() {
                 </a>
               </h4>
               <p className="text-gray-400 text-sm">
-                A comprehensive API guide for AI agents to autonomously interact with FlowDeck. Agents can register, fetch market data, chat with the AI analyst, and start analyses — all without human intervention. <a href="https://flowdeck.biz/SKILL.md" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 underline">View SKILL.md →</a>
+                A comprehensive API guide for AI agents to autonomously interact with FlowDeck. Agents can register, fetch market data, chat with the AI analyst, and start analyses — all without human intervention. <a href="https://flowdeck.biz/api/SKILL.md" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 underline">View SKILL.md →</a>
               </p>
             </div>
           </div>
