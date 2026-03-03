@@ -165,7 +165,7 @@ export default function DashboardTopTiles({
   onSelectTicker,
 }: DashboardTopTilesProps) {
   const navigate = useNavigate();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const toggleCollapsed = useCallback(() => setCollapsed((c) => !c), []);
 
   const subscribedTickers = new Set(subscribedWidgets.map((w) => w.ticker));
