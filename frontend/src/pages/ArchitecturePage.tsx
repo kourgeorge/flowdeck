@@ -1,5 +1,3 @@
-import { Link } from 'react-router-dom';
-
 type AgentKind = 'Analyst' | 'Researcher' | 'Manager' | 'Trader' | 'Risk Analyst';
 
 type AgentContract = {
