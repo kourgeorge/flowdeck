@@ -357,7 +357,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   // END EXPERIMENTAL
 
   useEffect(() => { if (activeTab === 'news' && ticker && !isLoadingNews) fetchNews(); }, [activeTab, ticker, fetchNews]);
-  useEffect(() => { if (activeTab === 'news' && ticker && !isLoadingInsiderTransactions) fetchInsiderTransactions(); }, [activeTab, ticker, fetchInsiderTransactions]);
+  useEffect(() => { if (activeTab === 'insider-transactions' && ticker && !isLoadingInsiderTransactions) fetchInsiderTransactions(); }, [activeTab, ticker, fetchInsiderTransactions]);
 
   useEffect(() => {
     if (activeTab !== 'sec-filings' || !ticker) return;
@@ -489,6 +489,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                   { id: 'overview', label: 'Overview' },
                   ...(hasFundamentals ? [{ id: 'fundamentals', label: 'Fundamentals' }] : []),
                   ...(isUSCompany ? [{ id: 'sec-filings', label: 'SEC Filings' }] : []),
+                  { id: 'insider-transactions', label: 'Insider Transactions' },
                   { id: 'news', label: 'News' },
                   { id: 'ai-analysis', label: 'AI Analysis' },
                 ].map((tab) => {
@@ -849,24 +850,26 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
             </div>
           )}
 
+          {/* Insider Transactions Tab */}
+          {activeTab === 'insider-transactions' && (
+            <div>
+              {isLoadingInsiderTransactions ? (
+                <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 animate-pulse"><div className="h-5 bg-gray-700 rounded w-64 mb-3" /><div className="space-y-3">{[1,2,3].map((i) => <div key={i} className="h-10 bg-gray-700 rounded" />)}</div></div>
+              ) : (
+                <InsiderTransactionsWidget transactions={insiderTransactions} ticker={stockData.ticker} onRetry={fetchInsiderTransactions} isLoading={isLoadingInsiderTransactions} errorMessage={insiderTransactionsError} />
+              )}
+            </div>
+          )}
+
           {/* News Tab */}
           {activeTab === 'news' && (
-            <div className="space-y-4">
-              <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 flex flex-col" style={{ minHeight: '400px' }}>
-                <h3 className="text-lg font-semibold text-white mb-4 shrink-0">Latest News</h3>
-                <div className="flex-1 min-h-0 overflow-y-auto">
-                  {isLoadingNews ? (
-                    <div className="animate-pulse space-y-3">{[1,2,3].map((i) => <div key={i} className="h-20 bg-gray-700 rounded" />)}</div>
-                  ) : (
-                    <NewsWidget articles={newsData} ticker={stockData.ticker} onRetry={fetchNews} isLoading={isLoadingNews} errorMessage={newsError} />
-                  )}
-                </div>
-              </div>
-              <div>
-                {isLoadingInsiderTransactions ? (
-                  <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 animate-pulse"><div className="h-5 bg-gray-700 rounded w-64 mb-3" /><div className="space-y-3">{[1,2,3].map((i) => <div key={i} className="h-10 bg-gray-700 rounded" />)}</div></div>
+            <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 flex flex-col" style={{ minHeight: '400px' }}>
+              <h3 className="text-lg font-semibold text-white mb-4 shrink-0">Latest News</h3>
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                {isLoadingNews ? (
+                  <div className="animate-pulse space-y-3">{[1,2,3].map((i) => <div key={i} className="h-20 bg-gray-700 rounded" />)}</div>
                 ) : (
-                  <InsiderTransactionsWidget transactions={insiderTransactions} ticker={stockData.ticker} onRetry={fetchInsiderTransactions} isLoading={isLoadingInsiderTransactions} errorMessage={insiderTransactionsError} />
+                  <NewsWidget articles={newsData} ticker={stockData.ticker} onRetry={fetchNews} isLoading={isLoadingNews} errorMessage={newsError} />
                 )}
               </div>
             </div>
