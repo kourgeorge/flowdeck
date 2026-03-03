@@ -51,6 +51,21 @@ def main() -> None:
         sys.exit(0)
 
     print(f"Notifying {len(emails)} subscriber(s) for {ticker} (report {latest_date})...")
+    print(f"Recommendation: {recommendation}, Confidence: {confidence}")
+    if scores:
+        print("Scores to be included in email:")
+        for report_type, report_data in scores.items():
+            score = report_data.get("score")
+            score_label = report_data.get("score_label")
+            if score is not None or score_label:
+                display = f"  • {report_type}: "
+                if score is not None:
+                    display += f"{score:.1f}/10"
+                    if score_label:
+                        display += f" ({score_label})"
+                elif score_label:
+                    display += score_label
+                print(display)
     notify_subscribers_new_report(
         ticker=ticker,
         run_id=latest_date,

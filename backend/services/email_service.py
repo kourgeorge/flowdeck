@@ -9,6 +9,7 @@ from typing import List, Optional
 
 import requests
 from dotenv import load_dotenv
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from database import SessionLocal
 from models.db_models import Subscription, User
@@ -17,6 +18,13 @@ from models.db_models import Subscription, User
 _env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=_env_path)
 load_dotenv(dotenv_path=_env_path.parent.parent / ".env")
+
+# Setup Jinja2 template environment
+_template_dir = Path(__file__).resolve().parent.parent / "templates"
+_jinja_env = Environment(
+    loader=FileSystemLoader(_template_dir),
+    autoescape=select_autoescape(['html', 'xml'])
+)
 
 # Brand colors and layout (email-safe inline styles)
 _BRAND_PRIMARY = "#0f766e"   # teal-700
@@ -156,6 +164,7 @@ def _build_report_email_bodies(
     run_id: str,
     recommendation: Optional[str] = None,
     confidence: Optional[float] = None,
+    scores: Optional[dict] = None,
 ) -> tuple[str, str, str]:
     """Return (subject, text_body, html_body). Link is to the stock page only, not a specific report."""
     display_confidence = confidence
@@ -171,6 +180,20 @@ def _build_report_email_bodies(
         summary_lines.append(f"Recommendation: {recommendation}")
     if display_confidence is not None:
         summary_lines.append(f"Confidence: {display_confidence:.1f}/10")
+    # Add scores to text body
+    if scores:
+        summary_lines.append("")
+        summary_lines.append("Analysis Scores:")
+        for report_type, report_data in scores.items():
+            score = report_data.get("score")
+            score_label = report_data.get("score_label")
+            if score is not None or score_label:
+                display_name = report_type.replace("_", " ").title()
+                if score is not None:
+                    summary_lines.append(f"  • {display_name}: {score:.1f}/10" + (f" ({score_label})" if score_label else ""))
+                elif score_label:
+                    summary_lines.append(f"  • {display_name}: {score_label}")
+    
     summary_lines.append("")
     summary_lines.append(f"View full report: {report_url}")
     text_body = "\n".join(summary_lines)
@@ -186,23 +209,85 @@ def _build_report_email_bodies(
     conf_html = ""
     if display_confidence is not None:
         conf_html = f'<p style="margin:0 0 20px;font-size:14px;color:#64748b;">Confidence: <strong>{display_confidence:.1f}/10</strong></p>'
-    inner = f"""
-    <h2 style="margin:0 0 20px;font-size:22px;color:{_TEXT_DARK};font-weight:600;">Your report is ready</h2>
-    <p style="margin:0 0 16px;font-size:16px;color:#475569;line-height:1.5;">We've completed a new analysis for <strong>{safe(ticker_upper)}</strong>.</p>
-    {rec_html}
-    {conf_html}
-    <p style="margin:24px 0 0;">
-      <a href="{report_url}" style="display:inline-block;padding:14px 28px;background:{_BRAND_PRIMARY};color:#ffffff !important;text-decoration:none;font-weight:600;font-size:15px;border-radius:8px;">View full report</a>
-    </p>
-    <p style="margin:20px 0 0;font-size:13px;color:#94a3b8;">
-      <a href="{report_url}" style="color:{_BRAND_PRIMARY_LIGHT};text-decoration:none;">{report_url}</a>
-    </p>
-    """
-    html_body = _html_email_wrapper(
-        title=f"Report for {ticker_upper}",
-        inner_body=inner,
-        preheader=f"New analysis for {ticker_upper}. " + (f"Recommendation: {recommendation}." if recommendation else "View your report."),
-    )
+    
+    # Prepare scores data for template
+    scores_list = []
+    bull_view = None
+    bear_view = None
+    key_insights = []
+    
+    if scores:
+        for report_type, report_data in scores.items():
+            score = report_data.get("score")
+            score_label = report_data.get("score_label")
+            if score is not None or score_label:
+                display_name = report_type.replace("_", " ").title()
+                # Color code based on score
+                score_color = "#64748b"  # default gray
+                if score is not None:
+                    if score >= 7:
+                        score_color = "#059669"  # green-600
+                    elif score >= 5:
+                        score_color = "#d97706"  # amber-600
+                    else:
+                        score_color = "#dc2626"  # red-600
+                
+                scores_list.append({
+                    "name": display_name,
+                    "score": f"{score:.1f}" if score is not None else None,
+                    "label": score_label,
+                    "color": score_color
+                })
+            
+            # Extract bull/bear viewpoints (keep as list for bullet points in email)
+            # Check investment_plan, trader_investment_plan, and final_trade_decision
+            if report_type in ("investment_plan", "trader_investment_plan", "final_trade_decision"):
+                if not bull_view and report_data.get("bull_viewpoint"):
+                    bv = report_data.get("bull_viewpoint")
+                    if isinstance(bv, list) and bv:
+                        bull_view = bv
+                    elif isinstance(bv, str) and bv:
+                        bull_view = [bv]
+                if not bear_view and report_data.get("bear_viewpoint"):
+                    bv = report_data.get("bear_viewpoint")
+                    if isinstance(bv, list) and bv:
+                        bear_view = bv
+                    elif isinstance(bv, str) and bv:
+                        bear_view = [bv]
+            
+            # Extract key takeaways/insights
+            if report_data.get("key_takeaways"):
+                takeaways = report_data.get("key_takeaways")
+                if isinstance(takeaways, list):
+                    key_insights.extend(takeaways[:3])  # Limit to first 3
+                elif isinstance(takeaways, str):
+                    key_insights.append(takeaways)
+    
+    # Limit key insights to 5 total
+    key_insights = key_insights[:5] if key_insights else None
+    
+    # Render HTML from template
+    try:
+        template = _jinja_env.get_template("report_notification_email.html")
+        html_body = template.render(
+            ticker=ticker_upper,
+            recommendation=recommendation,
+            confidence=f"{display_confidence:.1f}" if display_confidence is not None else None,
+            scores=scores_list if scores_list else None,
+            key_insights=key_insights,
+            bull_view=bull_view,
+            bear_view=bear_view,
+            report_url=report_url,
+            preheader=f"New analysis for {ticker_upper}. " + (f"Recommendation: {recommendation}." if recommendation else "View your report.")
+        )
+    except Exception:
+        # Fallback to simple wrapper if template fails
+        html_body = _html_email_wrapper(
+            title=f"Report for {ticker_upper}",
+            inner_body=f"<p>Your report for {ticker_upper} is ready. <a href='{report_url}'>View report</a></p>",
+            preheader=f"New analysis for {ticker_upper}."
+        )
+    
     return subject, text_body, html_body
 
 
@@ -273,6 +358,7 @@ def send_report_notification(
     run_id: str,
     recommendation: Optional[str] = None,
     confidence: Optional[float] = None,
+    scores: Optional[dict] = None,
 ) -> bool:
     """
     Send one email per recipient with report link and optional summary.
@@ -283,7 +369,11 @@ def send_report_notification(
     if not to_emails:
         return True
     subject, text_body, html_body = _build_report_email_bodies(
-        ticker, run_id, recommendation, confidence
+        ticker=ticker,
+        run_id=run_id,
+        recommendation=recommendation,
+        confidence=confidence,
+        scores=scores,
     )
     if _get_smtp_password():
         if _send_via_smtp(to_emails, subject, text_body, html_body):
@@ -309,18 +399,21 @@ def notify_admin_new_subscription(user_email: str, ticker: str) -> None:
         f"User: {user_email}\nTicker: {ticker_upper}\n\n"
         f"Dashboard: {_get_frontend_url()}"
     )
-    frontend_url = _get_frontend_url()
-    safe_email = user_email.replace("@", "&#64;")
-    inner = f"""
-    <p style="margin:0 0 16px;font-size:18px;color:{_TEXT_DARK};font-weight:600;">New subscription</p>
-    <p style="margin:0 0 12px;font-size:15px;color:#475569;line-height:1.6;"><strong>User:</strong> {safe_email}</p>
-    <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.6;"><strong>Ticker:</strong> {ticker_upper}</p>
-    <p style="margin:0;"><a href="{frontend_url}" style="display:inline-block;padding:12px 24px;background:{_BRAND_PRIMARY};color:#ffffff !important;text-decoration:none;font-weight:600;font-size:14px;border-radius:8px;">Open Flowdeck</a></p>
-    """
-    html_body = _html_email_wrapper(
-        title="New subscription",
-        inner_body=inner,
-    )
+    
+    try:
+        template = _jinja_env.get_template("admin_new_subscription_email.html")
+        html_body = template.render(
+            user_email=user_email,
+            ticker=ticker_upper,
+            dashboard_url=_get_frontend_url()
+        )
+    except Exception:
+        # Fallback to simple wrapper if template fails
+        html_body = _html_email_wrapper(
+            title="New subscription",
+            inner_body=f"<p>New subscription: {user_email} → {ticker_upper}</p>",
+        )
+    
     to_emails = [ADMIN_SUBSCRIBE_NOTIFY_EMAIL]
     if _get_smtp_password():
         if _send_via_smtp(to_emails, subject, text_body, html_body):
@@ -382,24 +475,18 @@ def send_welcome_email(user_email: str) -> bool:
         f"Get started: {dashboard_url}\n\n"
         f"— The Flowdeck team"
     )
-    inner = f"""
-    <h2 style="margin:0 0 12px;font-size:22px;color:{_TEXT_DARK};font-weight:600;">Welcome to Flowdeck</h2>
-    <p style="margin:0 0 16px;font-size:16px;color:#475569;line-height:1.5;">Thanks for signing up. You're all set to use AI-powered stock analysis.</p>
-    <ul style="margin:16px 0 24px;padding-left:20px;color:#475569;font-size:15px;line-height:1.7;">
-      <li>Search any ticker and run deep-dive analyses</li>
-      <li>Subscribe to tickers to get new reports by email</li>
-      <li>Read market, news, and fundamentals insights in one place</li>
-    </ul>
-    <p style="margin:24px 0 0;">
-      <a href="{dashboard_url}" style="display:inline-block;padding:14px 28px;background:{_BRAND_PRIMARY};color:#ffffff !important;text-decoration:none;font-weight:600;font-size:15px;border-radius:8px;">Go to Flowdeck</a>
-    </p>
-    <p style="margin:28px 0 0;font-size:14px;color:#94a3b8;">If you didn't create an account, you can ignore this email.</p>
-    """
-    html_body = _html_email_wrapper(
-        title="Welcome to Flowdeck",
-        inner_body=inner,
-        preheader="You're all set. Start exploring AI-powered stock analysis.",
-    )
+    
+    try:
+        template = _jinja_env.get_template("welcome_email.html")
+        html_body = template.render(dashboard_url=dashboard_url)
+    except Exception:
+        # Fallback to simple wrapper if template fails
+        html_body = _html_email_wrapper(
+            title="Welcome to Flowdeck",
+            inner_body=f"<p>Welcome to Flowdeck! <a href='{dashboard_url}'>Get started</a></p>",
+            preheader="You're all set."
+        )
+    
     to_emails = [user_email]
     if not to_emails or "@" not in (to_emails[0] or ""):
         return True
@@ -429,19 +516,18 @@ def send_subscription_confirmation(user_email: str, ticker: str) -> bool:
         f"View {ticker_upper}: {stock_url}\n\n"
         f"— The Flowdeck team"
     )
-    # Compact spacing so the email doesn't show excessive empty lines
-    inner = f"""<p style="margin:0 0 6px;font-size:18px;color:{_TEXT_DARK};font-weight:600;">Your subscription is confirmed.</p>
-<p style="margin:0 0 10px;font-size:15px;color:#475569;line-height:1.5;">We will email you when a new analysis report is ready for <strong>{ticker_upper}</strong>.</p>
-<p style="margin:0 0 4px;font-size:15px;color:#334155;line-height:1.5;">&bull; View the latest report and key takeaways on the stock page.</p>
-<p style="margin:0 0 4px;font-size:15px;color:#334155;line-height:1.5;">&bull; Run a new deep-dive analysis whenever you want.</p>
-<p style="margin:0 0 14px;font-size:15px;color:#334155;line-height:1.5;">&bull; Manage or remove this subscription from your account at any time.</p>
-<p style="margin:0 0 6px;"><a href="{stock_url}" style="display:inline-block;padding:12px 24px;background:{_BRAND_PRIMARY};color:#ffffff !important;text-decoration:none;font-weight:600;font-size:15px;border-radius:8px;">View {ticker_upper} on Flowdeck</a></p>
-<p style="margin:12px 0 0;font-size:13px;color:#64748b;"><a href="{stock_url}" style="color:{_BRAND_PRIMARY_LIGHT};text-decoration:none;">{stock_url}</a></p>"""
-    html_body = _html_email_wrapper(
-        title="Subscription confirmed",
-        inner_body=inner,
-        preheader=f"You'll get an email when new {ticker_upper} reports are ready.",
-    )
+    
+    try:
+        template = _jinja_env.get_template("subscription_confirmation_email.html")
+        html_body = template.render(ticker=ticker_upper, stock_url=stock_url)
+    except Exception:
+        # Fallback to simple wrapper if template fails
+        html_body = _html_email_wrapper(
+            title="Subscription confirmed",
+            inner_body=f"<p>Your subscription to {ticker_upper} is confirmed. <a href='{stock_url}'>View stock</a></p>",
+            preheader=f"You'll get an email when new {ticker_upper} reports are ready."
+        )
+    
     to_emails = [user_email]
     if _get_smtp_password() and _send_via_smtp(to_emails, subject, text_body, html_body):
         return True
@@ -469,10 +555,21 @@ def notify_subscribers_new_report(
             emails.append(initiator_email)
     if not emails:
         return
+    
+    # Fetch scores from the report
+    from services.report_service import ReportService
+    report_service = ReportService()
+    scores = None
+    try:
+        scores = report_service.get_reports_with_scores(ticker, run_id)
+    except Exception:
+        pass  # Continue without scores if fetch fails
+    
     send_report_notification(
         to_emails=emails,
         ticker=ticker,
         run_id=run_id,
         recommendation=recommendation,
         confidence=confidence,
+        scores=scores,
     )
