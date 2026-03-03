@@ -95,7 +95,7 @@ export default function ChatPage() {
                 ? `Hi ${greeting}!\nAsk me anything about the market`
                 : undefined
             }
-            welcomeSubtext="I have access to live prices, specialized AI reports & recommendations, fundamentals, news, technical indicators, insider activity, and your preferred tickers."
+            welcomeSubtext="I have access to live prices, AI reports, fundamentals, news, technicals, insider activity & your watchlist."
             inputPlaceholder={user ? 'Ask about any stock…' : 'Sign in to start chatting…'}
             inputFooter={
               <p className="text-xs text-slate-500 text-center py-1.5">

@@ -183,13 +183,7 @@ export default function CopilotChatPanel({
         isAuthenticated={!!user}
         suggestedQuestions={getSuggestedQuestions(selectedTicker, tickers)}
         welcomeHeading="Ask me anything about the market"
-        welcomeSubtext={
-          selectedTicker
-            ? `I have access to AI reports, live prices, fundamentals, news, technical indicators, and insider activity for ${selectedTicker}. I also know about all ${tickers.length} focus tickers in your list.`
-            : tickers.length > 0
-              ? `I have full context for all your focus tickers: ${tickers.join(', ')}. Ask me to compare, summarize, or analyze any of them.`
-              : 'I have access to live prices, AI reports, fundamentals, news, technical indicators, and insider activity.'
-        }
+        welcomeSubtext="I have access to live prices, AI reports, fundamentals, news, technicals, insider activity & your watchlist."
         inputPlaceholder={
           user
             ? selectedTicker
