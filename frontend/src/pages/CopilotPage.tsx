@@ -220,7 +220,7 @@ export default function CopilotPage() {
         {/* ── Mobile layout: stacked ── */}
         <div className="md:hidden flex flex-col flex-1 min-h-0 overflow-hidden">
           {/* Mobile: collapsible stock list */}
-          <div className="shrink-0 border-b border-gray-700 bg-gray-800/80">
+          <div className="shrink-0 border-b border-gray-700 bg-gray-800/80 relative">
             <button
               type="button"
               onClick={() => setSidebarCollapsed((c) => !c)}
@@ -235,7 +235,7 @@ export default function CopilotPage() {
               </svg>
             </button>
             {!sidebarCollapsed && (
-              <div style={{ maxHeight: '30vh', overflowY: 'auto' }}>
+              <div className="absolute top-full left-0 right-0 z-50 bg-gray-800 border-4 border-blue-900/40 shadow-2xl" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
                 <DashboardStockSidebar
                   subscribedWidgets={widgets}
                   recentWidgets={[]}
