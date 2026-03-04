@@ -14,6 +14,10 @@ aiosqlite
 bcrypt
 python-jose[cryptography]
 email-validator
+# Google OAuth
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
 
 # LangChain / LLM
 langchain-openai
