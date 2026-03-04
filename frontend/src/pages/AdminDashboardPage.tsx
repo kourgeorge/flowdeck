@@ -181,12 +181,6 @@ export default function AdminDashboardPage() {
   return (
     <div className="min-h-screen p-6 md:p-8">
       <div className="max-w-6xl mx-auto">
-        <Link
-          to="/"
-          className="inline-flex items-center text-sm text-gray-400 hover:text-white transition-colors mb-6"
-        >
-          ← Back to Flowdeck
-        </Link>
         <h1 className="text-2xl font-bold text-white mb-8">Admin dashboard</h1>
 
         {/* Stats */}
