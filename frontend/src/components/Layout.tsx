@@ -166,11 +166,6 @@ export default function Layout() {
           aria-label="Main navigation"
         >
           <div className="flex-1">
-            {user && sidebarExpanded && (
-              <p className="text-xs text-gray-400 truncate px-4 py-1 mb-2" title={user.email}>
-                {user.email}
-              </p>
-            )}
             <ul className="space-y-1">
               {navItems
                 .filter((item) => !('authOnly' in item && item.authOnly) || user)
@@ -215,6 +210,11 @@ export default function Layout() {
           
           {/* User menu at bottom */}
           <div className="mt-auto pt-4 border-t border-gray-700">
+            {user && sidebarExpanded && (
+              <p className="text-xs text-gray-400 truncate px-4 py-2 mb-2" title={user.email}>
+                {user.email}
+              </p>
+            )}
             <ul className="space-y-1">
               {user ? (
                 <>
