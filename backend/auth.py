@@ -56,7 +56,6 @@ def get_current_user_optional(
     # Check if it's an API key (starts with "fd_live_")
     if token.startswith("fd_live_"):
         from models.db_models import ApiKey
-        from datetime import datetime, timezone
         
         key_hash = ApiKey.hash_key(token)
         api_key = db.query(ApiKey).filter(ApiKey.key_hash == key_hash).first()
@@ -68,12 +67,12 @@ def get_current_user_optional(
         if not api_key.is_active:
             return None
         
-        # Check if key has expired
-        if api_key.expires_at and api_key.expires_at < datetime.now(timezone.utc):
+        # Check if key has expired (using naive UTC datetime to match db_models)
+        if api_key.expires_at and api_key.expires_at < datetime.utcnow():
             return None
         
         # Update last_used_at
-        api_key.last_used_at = datetime.now(timezone.utc)
+        api_key.last_used_at = datetime.utcnow()
         db.commit()
         
         # Return the user associated with this API key

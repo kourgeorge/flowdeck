@@ -133,6 +133,8 @@ All under `/api/data/`. No auth required.
 | GET | `/api/data/analyst-recommendations/{ticker}` | Analyst recommendations (Yahoo) |
 | GET | `/api/data/edgar-filings/{ticker}` | SEC 10-K / 10-Q filings list |
 | GET | `/api/data/edgar-filing-content/{ticker}?form=10-K&limit=1` | Extracted SEC sections (risk factors, MD&A); uses LLM |
+| GET | `/api/data/reports/{ticker}` | **[Auth required]** Latest AI-generated reports with recommendations |
+| POST | `/api/data/reports/batch` | **[Auth required]** Batch fetch reports for multiple tickers |
 
 Example:
 
@@ -259,6 +261,142 @@ Returns Server-Sent Events (SSE) stream with:
 
 ---
 
+## Report access (authenticated, no token cost)
+
+Access previously generated AI analysis reports without starting a new analysis. These endpoints provide read-only access to the report database.
+
+### Get reports for single ticker
+
+```bash
+GET /api/data/reports/{ticker}
+Authorization: Bearer YOUR_ACCESS_TOKEN
+```
+
+Returns the latest reports for a ticker with scores, recommendations, and key takeaways.
+
+Response:
+```json
+{
+  "report_date": "2026-03-04_10-30-00",
+  "reports": {
+    "final_recommendation": {
+      "content": "Detailed analysis text...",
+      "score": 75,
+      "score_label": "Strong Buy",
+      "key_takeaways": [
+        "Revenue growth accelerating",
+        "Strong competitive position",
+        "Valuation attractive"
+      ],
+      "recommendation": "BUY",
+      "expected_return_pct": 15.5,
+      "bear_case_return_pct": -5.0,
+      "bull_case_return_pct": 35.0,
+      "confidence": "HIGH",
+      "analysis_date": "2026-03-04",
+      "generated_at": "2026-03-04T10:30:00Z",
+      "days_ago": 0,
+      "models_used": ["gpt-4", "claude-3"],
+      "tps_plan": {
+        "entry_points": [...],
+        "exit_points": [...],
+        "stop_loss": {...}
+      }
+    },
+    "bull_viewpoint": {
+      "content": "Bullish perspective...",
+      "score": 85,
+      "key_takeaways": [...]
+    },
+    "bear_viewpoint": {
+      "content": "Bearish perspective...",
+      "score": 45,
+      "key_takeaways": [...]
+    },
+    "neutral_viewpoint": {...},
+    "risky_viewpoint": {...},
+    "safe_viewpoint": {...}
+  }
+}
+```
+
+If no reports exist for the ticker, returns:
+```json
+{
+  "report_date": null,
+  "reports": {}
+}
+```
+
+### Get reports for multiple tickers (batch)
+
+```bash
+POST /api/data/reports/batch
+Authorization: Bearer YOUR_ACCESS_TOKEN
+Content-Type: application/json
+
+{
+  "tickers": ["AAPL", "MSFT", "GOOGL"]
+}
+```
+
+Returns reports for up to 50 tickers in a single request.
+
+Response:
+```json
+{
+  "tickers": {
+    "AAPL": {
+      "report_date": "2026-03-04_10-30-00",
+      "reports": {
+        "final_recommendation": {...},
+        "bull_viewpoint": {...}
+      }
+    },
+    "MSFT": {
+      "report_date": "2026-03-04_09-15-00",
+      "reports": {...}
+    },
+    "GOOGL": {
+      "report_date": null,
+      "reports": {}
+    }
+  }
+}
+```
+
+### Report types available
+
+- **final_recommendation** - Overall trading recommendation with score and TPS plan
+- **bull_viewpoint** - Bullish analysis perspective
+- **bear_viewpoint** - Bearish analysis perspective
+- **neutral_viewpoint** - Neutral/balanced perspective
+- **risky_viewpoint** - Risk-focused analysis
+- **safe_viewpoint** - Conservative analysis
+
+### Key fields in reports
+
+| Field | Type | Description |
+|-------|------|-------------|
+| content | string | Full analysis text |
+| score | number | Numerical score (0-100) |
+| score_label | string | Human-readable label (e.g., "Strong Buy", "Hold", "Sell") |
+| recommendation | string | Trading action: BUY, SELL, or HOLD |
+| expected_return_pct | number | Expected return percentage |
+| bull_case_return_pct | number | Optimistic scenario return |
+| bear_case_return_pct | number | Pessimistic scenario return |
+| confidence | string | Confidence level: HIGH, MEDIUM, or LOW |
+| key_takeaways | array | Array of key insights (strings) |
+| tps_plan | object | Trading Plan Specification (entry/exit points, risk management) |
+| analysis_date | string | Date of analysis (YYYY-MM-DD) |
+| generated_at | string | ISO timestamp when report was generated |
+| days_ago | number | How many days old the report is |
+| models_used | array | LLM models used in analysis |
+
+**Note:** These endpoints do **not** cost tokens - they only retrieve existing reports. To generate new reports, use `POST /api/analyses/start` (costs 200 tokens).
+
+---
+
 ## AI analysis (authenticated, costs tokens)
 
 Flowdeck can run a full AI analysis pipeline (market, news, fundamentals, SEC, debate, risk) and produce a BUY/SELL/HOLD report. **Each run costs 200 tokens.**
@@ -349,14 +487,16 @@ Response (key shown only once):
 {
   "id": 1,
   "name": "My Agent Key",
-  "key": "fdk_1234567890abcdef...",
-  "key_prefix": "fdk_123",
+  "key": "fd_live_1234567890abcdef...",
+  "key_prefix": "fd_live_12345678",
   "is_active": true,
   "created_at": "2026-03-03T20:00:00Z",
   "expires_at": "2026-12-31T23:59:59Z",
   "warning": "Save this key now - it won't be shown again!"
 }
 ```
+
+**Important:** API keys start with `fd_live_` prefix. Save the full key securely - it won't be shown again!
 
 ### List API keys
 
@@ -374,11 +514,25 @@ Authorization: Bearer YOUR_ACCESS_TOKEN
 
 ### Use API key
 
-Include in requests as:
+API keys work exactly like JWT tokens - include them in the `Authorization: Bearer` header:
+
 ```bash
+# Using API key with any authenticated endpoint
 curl https://flowdeck.biz/api/me \
-  -H "X-API-Key: fdk_1234567890abcdef..."
+  -H "Authorization: Bearer fd_live_1234567890abcdef..."
+
+# Get reports with API key
+curl https://flowdeck.biz/api/data/reports/AAPL \
+  -H "Authorization: Bearer fd_live_1234567890abcdef..."
+
+# Batch reports with API key
+curl -X POST https://flowdeck.biz/api/data/reports/batch \
+  -H "Authorization: Bearer fd_live_1234567890abcdef..." \
+  -H "Content-Type: application/json" \
+  -d '{"tickers": ["AAPL", "MSFT", "GOOGL"]}'
 ```
+
+**Note:** API keys use the same `Authorization: Bearer` header as JWT tokens, not `X-API-Key`.
 
 ---
 
@@ -402,6 +556,8 @@ Check balance via `GET /api/me` → `token_balance`.
 | GET | `/api/tickers/widgets` | No | Widget data (tickers, optional date) |
 | GET | `/api/tickers/{ticker}` | Optional | Stock page (auth records view) |
 | GET | `/api/data/*` | No | Quote, company, news, fundamentals, historical, EDGAR, etc. |
+| GET | `/api/data/reports/{ticker}` | Yes | Get latest reports for ticker (no token cost) |
+| POST | `/api/data/reports/batch` | Yes | Get reports for multiple tickers (no token cost) |
 | POST | `/api/auth/register` | No | Register (email, password) |
 | POST | `/api/auth/login` | No | Login (email, password) |
 | GET | `/api/me` | Yes | Profile and token balance |
@@ -426,6 +582,7 @@ Check balance via `GET /api/me` → `token_balance`.
 | **Register / login** | `POST /api/auth/register` or `/api/auth/login` |
 | **Create API key** | `POST /api/api-keys` (for programmatic access) |
 | **Get market data** | `GET /api/data/quote/{ticker}`, `/company`, `/news`, `/fundamentals`, `/historical`, etc. |
+| **Get existing reports** | `GET /api/data/reports/{ticker}` or `POST /api/data/reports/batch` (no token cost) |
 | **Get stock page** | `GET /api/tickers/{ticker}` (optional auth for view tracking) |
 | **Check token balance** | `GET /api/me` → `token_balance` |
 | **Chat with AI analyst** | `POST /api/chat` or `/api/chat/stream` (variable tokens) |
