@@ -272,13 +272,13 @@ export default function Layout() {
       <div className="flex flex-col flex-1 min-w-0 min-h-0 h-screen overflow-hidden">
         {/* Hamburger: visible on mobile when sidebar is collapsed */}
         {!sidebarExpanded && (
-          <div className="md:hidden sticky top-0 z-20 flex items-center border-b border-gray-700 bg-gray-900/95 px-4 py-3 shrink-0">
+          <div className="md:hidden sticky top-0 z-20 flex items-center border-b border-gray-700 bg-gray-900/95 px-3 py-1.5 shrink-0">
             <button
               type="button"
               aria-expanded={sidebarExpanded}
               aria-label="Open menu"
               onClick={() => setSidebarExpanded(true)}
-              className="p-2 -ml-2 text-gray-300 hover:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="p-1 -ml-1 text-gray-300 hover:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <HamburgerIcon open={false} />
             </button>
