@@ -9,10 +9,13 @@ import ApiKeyManagement from '../components/ApiKeyManagement';
 
 const DELETE_CONFIRM_TEXT = 'DELETE';
 
+type TabType = 'overview' | 'api-keys' | 'account';
+
 export default function ProfilePage() {
   const { user, deleteAccount } = useAuth();
   const navigate = useNavigate();
   const { hash } = useLocation();
+  const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [profile, setProfile] = useState<MeProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,15 +72,16 @@ export default function ProfilePage() {
     }
   };
 
-  // Scroll to hash anchor after profile data is loaded
+  // Handle tab switching from hash
   useEffect(() => {
-    if (!loading && profile && hash) {
-      const el = document.querySelector(hash);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth' });
-      }
+    if (hash === '#api-keys') {
+      setActiveTab('api-keys');
+    } else if (hash === '#account') {
+      setActiveTab('account');
+    } else {
+      setActiveTab('overview');
     }
-  }, [loading, profile, hash]);
+  }, [hash]);
 
   useEffect(() => {
     if (!user) {
@@ -213,250 +217,308 @@ export default function ProfilePage() {
     );
   }
 
-  return (
-    <div className="min-h-screen px-4 py-6 sm:p-6 lg:p-8">
-      <div className="max-w-layout mx-auto min-w-0 w-full">
-        <Link
-          to="/"
-          className="inline-flex items-center text-sm text-gray-400 hover:text-white transition-colors mb-8"
-        >
-          ← Back to Flowdeck
-        </Link>
+  const renderTabContent = () => {
+    if (activeTab === 'overview') {
+      return (
+        <>
+          {/* Token Balance */}
+          {profile && (
+            <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
+              <h2 className="text-lg font-semibold text-white mb-2">Token balance</h2>
+              <p className="text-3xl font-bold text-white">{profile.token_balance.toLocaleString()} tokens</p>
+              <p className="text-sm text-gray-400 mt-1">
+                Creating a report costs 200 tokens. You earn tokens when others view your reports.
+              </p>
+            </section>
+          )}
 
-        <h1 className="text-2xl font-bold text-white mb-8">Profile</h1>
+          {/* Usage Statistics */}
+          <UserStatsSection />
 
-        {/* Email (read-only) */}
-        {profile && (
+          {/* Purchase Tokens */}
+          {profile && (
+            <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
+              <h2 className="text-lg font-semibold text-white mb-4">Purchase Tokens</h2>
+              <p className="text-sm text-gray-400 mb-6">
+                Need more tokens? Choose a package below to top up your account with PayPal.
+              </p>
+              <TokenPurchase />
+            </section>
+          )}
+
+          {/* Subscription email preferences */}
           <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
-            <h2 className="text-lg font-semibold text-white mb-2">Email</h2>
-            <p className="text-gray-300">{profile.email}</p>
-            <p className="text-xs text-gray-500 mt-1">Email cannot be changed here.</p>
-          </section>
-        )}
-
-        {/* Token Balance */}
-        {profile && (
-          <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
-            <h2 className="text-lg font-semibold text-white mb-2">Token balance</h2>
-            <p className="text-3xl font-bold text-white">{profile.token_balance.toLocaleString()} tokens</p>
-            <p className="text-sm text-gray-400 mt-1">
-              Creating a report costs 200 tokens. You earn tokens when others view your reports.
+            <h2 className="text-lg font-semibold text-white mb-2">Subscription email preferences</h2>
+            <p className="text-sm text-gray-400 mb-4">
+              Choose whether to receive an email when a new analysis report is ready for each subscribed stock.
             </p>
+            {subscriptionsLoading ? (
+              <p className="text-gray-400 text-sm">Loading subscriptions…</p>
+            ) : subscriptions.length === 0 ? (
+              <p className="text-gray-400 text-sm">You have no subscriptions. Subscribe to stocks from a stock page or the dashboard.</p>
+            ) : (
+              <ul className="space-y-3">
+                {subscriptions.map((s) => (
+                  <li
+                    key={s.id}
+                    className="flex items-center justify-between gap-4 py-2 border-b border-gray-700/50 last:border-0"
+                  >
+                    <Link
+                      to={`/tickers/${s.ticker}`}
+                      className="text-blue-400 hover:text-blue-300 font-medium shrink-0"
+                    >
+                      {s.ticker}
+                    </Link>
+                    <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                      <span className="text-sm text-gray-400">Email updates</span>
+                      <input
+                        type="checkbox"
+                        checked={s.email_updates}
+                        disabled={togglingTicker === s.ticker}
+                        onChange={(e) => handleEmailUpdatesToggle(s.ticker, e.target.checked)}
+                        className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
+                      />
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
-        )}
+        </>
+      );
+    }
 
-        {/* Usage Statistics */}
-        <UserStatsSection />
-
-        {/* Purchase Tokens */}
-        {profile && (
-          <section id="purchase-tokens" className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
-            <h2 className="text-lg font-semibold text-white mb-4">Purchase Tokens</h2>
-            <p className="text-sm text-gray-400 mb-6">
-              Need more tokens? Choose a package below to top up your account with PayPal.
-            </p>
-            <TokenPurchase />
-          </section>
-        )}
-
-        {/* API Keys */}
-        <section id="api-keys" className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
+    if (activeTab === 'api-keys') {
+      return (
+        <section className="bg-gray-800 border border-gray-700 rounded-xl p-6">
           <h2 className="text-lg font-semibold text-white mb-4">API Keys</h2>
           <p className="text-sm text-gray-400 mb-6">
             Create API keys for programmatic access to FlowDeck. Use them in bots, scripts, and integrations.
           </p>
           <ApiKeyManagement />
         </section>
+      );
+    }
 
-        {/* Subscription email preferences */}
-        <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
-          <h2 className="text-lg font-semibold text-white mb-2">Subscription email preferences</h2>
-          <p className="text-sm text-gray-400 mb-4">
-            Choose whether to receive an email when a new analysis report is ready for each subscribed stock.
-          </p>
-          {subscriptionsLoading ? (
-            <p className="text-gray-400 text-sm">Loading subscriptions…</p>
-          ) : subscriptions.length === 0 ? (
-            <p className="text-gray-400 text-sm">You have no subscriptions. Subscribe to stocks from a stock page or the dashboard.</p>
-          ) : (
-            <ul className="space-y-3">
-              {subscriptions.map((s) => (
-                <li
-                  key={s.id}
-                  className="flex items-center justify-between gap-4 py-2 border-b border-gray-700/50 last:border-0"
-                >
-                  <Link
-                    to={`/tickers/${s.ticker}`}
-                    className="text-blue-400 hover:text-blue-300 font-medium shrink-0"
-                  >
-                    {s.ticker}
-                  </Link>
-                  <label className="flex items-center gap-2 cursor-pointer shrink-0">
-                    <span className="text-sm text-gray-400">Email updates</span>
-                    <input
-                      type="checkbox"
-                      checked={s.email_updates}
-                      disabled={togglingTicker === s.ticker}
-                      onChange={(e) => handleEmailUpdatesToggle(s.ticker, e.target.checked)}
-                      className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
-                    />
-                  </label>
-                </li>
-              ))}
-            </ul>
+    if (activeTab === 'account') {
+      return (
+        <>
+          {/* Email (read-only) */}
+          {profile && (
+            <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
+              <h2 className="text-lg font-semibold text-white mb-2">Email</h2>
+              <p className="text-gray-300">{profile.email}</p>
+              <p className="text-xs text-gray-500 mt-1">Email cannot be changed here.</p>
+            </section>
           )}
-        </section>
 
-        {/* Name */}
-        <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Display name</h2>
-          <form onSubmit={handleSaveName} className="space-y-4">
-            <div>
-              <label htmlFor="profile-name" className="block text-sm font-medium text-gray-300 mb-1">
-                Name
-              </label>
-              <input
-                id="profile-name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Your name"
-              />
-            </div>
-            {nameMessage && (
-              <p className={`text-sm ${nameMessage.startsWith('Name updated') ? 'text-green-400' : 'text-red-400'}`}>
-                {nameMessage}
-              </p>
-            )}
-            <button
-              type="submit"
-              disabled={nameSaving}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
-            >
-              {nameSaving ? 'Saving…' : 'Save name'}
-            </button>
-          </form>
-        </section>
-
-        {/* Password - only show for users with passwords */}
-        {profile?.has_password && (
-          <section className="bg-gray-800 border border-gray-700 rounded-xl p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">Change password</h2>
-            <form onSubmit={handleChangePassword} className="space-y-4">
-            <div>
-              <label htmlFor="profile-current-password" className="block text-sm font-medium text-gray-300 mb-1">
-                Current password
-              </label>
-              <input
-                id="profile-current-password"
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="••••••••"
-                autoComplete="current-password"
-              />
-            </div>
-            <div>
-              <label htmlFor="profile-new-password" className="block text-sm font-medium text-gray-300 mb-1">
-                New password
-              </label>
-              <input
-                id="profile-new-password"
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="••••••••"
-                autoComplete="new-password"
-                minLength={6}
-              />
-            </div>
-            <div>
-              <label htmlFor="profile-confirm-password" className="block text-sm font-medium text-gray-300 mb-1">
-                Confirm new password
-              </label>
-              <input
-                id="profile-confirm-password"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="••••••••"
-                autoComplete="new-password"
-                minLength={6}
-              />
-            </div>
-            {passwordMessage && (
-              <p
-                className={`text-sm ${
-                  passwordMessage.startsWith('Password updated') ? 'text-green-400' : 'text-red-400'
-                }`}
-              >
-                {passwordMessage}
-              </p>
-            )}
-            <button
-              type="submit"
-              disabled={passwordSaving}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
-            >
-              {passwordSaving ? 'Updating…' : 'Change password'}
-            </button>
-          </form>
-        </section>
-        )}
-
-        {/* Delete account */}
-        <section className="bg-gray-800 border border-red-900/50 rounded-xl p-6 mt-8">
-          <h2 className="text-lg font-semibold text-red-400 mb-2">Delete account</h2>
-          <p className="text-sm text-gray-400 mb-4">
-            This will permanently delete your account and all associated data (subscriptions, etc.). This cannot be undone.
-          </p>
-          <form onSubmit={handleDeleteAccount} className="space-y-4">
-            {profile?.has_password && (
+          {/* Name */}
+          <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
+            <h2 className="text-lg font-semibold text-white mb-4">Display name</h2>
+            <form onSubmit={handleSaveName} className="space-y-4">
               <div>
-                <label htmlFor="delete-password" className="block text-sm font-medium text-gray-300 mb-1">
-                  Your password
+                <label htmlFor="profile-name" className="block text-sm font-medium text-gray-300 mb-1">
+                  Name
                 </label>
                 <input
-                  id="delete-password"
-                  type="password"
-                  value={deletePassword}
-                  onChange={(e) => setDeletePassword(e.target.value)}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
-                  placeholder="••••••••"
-                  autoComplete="current-password"
+                  id="profile-name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Your name"
                 />
               </div>
-            )}
-            <div>
-              <label htmlFor="delete-confirm-text" className="block text-sm font-medium text-gray-300 mb-1">
-                Type {DELETE_CONFIRM_TEXT} to confirm
-              </label>
-              <input
-                id="delete-confirm-text"
-                type="text"
-                value={deleteConfirmText}
-                onChange={(e) => setDeleteConfirmText(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
-                placeholder={DELETE_CONFIRM_TEXT}
-                autoComplete="off"
-              />
-            </div>
-            {deleteError && (
-              <p className="text-sm text-red-400">{deleteError}</p>
-            )}
-            <button
-              type="submit"
-              disabled={deleteLoading || deleteConfirmText !== DELETE_CONFIRM_TEXT || (profile?.has_password && !deletePassword.trim())}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
-            >
-              {deleteLoading ? 'Deleting…' : 'Delete my account'}
-            </button>
-          </form>
-        </section>
+              {nameMessage && (
+                <p className={`text-sm ${nameMessage.startsWith('Name updated') ? 'text-green-400' : 'text-red-400'}`}>
+                  {nameMessage}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={nameSaving}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                {nameSaving ? 'Saving…' : 'Save name'}
+              </button>
+            </form>
+          </section>
+
+          {/* Password - only show for users with passwords */}
+          {profile?.has_password && (
+            <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
+              <h2 className="text-lg font-semibold text-white mb-4">Change password</h2>
+              <form onSubmit={handleChangePassword} className="space-y-4">
+                <div>
+                  <label htmlFor="profile-current-password" className="block text-sm font-medium text-gray-300 mb-1">
+                    Current password
+                  </label>
+                  <input
+                    id="profile-current-password"
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="profile-new-password" className="block text-sm font-medium text-gray-300 mb-1">
+                    New password
+                  </label>
+                  <input
+                    id="profile-new-password"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="••••••••"
+                    autoComplete="new-password"
+                    minLength={6}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="profile-confirm-password" className="block text-sm font-medium text-gray-300 mb-1">
+                    Confirm new password
+                  </label>
+                  <input
+                    id="profile-confirm-password"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="••••••••"
+                    autoComplete="new-password"
+                    minLength={6}
+                  />
+                </div>
+                {passwordMessage && (
+                  <p
+                    className={`text-sm ${
+                      passwordMessage.startsWith('Password updated') ? 'text-green-400' : 'text-red-400'
+                    }`}
+                  >
+                    {passwordMessage}
+                  </p>
+                )}
+                <button
+                  type="submit"
+                  disabled={passwordSaving}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  {passwordSaving ? 'Updating…' : 'Change password'}
+                </button>
+              </form>
+            </section>
+          )}
+
+          {/* Delete account */}
+          <section className="bg-gray-800 border border-red-900/50 rounded-xl p-6">
+            <h2 className="text-lg font-semibold text-red-400 mb-2">Delete account</h2>
+            <p className="text-sm text-gray-400 mb-4">
+              This will permanently delete your account and all associated data (subscriptions, etc.). This cannot be undone.
+            </p>
+            <form onSubmit={handleDeleteAccount} className="space-y-4">
+              {profile?.has_password && (
+                <div>
+                  <label htmlFor="delete-password" className="block text-sm font-medium text-gray-300 mb-1">
+                    Your password
+                  </label>
+                  <input
+                    id="delete-password"
+                    type="password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                  />
+                </div>
+              )}
+              <div>
+                <label htmlFor="delete-confirm-text" className="block text-sm font-medium text-gray-300 mb-1">
+                  Type {DELETE_CONFIRM_TEXT} to confirm
+                </label>
+                <input
+                  id="delete-confirm-text"
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder={DELETE_CONFIRM_TEXT}
+                  autoComplete="off"
+                />
+              </div>
+              {deleteError && (
+                <p className="text-sm text-red-400">{deleteError}</p>
+              )}
+              <button
+                type="submit"
+                disabled={deleteLoading || deleteConfirmText !== DELETE_CONFIRM_TEXT || (profile?.has_password && !deletePassword.trim())}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                {deleteLoading ? 'Deleting…' : 'Delete my account'}
+              </button>
+            </form>
+          </section>
+        </>
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <div className="min-h-screen px-4 py-6 sm:p-6 lg:p-8">
+      <div className="max-w-layout mx-auto min-w-0 w-full">
+        <h1 className="text-2xl font-bold text-white mb-8">Profile</h1>
+
+        {/* Tab Navigation */}
+        <div className="flex gap-1 mb-8 border-b border-gray-700">
+          <button
+            onClick={() => {
+              setActiveTab('overview');
+              navigate('/profile#overview', { replace: true });
+            }}
+            className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${
+              activeTab === 'overview'
+                ? 'text-blue-400 border-blue-400'
+                : 'text-gray-400 border-transparent hover:text-white hover:border-gray-600'
+            }`}
+          >
+            Overview
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('api-keys');
+              navigate('/profile#api-keys', { replace: true });
+            }}
+            className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${
+              activeTab === 'api-keys'
+                ? 'text-blue-400 border-blue-400'
+                : 'text-gray-400 border-transparent hover:text-white hover:border-gray-600'
+            }`}
+          >
+            API Keys
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('account');
+              navigate('/profile#account', { replace: true });
+            }}
+            className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${
+              activeTab === 'account'
+                ? 'text-blue-400 border-blue-400'
+                : 'text-gray-400 border-transparent hover:text-white hover:border-gray-600'
+            }`}
+          >
+            Account
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        {renderTabContent()}
       </div>
     </div>
   );
