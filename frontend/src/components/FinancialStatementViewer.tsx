@@ -200,22 +200,24 @@ const balanceSheetKeyFields = [
 
 export default function FinancialStatementViewer({ data, statementType }: FinancialStatementViewerProps) {
   const [selectedPeriod, setSelectedPeriod] = useState<'quarterly' | 'annual'>('quarterly');
+  const [isInitialized, setIsInitialized] = useState(false);
   
-  // Auto-select period based on available data
+  // Auto-select period based on available data (only on initial load)
   useEffect(() => {
-    if (data.format === 'json') {
+    if (data.format === 'json' && !isInitialized) {
       const jsonData = data.data;
       const hasQuarterly = jsonData.quarterlyReports && jsonData.quarterlyReports.length > 0;
       const hasAnnual = jsonData.annualReports && jsonData.annualReports.length > 0;
       
       // Prefer quarterly if available, otherwise annual
-      if (hasQuarterly && selectedPeriod !== 'quarterly') {
+      if (hasQuarterly) {
         setSelectedPeriod('quarterly');
-      } else if (!hasQuarterly && hasAnnual && selectedPeriod !== 'annual') {
+      } else if (hasAnnual) {
         setSelectedPeriod('annual');
       }
+      setIsInitialized(true);
     }
-  }, [data, selectedPeriod]);
+  }, [data, isInitialized]);
 
   if (data.format === 'error') {
     return (
