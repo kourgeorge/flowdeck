@@ -237,9 +237,9 @@ export default function AdminDashboardPage() {
           </section>
         )}
 
-        {/* Customers */}
+        {/* Users */}
         <section className="mb-10">
-          <h2 className="text-lg font-semibold text-white mb-4">Customers ({usersTotal})</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">Users ({usersTotal})</h2>
           {addTokensError && (
             <div className="mb-3 rounded-lg border border-red-800 bg-red-950/50 px-4 py-2 text-sm text-red-200">
               {addTokensError}
