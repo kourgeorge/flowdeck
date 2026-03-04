@@ -14,7 +14,8 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     email = Column(String(255), unique=True, nullable=False, index=True)
     name = Column(String(255), nullable=True)
-    hashed_password = Column(String(255), nullable=False)
+    hashed_password = Column(String(255), nullable=True)  # Nullable for Google OAuth users
+    google_id = Column(String(255), nullable=True, unique=True, index=True)  # Google user ID
     token_balance = Column(Integer, nullable=False, default=1000)
     is_admin = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)

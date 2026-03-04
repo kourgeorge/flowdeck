@@ -507,6 +507,7 @@ class MeResponse(BaseModel):
     name: Optional[str] = None
     token_balance: int
     is_admin: bool = False
+    has_password: bool = True  # True if user has password, False if Google-only
 
 
 class UpdateProfileRequest(BaseModel):
@@ -529,6 +530,7 @@ async def get_me(current_user=Depends(get_current_user), db: Session = Depends(g
         name=getattr(current_user, "name", None) or None,
         token_balance=balance,
         is_admin=getattr(current_user, "is_admin", False),
+        has_password=current_user.hashed_password is not None,
     )
 
 

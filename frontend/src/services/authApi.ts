@@ -23,11 +23,15 @@ export const authApi = {
     const res = await api.post<TokenResponse>('/api/auth/login', { email, password });
     return res.data;
   },
-  deleteAccount: async (password: string): Promise<void> => {
+  googleLogin: (): void => {
+    // Redirect to backend Google OAuth endpoint
+    window.location.href = `${API_BASE_URL}/api/auth/google`;
+  },
+  deleteAccount: async (password?: string): Promise<void> => {
     const token = getStoredToken();
     if (!token) throw new Error('Not authenticated');
     await api.delete('/api/auth/account', {
-      data: { password },
+      data: { password: password || null },
       headers: { Authorization: `Bearer ${token}` },
     });
   },
@@ -83,6 +87,7 @@ export interface MeProfile {
   name: string | null;
   token_balance: number;
   is_admin?: boolean;
+  has_password?: boolean;  // True if user has email/password, false if Google-only
 }
 
 export interface UserStats {

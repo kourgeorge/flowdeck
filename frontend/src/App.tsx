@@ -13,6 +13,7 @@ import PaymentCancelPage from './pages/PaymentCancelPage';
 import ChatPage from './pages/ChatPage';
 import CopilotPage from './pages/CopilotPage';
 import DocsPage from './pages/DocsPage';
+import AuthCallbackPage from './pages/AuthCallbackPage';
 
 function App() {
   return (
@@ -38,6 +39,7 @@ function App() {
           <Route path="contact" element={<ContactUsPage />} />
           <Route path="payment/success" element={<PaymentSuccessPage />} />
           <Route path="payment/cancel" element={<PaymentCancelPage />} />
+          <Route path="auth/callback" element={<AuthCallbackPage />} />
         </Route>
       </Routes>
     </Router>
