@@ -227,7 +227,7 @@ export default function ProfilePage() {
               <h2 className="text-lg font-semibold text-white mb-2">Token balance</h2>
               <p className="text-3xl font-bold text-white">{profile.token_balance.toLocaleString()} tokens</p>
               <p className="text-sm text-gray-400 mt-1">
-                Creating a report costs 200 tokens. You earn tokens when others view your reports.
+                Ticker analysis and AI assistant usage cost tokens. Earn tokens when others view your reports.
               </p>
             </section>
           )}
@@ -257,11 +257,11 @@ export default function ProfilePage() {
             ) : subscriptions.length === 0 ? (
               <p className="text-gray-400 text-sm">You have no subscriptions. Subscribe to stocks from a stock page or the dashboard.</p>
             ) : (
-              <ul className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {subscriptions.map((s) => (
-                  <li
+                  <div
                     key={s.id}
-                    className="flex items-center justify-between gap-4 py-2 border-b border-gray-700/50 last:border-0"
+                    className="flex items-center justify-between gap-4 py-2 px-3 rounded-lg bg-gray-700/30 border border-gray-600/30"
                   >
                     <Link
                       to={`/tickers/${s.ticker}`}
@@ -270,7 +270,7 @@ export default function ProfilePage() {
                       {s.ticker}
                     </Link>
                     <label className="flex items-center gap-2 cursor-pointer shrink-0">
-                      <span className="text-sm text-gray-400">Email updates</span>
+                      <span className="text-sm text-gray-400">Email</span>
                       <input
                         type="checkbox"
                         checked={s.email_updates}
@@ -279,9 +279,9 @@ export default function ProfilePage() {
                         className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
                       />
                     </label>
-                  </li>
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
           </section>
         </>
