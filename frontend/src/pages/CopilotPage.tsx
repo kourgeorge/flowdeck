@@ -235,7 +235,7 @@ export default function CopilotPage() {
               </svg>
             </button>
             {!sidebarCollapsed && (
-              <div className="absolute top-full left-0 right-0 z-50 bg-gray-800 border-4 border-blue-900/40 shadow-2xl" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
+              <div className="absolute top-full left-0 right-0 z-[60] bg-gray-800 border-4 border-blue-900/40 shadow-2xl" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
                 <DashboardStockSidebar
                   subscribedWidgets={widgets}
                   recentWidgets={[]}

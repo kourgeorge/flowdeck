@@ -92,7 +92,13 @@ function SidebarIcon() {
 }
 
 export default function Layout() {
-  const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  // Start collapsed on mobile (< 768px), expanded on desktop
+  const [sidebarExpanded, setSidebarExpanded] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 768;
+    }
+    return false;
+  });
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -105,13 +111,13 @@ export default function Layout() {
           type="button"
           aria-label="Close menu"
           onClick={() => setSidebarExpanded(false)}
-          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          className="fixed inset-0 bg-black/50 z-[70] md:hidden"
         />
       )}
 
       {/* Left sidebar: drawer on mobile, collapsible on desktop */}
       <aside
-        className={`fixed md:relative inset-y-0 left-0 shrink-0 border-r border-gray-700 bg-gray-800/95 flex flex-col z-40 transition-all duration-200 ease-out ${
+        className={`fixed md:relative inset-y-0 left-0 shrink-0 border-r border-gray-700 bg-gray-800/95 flex flex-col z-[80] transition-all duration-200 ease-out ${
           sidebarExpanded ? 'w-52 translate-x-0' : 'w-16 -translate-x-full md:translate-x-0'
         }`}
       >
