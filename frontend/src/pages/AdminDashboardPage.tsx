@@ -529,6 +529,7 @@ export default function AdminDashboardPage() {
                   {sortedMissionItems.map((item) => {
                     const isSelected = selectedMissionTickerSet.has(item.ticker);
                     const isRunningThisTicker = missionRunningForTicker === item.ticker;
+                    const isRunDisabled = isRunningThisTicker || item.is_running;
                     return (
                       <tr key={item.ticker} className="border-b border-gray-700/50">
                         <td className="px-4 py-3">
@@ -571,7 +572,7 @@ export default function AdminDashboardPage() {
                         <td className="px-4 py-3">
                           <button
                             type="button"
-                            disabled={isRunningThisTicker}
+                            disabled={isRunDisabled}
                             onClick={() => {
                               setMissionRunningForTicker(item.ticker);
                               void runMissionForTickers([item.ticker], true).finally(() => {
@@ -580,7 +581,7 @@ export default function AdminDashboardPage() {
                             }}
                             className="rounded border border-gray-600 bg-gray-800 px-2 py-1 text-sm font-medium text-gray-200 hover:bg-gray-700 disabled:opacity-50"
                           >
-                            {isRunningThisTicker ? 'Running…' : 'Run'}
+                            Run
                           </button>
                         </td>
                       </tr>
