@@ -620,7 +620,8 @@ class InfoFetcher:
         # Use instance variable for major tickers list
         major_tickers = [t for t in self._major_tickers if t != ticker]
         
-        similar_stocks = []
+        exact_matches: List[Dict[str, Any]] = []
+        sector_only_matches: List[Dict[str, Any]] = []
         
         for candidate_ticker in major_tickers:
             # Get from cache (should be prefetched by now, but will fetch if not)
@@ -634,8 +635,8 @@ class InfoFetcher:
             sector_match = target_sector and candidate_sector == target_sector
             industry_match = target_industry and candidate_industry == target_industry
             
-            if sector_match or industry_match:
-                similar_stocks.append({
+            if sector_match and industry_match:
+                exact_matches.append({
                     "ticker": candidate_ticker,
                     "name": candidate_info.get("name", candidate_ticker),
                     "sector": candidate_sector,
@@ -643,39 +644,33 @@ class InfoFetcher:
                     "market_cap": candidate_info.get("market_cap"),
                     "current_price": None,
                     "change_percent": None,
-                    "sector_match": sector_match,
-                    "industry_match": industry_match,
+                })
+            elif sector_match:
+                sector_only_matches.append({
+                    "ticker": candidate_ticker,
+                    "name": candidate_info.get("name", candidate_ticker),
+                    "sector": candidate_sector,
+                    "industry": candidate_industry,
+                    "market_cap": candidate_info.get("market_cap"),
+                    "current_price": None,
+                    "change_percent": None,
                 })
                 
-                if len(similar_stocks) >= limit * 2:
-                    break
+            if len(exact_matches) >= limit and len(sector_only_matches) >= limit:
+                break
         
-        # Sort by: 1) both sector and industry match, 2) market cap (descending)
-        similar_stocks.sort(
-            key=lambda x: (
-                x["sector_match"] and x["industry_match"],
-                x["market_cap"] if x["market_cap"] else 0
-            ),
-            reverse=True
-        )
+        # Prioritize exact sector+industry matches first, then sector-only matches.
+        exact_matches.sort(key=lambda x: x["market_cap"] if x["market_cap"] else 0, reverse=True)
+        sector_only_matches.sort(key=lambda x: x["market_cap"] if x["market_cap"] else 0, reverse=True)
         
-        # Limit results
-        similar_stocks = similar_stocks[:limit]
+        similar_stocks = (exact_matches + sector_only_matches)[:limit]
         
         if not similar_stocks:
             match_type = "no_matches"
-        elif all(s["sector_match"] and s["industry_match"] for s in similar_stocks):
+        elif len(similar_stocks) <= len(exact_matches):
             match_type = "sector_and_industry"
-        elif all(s["sector_match"] for s in similar_stocks):
-            match_type = "sector_only"
-        elif all(s["industry_match"] for s in similar_stocks):
-            match_type = "industry_only"
         else:
-            match_type = "mixed"
-        
-        for stock in similar_stocks:
-            stock.pop("sector_match", None)
-            stock.pop("industry_match", None)
+            match_type = "sector_only"
         
         return {
             "ticker": ticker,

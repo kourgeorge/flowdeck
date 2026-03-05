@@ -4,9 +4,8 @@ Generate a consolidated stocks.json for frontend search.
 
 Sources (in order of preference):
   1. SEC EDGAR company tickers JSON         -- free, no key, ~13k US-listed companies
-  2. NASDAQ FTP listings                    -- free, no key
+  2. Curated S&P 500 and NASDAQ-100 lists  -- static in-file
   3. Top crypto tickers                     -- static list
-  4. Fallback: S&P 500 via Wikipedia
 
 The script writes frontend/public/stocks.json with entries:
   - Non-major tickers: {"ticker": "...", "name": "..."}
@@ -50,8 +49,109 @@ MAJOR_TICKERS = [
     "SCHW", "LRCX", "EOG", "BSX", "MDLZ", "TMUS", "BDX", "SLB", "PYPL", "NOC",
     "MMM", "ITW", "USB", "PNC", "AON", "CL", "APD", "CME", "GD", "TGT",
     "NFLX", "SHOP", "SQ", "ROKU", "SNAP", "UBER", "LYFT", "ABNB", "COIN", "RBLX",
+    "ADP", "AMAT", "ANET", "AEP", "AIG", "ALL", "ALGN", "AME", "AMP", "AMT",
+    "AOS", "APA", "ARE", "ATO", "AWK", "AZO", "BALL", "BAX", "BBY", "BIIB",
+    "BKR", "BRO", "BXP", "CDNS", "CDW", "CHD", "CHTR", "CINF", "CMS", "CNC",
+    "COF", "CPB", "CRL", "CTSH", "CTAS", "CTVA", "DG", "DGX", "DOV", "DRI",
+    "EBAY", "ED", "EFX", "EIX", "EL", "EMR", "ENPH", "EQIX", "EQT", "ES",
+    "ESS", "ETSY", "EVRG", "EXC", "EXPD", "FAST", "FCX", "FDS", "FDX", "FTV",
+    "GLW", "GRMN", "HCA", "HIG", "HLT", "HPE", "HPQ", "HSY", "HUBB", "HUM",
+    "IEX", "ILMN", "IR", "K", "KDP", "KEY", "KMB", "KR", "LH", "LHX",
+    "LKQ", "LLY", "LUV", "LYB", "MCHP", "MKC", "MSCI", "MTB", "NDAQ", "NTRS",
+    "O", "ODFL", "OMC", "PAYX", "PFG", "PH", "PKG", "PNW", "PPG", "PSA",
+    "A","AA","AAC","AADI","AAOI","AAWW","AB","ABB","ABCL","ABEO",
+    "ABG","ABM","ABR","ABST","ABUS","ABVC","ABVX","AC","ACA","ACAD",
+    "ACCO","ACEL","ACET","ACGL","ACHC","ACHR","ACHV","ACIC","ACIU","ACLS",
+    "ACM","ACNB","ACON","ACRS","ACT","ACTG","ACVA","ACXP","ADAP","ADCT",
+    "ADIL","ADMA","ADMP","ADPT","ADSE","ADTN","ADTX","ADUS","ADV","ADVM",
+    "ADXN","AE","AEHR","AEIS","AEL","AEM","AENZ","AERI","AESI","AEVA",
+    "AEY","AFBI","AFG","AFIB","AFIN","AFMD","AFYA","AG","AGAE","AGCO",
+    "AGEN","AGFY","AGI","AGIO","AGL","AGLE","AGM","AGNC","AGO","AGR",
+    "AGRO","AGRX","AGS","AGTI","AGX","AGYS","AHCO","AHH","AHT","AI",
+    "AIHS","AIMC","AIN","AIP","AIR","AIRC","AIRI","AIT","AIV",
+    "AIZ","AJRD","AJX","AKAM","AKBA","AKR","AKRO","AKTS","AKYA","AL",
+    "ALB","ALC","ALDX","ALE","ALEC","ALEX","ALG","ALGM","ALGT","ALHC",
+    "ALIT","ALK","ALKS","ALLK","ALLO","ALNY","ALRM","ALSN","ALT","ALTO",
+    "ALTR","ALV","ALVR","ALXO","AM","AMAL","AMBA","AMBC","AMCX","AMED",
+    "AMG","AMH","AMK","AMKR","AMN","AMOT","AMPS","AMPX","AMRC","AMRK",
+    "AMRN","AMRX","AMSC","AMSF","AMSWA","AMTB","AMWD","AMWL","AMX","AMYT",
+    "AN","ANAB","ANDE","ANF","ANGO","ANIK","ANIP","ANIX","ANNX","ANSS",
+    "ANTE","ANY","AOMR","AORT","AOSL","AOUT","AP","APAM","APDN","APEI",
+    "APG","APLD","APLS","APLT","APOG","APP","APPF","APPN","APPS","APRE",
+    "APT","APTO","APTV","AQB","AQN","AQUA","AR","ARAV","ARAY","ARCB",
+    "ARCC","ARCH","ARCO","ARCT","ARDX","AREC","ARES","ARGX","ARHS","ARI",
+    "ARIS","ARKO","ARLO","ARLP","AROC","AROW","ARQT","ARR","ARRY","ARVN",
+    "ASAN","ASB","ASGN","ASH","ASIX","ASLE","ASND","ASO","ASPN","ASTE",
+    "ASTL","ASTS","ASUR","ASX","ATEN","ATI","ATKR","ATNI","ATRC","ATRO",
+    "ATSG","ATUS","AU","AUB","AUPH","AVA","AVAV","AVDL","AVIR","AVNS",
+    "AVNW","AVPT","AVRO","AVTR","AVXL","AVYA","AWI","AX","AXGN","AXL",
+    "AXNX","AXON","AXS","AY","AYI","AYRO","AZEK","AZPN","AZTA","AZUL"
+    ]
+
+SP500 = [
+    "NVDA", "AAPL", "MSFT", "AMZN", "GOOGL", "GOOG", "META", "AVGO", "TSLA", "BRK.B", "WMT", "LLY",
+    "JPM", "XOM", "V", "JNJ", "MA", "MU", "COST", "ORCL", "ABBV", "NFLX", "CVX", "PG",
+    "HD", "PLTR", "BAC", "GE", "CAT", "KO", "AMD", "CSCO", "MRK", "AMAT", "RTX", "PM",
+    "LRCX", "UNH", "MS", "GS", "WFC", "TMUS", "MCD", "IBM", "LIN", "INTC", "GEV", "PEP",
+    "VZ", "AXP", "AMGN", "T", "ABT", "C", "NEE", "KLAC", "TMO", "TXN", "GILD", "DIS",
+    "CRM", "TJX", "BA", "ISRG", "ANET", "SCHW", "DE", "APH", "ADI", "BLK", "APP", "UBER",
+    "UNP", "HON", "LMT", "PFE", "QCOM", "SYK", "LOW", "DHR", "WELL", "COP", "BKNG", "ETN",
+    "SPGI", "CB", "PANW", "ACN", "NEM", "PLD", "BMY", "PGR", "PH", "MDT", "INTU", "COF",
+    "VRTX", "HCA", "NOW", "GLW", "CEG", "MCK", "CME", "CMCSA", "MO", "ADBE", "SBUX", "SO",
+    "NOC", "BSX", "HWM", "CVS", "DUK", "CRWD", "GD", "TT", "WM", "DELL", "EQIX", "ICE",
+    "UPS", "FCX", "WMB", "FDX", "MRSH", "BX", "AMT", "WDC", "SNDK", "MAR", "ADP", "NKE",
+    "PNC", "SHW", "JCI", "PWR", "MMM", "ECL", "STX", "USB", "MCO", "KKR", "CDNS", "REGN",
+    "ITW", "SNPS", "ABNB", "EMR", "BK", "DASH", "CTAS", "MSI", "CSX", "CMI", "ORLY", "RCL",
+    "CL", "MNST", "KMI", "MDLZ", "CRH", "HOOD", "TDG", "CI", "AON", "AEP", "COR", "SLB",
+    "NSC", "GM", "RSG", "VLO", "WBD", "HLT", "EOG", "LHX", "ROST", "TRV", "PSX", "SPG",
+    "MPC", "PCAR", "ELV", "DLR", "APO", "TEL", "TFC", "AZO", "SRE", "FTNT", "O", "APD",
+    "BKR", "AJG", "AFL", "GWW", "FAST", "ALL", "COIN", "D", "VST", "PSA", "ADSK", "TGT",
+    "NXPI", "OKE", "AME", "OXY", "CAH", "ZTS", "CTVA", "URI", "MPWR", "TRGP", "CARR", "KEYS",
+    "IDXX", "F", "NDAQ", "EA", "FANG", "FIX", "EXC", "EW", "BDX", "XEL", "ETR", "GRMN",
+    "CMG", "MET", "TER", "HSY", "AXON", "CIEN", "CVNA", "ODFL", "WAB", "FITB", "YUM", "DHI",
+    "ROK", "AIG", "PYPL", "AMP", "KR", "PEG", "MSCI", "SYY", "CBRE", "PCG", "DDOG", "DAL",
+    "EBAY", "VTR", "ED", "NUE", "MLM", "TTWO", "XYZ", "CCI", "KDP", "HIG", "EQT", "CCL",
+    "RMD", "VMC", "WEC", "WDAY", "LVS", "MCHP", "LYV", "ROP", "TPL", "CPRT", "IR", "EL",
+    "GEHC", "OTIS", "ACGL", "STT", "NRG", "KMB", "KVUE", "FICO", "PAYX", "PRU", "HBAN", "A",
+    "FISV", "DG", "EME", "MTB", "ADM", "UAL", "VICI", "IRM", "TDY", "TPR", "ATO", "CBOE",
+    "EXR", "XYL", "WAT", "CTSH", "DTE", "AEE", "RJF", "IBKR", "IQV", "VRSK", "DOV", "CHTR",
+    "ULTA", "FE", "PPL", "WTW", "EXPE", "HAL", "KHC", "CNP", "HPE", "STLD", "EIX", "ROL",
+    "BIIB", "DXCM", "ES", "DVN", "NTRS", "JBL", "TSCO", "WRB", "AWK", "OMC", "PPG", "STZ",
+    "LEN", "CINF", "ARES", "HUBB", "FIS", "MTD", "EXE", "CFG", "PHM", "AVB", "Q", "EFX",
+    "ON", "BRO", "CHD", "WSM", "SYF", "STE", "RF", "CMS", "DOW", "VLTO", "EQR", "SW",
+    "DRI", "DLTR", "CTRA", "GIS", "LH", "DGX", "CPAY", "L", "LUV", "NI", "BR", "MRNA",
+    "IP", "KEY", "LDOS", "BG", "JBHT", "CHRW", "TSN", "HUM", "CNC", "VRSN", "GPN", "RL",
+    "FSLR", "AMCR", "PKG", "SBAC", "LYB", "LULU", "NVR", "PFG", "IFF", "TROW", "SNA", "ALB",
+    "EXPD", "CSGP", "INCY", "DD", "NTAP", "EVRG", "LII", "PTC", "SMCI", "ZBH", "LNT", "FTV",
+    "WY", "MKC", "HPQ", "WST", "BALL", "TXT", "PODD", "HII", "HOLX", "TKO", "VTRS", "TRMB",
+    "ESS", "INVH", "CF", "COO", "NDSN", "CDW", "J", "GPC", "FFIV", "PNR", "KIM", "TYL",
+    "MAA", "APTV", "IEX", "DECK", "TTD", "AKAM", "REG", "AVY", "ERIE", "CLX", "BBY", "HST",
+    "BEN", "MAS", "DPZ", "HAS", "EG", "ALLE", "GEN", "HRL", "PSKY", "ALGN", "GNRC", "UHS",
+    "PNW", "SJM", "SWK", "SOLV", "UDR", "JKHY", "DOC", "BF.B", "FOX", "GDDY", "IT", "FOXA",
+    "AIZ", "GL", "ZBRA", "CPT", "APA", "IVZ", "RVTY", "WYNN", "BLDR", "DVA", "AOS", "AES",
+    "BAX", "NCLH", "MGM", "FRT", "ARE", "HSIC", "TECH", "CAG", "TAP", "CRL", "BXP", "NWSA",
+    "SWKS", "FDS", "MOS", "POOL", "MOH", "EPAM", "CPB", "MTCH", "PAYC", "LW", "NWS"
 ]
 
+NASDAQ100 = [
+    "NVDA", "AAPL", "MSFT", "AMZN", "GOOGL", "GOOG", "META", "AVGO", "TSLA", "WMT", "ASML", "MU",
+    "COST", "NFLX", "PLTR", "AMD", "CSCO", "AMAT", "LRCX", "TMUS", "LIN", "INTC", "PEP", "AMGN",
+    "KLAC", "TXN", "GILD", "ISRG", "SHOP", "ADI", "APP", "HON", "QCOM", "PDD", "BKNG", "ARM",
+    "PANW", "INTU", "VRTX", "CEG", "CMCSA", "ADBE", "SBUX", "CRWD", "MELI", "WDC", "MAR", "ADP",
+    "STX", "CDNS", "REGN", "SNPS", "ABNB", "DASH", "CTAS", "ORLY", "CSX", "MNST", "MDLZ", "AEP",
+    "MRVL", "WBD", "ROST", "PCAR", "FTNT", "BKR", "FAST", "ADSK", "NXPI", "MPWR", "IDXX", "EA",
+    "EXC", "FANG", "FER", "MSTR", "XEL", "CCEP", "TRI", "AXON", "ODFL", "ALNY", "PYPL", "DDOG",
+    "TTWO", "KDP", "WDAY", "MCHP", "ROP", "CPRT", "GEHC", "PAYX", "INSM", "CTSH", "VRSK", "CHTR",
+    "KHC", "DXCM", "ZS", "TEAM", "CSGP"
+]
+# Backward-compatible alias for older typo used in this file history.
+NSDAQ100 = NASDAQ100
+
+DowJones = [
+    "GS", "CAT", "MSFT", "AMGN", "HD", "SHW", "MCD", "V", "TRV", "AXP", "JPM", "UNH",
+    "AAPL", "IBM", "HON", "JNJ", "BA", "AMZN", "CRM", "CVX", "NVDA", "MMM", "PG", "WMT",
+    "MRK", "DIS", "CSCO", "KO", "NKE", "VZ"
+]
 
 # ---------------------------------------------------------------------------
 # Source 1: SEC EDGAR – all US-listed companies (~13 000 tickers, no API key)
@@ -82,58 +182,31 @@ def fetch_from_edgar() -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Source 2: NASDAQ FTP – all NASDAQ + other-listed tickers
+# Source 2: Curated index lists (local, no network)
 # ---------------------------------------------------------------------------
 
-def fetch_from_nasdaq_ftp() -> list[dict]:
-    """
-    Download NASDAQ-listed and other-listed tickers from NASDAQ's FTP.
-    Returns list of {"ticker": ..., "name": ...} dicts.
-    """
-    urls = [
-        "https://ftp.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt",
-        "https://ftp.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt",
-    ]
-    stocks = {}
-    for url in urls:
-        print(f"Fetching from NASDAQ FTP: {url}")
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                lines = resp.read().decode("utf-8", errors="replace").splitlines()
-        except Exception as e:
-            print(f"  Warning: could not fetch {url}: {e}")
+def _stocks_from_tickers(tickers: list[str], source_name: str) -> list[dict]:
+    stocks: list[dict] = []
+    seen: set[str] = set()
+    for raw in tickers:
+        ticker = str(raw).strip().upper()
+        if not ticker or ticker in seen:
             continue
+        seen.add(ticker)
+        stocks.append({"ticker": ticker, "name": ticker})
+    stocks.sort(key=lambda x: x["ticker"])
+    print(f"  → {len(stocks)} tickers from {source_name}")
+    return stocks
 
-        if not lines:
-            continue
 
-        # First line is header
-        header = lines[0].split("|")
-        try:
-            sym_idx = header.index("Symbol")
-            name_idx = header.index("Security Name") if "Security Name" in header else header.index("Security Name")
-        except ValueError:
-            # Try alternate column names
-            sym_idx = 0
-            name_idx = 1
+def fetch_nasdaq100() -> list[dict]:
+    """Return NASDAQ-100 tickers from the local curated list."""
+    return _stocks_from_tickers(NASDAQ100, "local NASDAQ100 list")
 
-        for line in lines[1:]:
-            parts = line.split("|")
-            if len(parts) <= max(sym_idx, name_idx):
-                continue
-            ticker = parts[sym_idx].strip().upper()
-            name = parts[name_idx].strip()
-            # Skip test issues, warrants, units, etc.
-            if not ticker or not name or ticker == "SYMBOL" or "TEST" in ticker:
-                continue
-            if not _is_valid_ticker(ticker):
-                continue
-            stocks[ticker] = name
 
-    result = [{"ticker": t, "name": n} for t, n in sorted(stocks.items())]
-    print(f"  → {len(result)} stocks from NASDAQ FTP")
-    return result
+def fetch_sp500() -> list[dict]:
+    """Return S&P 500 tickers from the local curated list."""
+    return _stocks_from_tickers(SP500, "local SP500 list")
 
 
 # ---------------------------------------------------------------------------
@@ -182,35 +255,6 @@ def fetch_crypto() -> list[dict]:
     stocks = [{"ticker": ticker, "name": name} for ticker, name in crypto_list]
     print(f"  → {len(stocks)} cryptocurrencies added")
     return stocks
-
-
-# ---------------------------------------------------------------------------
-# Source 4: S&P 500 via Wikipedia (fallback, ~503 tickers)
-# ---------------------------------------------------------------------------
-
-def fetch_sp500() -> list[dict]:
-    """Scrape S&P 500 constituents from Wikipedia."""
-    try:
-        import pandas as pd
-        url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-        print(f"Fetching S&P 500 from Wikipedia...")
-        tables = pd.read_html(url)
-        df = tables[0]
-        stocks = []
-        for _, row in df.iterrows():
-            ticker = str(row["Symbol"]).strip().upper().replace(".", "-")
-            name = str(row["Security"]).strip()
-            if ticker and name:
-                stocks.append({"ticker": ticker, "name": name})
-        stocks.sort(key=lambda x: x["ticker"])
-        print(f"  → {len(stocks)} S&P 500 stocks")
-        return stocks
-    except ImportError:
-        print("  pandas not available, skipping Wikipedia S&P 500 source")
-        return []
-    except Exception as e:
-        print(f"  Warning: could not fetch S&P 500: {e}")
-        return []
 
 
 # ---------------------------------------------------------------------------
@@ -277,7 +321,26 @@ def _normalize_ticker(ticker: str) -> str:
     return ticker.upper().replace(".", "-")
 
 
-_MAJOR_TICKER_SET = {_normalize_ticker(t) for t in MAJOR_TICKERS}
+def _merge_major_ticker_lists(*lists: list[str]) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for tickers in lists:
+        for ticker in tickers:
+            norm = _normalize_ticker(ticker)
+            if norm in seen:
+                continue
+            seen.add(norm)
+            merged.append(norm)
+    return merged
+
+
+MERGED_MAJOR_TICKERS = _merge_major_ticker_lists(
+    MAJOR_TICKERS,
+    SP500,
+    NASDAQ100,
+    DowJones,
+)
+_MAJOR_TICKER_SET = set(MERGED_MAJOR_TICKERS)
 
 
 def load_major_sector_cache(path: Path) -> dict[str, dict]:
@@ -422,7 +485,7 @@ def main():
         "--source",
         choices=["edgar", "nasdaq", "crypto", "sp500", "all"],
         default="all",
-        help="Data source to use (default: all, merges edgar + nasdaq + crypto)",
+        help="Data source to use (default: all, merges edgar + local index lists + crypto)",
     )
     parser.add_argument(
         "--output",
@@ -465,15 +528,15 @@ def main():
 
     if args.source in ("nasdaq", "all"):
         try:
-            equity_stocks += fetch_from_nasdaq_ftp()
+            equity_stocks += fetch_nasdaq100()
         except Exception as e:
-            print(f"NASDAQ FTP fetch failed: {e}")
+            print(f"NASDAQ100 list load failed: {e}")
 
-    if args.source == "sp500" or (args.source == "all" and not equity_stocks):
+    if args.source in ("sp500", "all"):
         try:
             equity_stocks += fetch_sp500()
         except Exception as e:
-            print(f"S&P 500 fetch failed: {e}")
+            print(f"S&P 500 list load failed: {e}")
 
     if args.source == "all" and not equity_stocks:
         existing_stocks = load_existing_stocks(output_path)
