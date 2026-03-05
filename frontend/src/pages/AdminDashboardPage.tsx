@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -40,6 +40,19 @@ function formatDate(s?: string | null): string {
   } catch {
     return s;
   }
+}
+
+function formatMarketCap(value?: number | null): string {
+  if (value == null || !Number.isFinite(value) || value <= 0) return '—';
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000_000) return `${(value / 1_000_000_000_000).toFixed(2)}T`;
+  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
+  return value.toLocaleString();
+}
+
+function quoteTypeSortRank(value?: string | null): number {
+  return String(value ?? '').toUpperCase() === 'EQUITY' ? 0 : 1;
 }
 
 function summarizeMissionRunResult(result: MissionControlRunResponse): string {
@@ -134,10 +147,22 @@ export default function AdminDashboardPage() {
   const [latestReportsCollapsed, setLatestReportsCollapsed] = useState(true);
   const [subscriptionsCollapsed, setSubscriptionsCollapsed] = useState(true);
 
+  const sortedMissionItems = useMemo(
+    () =>
+      [...missionItems].sort((a, b) => {
+        const rankDiff = quoteTypeSortRank(a.quote_type) - quoteTypeSortRank(b.quote_type);
+        if (rankDiff !== 0) return rankDiff;
+        const aCap = typeof a.market_cap === 'number' && Number.isFinite(a.market_cap) ? a.market_cap : -1;
+        const bCap = typeof b.market_cap === 'number' && Number.isFinite(b.market_cap) ? b.market_cap : -1;
+        if (aCap !== bCap) return bCap - aCap;
+        return a.ticker.localeCompare(b.ticker);
+      }),
+    [missionItems],
+  );
   const selectedMissionTickerSet = new Set(selectedMissionTickers);
-  const allMissionTickers = missionItems.map((item) => item.ticker);
+  const allMissionTickers = sortedMissionItems.map((item) => item.ticker);
   const allMissionSelected =
-    missionItems.length > 0 && selectedMissionTickers.length === missionItems.length;
+    sortedMissionItems.length > 0 && selectedMissionTickers.length === sortedMissionItems.length;
 
   const refreshMissionControl = async (analysisDate = missionDate) => {
     setMissionLoading(true);
@@ -158,12 +183,13 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const runMissionForTickers = async (tickers: string[]) => {
+  const runMissionForTickers = async (tickers: string[], forceOverride?: boolean) => {
     if (tickers.length === 0) return;
     setMissionActionError(null);
     setMissionActionInfo(null);
     try {
-      const result = await adminApi.runMissionControl(tickers, missionDate, missionForceRerun);
+      const force = forceOverride ?? missionForceRerun;
+      const result = await adminApi.runMissionControl(tickers, missionDate, force);
       setMissionActionInfo(summarizeMissionRunResult(result));
       if (result.failed.length > 0) {
         const failures = result.failed.map((item) => `${item.ticker}: ${item.error}`).join(' | ');
@@ -335,19 +361,6 @@ export default function AdminDashboardPage() {
               >
                 {missionBulkRunning ? 'Running…' : `Run selected (${selectedMissionTickers.length})`}
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMissionBulkRunning(true);
-                  void runMissionForTickers(allMissionTickers).finally(() => {
-                    setMissionBulkRunning(false);
-                  });
-                }}
-                disabled={missionBulkRunning || allMissionTickers.length === 0}
-                className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-              >
-                Run all major
-              </button>
             </div>
 
             {missionActionInfo && (
@@ -367,7 +380,7 @@ export default function AdminDashboardPage() {
             )}
 
             <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-lg border border-gray-700 bg-gray-800/80">
-              <table className="w-full min-w-[760px] text-left text-sm">
+              <table className="w-full min-w-[1120px] text-left text-sm">
                 <thead className="sticky top-0 bg-gray-800 z-10">
                   <tr className="border-b border-gray-700">
                     <th className="px-4 py-3 text-gray-400 font-medium w-10">
@@ -385,15 +398,17 @@ export default function AdminDashboardPage() {
                       />
                     </th>
                     <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
-                    <th className="px-4 py-3 text-gray-400 font-medium">Latest run</th>
-                    <th className="px-4 py-3 text-gray-400 font-medium">Last executed</th>
-                    <th className="px-4 py-3 text-gray-400 font-medium">Has report ({missionDate})</th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">Quote type</th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">Market cap</th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">Sector</th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">Industry</th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">Last completed</th>
                     <th className="px-4 py-3 text-gray-400 font-medium">Status</th>
                     <th className="px-4 py-3 text-gray-400 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {missionItems.map((item) => {
+                  {sortedMissionItems.map((item) => {
                     const isSelected = selectedMissionTickerSet.has(item.ticker);
                     const isRunningThisTicker = missionRunningForTicker === item.ticker;
                     return (
@@ -421,19 +436,11 @@ export default function AdminDashboardPage() {
                             {item.ticker}
                           </Link>
                         </td>
-                        <td className="px-4 py-3 text-gray-300 font-mono text-xs">
-                          {item.latest_run_id ?? '—'}
-                        </td>
-                        <td className="px-4 py-3 text-gray-300">{formatDate(item.last_executed_at)}</td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={
-                              item.has_report_for_date ? 'text-emerald-300 font-medium' : 'text-amber-300 font-medium'
-                            }
-                          >
-                            {item.has_report_for_date ? 'Yes' : 'No'}
-                          </span>
-                        </td>
+                        <td className="px-4 py-3 text-gray-300">{item.quote_type ?? '—'}</td>
+                        <td className="px-4 py-3 text-gray-300">{formatMarketCap(item.market_cap)}</td>
+                        <td className="px-4 py-3 text-gray-300">{item.sector ?? '—'}</td>
+                        <td className="px-4 py-3 text-gray-300">{item.industry ?? '—'}</td>
+                        <td className="px-4 py-3 text-gray-300">{formatDate(item.last_completed_at)}</td>
                         <td className="px-4 py-3 text-gray-300">
                           {item.is_running ? (
                             <div>
@@ -452,7 +459,7 @@ export default function AdminDashboardPage() {
                             disabled={isRunningThisTicker}
                             onClick={() => {
                               setMissionRunningForTicker(item.ticker);
-                              void runMissionForTickers([item.ticker]).finally(() => {
+                              void runMissionForTickers([item.ticker], true).finally(() => {
                                 setMissionRunningForTicker(null);
                               });
                             }}
@@ -464,9 +471,9 @@ export default function AdminDashboardPage() {
                       </tr>
                     );
                   })}
-                  {missionItems.length === 0 && (
+                  {sortedMissionItems.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
+                      <td colSpan={9} className="px-4 py-6 text-center text-gray-400">
                         No mission-control rows found.
                       </td>
                     </tr>
