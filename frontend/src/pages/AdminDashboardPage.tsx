@@ -24,6 +24,8 @@ import {
 } from '../services/adminApi';
 
 type AdminTab = 'overview' | 'mission-control';
+type MissionSortKey = 'ticker' | 'type' | 'market_cap' | 'sector' | 'industry' | 'last_completed' | 'status';
+type MissionSortDirection = 'asc' | 'desc';
 
 function formatDate(s?: string | null, use24Hour = false): string {
   if (!s) return '—';
@@ -50,6 +52,24 @@ function formatMarketCap(value?: number | null): string {
 
 function quoteTypeSortRank(value?: string | null): number {
   return String(value ?? '').toUpperCase() === 'EQUITY' ? 0 : 1;
+}
+
+function compareNullableNumber(a?: number | null, b?: number | null): number {
+  const aValid = typeof a === 'number' && Number.isFinite(a);
+  const bValid = typeof b === 'number' && Number.isFinite(b);
+  if (!aValid && !bValid) return 0;
+  if (!aValid) return 1;
+  if (!bValid) return -1;
+  return a - b;
+}
+
+function compareNullableString(a?: string | null, b?: string | null): number {
+  const aVal = String(a ?? '').trim();
+  const bVal = String(b ?? '').trim();
+  if (!aVal && !bVal) return 0;
+  if (!aVal) return 1;
+  if (!bVal) return -1;
+  return aVal.localeCompare(bVal, undefined, { sensitivity: 'base' });
 }
 
 function summarizeMissionRunResult(result: MissionControlRunResponse): string {
@@ -134,6 +154,13 @@ export default function AdminDashboardPage() {
   const [missionRunningForTicker, setMissionRunningForTicker] = useState<string | null>(null);
   const [missionBulkRunning, setMissionBulkRunning] = useState(false);
   const [missionForceRerun, setMissionForceRerun] = useState(false);
+  const [missionSort, setMissionSort] = useState<{
+    key: MissionSortKey;
+    direction: MissionSortDirection;
+  }>({
+    key: 'type',
+    direction: 'asc',
+  });
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -146,19 +173,61 @@ export default function AdminDashboardPage() {
   const sortedMissionItems = useMemo(
     () =>
       [...missionItems].sort((a, b) => {
-        const rankDiff = quoteTypeSortRank(a.quote_type) - quoteTypeSortRank(b.quote_type);
-        if (rankDiff !== 0) return rankDiff;
-        const aCap = typeof a.market_cap === 'number' && Number.isFinite(a.market_cap) ? a.market_cap : -1;
-        const bCap = typeof b.market_cap === 'number' && Number.isFinite(b.market_cap) ? b.market_cap : -1;
-        if (aCap !== bCap) return bCap - aCap;
+        let cmp = 0;
+        switch (missionSort.key) {
+          case 'ticker':
+            cmp = a.ticker.localeCompare(b.ticker, undefined, { sensitivity: 'base' });
+            break;
+          case 'type': {
+            const rankDiff = quoteTypeSortRank(a.quote_type) - quoteTypeSortRank(b.quote_type);
+            cmp = rankDiff !== 0 ? rankDiff : compareNullableString(a.quote_type, b.quote_type);
+            break;
+          }
+          case 'market_cap':
+            cmp = compareNullableNumber(a.market_cap, b.market_cap);
+            break;
+          case 'sector':
+            cmp = compareNullableString(a.sector, b.sector);
+            break;
+          case 'industry':
+            cmp = compareNullableString(a.industry, b.industry);
+            break;
+          case 'last_completed': {
+            const aTime = a.last_completed_at ? new Date(a.last_completed_at).getTime() : null;
+            const bTime = b.last_completed_at ? new Date(b.last_completed_at).getTime() : null;
+            cmp = compareNullableNumber(aTime, bTime);
+            break;
+          }
+          case 'status':
+            cmp = Number(a.is_running) - Number(b.is_running);
+            break;
+          default:
+            cmp = 0;
+        }
+        if (missionSort.direction === 'desc') cmp *= -1;
+        if (cmp !== 0) return cmp;
         return a.ticker.localeCompare(b.ticker);
       }),
-    [missionItems],
+    [missionItems, missionSort],
   );
   const selectedMissionTickerSet = new Set(selectedMissionTickers);
   const allMissionTickers = sortedMissionItems.map((item) => item.ticker);
   const allMissionSelected =
     sortedMissionItems.length > 0 && selectedMissionTickers.length === sortedMissionItems.length;
+
+  const toggleMissionSort = (key: MissionSortKey) => {
+    setMissionSort((prev) => {
+      if (prev.key === key) {
+        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      const defaultDirection: MissionSortDirection =
+        key === 'market_cap' || key === 'last_completed' || key === 'status' ? 'desc' : 'asc';
+      return { key, direction: defaultDirection };
+    });
+  };
+
+  const sortIndicator = (key: MissionSortKey): string =>
+    missionSort.key === key ? (missionSort.direction === 'asc' ? '↑' : '↓') : '↕';
 
   const refreshMissionControl = async () => {
     setMissionLoading(true);
@@ -384,13 +453,69 @@ export default function AdminDashboardPage() {
                         aria-label="Select all major tickers"
                       />
                     </th>
-                    <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
-                    <th className="px-4 py-3 text-gray-400 font-medium">Type</th>
-                    <th className="px-4 py-3 text-gray-400 font-medium">Market cap</th>
-                    <th className="px-4 py-3 text-gray-400 font-medium">Sector</th>
-                    <th className="px-4 py-3 text-gray-400 font-medium">Industry</th>
-                    <th className="px-4 py-3 text-gray-400 font-medium">Last completed</th>
-                    <th className="px-4 py-3 text-gray-400 font-medium">Status</th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 hover:text-gray-200"
+                        onClick={() => toggleMissionSort('ticker')}
+                      >
+                        Ticker <span className="text-xs">{sortIndicator('ticker')}</span>
+                      </button>
+                    </th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 hover:text-gray-200"
+                        onClick={() => toggleMissionSort('type')}
+                      >
+                        Type <span className="text-xs">{sortIndicator('type')}</span>
+                      </button>
+                    </th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 hover:text-gray-200"
+                        onClick={() => toggleMissionSort('market_cap')}
+                      >
+                        Market cap <span className="text-xs">{sortIndicator('market_cap')}</span>
+                      </button>
+                    </th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 hover:text-gray-200"
+                        onClick={() => toggleMissionSort('sector')}
+                      >
+                        Sector <span className="text-xs">{sortIndicator('sector')}</span>
+                      </button>
+                    </th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 hover:text-gray-200"
+                        onClick={() => toggleMissionSort('industry')}
+                      >
+                        Industry <span className="text-xs">{sortIndicator('industry')}</span>
+                      </button>
+                    </th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 hover:text-gray-200"
+                        onClick={() => toggleMissionSort('last_completed')}
+                      >
+                        Last completed <span className="text-xs">{sortIndicator('last_completed')}</span>
+                      </button>
+                    </th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 hover:text-gray-200"
+                        onClick={() => toggleMissionSort('status')}
+                      >
+                        Status <span className="text-xs">{sortIndicator('status')}</span>
+                      </button>
+                    </th>
                     <th className="px-4 py-3 text-gray-400 font-medium">Actions</th>
                   </tr>
                 </thead>
@@ -432,9 +557,6 @@ export default function AdminDashboardPage() {
                           {item.is_running ? (
                             <div>
                               <p className="text-blue-300 font-medium">Running</p>
-                              {item.running_analysis_id && (
-                                <p className="font-mono text-xs text-gray-400">{item.running_analysis_id}</p>
-                              )}
                             </div>
                           ) : (
                             <span className="text-gray-400">Idle</span>
