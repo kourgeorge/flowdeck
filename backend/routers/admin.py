@@ -1,19 +1,169 @@
 """Admin-only API: stats, users, reports, analyses, subscriptions."""
 
+from json import JSONDecodeError, load
 from datetime import datetime, timedelta, timezone, date
-from typing import Optional
+from pathlib import Path
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, cast, Date
 from sqlalchemy.orm import Session
 
 from auth import get_current_admin_user
+from config import RESULTS_DIR
 from database import get_db
 from models.db_models import User, Report, AnalysisRun, ReportView, Subscription
 from services import token_service
+from services.analysis_service import AnalysisService
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+_MISSION_ANALYSIS_SERVICE = AnalysisService(results_dir=RESULTS_DIR)
+_MAJOR_STOCKS_SECTORS_PATH = (
+    Path(__file__).resolve().parents[1] / "data" / "major_stocks_sectors.json"
+)
+
+
+def _normalize_analysis_date(analysis_date: Optional[str]) -> str:
+    date_str = (analysis_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")).strip()
+    try:
+        datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="analysis_date must be YYYY-MM-DD")
+    return date_str
+
+
+def _results_root() -> Path:
+    p = Path(RESULTS_DIR)
+    if p.is_absolute():
+        return p
+    return Path(__file__).resolve().parents[2] / p
+
+
+def _load_mission_control_entries(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            data = load(f)
+    except (OSError, JSONDecodeError):
+        return []
+    if not isinstance(data, dict):
+        return []
+
+    entries: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for key, item in data.items():
+        ticker_raw = key
+        sector: Optional[str] = None
+        industry: Optional[str] = None
+        quote_type: Optional[str] = None
+        market_cap: Optional[float] = None
+
+        if isinstance(item, dict):
+            ticker_raw = item.get("ticker") or key
+            sector_raw = item.get("sector")
+            industry_raw = item.get("industry")
+            quote_type_raw = item.get("quote_type")
+            market_cap_raw = item.get("market_cap")
+            sector = str(sector_raw).strip() if sector_raw is not None else None
+            industry = str(industry_raw).strip() if industry_raw is not None else None
+            quote_type = (
+                str(quote_type_raw).strip().upper() if quote_type_raw is not None else None
+            )
+            if market_cap_raw is not None:
+                try:
+                    market_cap = float(market_cap_raw)
+                except (TypeError, ValueError):
+                    market_cap = None
+
+        ticker = str(ticker_raw or "").strip().upper()
+        if not ticker or ticker in seen:
+            continue
+        seen.add(ticker)
+        entries.append(
+            {
+                "ticker": ticker,
+                "sector": sector or None,
+                "industry": industry or None,
+                "quote_type": quote_type or None,
+                "market_cap": market_cap,
+            }
+        )
+
+    entries.sort(key=lambda item: (0 if item.get("quote_type") == "EQUITY" else 1, item["ticker"] or ""))
+    return entries
+
+
+def _get_mission_control_entries() -> list[dict[str, Any]]:
+    return _load_mission_control_entries(_MAJOR_STOCKS_SECTORS_PATH)
+
+
+def _quote_type_sort_rank(quote_type: Optional[str]) -> int:
+    return 0 if str(quote_type or "").strip().upper() == "EQUITY" else 1
+
+
+def _load_running_statuses_by_ticker(tickers: list[str]) -> dict[str, dict]:
+    """
+    Return currently running status payload keyed by ticker.
+    Status files are removed by AnalysisService when analyses complete/error.
+    """
+    root = _results_root()
+    if not root.exists():
+        return {}
+
+    allowed_tickers = {t.upper() for t in tickers}
+    by_ticker: dict[str, dict] = {}
+    for ticker_dir in root.iterdir():
+        if not ticker_dir.is_dir():
+            continue
+        ticker_upper = ticker_dir.name.upper()
+        if ticker_upper not in allowed_tickers:
+            continue
+
+        for status_file in sorted(ticker_dir.glob("*/status.json"), key=lambda p: p.parent.name, reverse=True):
+            try:
+                with status_file.open("r", encoding="utf-8") as f:
+                    data = load(f) or {}
+            except (OSError, JSONDecodeError):
+                continue
+
+            if data.get("status") != "running":
+                continue
+            if str(data.get("ticker") or "").upper() != ticker_upper:
+                continue
+
+            current = by_ticker.get(ticker_upper)
+            current_updated_at = str((current or {}).get("updated_at") or "")
+            candidate_updated_at = str(data.get("updated_at") or "")
+            if current is None or candidate_updated_at >= current_updated_at:
+                by_ticker[ticker_upper] = data
+
+    return by_ticker
+
+
+def _normalize_requested_tickers(
+    tickers: Optional[list[str]],
+    allowed_tickers: list[str],
+) -> tuple[list[str], list[str]]:
+    allowed_set = set(allowed_tickers)
+    if not tickers:
+        return (allowed_tickers, [])
+
+    valid: list[str] = []
+    invalid: list[str] = []
+    seen: set[str] = set()
+    for raw in tickers:
+        ticker = str(raw or "").strip().upper()
+        if not ticker or ticker in seen:
+            continue
+        seen.add(ticker)
+        if ticker not in allowed_set:
+            invalid.append(ticker)
+            continue
+        valid.append(ticker)
+
+    return (valid, invalid)
 
 
 # --- Response schemas ---
@@ -92,6 +242,50 @@ class AdminAddTokensBody(BaseModel):
 
 class AdminAddTokensResponse(BaseModel):
     token_balance: int
+
+
+class MissionControlTickerItem(BaseModel):
+    ticker: str
+    quote_type: Optional[str]
+    market_cap: Optional[float]
+    last_completed_at: Optional[datetime]
+    sector: Optional[str]
+    industry: Optional[str]
+    has_report_for_date: bool
+    is_running: bool
+    running_analysis_id: Optional[str]
+    running_for_date: Optional[str]
+
+
+class MissionControlResponse(BaseModel):
+    date: str
+    items: list[MissionControlTickerItem]
+
+
+class MissionControlRunBody(BaseModel):
+    tickers: list[str] = Field(default_factory=list)
+    analysis_date: Optional[str] = None
+    force: bool = False
+
+
+class MissionControlRunItem(BaseModel):
+    ticker: str
+    analysis_id: str
+
+
+class MissionControlRunErrorItem(BaseModel):
+    ticker: str
+    error: str
+
+
+class MissionControlRunResponse(BaseModel):
+    date: str
+    requested: list[str]
+    triggered: list[MissionControlRunItem]
+    already_running: list[MissionControlRunItem]
+    skipped_existing: list[str]
+    invalid_tickers: list[str]
+    failed: list[MissionControlRunErrorItem]
 
 
 # --- Endpoints ---
@@ -361,3 +555,130 @@ def get_analyses_daily(
         result.append(AnalysisDailyCount(date=date_str, count=count_val))  # type: ignore[arg-type]
         current += timedelta(days=1)
     return AnalysesDailyResponse(data=result)
+
+
+@router.get("/mission-control", response_model=MissionControlResponse)
+def get_mission_control(
+    _user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+    analysis_date: Optional[str] = Query(None),
+):
+    date_str = _normalize_analysis_date(analysis_date)
+    mission_entries = _get_mission_control_entries()
+    mission_tickers = [str(item.get("ticker") or "").upper() for item in mission_entries if item.get("ticker")]
+    ticker_set = set(mission_tickers)
+    running_by_ticker = _load_running_statuses_by_ticker(mission_tickers)
+
+    last_completed = {
+        str(ticker).upper(): created_at
+        for ticker, created_at in db.query(
+            Report.ticker, func.max(Report.created_at)
+        ).group_by(Report.ticker).all()
+        if ticker and str(ticker).upper() in ticker_set and created_at is not None
+    }
+    has_report_today = {
+        str(ticker).upper()
+        for (ticker,) in db.query(Report.ticker)
+        .filter(Report.run_id.like(f"{date_str}%"))
+        .distinct()
+        .all()
+        if ticker
+    }
+
+    def _entry_sort_key(entry: dict[str, Any]) -> tuple[int, int, float, str]:
+        ticker_upper = str(entry.get("ticker") or "").upper()
+        completed_at = last_completed.get(ticker_upper)
+        completed_ts = completed_at.timestamp() if completed_at is not None else 0.0
+        return (
+            _quote_type_sort_rank(entry.get("quote_type")),
+            0 if completed_at is not None else 1,
+            -completed_ts,
+            ticker_upper,
+        )
+
+    items: list[MissionControlTickerItem] = []
+    for entry in sorted(mission_entries, key=_entry_sort_key):
+        ticker_upper = str(entry.get("ticker") or "").upper()
+        if not ticker_upper:
+            continue
+        running = running_by_ticker.get(ticker_upper)
+        items.append(
+            MissionControlTickerItem(
+                ticker=ticker_upper,
+                quote_type=entry.get("quote_type"),
+                market_cap=entry.get("market_cap"),
+                last_completed_at=last_completed.get(ticker_upper),
+                sector=entry.get("sector"),
+                industry=entry.get("industry"),
+                has_report_for_date=ticker_upper in has_report_today,
+                is_running=running is not None,
+                running_analysis_id=(str(running.get("analysis_id")) if running else None),
+                running_for_date=(str(running.get("date")) if running else None),
+            )
+        )
+
+    return MissionControlResponse(date=date_str, items=items)
+
+
+@router.post("/mission-control/run", response_model=MissionControlRunResponse)
+def run_mission_control(
+    body: MissionControlRunBody,
+    _user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    date_str = _normalize_analysis_date(body.analysis_date)
+    mission_entries = _get_mission_control_entries()
+    mission_tickers = [str(item.get("ticker") or "").upper() for item in mission_entries if item.get("ticker")]
+    requested, invalid_tickers = _normalize_requested_tickers(body.tickers, mission_tickers)
+    running_by_ticker = _load_running_statuses_by_ticker(mission_tickers)
+    has_report_today = {
+        str(ticker).upper()
+        for (ticker,) in db.query(Report.ticker)
+        .filter(Report.run_id.like(f"{date_str}%"))
+        .distinct()
+        .all()
+        if ticker
+    }
+
+    triggered: list[MissionControlRunItem] = []
+    already_running: list[MissionControlRunItem] = []
+    skipped_existing: list[str] = []
+    failed: list[MissionControlRunErrorItem] = []
+
+    for ticker in requested:
+        running = running_by_ticker.get(ticker)
+        if running is not None and str(running.get("date") or "") == date_str:
+            analysis_id = str(running.get("analysis_id") or "")
+            if analysis_id:
+                already_running.append(MissionControlRunItem(ticker=ticker, analysis_id=analysis_id))
+                continue
+
+        if not body.force and ticker in has_report_today:
+            skipped_existing.append(ticker)
+            continue
+
+        try:
+            analysis_id, existing = _MISSION_ANALYSIS_SERVICE.start_analysis(
+                ticker=ticker,
+                analysis_date=date_str,
+                analysts=["market", "news", "fundamentals", "technical", "sec"],
+                research_depth=5,
+                llm_provider="azure",
+                progress_callback=None,
+            )
+            if existing:
+                already_running.append(MissionControlRunItem(ticker=ticker, analysis_id=analysis_id))
+            else:
+                triggered.append(MissionControlRunItem(ticker=ticker, analysis_id=analysis_id))
+        except Exception as e:
+            failed.append(MissionControlRunErrorItem(ticker=ticker, error=str(e)))
+
+    return MissionControlRunResponse(
+        date=date_str,
+        requested=requested,
+        triggered=triggered,
+        already_running=already_running,
+        skipped_existing=skipped_existing,
+        invalid_tickers=invalid_tickers,
+        failed=failed,
+    )
