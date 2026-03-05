@@ -830,7 +830,8 @@ class InfoFetcher:
 
             change_percent = self._coerce_float(symbol_price.get("regularMarketChangePercent"))
             if change_percent is not None:
-                stock["change_percent"] = round(change_percent, 2)
+                # yahooquery `regularMarketChangePercent` is fractional (e.g. -0.016 = -1.6%).
+                stock["change_percent"] = round(change_percent * 100.0, 2)
 
             market_cap = self._coerce_float(symbol_price.get("marketCap"))
             if market_cap is None:
