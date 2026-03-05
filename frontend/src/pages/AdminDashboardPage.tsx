@@ -29,13 +29,14 @@ function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function formatDate(s?: string | null): string {
+function formatDate(s?: string | null, use24Hour = false): string {
   if (!s) return '—';
   try {
     const d = new Date(s);
     return d.toLocaleString(undefined, {
       dateStyle: 'short',
       timeStyle: 'short',
+      ...(use24Hour ? { hour12: false } : {}),
     });
   } catch {
     return s;
@@ -440,7 +441,7 @@ export default function AdminDashboardPage() {
                         <td className="px-4 py-3 text-gray-300">{formatMarketCap(item.market_cap)}</td>
                         <td className="px-4 py-3 text-gray-300">{item.sector ?? '—'}</td>
                         <td className="px-4 py-3 text-gray-300">{item.industry ?? '—'}</td>
-                        <td className="px-4 py-3 text-gray-300">{formatDate(item.last_completed_at)}</td>
+                        <td className="px-4 py-3 text-gray-300">{formatDate(item.last_completed_at, true)}</td>
                         <td className="px-4 py-3 text-gray-300">
                           {item.is_running ? (
                             <div>
