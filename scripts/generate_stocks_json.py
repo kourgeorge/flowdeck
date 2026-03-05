@@ -4,8 +4,8 @@ Generate a consolidated stocks.json for frontend search.
 
 Sources (in order of preference):
   1. SEC EDGAR company tickers JSON         -- free, no key, ~13k US-listed companies
-  2. Curated S&P 500 and NASDAQ-100 lists  -- static in-file
-  3. Top crypto tickers                     -- static list
+  2. Curated S&P 500 and NASDAQ-100 lists  -- loaded from scripts/data/stock_lists.json
+  3. Top crypto tickers                     -- loaded from scripts/data/stock_lists.json
 
 The script writes frontend/public/stocks.json with entries:
   - Non-major tickers: {"ticker": "...", "name": "..."}
@@ -35,123 +35,58 @@ OUTPUT_PATH = Path(__file__).parent.parent / "frontend" / "public" / "stocks.jso
 MAJOR_SECTORS_CACHE_PATH = (
     Path(__file__).parent.parent / "backend" / "data" / "major_stocks_sectors.json"
 )
+STOCK_LISTS_PATH = Path(__file__).parent / "data" / "stock_lists.json"
 
-# Curated list of major stocks (S&P 500 + NASDAQ 100 top stocks)
-MAJOR_TICKERS = [
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK-B", "V", "UNH",
-    "JNJ", "WMT", "JPM", "MA", "PG", "XOM", "HD", "CVX", "MRK", "ABBV",
-    "KO", "PEP", "COST", "AVGO", "TMO", "MCD", "CSCO", "ACN", "ABT", "LIN",
-    "DHR", "NKE", "VZ", "ADBE", "TXN", "NEE", "CRM", "PM", "ORCL", "CMCSA",
-    "DIS", "WFC", "BMY", "UPS", "RTX", "QCOM", "INTC", "HON", "UNP", "INTU",
-    "AMD", "AMGN", "LOW", "BA", "SBUX", "CAT", "GE", "SPGI", "DE", "AXP",
-    "BLK", "GILD", "MDT", "PLD", "ISRG", "TJX", "MMC", "C", "BKNG", "SYK",
-    "ADI", "VRTX", "REGN", "ZTS", "CB", "MO", "CI", "PGR", "SO", "DUK",
-    "SCHW", "LRCX", "EOG", "BSX", "MDLZ", "TMUS", "BDX", "SLB", "PYPL", "NOC",
-    "MMM", "ITW", "USB", "PNC", "AON", "CL", "APD", "CME", "GD", "TGT",
-    "NFLX", "SHOP", "SQ", "ROKU", "SNAP", "UBER", "LYFT", "ABNB", "COIN", "RBLX",
-    "ADP", "AMAT", "ANET", "AEP", "AIG", "ALL", "ALGN", "AME", "AMP", "AMT",
-    "AOS", "APA", "ARE", "ATO", "AWK", "AZO", "BALL", "BAX", "BBY", "BIIB",
-    "BKR", "BRO", "BXP", "CDNS", "CDW", "CHD", "CHTR", "CINF", "CMS", "CNC",
-    "COF", "CPB", "CRL", "CTSH", "CTAS", "CTVA", "DG", "DGX", "DOV", "DRI",
-    "EBAY", "ED", "EFX", "EIX", "EL", "EMR", "ENPH", "EQIX", "EQT", "ES",
-    "ESS", "ETSY", "EVRG", "EXC", "EXPD", "FAST", "FCX", "FDS", "FDX", "FTV",
-    "GLW", "GRMN", "HCA", "HIG", "HLT", "HPE", "HPQ", "HSY", "HUBB", "HUM",
-    "IEX", "ILMN", "IR", "K", "KDP", "KEY", "KMB", "KR", "LH", "LHX",
-    "LKQ", "LLY", "LUV", "LYB", "MCHP", "MKC", "MSCI", "MTB", "NDAQ", "NTRS",
-    "O", "ODFL", "OMC", "PAYX", "PFG", "PH", "PKG", "PNW", "PPG", "PSA",
-    "A","AA","AAC","AADI","AAOI","AAWW","AB","ABB","ABCL","ABEO",
-    "ABG","ABM","ABR","ABST","ABUS","ABVC","ABVX","AC","ACA","ACAD",
-    "ACCO","ACEL","ACET","ACGL","ACHC","ACHR","ACHV","ACIC","ACIU","ACLS",
-    "ACM","ACNB","ACON","ACRS","ACT","ACTG","ACVA","ACXP","ADAP","ADCT",
-    "ADIL","ADMA","ADMP","ADPT","ADSE","ADTN","ADTX","ADUS","ADV","ADVM",
-    "ADXN","AE","AEHR","AEIS","AEL","AEM","AENZ","AERI","AESI","AEVA",
-    "AEY","AFBI","AFG","AFIB","AFIN","AFMD","AFYA","AG","AGAE","AGCO",
-    "AGEN","AGFY","AGI","AGIO","AGL","AGLE","AGM","AGNC","AGO","AGR",
-    "AGRO","AGRX","AGS","AGTI","AGX","AGYS","AHCO","AHH","AHT","AI",
-    "AIHS","AIMC","AIN","AIP","AIR","AIRC","AIRI","AIT","AIV",
-    "AIZ","AJRD","AJX","AKAM","AKBA","AKR","AKRO","AKTS","AKYA","AL",
-    "ALB","ALC","ALDX","ALE","ALEC","ALEX","ALG","ALGM","ALGT","ALHC",
-    "ALIT","ALK","ALKS","ALLK","ALLO","ALNY","ALRM","ALSN","ALT","ALTO",
-    "ALTR","ALV","ALVR","ALXO","AM","AMAL","AMBA","AMBC","AMCX","AMED",
-    "AMG","AMH","AMK","AMKR","AMN","AMOT","AMPS","AMPX","AMRC","AMRK",
-    "AMRN","AMRX","AMSC","AMSF","AMSWA","AMTB","AMWD","AMWL","AMX","AMYT",
-    "AN","ANAB","ANDE","ANF","ANGO","ANIK","ANIP","ANIX","ANNX","ANSS",
-    "ANTE","ANY","AOMR","AORT","AOSL","AOUT","AP","APAM","APDN","APEI",
-    "APG","APLD","APLS","APLT","APOG","APP","APPF","APPN","APPS","APRE",
-    "APT","APTO","APTV","AQB","AQN","AQUA","AR","ARAV","ARAY","ARCB",
-    "ARCC","ARCH","ARCO","ARCT","ARDX","AREC","ARES","ARGX","ARHS","ARI",
-    "ARIS","ARKO","ARLO","ARLP","AROC","AROW","ARQT","ARR","ARRY","ARVN",
-    "ASAN","ASB","ASGN","ASH","ASIX","ASLE","ASND","ASO","ASPN","ASTE",
-    "ASTL","ASTS","ASUR","ASX","ATEN","ATI","ATKR","ATNI","ATRC","ATRO",
-    "ATSG","ATUS","AU","AUB","AUPH","AVA","AVAV","AVDL","AVIR","AVNS",
-    "AVNW","AVPT","AVRO","AVTR","AVXL","AVYA","AWI","AX","AXGN","AXL",
-    "AXNX","AXON","AXS","AY","AYI","AYRO","AZEK","AZPN","AZTA","AZUL"
-    ]
 
-SP500 = [
-    "NVDA", "AAPL", "MSFT", "AMZN", "GOOGL", "GOOG", "META", "AVGO", "TSLA", "BRK.B", "WMT", "LLY",
-    "JPM", "XOM", "V", "JNJ", "MA", "MU", "COST", "ORCL", "ABBV", "NFLX", "CVX", "PG",
-    "HD", "PLTR", "BAC", "GE", "CAT", "KO", "AMD", "CSCO", "MRK", "AMAT", "RTX", "PM",
-    "LRCX", "UNH", "MS", "GS", "WFC", "TMUS", "MCD", "IBM", "LIN", "INTC", "GEV", "PEP",
-    "VZ", "AXP", "AMGN", "T", "ABT", "C", "NEE", "KLAC", "TMO", "TXN", "GILD", "DIS",
-    "CRM", "TJX", "BA", "ISRG", "ANET", "SCHW", "DE", "APH", "ADI", "BLK", "APP", "UBER",
-    "UNP", "HON", "LMT", "PFE", "QCOM", "SYK", "LOW", "DHR", "WELL", "COP", "BKNG", "ETN",
-    "SPGI", "CB", "PANW", "ACN", "NEM", "PLD", "BMY", "PGR", "PH", "MDT", "INTU", "COF",
-    "VRTX", "HCA", "NOW", "GLW", "CEG", "MCK", "CME", "CMCSA", "MO", "ADBE", "SBUX", "SO",
-    "NOC", "BSX", "HWM", "CVS", "DUK", "CRWD", "GD", "TT", "WM", "DELL", "EQIX", "ICE",
-    "UPS", "FCX", "WMB", "FDX", "MRSH", "BX", "AMT", "WDC", "SNDK", "MAR", "ADP", "NKE",
-    "PNC", "SHW", "JCI", "PWR", "MMM", "ECL", "STX", "USB", "MCO", "KKR", "CDNS", "REGN",
-    "ITW", "SNPS", "ABNB", "EMR", "BK", "DASH", "CTAS", "MSI", "CSX", "CMI", "ORLY", "RCL",
-    "CL", "MNST", "KMI", "MDLZ", "CRH", "HOOD", "TDG", "CI", "AON", "AEP", "COR", "SLB",
-    "NSC", "GM", "RSG", "VLO", "WBD", "HLT", "EOG", "LHX", "ROST", "TRV", "PSX", "SPG",
-    "MPC", "PCAR", "ELV", "DLR", "APO", "TEL", "TFC", "AZO", "SRE", "FTNT", "O", "APD",
-    "BKR", "AJG", "AFL", "GWW", "FAST", "ALL", "COIN", "D", "VST", "PSA", "ADSK", "TGT",
-    "NXPI", "OKE", "AME", "OXY", "CAH", "ZTS", "CTVA", "URI", "MPWR", "TRGP", "CARR", "KEYS",
-    "IDXX", "F", "NDAQ", "EA", "FANG", "FIX", "EXC", "EW", "BDX", "XEL", "ETR", "GRMN",
-    "CMG", "MET", "TER", "HSY", "AXON", "CIEN", "CVNA", "ODFL", "WAB", "FITB", "YUM", "DHI",
-    "ROK", "AIG", "PYPL", "AMP", "KR", "PEG", "MSCI", "SYY", "CBRE", "PCG", "DDOG", "DAL",
-    "EBAY", "VTR", "ED", "NUE", "MLM", "TTWO", "XYZ", "CCI", "KDP", "HIG", "EQT", "CCL",
-    "RMD", "VMC", "WEC", "WDAY", "LVS", "MCHP", "LYV", "ROP", "TPL", "CPRT", "IR", "EL",
-    "GEHC", "OTIS", "ACGL", "STT", "NRG", "KMB", "KVUE", "FICO", "PAYX", "PRU", "HBAN", "A",
-    "FISV", "DG", "EME", "MTB", "ADM", "UAL", "VICI", "IRM", "TDY", "TPR", "ATO", "CBOE",
-    "EXR", "XYL", "WAT", "CTSH", "DTE", "AEE", "RJF", "IBKR", "IQV", "VRSK", "DOV", "CHTR",
-    "ULTA", "FE", "PPL", "WTW", "EXPE", "HAL", "KHC", "CNP", "HPE", "STLD", "EIX", "ROL",
-    "BIIB", "DXCM", "ES", "DVN", "NTRS", "JBL", "TSCO", "WRB", "AWK", "OMC", "PPG", "STZ",
-    "LEN", "CINF", "ARES", "HUBB", "FIS", "MTD", "EXE", "CFG", "PHM", "AVB", "Q", "EFX",
-    "ON", "BRO", "CHD", "WSM", "SYF", "STE", "RF", "CMS", "DOW", "VLTO", "EQR", "SW",
-    "DRI", "DLTR", "CTRA", "GIS", "LH", "DGX", "CPAY", "L", "LUV", "NI", "BR", "MRNA",
-    "IP", "KEY", "LDOS", "BG", "JBHT", "CHRW", "TSN", "HUM", "CNC", "VRSN", "GPN", "RL",
-    "FSLR", "AMCR", "PKG", "SBAC", "LYB", "LULU", "NVR", "PFG", "IFF", "TROW", "SNA", "ALB",
-    "EXPD", "CSGP", "INCY", "DD", "NTAP", "EVRG", "LII", "PTC", "SMCI", "ZBH", "LNT", "FTV",
-    "WY", "MKC", "HPQ", "WST", "BALL", "TXT", "PODD", "HII", "HOLX", "TKO", "VTRS", "TRMB",
-    "ESS", "INVH", "CF", "COO", "NDSN", "CDW", "J", "GPC", "FFIV", "PNR", "KIM", "TYL",
-    "MAA", "APTV", "IEX", "DECK", "TTD", "AKAM", "REG", "AVY", "ERIE", "CLX", "BBY", "HST",
-    "BEN", "MAS", "DPZ", "HAS", "EG", "ALLE", "GEN", "HRL", "PSKY", "ALGN", "GNRC", "UHS",
-    "PNW", "SJM", "SWK", "SOLV", "UDR", "JKHY", "DOC", "BF.B", "FOX", "GDDY", "IT", "FOXA",
-    "AIZ", "GL", "ZBRA", "CPT", "APA", "IVZ", "RVTY", "WYNN", "BLDR", "DVA", "AOS", "AES",
-    "BAX", "NCLH", "MGM", "FRT", "ARE", "HSIC", "TECH", "CAG", "TAP", "CRL", "BXP", "NWSA",
-    "SWKS", "FDS", "MOS", "POOL", "MOH", "EPAM", "CPB", "MTCH", "PAYC", "LW", "NWS"
-]
+def _read_string_list(data: dict, key: str) -> list[str]:
+    raw = data.get(key)
+    if not isinstance(raw, list):
+        raise ValueError(f"stock lists config key '{key}' must be a list")
+    values: list[str] = []
+    for item in raw:
+        val = str(item or "").strip().upper()
+        if val:
+            values.append(val)
+    return values
 
-NASDAQ100 = [
-    "NVDA", "AAPL", "MSFT", "AMZN", "GOOGL", "GOOG", "META", "AVGO", "TSLA", "WMT", "ASML", "MU",
-    "COST", "NFLX", "PLTR", "AMD", "CSCO", "AMAT", "LRCX", "TMUS", "LIN", "INTC", "PEP", "AMGN",
-    "KLAC", "TXN", "GILD", "ISRG", "SHOP", "ADI", "APP", "HON", "QCOM", "PDD", "BKNG", "ARM",
-    "PANW", "INTU", "VRTX", "CEG", "CMCSA", "ADBE", "SBUX", "CRWD", "MELI", "WDC", "MAR", "ADP",
-    "STX", "CDNS", "REGN", "SNPS", "ABNB", "DASH", "CTAS", "ORLY", "CSX", "MNST", "MDLZ", "AEP",
-    "MRVL", "WBD", "ROST", "PCAR", "FTNT", "BKR", "FAST", "ADSK", "NXPI", "MPWR", "IDXX", "EA",
-    "EXC", "FANG", "FER", "MSTR", "XEL", "CCEP", "TRI", "AXON", "ODFL", "ALNY", "PYPL", "DDOG",
-    "TTWO", "KDP", "WDAY", "MCHP", "ROP", "CPRT", "GEHC", "PAYX", "INSM", "CTSH", "VRSK", "CHTR",
-    "KHC", "DXCM", "ZS", "TEAM", "CSGP"
-]
-# Backward-compatible alias for older typo used in this file history.
-NSDAQ100 = NASDAQ100
 
-DowJones = [
-    "GS", "CAT", "MSFT", "AMGN", "HD", "SHW", "MCD", "V", "TRV", "AXP", "JPM", "UNH",
-    "AAPL", "IBM", "HON", "JNJ", "BA", "AMZN", "CRM", "CVX", "NVDA", "MMM", "PG", "WMT",
-    "MRK", "DIS", "CSCO", "KO", "NKE", "VZ"
-]
+def _read_crypto_list(data: dict) -> list[dict]:
+    raw = data.get("crypto")
+    if not isinstance(raw, list):
+        raise ValueError("stock lists config key 'crypto' must be a list")
+    values: list[dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        ticker = str(item.get("ticker") or "").strip().upper()
+        name = str(item.get("name") or "").strip()
+        if ticker and name:
+            values.append({"ticker": ticker, "name": name})
+    return values
+
+
+def _load_stock_lists(path: Path) -> dict:
+    if not path.exists():
+        raise FileNotFoundError(f"Stock lists config not found: {path}")
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f"Stock lists config must be an object: {path}")
+    return {
+        "major_tickers": _read_string_list(data, "major_tickers"),
+        "sp500": _read_string_list(data, "sp500"),
+        "nasdaq100": _read_string_list(data, "nasdaq100"),
+        "dow_jones": _read_string_list(data, "dow_jones"),
+        "crypto": _read_crypto_list(data),
+    }
+
+
+_STOCK_LISTS = _load_stock_lists(STOCK_LISTS_PATH)
+MAJOR_TICKERS = _STOCK_LISTS["major_tickers"]
+SP500 = _STOCK_LISTS["sp500"]
+NASDAQ100 = _STOCK_LISTS["nasdaq100"]
+DOW_JONES = _STOCK_LISTS["dow_jones"]
+CRYPTO_LIST = _STOCK_LISTS["crypto"]
 
 # ---------------------------------------------------------------------------
 # Source 1: SEC EDGAR – all US-listed companies (~13 000 tickers, no API key)
@@ -210,7 +145,7 @@ def fetch_sp500() -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Source 3: Cryptocurrencies via yfinance (top cryptos)
+# Source 3: Cryptocurrencies (top cryptos from config)
 # ---------------------------------------------------------------------------
 
 def fetch_crypto() -> list[dict]:
@@ -218,41 +153,7 @@ def fetch_crypto() -> list[dict]:
     Fetch top cryptocurrencies that are tradeable via Yahoo Finance.
     Returns list of {"ticker": ..., "name": ...} dicts.
     """
-    # Top cryptocurrencies available on Yahoo Finance (ticker format: SYMBOL-USD)
-    crypto_list = [
-        ("BTC-USD", "Bitcoin USD"),
-        ("ETH-USD", "Ethereum USD"),
-        ("USDT-USD", "Tether USD"),
-        ("BNB-USD", "Binance Coin USD"),
-        ("SOL-USD", "Solana USD"),
-        ("XRP-USD", "XRP USD"),
-        ("USDC-USD", "USD Coin"),
-        ("ADA-USD", "Cardano USD"),
-        ("AVAX-USD", "Avalanche USD"),
-        ("DOGE-USD", "Dogecoin USD"),
-        ("TRX-USD", "TRON USD"),
-        ("DOT-USD", "Polkadot USD"),
-        ("MATIC-USD", "Polygon USD"),
-        ("LTC-USD", "Litecoin USD"),
-        ("SHIB-USD", "Shiba Inu USD"),
-        ("BCH-USD", "Bitcoin Cash USD"),
-        ("LINK-USD", "Chainlink USD"),
-        ("UNI-USD", "Uniswap USD"),
-        ("ATOM-USD", "Cosmos USD"),
-        ("XLM-USD", "Stellar USD"),
-        ("ETC-USD", "Ethereum Classic USD"),
-        ("XMR-USD", "Monero USD"),
-        ("APT-USD", "Aptos USD"),
-        ("FIL-USD", "Filecoin USD"),
-        ("HBAR-USD", "Hedera USD"),
-        ("ARB-USD", "Arbitrum USD"),
-        ("OP-USD", "Optimism USD"),
-        ("NEAR-USD", "NEAR Protocol USD"),
-        ("VET-USD", "VeChain USD"),
-        ("ALGO-USD", "Algorand USD"),
-    ]
-    
-    stocks = [{"ticker": ticker, "name": name} for ticker, name in crypto_list]
+    stocks = [{"ticker": item["ticker"], "name": item["name"]} for item in CRYPTO_LIST]
     print(f"  → {len(stocks)} cryptocurrencies added")
     return stocks
 
@@ -338,7 +239,7 @@ MERGED_MAJOR_TICKERS = _merge_major_ticker_lists(
     MAJOR_TICKERS,
     SP500,
     NASDAQ100,
-    DowJones,
+    DOW_JONES,
 )
 _MAJOR_TICKER_SET = set(MERGED_MAJOR_TICKERS)
 
@@ -538,10 +439,10 @@ def main():
         except Exception as e:
             print(f"S&P 500 list load failed: {e}")
 
-    if args.source == "all" and not equity_stocks:
+    if args.source == "all":
         existing_stocks = load_existing_stocks(output_path)
         if existing_stocks:
-            print(f"Using existing {output_path} as equity fallback ({len(existing_stocks)} entries)")
+            print(f"Merging existing {output_path} ({len(existing_stocks)} entries) as fallback/supplement")
             equity_stocks += existing_stocks
 
     if args.source in ("crypto", "all"):
