@@ -12,6 +12,7 @@ import json
 import math
 import threading
 from datetime import date, datetime, timedelta
+import numbers
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -524,6 +525,22 @@ class InfoFetcher:
                 "industry": info.get("industry"),
                 "market_cap": info.get("marketCap"),
                 "quote_type": info.get("quoteType"),
+                "trailing_pe": info.get("trailingPE"),
+                "forward_pe": info.get("forwardPE"),
+                "trailing_eps": info.get("trailingEps"),
+                "forward_eps": info.get("forwardEps"),
+                "ebitda": info.get("ebitda"),
+                "revenue": info.get("totalRevenue"),
+                "profit_margin": info.get("profitMargins"),
+                "gross_margin": info.get("grossMargins"),
+                "operating_margin": info.get("operatingMargins"),
+                "ebitda_margin": info.get("ebitdaMargins"),
+                "beta": info.get("beta"),
+                "dividend_yield": info.get("dividendYield"),
+                "fifty_two_week_high": info.get("fiftyTwoWeekHigh"),
+                "fifty_two_week_low": info.get("fiftyTwoWeekLow"),
+                "target_mean_price": info.get("targetMeanPrice"),
+                "recommendation_key": info.get("recommendationKey"),
             }
             
             # Cache it
@@ -587,9 +604,9 @@ class InfoFetcher:
                 "message": "No sector/industry data available for this ticker"
             }
         
-        # Use yfinance-based method with cached sector/industry data
+        # Use cached sector/industry matching with batch quote enrichment.
         try:
-            return self._get_similar_tickers_yfinance(
+            return self._get_similar_tickers_cached(
                 ticker, target_info, target_sector, target_industry, limit
             )
         except Exception as e:
@@ -604,7 +621,7 @@ class InfoFetcher:
             }
     
     
-    def _get_similar_tickers_yfinance(
+    def _get_similar_tickers_cached(
         self,
         ticker: str,
         target_info: Dict[str, Any],
@@ -644,6 +661,22 @@ class InfoFetcher:
                     "market_cap": candidate_info.get("market_cap"),
                     "current_price": None,
                     "change_percent": None,
+                    "trailing_pe": candidate_info.get("trailing_pe"),
+                    "forward_pe": candidate_info.get("forward_pe"),
+                    "trailing_eps": candidate_info.get("trailing_eps"),
+                    "forward_eps": candidate_info.get("forward_eps"),
+                    "ebitda": candidate_info.get("ebitda"),
+                    "revenue": candidate_info.get("revenue"),
+                    "profit_margin": candidate_info.get("profit_margin"),
+                    "gross_margin": candidate_info.get("gross_margin"),
+                    "operating_margin": candidate_info.get("operating_margin"),
+                    "ebitda_margin": candidate_info.get("ebitda_margin"),
+                    "beta": candidate_info.get("beta"),
+                    "dividend_yield": candidate_info.get("dividend_yield"),
+                    "fifty_two_week_high": candidate_info.get("fifty_two_week_high"),
+                    "fifty_two_week_low": candidate_info.get("fifty_two_week_low"),
+                    "target_mean_price": candidate_info.get("target_mean_price"),
+                    "recommendation_key": candidate_info.get("recommendation_key"),
                 })
             elif sector_match:
                 sector_only_matches.append({
@@ -654,6 +687,22 @@ class InfoFetcher:
                     "market_cap": candidate_info.get("market_cap"),
                     "current_price": None,
                     "change_percent": None,
+                    "trailing_pe": candidate_info.get("trailing_pe"),
+                    "forward_pe": candidate_info.get("forward_pe"),
+                    "trailing_eps": candidate_info.get("trailing_eps"),
+                    "forward_eps": candidate_info.get("forward_eps"),
+                    "ebitda": candidate_info.get("ebitda"),
+                    "revenue": candidate_info.get("revenue"),
+                    "profit_margin": candidate_info.get("profit_margin"),
+                    "gross_margin": candidate_info.get("gross_margin"),
+                    "operating_margin": candidate_info.get("operating_margin"),
+                    "ebitda_margin": candidate_info.get("ebitda_margin"),
+                    "beta": candidate_info.get("beta"),
+                    "dividend_yield": candidate_info.get("dividend_yield"),
+                    "fifty_two_week_high": candidate_info.get("fifty_two_week_high"),
+                    "fifty_two_week_low": candidate_info.get("fifty_two_week_low"),
+                    "target_mean_price": candidate_info.get("target_mean_price"),
+                    "recommendation_key": candidate_info.get("recommendation_key"),
                 })
                 
             if len(exact_matches) >= limit and len(sector_only_matches) >= limit:
@@ -671,6 +720,9 @@ class InfoFetcher:
             match_type = "sector_and_industry"
         else:
             match_type = "sector_only"
+
+        # Fill current_price/change_percent in one batch call.
+        self._enrich_similar_tickers_with_batch_quotes(similar_stocks)
         
         return {
             "ticker": ticker,
@@ -679,8 +731,183 @@ class InfoFetcher:
             "similar_tickers": similar_stocks,
             "count": len(similar_stocks),
             "match_type": match_type,
-            "method": "yfinance"
+            "method": "yahooquery_batch"
         }
+
+    @staticmethod
+    def _coerce_float(value: Any) -> Optional[float]:
+        """Convert values to float when possible; return None for invalid values."""
+        if value is None or isinstance(value, bool):
+            return None
+        if isinstance(value, numbers.Real):
+            val = float(value)
+            if math.isnan(val) or math.isinf(val):
+                return None
+            return val
+        try:
+            val = float(value)
+            if math.isnan(val) or math.isinf(val):
+                return None
+            return val
+        except Exception:
+            return None
+
+    @staticmethod
+    def _get_symbol_payload(batch_map: Any, symbol: str) -> Dict[str, Any]:
+        """Extract per-symbol payload from yahooquery batch response."""
+        if not isinstance(batch_map, dict):
+            return {}
+        payload = batch_map.get(symbol)
+        if isinstance(payload, dict) and not payload.get("error"):
+            return payload
+        return {}
+
+    def _enrich_similar_tickers_with_batch_quotes(self, similar_stocks: List[Dict[str, Any]]) -> None:
+        """Populate price and fundamentals fields using batched yahooquery requests."""
+        if not similar_stocks:
+            return
+
+        symbols = [stock.get("ticker") for stock in similar_stocks if stock.get("ticker")]
+        if not symbols:
+            return
+
+        try:
+            from yahooquery import Ticker as YahooQueryTicker
+        except Exception:
+            return
+
+        try:
+            ticker_obj = YahooQueryTicker(symbols)
+        except Exception:
+            return
+
+        batch_price: Dict[str, Any] = {}
+        batch_summary_detail: Dict[str, Any] = {}
+        batch_financial_data: Dict[str, Any] = {}
+        batch_key_stats: Dict[str, Any] = {}
+
+        try:
+            resp = ticker_obj.price
+            if isinstance(resp, dict):
+                batch_price = resp
+        except Exception:
+            pass
+
+        try:
+            resp = ticker_obj.summary_detail
+            if isinstance(resp, dict):
+                batch_summary_detail = resp
+        except Exception:
+            pass
+
+        try:
+            resp = ticker_obj.financial_data
+            if isinstance(resp, dict):
+                batch_financial_data = resp
+        except Exception:
+            pass
+
+        try:
+            resp = ticker_obj.key_stats
+            if isinstance(resp, dict):
+                batch_key_stats = resp
+        except Exception:
+            pass
+
+        for stock in similar_stocks:
+            symbol = stock.get("ticker")
+            if not symbol:
+                continue
+
+            symbol_price = self._get_symbol_payload(batch_price, symbol)
+            symbol_summary_detail = self._get_symbol_payload(batch_summary_detail, symbol)
+            symbol_financial_data = self._get_symbol_payload(batch_financial_data, symbol)
+            symbol_key_stats = self._get_symbol_payload(batch_key_stats, symbol)
+
+            market_price = self._coerce_float(symbol_price.get("regularMarketPrice"))
+            if market_price is not None:
+                stock["current_price"] = round(market_price, 2)
+
+            change_percent = self._coerce_float(symbol_price.get("regularMarketChangePercent"))
+            if change_percent is not None:
+                stock["change_percent"] = round(change_percent, 2)
+
+            market_cap = self._coerce_float(symbol_price.get("marketCap"))
+            if market_cap is None:
+                market_cap = self._coerce_float(symbol_summary_detail.get("marketCap"))
+            if market_cap is not None:
+                stock["market_cap"] = int(market_cap)
+
+            trailing_pe = self._coerce_float(symbol_summary_detail.get("trailingPE"))
+            if trailing_pe is not None:
+                stock["trailing_pe"] = trailing_pe
+
+            forward_pe = self._coerce_float(symbol_summary_detail.get("forwardPE"))
+            if forward_pe is not None:
+                stock["forward_pe"] = forward_pe
+
+            dividend_yield = self._coerce_float(symbol_summary_detail.get("dividendYield"))
+            if dividend_yield is not None:
+                stock["dividend_yield"] = dividend_yield
+
+            beta = self._coerce_float(symbol_summary_detail.get("beta"))
+            if beta is None:
+                beta = self._coerce_float(symbol_key_stats.get("beta"))
+            if beta is not None:
+                stock["beta"] = beta
+
+            fifty_two_week_high = self._coerce_float(symbol_summary_detail.get("fiftyTwoWeekHigh"))
+            if fifty_two_week_high is None:
+                fifty_two_week_high = self._coerce_float(symbol_price.get("fiftyTwoWeekHigh"))
+            if fifty_two_week_high is not None:
+                stock["fifty_two_week_high"] = fifty_two_week_high
+
+            fifty_two_week_low = self._coerce_float(symbol_summary_detail.get("fiftyTwoWeekLow"))
+            if fifty_two_week_low is None:
+                fifty_two_week_low = self._coerce_float(symbol_price.get("fiftyTwoWeekLow"))
+            if fifty_two_week_low is not None:
+                stock["fifty_two_week_low"] = fifty_two_week_low
+
+            trailing_eps = self._coerce_float(symbol_key_stats.get("trailingEps"))
+            if trailing_eps is not None:
+                stock["trailing_eps"] = trailing_eps
+
+            forward_eps = self._coerce_float(symbol_key_stats.get("forwardEps"))
+            if forward_eps is not None:
+                stock["forward_eps"] = forward_eps
+
+            ebitda = self._coerce_float(symbol_financial_data.get("ebitda"))
+            if ebitda is not None:
+                stock["ebitda"] = int(ebitda)
+
+            revenue = self._coerce_float(symbol_financial_data.get("totalRevenue"))
+            if revenue is not None:
+                stock["revenue"] = int(revenue)
+
+            profit_margin = self._coerce_float(symbol_financial_data.get("profitMargins"))
+            if profit_margin is not None:
+                stock["profit_margin"] = profit_margin
+
+            gross_margin = self._coerce_float(symbol_financial_data.get("grossMargins"))
+            if gross_margin is not None:
+                stock["gross_margin"] = gross_margin
+
+            operating_margin = self._coerce_float(symbol_financial_data.get("operatingMargins"))
+            if operating_margin is not None:
+                stock["operating_margin"] = operating_margin
+
+            ebitda_margin = self._coerce_float(symbol_financial_data.get("ebitdaMargins"))
+            if ebitda_margin is not None:
+                stock["ebitda_margin"] = ebitda_margin
+
+            target_mean_price = self._coerce_float(symbol_financial_data.get("targetMeanPrice"))
+            if target_mean_price is not None:
+                stock["target_mean_price"] = target_mean_price
+
+            recommendation_key = symbol_financial_data.get("recommendationKey")
+            if isinstance(recommendation_key, str) and recommendation_key.strip():
+                stock["recommendation_key"] = recommendation_key.strip()
+
     def get_company_officers(self, ticker: str) -> Dict[str, Any]:
         """Get company officers/management team from Yahoo Finance."""
         import yfinance as yf

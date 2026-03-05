@@ -31,6 +31,7 @@ chromadb
 # Data & markets
 pandas
 yfinance
+yahooquery
 stockstats
 eodhd
 akshare

@@ -111,6 +111,22 @@ export interface SimilarTicker {
   market_cap: number | null;
   current_price: number | null;
   change_percent: number | null;
+  trailing_pe?: number | null;
+  forward_pe?: number | null;
+  trailing_eps?: number | null;
+  forward_eps?: number | null;
+  ebitda?: number | null;
+  revenue?: number | null;
+  profit_margin?: number | null;
+  gross_margin?: number | null;
+  operating_margin?: number | null;
+  ebitda_margin?: number | null;
+  beta?: number | null;
+  dividend_yield?: number | null;
+  fifty_two_week_high?: number | null;
+  fifty_two_week_low?: number | null;
+  target_mean_price?: number | null;
+  recommendation_key?: string | null;
 }
 
 export interface SimilarTickersResponse {
@@ -123,5 +139,4 @@ export interface SimilarTickersResponse {
   message?: string;
   error?: string;
 }
-
 
