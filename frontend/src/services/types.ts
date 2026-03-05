@@ -103,4 +103,25 @@ export interface StockPageData {
   report_view_count?: number | null;
   report_earned_tokens?: number | null;
 }
+export interface SimilarTicker {
+  ticker: string;
+  name: string;
+  sector: string | null;
+  industry: string | null;
+  market_cap: number | null;
+  current_price: number | null;
+  change_percent: number | null;
+}
+
+export interface SimilarTickersResponse {
+  ticker: string;
+  sector: string | null;
+  industry: string | null;
+  similar_tickers: SimilarTicker[];
+  count: number;
+  match_type: 'sector_and_industry' | 'sector_only' | 'industry_only' | 'mixed' | 'no_matches' | 'not_applicable' | 'no_data';
+  message?: string;
+  error?: string;
+}
+
 

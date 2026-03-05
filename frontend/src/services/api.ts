@@ -3,6 +3,7 @@ import type {
   WidgetsResponse,
   StockPageData,
   StockQuote,
+  SimilarTickersResponse,
 } from './types';
 import { getStoredToken, getStoredUser } from './authApi';
 
@@ -79,9 +80,37 @@ export const stockApi = {
     return response.data;
   },
 
+  // Get company officers (raw market data via /api/data)
+  getCompanyOfficers: async (ticker: string): Promise<{
+    ticker: string;
+    officers: Array<{
+      name: string;
+      title: string;
+      age?: number | null;
+      year_born?: number | null;
+      fiscal_year?: number | null;
+      total_pay?: number | null;
+      exercised_value?: number | null;
+      unexercised_value?: number | null;
+    }>;
+    count: number;
+    error?: string;
+  }> => {
+    const response = await api.get(`/api/data/company-officers/${ticker}`);
+    return response.data;
+  },
+
   // Get extended stock info (raw market data via /api/data)
   getExtendedInfo: async (ticker: string): Promise<any> => {
     const response = await api.get(`/api/data/extended-info/${ticker}`);
+    return response.data;
+  },
+
+  // Get similar tickers based on sector/industry (raw market data via /api/data)
+  getSimilarTickers: async (ticker: string, limit: number = 10): Promise<SimilarTickersResponse> => {
+    const response = await api.get(`/api/data/similar-tickers/${ticker}`, {
+      params: { limit },
+    });
     return response.data;
   },
 

@@ -68,12 +68,16 @@ interface FundamentalPanesProps {
     total_analysts?: number | string;
   } | null;
   isLoadingRecommendations?: boolean;
+  companyOfficers?: any[];
+  isLoadingOfficers?: boolean;
 }
 
 const FundamentalPanes: React.FC<FundamentalPanesProps> = ({
   data,
   analystRecommendations,
-  isLoadingRecommendations = false
+  isLoadingRecommendations = false,
+  companyOfficers = [],
+  isLoadingOfficers = false
 }) => {
   const fundamentalData = data;
 
@@ -507,6 +511,59 @@ const FundamentalPanes: React.FC<FundamentalPanesProps> = ({
         <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
           <h3 className="text-lg font-semibold text-white mb-2">Analyst Recommendations (Yahoo Finance)</h3>
           <p className="text-gray-400 text-sm">No analyst recommendations available for this stock.</p>
+        </div>
+      ) : null}
+
+      {/* Company Officers */}
+      {isLoadingOfficers ? (
+        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 animate-pulse">
+          <div className="h-6 bg-gray-700 rounded w-40 mb-4" />
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-16 bg-gray-700 rounded" />
+            ))}
+          </div>
+        </div>
+      ) : companyOfficers.length > 0 ? (
+        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+            Company Officers
+          </h3>
+          <div className="space-y-3">
+            {companyOfficers.slice(0, 5).map((officer, idx) => (
+              <div
+                key={idx}
+                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-3 border-b border-gray-700 last:border-0"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-sm font-semibold truncate">{officer.name}</p>
+                  <p className="text-gray-400 text-xs truncate">{officer.title}</p>
+                </div>
+                <div className="flex items-center gap-3 text-xs shrink-0">
+                  {officer.age && (
+                    <span className="text-gray-400">
+                      Age: <span className="text-white font-medium">{officer.age}</span>
+                    </span>
+                  )}
+                  {officer.total_pay && (
+                    <span className="text-gray-400">
+                      Pay: <span className="text-green-400 font-medium">
+                        ${(officer.total_pay / 1000000).toFixed(2)}M
+                      </span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+            {companyOfficers.length > 5 && (
+              <p className="text-gray-500 text-xs text-center pt-2">
+                Showing 5 of {companyOfficers.length} officers
+              </p>
+            )}
+          </div>
         </div>
       ) : null}
 

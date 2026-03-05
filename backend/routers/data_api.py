@@ -146,6 +146,21 @@ async def data_future_events(ticker: str):
     except Exception as e:
         return {"ticker": ticker.upper(), "events": [], "count": 0, "error": str(e)}
 
+@router.get("/similar-tickers/{ticker}")
+async def data_similar_tickers(
+    ticker: str,
+    limit: int = Query(10, ge=1, le=50, description="Maximum number of similar tickers to return"),
+):
+    """Get similar tickers based on sector/industry matching."""
+    return await asyncio.to_thread(_engine().get_similar_tickers, ticker, limit)
+
+@router.get("/company-officers/{ticker}")
+async def data_company_officers(ticker: str):
+    """Get company officers/management team from Yahoo Finance."""
+    return await asyncio.to_thread(_engine().get_company_officers, ticker)
+
+
+
 
 @router.get("/edgar-filings/{ticker}")
 async def data_edgar_filings(ticker: str):

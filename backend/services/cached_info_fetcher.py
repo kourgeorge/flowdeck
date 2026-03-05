@@ -22,6 +22,7 @@ from config import (
     DATA_CACHE_TTL_INSIDER_TRANSACTIONS,
     DATA_CACHE_TTL_NEWS,
     DATA_CACHE_TTL_QUOTE,
+    DATA_CACHE_TTL_SIMILAR_TICKERS,
     DATA_CACHE_TTL_STOCK_DATA,
 )
 from services.data_cache import get_cached, get_cached_batch
@@ -179,4 +180,22 @@ class CachedInfoFetcher:
             key,
             DATA_CACHE_TTL_ANALYST,
             lambda: self._fetcher.get_future_events(ticker),
+        )
+
+    def get_similar_tickers(self, ticker: str, limit: int = 10) -> Dict[str, Any]:
+        """Get similar tickers based on sector/industry matching (cached)."""
+        key = f"similar_tickers:{ticker.upper()}:{limit}"
+        return get_cached(
+            key,
+            DATA_CACHE_TTL_SIMILAR_TICKERS,
+            lambda: self._fetcher.get_similar_tickers(ticker, limit),
+        )
+
+    def get_company_officers(self, ticker: str) -> Dict[str, Any]:
+        """Get company officers/management team (cached)."""
+        key = f"company_officers:{ticker.upper()}"
+        return get_cached(
+            key,
+            DATA_CACHE_TTL_COMPANY,  # Use same TTL as company info
+            lambda: self._fetcher.get_company_officers(ticker),
         )

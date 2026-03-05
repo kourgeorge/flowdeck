@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { stockApi, configApi } from '../services/api';
 import { WebSocketClient } from '../services/websocket';
-import type { StockPageData } from '../services/types';
+import type { StockPageData, SimilarTickersResponse } from '../services/types';
 import { useQuoteRefresh } from '../hooks/useQuoteRefresh';
 import { useAuth } from '../contexts/AuthContext';
 import { subscriptionApi, type Subscription } from '../services/subscriptionApi';
@@ -43,6 +44,7 @@ const REPORT_PROCESS_ORDER = [
 ];
 
 export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptionChange }: StockDetailPanelProps) {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalMessage, setAuthModalMessage] = useState('Please sign in to run a fresh analysis.');
@@ -84,7 +86,11 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const [isLoadingFutureEvents, setIsLoadingFutureEvents] = useState(false);
   const [subscriptionForTicker, setSubscriptionForTicker] = useState<Subscription | null>(null);
   const [emailPreferenceToggling, setEmailPreferenceToggling] = useState(false);
+  const [similarTickers, setSimilarTickers] = useState<SimilarTickersResponse | null>(null);
+  const [isLoadingSimilarTickers, setIsLoadingSimilarTickers] = useState(false);
   const [priceFlash, setPriceFlash] = useState(false);
+  const [companyOfficers, setCompanyOfficers] = useState<any[]>([]);
+  const [isLoadingOfficers, setIsLoadingOfficers] = useState(false);
 
   const refreshedQuote = useQuoteRefresh(ticker, 60000);
   const prevPriceRef = useRef<number | null>(null);
@@ -185,6 +191,17 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     stockApi.getAnalystRecommendations(ticker).then(setAnalystRecommendations).catch(() => {}).finally(() => setIsLoadingRecommendations(false));
     setIsLoadingFutureEvents(true);
     stockApi.getFutureEvents(ticker).then(setFutureEvents).catch(() => {}).finally(() => setIsLoadingFutureEvents(false));
+    setIsLoadingSimilarTickers(true);
+    stockApi.getSimilarTickers(ticker, 10)
+      .then((data) => {
+        console.log('Similar tickers response:', data);
+        setSimilarTickers(data);
+      })
+      .catch((error) => {
+        console.error('Error fetching similar tickers:', error);
+        setSimilarTickers(null);
+      })
+      .finally(() => setIsLoadingSimilarTickers(false));
   };
 
   useEffect(() => {
@@ -193,6 +210,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     setFinancialStatements(null); setNewsData([]); setNewsError(null); setInsiderTransactions([]);
     setInsiderTransactionsError(null); setFundamentalsSubTab('charts'); setFundInfo(null);
     setAnalysisProgress(null); setEdgarFilings(null); setEdgarFilingsError(null); setFutureEvents(null);
+    setSimilarTickers(null);
     setActiveTab('ai-analysis'); setSelectedReport(null); setLoadError(null); setAnalysisError(null);
     // EXPERIMENTAL: reset historical run state
     setSelectedRunId(null); setHistoricalReportsData(null);
@@ -225,6 +243,17 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       stockApi.getAnalystRecommendations(ticker).then(setAnalystRecommendations).catch(() => {}).finally(() => setIsLoadingRecommendations(false));
       setIsLoadingFutureEvents(true);
       stockApi.getFutureEvents(ticker).then(setFutureEvents).catch(() => {}).finally(() => setIsLoadingFutureEvents(false));
+      setIsLoadingSimilarTickers(true);
+      stockApi.getSimilarTickers(ticker, 10)
+        .then((data) => {
+          console.log('Similar tickers response:', data);
+          setSimilarTickers(data);
+        })
+        .catch((error) => {
+          console.error('Error fetching similar tickers:', error);
+          setSimilarTickers(null);
+        })
+        .finally(() => setIsLoadingSimilarTickers(false));
     } else {
       setStockData(null);
       setIsLoading(true);
@@ -298,6 +327,20 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       .catch((err) => { setInsiderTransactionsError(err.response?.data?.detail ?? err.message ?? 'Unable to fetch insider transactions.'); setInsiderTransactions([]); setIsLoadingInsiderTransactions(false); });
   }, [ticker]);
 
+  const fetchCompanyOfficers = useCallback(() => {
+    if (!ticker) return;
+    setIsLoadingOfficers(true);
+    stockApi.getCompanyOfficers(ticker)
+      .then((r) => {
+        setCompanyOfficers(r.officers || []);
+        setIsLoadingOfficers(false);
+      })
+      .catch(() => {
+        setCompanyOfficers([]);
+        setIsLoadingOfficers(false);
+      });
+  }, [ticker]);
+
   const refreshSubscriptionForTicker = useCallback(async () => {
     if (!user || !ticker) { setSubscriptionForTicker(null); return; }
     try { const list = await subscriptionApi.list(); setSubscriptionForTicker(list.find((s) => s.ticker.toUpperCase() === ticker.toUpperCase()) ?? null); }
@@ -357,6 +400,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   // END EXPERIMENTAL
 
   useEffect(() => { if (activeTab === 'news' && ticker && !isLoadingNews) fetchNews(); }, [activeTab, ticker, fetchNews]);
+  useEffect(() => { if (activeTab === 'overview' && ticker && !isLoadingOfficers && companyOfficers.length === 0) fetchCompanyOfficers(); }, [activeTab, ticker, fetchCompanyOfficers, isLoadingOfficers, companyOfficers.length]);
   useEffect(() => { if (activeTab === 'insider-transactions' && ticker && !isLoadingInsiderTransactions) fetchInsiderTransactions(); }, [activeTab, ticker, fetchInsiderTransactions]);
 
   useEffect(() => {
@@ -487,6 +531,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
               <nav className="flex flex-wrap gap-0.5 px-2 pt-1" aria-label="Stock sections">
                 {[
                   { id: 'overview', label: 'Overview' },
+                  { id: 'similar-stocks', label: 'Similar Stocks' },
                   ...(hasFundamentals ? [{ id: 'fundamentals', label: 'Fundamentals' }] : []),
                   ...(isUSCompany ? [{ id: 'sec-filings', label: 'SEC Filings' }] : []),
                   { id: 'insider-transactions', label: 'Insider Transactions' },
@@ -646,8 +691,64 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
               ) : isLoadingFundamentals ? (
                 <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 animate-pulse"><div className="h-5 bg-gray-700 rounded w-48 mb-3" /><div className="h-48 bg-gray-700 rounded" /></div>
               ) : fundamentalsData && typeof fundamentalsData === 'object' ? (
-                <FundamentalPanes data={fundamentalsData} analystRecommendations={analystRecommendations} isLoadingRecommendations={isLoadingRecommendations} />
+                <FundamentalPanes
+                  data={fundamentalsData}
+                  analystRecommendations={analystRecommendations}
+                  isLoadingRecommendations={isLoadingRecommendations}
+                  companyOfficers={companyOfficers}
+                  isLoadingOfficers={isLoadingOfficers}
+                />
               ) : null}
+            </div>
+          )}
+
+          {/* Similar Stocks Tab */}
+          {activeTab === 'similar-stocks' && (
+            <div className="space-y-4">
+              {isLoadingSimilarTickers ? (
+                <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 animate-pulse">
+                  <div className="h-5 bg-gray-700 rounded w-40 mb-3" />
+                  <div className="h-20 bg-gray-700 rounded" />
+                </div>
+              ) : similarTickers && similarTickers.similar_tickers && similarTickers.similar_tickers.length > 0 ? (
+                <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-white">
+                      Similar Stocks {similarTickers.sector && `in ${similarTickers.sector}`}
+                    </h3>
+                    <span className="text-xs text-gray-400">
+                      {similarTickers.match_type === 'sector_and_industry' ? 'Same sector & industry' :
+                       similarTickers.match_type === 'sector_only' ? 'Same sector' :
+                       similarTickers.match_type === 'industry_only' ? 'Same industry' : 'Related'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                    {similarTickers.similar_tickers.slice(0, 10).map((similar) => (
+                      <button
+                        key={similar.ticker}
+                        type="button"
+                        onClick={() => navigate(`/tickers/${similar.ticker}`)}
+                        className="bg-gray-700/50 hover:bg-gray-700 rounded-lg p-3 transition-colors text-left border border-gray-600 hover:border-gray-500"
+                      >
+                        <div className="flex flex-col gap-1">
+                          <span className="font-semibold text-white text-sm">{similar.ticker}</span>
+                          <span className="text-gray-400 text-xs truncate" title={similar.name}>{similar.name}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : similarTickers && similarTickers.message ? (
+                <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+                  <h3 className="text-sm font-semibold text-white mb-2">Similar Stocks</h3>
+                  <p className="text-gray-400 text-sm">{similarTickers.message}</p>
+                </div>
+              ) : (
+                <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+                  <h3 className="text-sm font-semibold text-white mb-2">Similar Stocks</h3>
+                  <p className="text-gray-400 text-sm">No similar stocks found.</p>
+                </div>
+              )}
             </div>
           )}
 

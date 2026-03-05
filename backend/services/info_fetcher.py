@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import math
+import threading
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -39,6 +40,9 @@ class InfoFetcher:
         self._market_data_service = market_data_service
         self._news_service = news_service
         self._route_to_vendor = None
+        # In-memory cache for sector/industry data (builds up on-demand)
+        self._sector_cache: Dict[str, Dict[str, Any]] = {}
+        self._sector_cache_lock = threading.Lock()
 
     def _get_route_to_vendor(self):
         if self._route_to_vendor is None:
@@ -460,6 +464,253 @@ class InfoFetcher:
             return out
         except Exception:
             return out
+    def _get_or_fetch_sector_info(self, ticker: str) -> Optional[Dict[str, Any]]:
+        """Get sector/industry info from cache or fetch from Yahoo Finance.
+        
+        This builds up an in-memory cache on-demand to speed up subsequent requests.
+        """
+        import yfinance as yf
+        
+        ticker = ticker.upper()
+        
+        # Check cache first
+        with self._sector_cache_lock:
+            if ticker in self._sector_cache:
+                return self._sector_cache[ticker]
+        
+        # Fetch from Yahoo Finance
+        try:
+            info = yf.Ticker(ticker).info
+            sector_info = {
+                "name": info.get("longName") or info.get("shortName") or ticker,
+                "sector": info.get("sector"),
+                "industry": info.get("industry"),
+                "market_cap": info.get("marketCap"),
+                "quote_type": info.get("quoteType"),
+            }
+            
+            # Cache it
+            with self._sector_cache_lock:
+                self._sector_cache[ticker] = sector_info
+            
+            return sector_info
+        except Exception:
+            return None
+    
+    def get_similar_tickers(
+        self,
+        ticker: str,
+        limit: int = 10,
+    ) -> Dict[str, Any]:
+        """Get similar tickers based on sector/industry matching.
+        
+        Uses a curated list of major stocks and filters by matching sector/industry.
+        Returns tickers with basic info (no price data for faster performance).
+        
+        Optimized with in-memory sector cache that builds up on-demand.
+        """
+        import yfinance as yf
+        
+        ticker = ticker.upper()
+        
+        # Get target ticker's sector and industry (from cache or fetch)
+        target_info = self._get_or_fetch_sector_info(ticker)
+        if not target_info:
+            return {
+                "ticker": ticker,
+                "sector": None,
+                "industry": None,
+                "similar_tickers": [],
+                "count": 0,
+                "error": "Failed to fetch ticker information"
+            }
+        
+        target_sector = target_info.get("sector")
+        target_industry = target_info.get("industry")
+        target_quote_type = target_info.get("quote_type")
+        
+        # Skip similar tickers for indices and some other types
+        if target_quote_type in ("INDEX", "CURRENCY", "CRYPTOCURRENCY"):
+            return {
+                "ticker": ticker,
+                "sector": target_sector,
+                "industry": target_industry,
+                "similar_tickers": [],
+                "count": 0,
+                "match_type": "not_applicable",
+                "message": f"Similar tickers not available for {target_quote_type} type"
+            }
+        
+        if not target_sector and not target_industry:
+            return {
+                "ticker": ticker,
+                "sector": None,
+                "industry": None,
+                "similar_tickers": [],
+                "count": 0,
+                "match_type": "no_data",
+                "message": "No sector/industry data available for this ticker"
+            }
+        
+        # Curated list of major stocks (S&P 500 + NASDAQ 100 top stocks)
+        # In production, this could be loaded from a file or database
+        major_tickers = [
+            "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK.B", "V", "UNH",
+            "JNJ", "WMT", "JPM", "MA", "PG", "XOM", "HD", "CVX", "MRK", "ABBV",
+            "KO", "PEP", "COST", "AVGO", "TMO", "MCD", "CSCO", "ACN", "ABT", "LIN",
+            "DHR", "NKE", "VZ", "ADBE", "TXN", "NEE", "CRM", "PM", "ORCL", "CMCSA",
+            "DIS", "WFC", "BMY", "UPS", "RTX", "QCOM", "INTC", "HON", "UNP", "INTU",
+            "AMD", "AMGN", "LOW", "BA", "SBUX", "CAT", "GE", "SPGI", "DE", "AXP",
+            "BLK", "GILD", "MDT", "PLD", "ISRG", "TJX", "MMC", "C", "BKNG", "SYK",
+            "ADI", "VRTX", "REGN", "ZTS", "CB", "MO", "CI", "PGR", "SO", "DUK",
+            "SCHW", "LRCX", "EOG", "BSX", "MDLZ", "TMUS", "BDX", "SLB", "PYPL", "NOC",
+            "MMM", "ITW", "USB", "PNC", "AON", "CL", "APD", "CME", "GD", "TGT",
+            "NFLX", "SHOP", "SQ", "ROKU", "SNAP", "UBER", "LYFT", "ABNB", "COIN", "RBLX"
+        ]
+        
+        # Remove the target ticker from the list
+        if ticker in major_tickers:
+            major_tickers.remove(ticker)
+        
+        similar_stocks = []
+        
+        # Fetch info for all tickers and filter by sector/industry
+        # Use cached sector info for fast lookups
+        for candidate_ticker in major_tickers:
+            # Get sector/industry from cache (or fetch if not cached)
+            candidate_info = self._get_or_fetch_sector_info(candidate_ticker)
+            if not candidate_info:
+                continue
+            
+            candidate_sector = candidate_info.get("sector")
+            candidate_industry = candidate_info.get("industry")
+            
+            # Determine match type
+            sector_match = target_sector and candidate_sector == target_sector
+            industry_match = target_industry and candidate_industry == target_industry
+            
+            if sector_match or industry_match:
+                similar_stocks.append({
+                    "ticker": candidate_ticker,
+                    "name": candidate_info.get("name", candidate_ticker),
+                    "sector": candidate_sector,
+                    "industry": candidate_industry,
+                    "market_cap": candidate_info.get("market_cap"),
+                    "current_price": None,  # Not fetching prices for performance
+                    "change_percent": None,  # Not fetching prices for performance
+                    "sector_match": sector_match,
+                    "industry_match": industry_match,
+                })
+                
+                # Stop if we have enough matches
+                if len(similar_stocks) >= limit * 2:  # Get extra to sort and filter
+                    break
+        
+        # Sort by: 1) both sector and industry match, 2) market cap (descending)
+        similar_stocks.sort(
+            key=lambda x: (
+                x["sector_match"] and x["industry_match"],
+                x["market_cap"] if x["market_cap"] else 0
+            ),
+            reverse=True
+        )
+        
+        # Limit results
+        similar_stocks = similar_stocks[:limit]
+        
+        # Determine overall match type
+        if not similar_stocks:
+            match_type = "no_matches"
+        elif all(s["sector_match"] and s["industry_match"] for s in similar_stocks):
+            match_type = "sector_and_industry"
+        elif all(s["sector_match"] for s in similar_stocks):
+            match_type = "sector_only"
+        elif all(s["industry_match"] for s in similar_stocks):
+            match_type = "industry_only"
+        else:
+            match_type = "mixed"
+        
+        # Remove internal matching flags from response
+        for stock in similar_stocks:
+            stock.pop("sector_match", None)
+            stock.pop("industry_match", None)
+        
+        return {
+            "ticker": ticker,
+            "sector": target_sector,
+            "industry": target_industry,
+            "similar_tickers": similar_stocks,
+            "count": len(similar_stocks),
+            "match_type": match_type,
+        }
+    def get_company_officers(self, ticker: str) -> Dict[str, Any]:
+        """Get company officers/management team from Yahoo Finance."""
+        import yfinance as yf
+        import pandas as pd
+        
+        ticker = ticker.upper()
+        
+        try:
+            t = yf.Ticker(ticker)
+            # Get company officers from the info dict
+            info = t.info
+            officers_data = info.get("companyOfficers", [])
+            
+            if not officers_data:
+                return {
+                    "ticker": ticker,
+                    "officers": [],
+                    "count": 0,
+                }
+            
+            # Process officers data
+            officers = []
+            for officer in officers_data:
+                if not isinstance(officer, dict):
+                    continue
+                
+                # Extract relevant fields
+                name = officer.get("name")
+                title = officer.get("title")
+                age = officer.get("age")
+                year_born = officer.get("yearBorn")
+                fiscal_year = officer.get("fiscalYear")
+                total_pay = officer.get("totalPay")
+                exercised_value = officer.get("exercisedValue")
+                unexercised_value = officer.get("unexercisedValue")
+                
+                # Skip if no name or title
+                if not name or not title:
+                    continue
+                
+                officer_info = {
+                    "name": name,
+                    "title": title,
+                    "age": age,
+                    "year_born": year_born,
+                    "fiscal_year": fiscal_year,
+                    "total_pay": total_pay,
+                    "exercised_value": exercised_value,
+                    "unexercised_value": unexercised_value,
+                }
+                
+                officers.append(officer_info)
+            
+            return {
+                "ticker": ticker,
+                "officers": officers,
+                "count": len(officers),
+            }
+            
+        except Exception as e:
+            return {
+                "ticker": ticker,
+                "officers": [],
+                "count": 0,
+                "error": str(e),
+            }
+
+
 
 
 # Singleton used by the API router (injected with services from main.py when needed)
