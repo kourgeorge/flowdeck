@@ -24,15 +24,6 @@ _MAJOR_STOCKS_SECTORS_PATH = (
 )
 
 
-def _normalize_analysis_date(analysis_date: Optional[str]) -> str:
-    date_str = (analysis_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")).strip()
-    try:
-        datetime.strptime(date_str, "%Y-%m-%d")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="analysis_date must be YYYY-MM-DD")
-    return date_str
-
-
 def _results_root() -> Path:
     p = Path(RESULTS_DIR)
     if p.is_absolute():
@@ -251,20 +242,16 @@ class MissionControlTickerItem(BaseModel):
     last_completed_at: Optional[datetime]
     sector: Optional[str]
     industry: Optional[str]
-    has_report_for_date: bool
     is_running: bool
     running_analysis_id: Optional[str]
-    running_for_date: Optional[str]
 
 
 class MissionControlResponse(BaseModel):
-    date: str
     items: list[MissionControlTickerItem]
 
 
 class MissionControlRunBody(BaseModel):
     tickers: list[str] = Field(default_factory=list)
-    analysis_date: Optional[str] = None
     force: bool = False
 
 
@@ -279,7 +266,6 @@ class MissionControlRunErrorItem(BaseModel):
 
 
 class MissionControlRunResponse(BaseModel):
-    date: str
     requested: list[str]
     triggered: list[MissionControlRunItem]
     already_running: list[MissionControlRunItem]
@@ -561,9 +547,8 @@ def get_analyses_daily(
 def get_mission_control(
     _user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
-    analysis_date: Optional[str] = Query(None),
 ):
-    date_str = _normalize_analysis_date(analysis_date)
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     mission_entries = _get_mission_control_entries()
     mission_tickers = [str(item.get("ticker") or "").upper() for item in mission_entries if item.get("ticker")]
     ticker_set = set(mission_tickers)
@@ -610,14 +595,12 @@ def get_mission_control(
                 last_completed_at=last_completed.get(ticker_upper),
                 sector=entry.get("sector"),
                 industry=entry.get("industry"),
-                has_report_for_date=ticker_upper in has_report_today,
                 is_running=running is not None,
                 running_analysis_id=(str(running.get("analysis_id")) if running else None),
-                running_for_date=(str(running.get("date")) if running else None),
             )
         )
 
-    return MissionControlResponse(date=date_str, items=items)
+    return MissionControlResponse(items=items)
 
 
 @router.post("/mission-control/run", response_model=MissionControlRunResponse)
@@ -626,7 +609,7 @@ def run_mission_control(
     _user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ):
-    date_str = _normalize_analysis_date(body.analysis_date)
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     mission_entries = _get_mission_control_entries()
     mission_tickers = [str(item.get("ticker") or "").upper() for item in mission_entries if item.get("ticker")]
     requested, invalid_tickers = _normalize_requested_tickers(body.tickers, mission_tickers)
@@ -674,7 +657,6 @@ def run_mission_control(
             failed.append(MissionControlRunErrorItem(ticker=ticker, error=str(e)))
 
     return MissionControlRunResponse(
-        date=date_str,
         requested=requested,
         triggered=triggered,
         already_running=already_running,

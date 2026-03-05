@@ -25,10 +25,6 @@ import {
 
 type AdminTab = 'overview' | 'mission-control';
 
-function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function formatDate(s?: string | null, use24Hour = false): string {
   if (!s) return '—';
   try {
@@ -129,7 +125,6 @@ export default function AdminDashboardPage() {
   const [dailyAnalyses, setDailyAnalyses] = useState<AnalysisDailyCount[]>([]);
   const [dailyViews, setDailyViews] = useState<ViewsDailyCount[]>([]);
 
-  const [missionDate, setMissionDate] = useState(todayIsoDate());
   const [missionItems, setMissionItems] = useState<MissionControlTickerItem[]>([]);
   const [selectedMissionTickers, setSelectedMissionTickers] = useState<string[]>([]);
   const [missionLoading, setMissionLoading] = useState(false);
@@ -165,12 +160,11 @@ export default function AdminDashboardPage() {
   const allMissionSelected =
     sortedMissionItems.length > 0 && selectedMissionTickers.length === sortedMissionItems.length;
 
-  const refreshMissionControl = async (analysisDate = missionDate) => {
+  const refreshMissionControl = async () => {
     setMissionLoading(true);
     setMissionError(null);
     try {
-      const res = await adminApi.getMissionControl(analysisDate);
-      setMissionDate(res.date);
+      const res = await adminApi.getMissionControl();
       setMissionItems(res.items);
       setSelectedMissionTickers((prev) => {
         const valid = new Set(res.items.map((item) => item.ticker));
@@ -190,13 +184,13 @@ export default function AdminDashboardPage() {
     setMissionActionInfo(null);
     try {
       const force = forceOverride ?? missionForceRerun;
-      const result = await adminApi.runMissionControl(tickers, missionDate, force);
+      const result = await adminApi.runMissionControl(tickers, force);
       setMissionActionInfo(summarizeMissionRunResult(result));
       if (result.failed.length > 0) {
         const failures = result.failed.map((item) => `${item.ticker}: ${item.error}`).join(' | ');
         setMissionActionError(failures);
       }
-      await refreshMissionControl(missionDate);
+      await refreshMissionControl();
     } catch (err: unknown) {
       const ax = err as { response?: { data?: { detail?: string } } };
       setMissionActionError(ax.response?.data?.detail ?? 'Failed to run mission control action');
@@ -214,7 +208,7 @@ export default function AdminDashboardPage() {
       adminApi.getSubscriptions(100, 0),
       adminApi.getAnalysesDaily(30),
       adminApi.getViewsDaily(30),
-      adminApi.getMissionControl(missionDate),
+      adminApi.getMissionControl(),
     ])
       .then(([s, u, r, a, sub, dailyA, dailyV, mission]) => {
         if (cancelled) return;
@@ -229,7 +223,6 @@ export default function AdminDashboardPage() {
         setSubscriptionsTotal(sub.total);
         setDailyAnalyses(dailyA.data);
         setDailyViews(dailyV.data);
-        setMissionDate(mission.date);
         setMissionItems(mission.items);
       })
       .catch((err) => {
@@ -248,8 +241,8 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     if (!user?.is_admin || activeTab !== 'mission-control') return;
     if (missionItems.length > 0 || missionLoading) return;
-    void refreshMissionControl(missionDate);
-  }, [activeTab, missionItems.length, missionLoading, missionDate, user?.is_admin]);
+    void refreshMissionControl();
+  }, [activeTab, missionItems.length, missionLoading, user?.is_admin]);
 
   if (!user) {
     return (
@@ -271,7 +264,7 @@ export default function AdminDashboardPage() {
   if (loading && !stats) {
     return (
       <div className="min-h-screen p-8">
-        <div className="max-w-6xl mx-auto text-gray-400">Loading admin dashboard…</div>
+        <div className="max-w-layout mx-auto text-gray-400">Loading admin dashboard…</div>
       </div>
     );
   }
@@ -291,50 +284,43 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="min-h-screen p-6 md:p-8">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-layout mx-auto">
         <h1 className="text-2xl font-bold text-white mb-4">Admin dashboard</h1>
 
-        <div className="mb-8 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveTab('overview')}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-              activeTab === 'overview'
-                ? 'bg-blue-600 text-white'
-                : 'border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700'
-            }`}
-          >
-            Overview
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('mission-control')}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-              activeTab === 'mission-control'
-                ? 'bg-blue-600 text-white'
-                : 'border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700'
-            }`}
-          >
-            Mission control
-          </button>
+        <div className="border-b border-slate-700 mb-8">
+          <div className="flex flex-wrap gap-0.5">
+            <button
+              type="button"
+              onClick={() => setActiveTab('overview')}
+              className={`px-2 py-1.5 text-sm font-medium transition-colors ${
+                activeTab === 'overview'
+                  ? 'border-b-2 border-blue-500 text-blue-400'
+                  : 'text-slate-400 hover:text-slate-300'
+              }`}
+            >
+              Overview
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('mission-control')}
+              className={`px-2 py-1.5 text-sm font-medium transition-colors ${
+                activeTab === 'mission-control'
+                  ? 'border-b-2 border-blue-500 text-blue-400'
+                  : 'text-slate-400 hover:text-slate-300'
+              }`}
+            >
+              Mission control
+            </button>
+          </div>
         </div>
 
         {activeTab === 'mission-control' ? (
           <section>
             <div className="mb-4 flex flex-wrap items-center gap-3">
-              <label className="flex items-center gap-2 text-sm text-gray-300">
-                <span>Date</span>
-                <input
-                  type="date"
-                  value={missionDate}
-                  onChange={(e) => setMissionDate(e.target.value)}
-                  className="rounded border border-gray-600 bg-gray-800 px-2 py-1 text-white"
-                />
-              </label>
               <button
                 type="button"
                 onClick={() => {
-                  void refreshMissionControl(missionDate);
+                  void refreshMissionControl();
                 }}
                 disabled={missionLoading}
                 className="rounded bg-gray-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-600 disabled:opacity-50"
@@ -399,7 +385,7 @@ export default function AdminDashboardPage() {
                       />
                     </th>
                     <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
-                    <th className="px-4 py-3 text-gray-400 font-medium">Quote type</th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">Type</th>
                     <th className="px-4 py-3 text-gray-400 font-medium">Market cap</th>
                     <th className="px-4 py-3 text-gray-400 font-medium">Sector</th>
                     <th className="px-4 py-3 text-gray-400 font-medium">Industry</th>
@@ -464,9 +450,9 @@ export default function AdminDashboardPage() {
                                 setMissionRunningForTicker(null);
                               });
                             }}
-                            className="rounded bg-blue-600 px-2 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                            className="rounded border border-gray-600 bg-gray-800 px-2 py-1 text-sm font-medium text-gray-200 hover:bg-gray-700 disabled:opacity-50"
                           >
-                            {isRunningThisTicker ? 'Running…' : 'Run now'}
+                            {isRunningThisTicker ? 'Running…' : 'Run'}
                           </button>
                         </td>
                       </tr>
