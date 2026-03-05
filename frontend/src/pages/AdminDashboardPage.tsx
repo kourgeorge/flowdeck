@@ -158,8 +158,8 @@ export default function AdminDashboardPage() {
     key: MissionSortKey;
     direction: MissionSortDirection;
   }>({
-    key: 'type',
-    direction: 'asc',
+    key: 'market_cap',
+    direction: 'desc',
   });
 
   const [loading, setLoading] = useState(true);
