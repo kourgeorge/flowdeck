@@ -6,6 +6,7 @@ export class WebSocketClient {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
+  private manuallyClosed = false;
   private listeners: Map<string, Set<(data: any) => void>> = new Map();
 
   constructor(analysisId: string) {
@@ -20,6 +21,7 @@ export class WebSocketClient {
 
   connect(): void {
     try {
+      this.manuallyClosed = false;
       this.ws = new WebSocket(this.url);
 
       this.ws.onopen = () => {
@@ -47,7 +49,9 @@ export class WebSocketClient {
       this.ws.onclose = () => {
         console.log('WebSocket closed');
         this.emit('close', {});
-        this.reconnect();
+        if (!this.manuallyClosed) {
+          this.reconnect();
+        }
       };
     } catch (error) {
       console.error('Error creating WebSocket:', error);
@@ -88,11 +92,20 @@ export class WebSocketClient {
 
   send(data: any): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(data));
+      if (typeof data === 'string') {
+        this.ws.send(data);
+      } else {
+        this.ws.send(JSON.stringify(data));
+      }
     }
   }
 
+  isConnected(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
+  }
+
   disconnect(): void {
+    this.manuallyClosed = true;
     if (this.ws) {
       this.ws.close();
       this.ws = null;
@@ -100,4 +113,3 @@ export class WebSocketClient {
     this.listeners.clear();
   }
 }
-

@@ -71,6 +71,41 @@ export interface ViewsDailyCount {
   count: number;
 }
 
+export interface MissionControlTickerItem {
+  ticker: string;
+  latest_run_id: string | null;
+  last_executed_at: string | null;
+  has_report_for_date: boolean;
+  is_running: boolean;
+  running_analysis_id: string | null;
+  running_for_date: string | null;
+}
+
+export interface MissionControlResponse {
+  date: string;
+  items: MissionControlTickerItem[];
+}
+
+export interface MissionControlRunItem {
+  ticker: string;
+  analysis_id: string;
+}
+
+export interface MissionControlRunErrorItem {
+  ticker: string;
+  error: string;
+}
+
+export interface MissionControlRunResponse {
+  date: string;
+  requested: string[];
+  triggered: MissionControlRunItem[];
+  already_running: MissionControlRunItem[];
+  skipped_existing: string[];
+  invalid_tickers: string[];
+  failed: MissionControlRunErrorItem[];
+}
+
 export const adminApi = {
   getStats: async (): Promise<AdminStats> => {
     const res = await api.get<AdminStats>('/api/admin/stats', {
@@ -152,6 +187,29 @@ export const adminApi = {
     const res = await api.get<{ data: ViewsDailyCount[] }>(
       '/api/admin/views/daily',
       { params: { days }, headers: authHeaders() },
+    );
+    return res.data;
+  },
+
+  getMissionControl: async (
+    analysisDate?: string,
+  ): Promise<MissionControlResponse> => {
+    const res = await api.get<MissionControlResponse>(
+      '/api/admin/mission-control',
+      { params: analysisDate ? { analysis_date: analysisDate } : undefined, headers: authHeaders() },
+    );
+    return res.data;
+  },
+
+  runMissionControl: async (
+    tickers: string[],
+    analysisDate?: string,
+    force = false,
+  ): Promise<MissionControlRunResponse> => {
+    const res = await api.post<MissionControlRunResponse>(
+      '/api/admin/mission-control/run',
+      { tickers, analysis_date: analysisDate, force },
+      { headers: authHeaders() },
     );
     return res.data;
   },

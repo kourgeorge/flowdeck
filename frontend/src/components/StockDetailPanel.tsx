@@ -264,34 +264,30 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
 
   useEffect(() => {
     // Fallback polling mechanism:
-    // 1. If WebSocket is not connected, poll immediately
-    // 2. If WebSocket is connected, still poll but less frequently (every 30s) as a safety net
+    // 1. Always poll while generation is running so report progress updates in UI
+    // 2. If WebSocket is healthy, poll less frequently as a safety net
     if (!ticker || !stockData?.is_generating) return;
     
-    const hasWebSocket = !!wsClientRef.current;
-    const pollInterval = hasWebSocket ? 30000 : 3500; // 30s with WS, 3.5s without
+    const hasWebSocket = wsClientRef.current?.isConnected() ?? false;
+    const pollInterval = hasWebSocket ? 6000 : 3500; // 6s with WS, 3.5s without
     
     const interval = setInterval(() => {
       stockApi.getStockPage(ticker).then((data) => {
-        // If generation is no longer running, update everything
+        setStockData(data);
+        if (data.reports && Object.keys(data.reports).length > 0) {
+          const keys = Object.keys(data.reports);
+          setSelectedReport((prev) => {
+            if (prev && keys.includes(prev)) return prev;
+            return keys.includes('final_trade_decision') ? 'final_trade_decision' : keys[0];
+          });
+        }
         if (!data.is_generating) {
-          setStockData(data);
-          if (data.reports && Object.keys(data.reports).length > 0) {
-            const keys = Object.keys(data.reports);
-            setSelectedReport(keys.includes('final_trade_decision') ? 'final_trade_decision' : keys[0]);
-          }
-        } else if (!hasWebSocket) {
-          // Only update during generation if WebSocket is not available
-          setStockData(data);
-          if (data.reports && Object.keys(data.reports).length > 0) {
-            const keys = Object.keys(data.reports);
-            setSelectedReport(keys.includes('final_trade_decision') ? 'final_trade_decision' : keys[0]);
-          }
+          setAnalysisProgress(null);
         }
       }).catch(() => {});
     }, pollInterval);
     return () => clearInterval(interval);
-  }, [ticker, stockData?.is_generating]);
+  }, [ticker, stockData?.is_generating, stockData?.generation_analysis_id]);
 
   useEffect(() => {
     if (activeTab !== 'fundamentals' || !ticker || financialStatements) return;

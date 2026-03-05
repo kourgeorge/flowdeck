@@ -19,9 +19,18 @@ import {
   type AdminSubscriptionItem,
   type AnalysisDailyCount,
   type ViewsDailyCount,
+  type MissionControlTickerItem,
+  type MissionControlRunResponse,
 } from '../services/adminApi';
 
-function formatDate(s: string): string {
+type AdminTab = 'overview' | 'mission-control';
+
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function formatDate(s?: string | null): string {
+  if (!s) return '—';
   try {
     const d = new Date(s);
     return d.toLocaleString(undefined, {
@@ -31,6 +40,16 @@ function formatDate(s: string): string {
   } catch {
     return s;
   }
+}
+
+function summarizeMissionRunResult(result: MissionControlRunResponse): string {
+  const parts: string[] = [];
+  if (result.triggered.length > 0) parts.push(`started ${result.triggered.length}`);
+  if (result.already_running.length > 0) parts.push(`already running ${result.already_running.length}`);
+  if (result.skipped_existing.length > 0) parts.push(`skipped existing ${result.skipped_existing.length}`);
+  if (result.invalid_tickers.length > 0) parts.push(`invalid ${result.invalid_tickers.length}`);
+  if (result.failed.length > 0) parts.push(`failed ${result.failed.length}`);
+  return parts.length > 0 ? parts.join(' • ') : 'No changes';
 }
 
 function DailyBarChart({
@@ -44,8 +63,7 @@ function DailyBarChart({
 }) {
   if (data.length === 0) return null;
   const total = data.reduce((s, d) => s + d.count, 0);
-  
-  // Format data for Recharts
+
   const chartData = data.map((item) => ({
     date: new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
     count: item.count,
@@ -84,6 +102,7 @@ function DailyBarChart({
 
 export default function AdminDashboardPage() {
   const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<AdminUserItem[]>([]);
   const [usersTotal, setUsersTotal] = useState(0);
@@ -95,11 +114,67 @@ export default function AdminDashboardPage() {
   const [subscriptionsTotal, setSubscriptionsTotal] = useState(0);
   const [dailyAnalyses, setDailyAnalyses] = useState<AnalysisDailyCount[]>([]);
   const [dailyViews, setDailyViews] = useState<ViewsDailyCount[]>([]);
+
+  const [missionDate, setMissionDate] = useState(todayIsoDate());
+  const [missionItems, setMissionItems] = useState<MissionControlTickerItem[]>([]);
+  const [selectedMissionTickers, setSelectedMissionTickers] = useState<string[]>([]);
+  const [missionLoading, setMissionLoading] = useState(false);
+  const [missionError, setMissionError] = useState<string | null>(null);
+  const [missionActionError, setMissionActionError] = useState<string | null>(null);
+  const [missionActionInfo, setMissionActionInfo] = useState<string | null>(null);
+  const [missionRunningForTicker, setMissionRunningForTicker] = useState<string | null>(null);
+  const [missionBulkRunning, setMissionBulkRunning] = useState(false);
+  const [missionForceRerun, setMissionForceRerun] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [addingForUserId, setAddingForUserId] = useState<number | null>(null);
   const [addTokensError, setAddTokensError] = useState<string | null>(null);
   const [addAmountByUser, setAddAmountByUser] = useState<Record<number, string>>({});
+  const [latestReportsCollapsed, setLatestReportsCollapsed] = useState(true);
+  const [subscriptionsCollapsed, setSubscriptionsCollapsed] = useState(true);
+
+  const selectedMissionTickerSet = new Set(selectedMissionTickers);
+  const allMissionTickers = missionItems.map((item) => item.ticker);
+  const allMissionSelected =
+    missionItems.length > 0 && selectedMissionTickers.length === missionItems.length;
+
+  const refreshMissionControl = async (analysisDate = missionDate) => {
+    setMissionLoading(true);
+    setMissionError(null);
+    try {
+      const res = await adminApi.getMissionControl(analysisDate);
+      setMissionDate(res.date);
+      setMissionItems(res.items);
+      setSelectedMissionTickers((prev) => {
+        const valid = new Set(res.items.map((item) => item.ticker));
+        return prev.filter((ticker) => valid.has(ticker));
+      });
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { detail?: string } } };
+      setMissionError(ax.response?.data?.detail ?? 'Failed to load mission control');
+    } finally {
+      setMissionLoading(false);
+    }
+  };
+
+  const runMissionForTickers = async (tickers: string[]) => {
+    if (tickers.length === 0) return;
+    setMissionActionError(null);
+    setMissionActionInfo(null);
+    try {
+      const result = await adminApi.runMissionControl(tickers, missionDate, missionForceRerun);
+      setMissionActionInfo(summarizeMissionRunResult(result));
+      if (result.failed.length > 0) {
+        const failures = result.failed.map((item) => `${item.ticker}: ${item.error}`).join(' | ');
+        setMissionActionError(failures);
+      }
+      await refreshMissionControl(missionDate);
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { detail?: string } } };
+      setMissionActionError(ax.response?.data?.detail ?? 'Failed to run mission control action');
+    }
+  };
 
   useEffect(() => {
     if (!user?.is_admin) return;
@@ -112,8 +187,9 @@ export default function AdminDashboardPage() {
       adminApi.getSubscriptions(100, 0),
       adminApi.getAnalysesDaily(30),
       adminApi.getViewsDaily(30),
+      adminApi.getMissionControl(missionDate),
     ])
-      .then(([s, u, r, a, sub, dailyA, dailyV]) => {
+      .then(([s, u, r, a, sub, dailyA, dailyV, mission]) => {
         if (cancelled) return;
         setStats(s);
         setUsers(u.users);
@@ -126,6 +202,8 @@ export default function AdminDashboardPage() {
         setSubscriptionsTotal(sub.total);
         setDailyAnalyses(dailyA.data);
         setDailyViews(dailyV.data);
+        setMissionDate(mission.date);
+        setMissionItems(mission.items);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -139,6 +217,12 @@ export default function AdminDashboardPage() {
       cancelled = true;
     };
   }, [user?.is_admin]);
+
+  useEffect(() => {
+    if (!user?.is_admin || activeTab !== 'mission-control') return;
+    if (missionItems.length > 0 || missionLoading) return;
+    void refreshMissionControl(missionDate);
+  }, [activeTab, missionItems.length, missionLoading, missionDate, user?.is_admin]);
 
   if (!user) {
     return (
@@ -181,249 +265,487 @@ export default function AdminDashboardPage() {
   return (
     <div className="min-h-screen p-6 md:p-8">
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold text-white mb-8">Admin dashboard</h1>
+        <h1 className="text-2xl font-bold text-white mb-4">Admin dashboard</h1>
 
-        {/* Stats */}
-        {stats && (
-          <section className="mb-10">
-            <h2 className="text-lg font-semibold text-white mb-4">Overview</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
-                <p className="text-sm text-gray-400">Total users</p>
-                <p className="text-2xl font-bold text-white">{stats.total_users.toLocaleString()}</p>
-              </div>
-              <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
-                <p className="text-sm text-gray-400">Total reports</p>
-                <p className="text-2xl font-bold text-white">{stats.total_reports.toLocaleString()}</p>
-              </div>
-              <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
-                <p className="text-sm text-gray-400">Analyses (7d)</p>
-                <p className="text-2xl font-bold text-white">{stats.analyses_last_7d.toLocaleString()}</p>
-              </div>
-              <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
-                <p className="text-sm text-gray-400">Report views</p>
-                <p className="text-2xl font-bold text-white">{stats.total_report_views.toLocaleString()}</p>
-              </div>
-              <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
-                <p className="text-sm text-gray-400">Subscriptions</p>
-                <p className="text-2xl font-bold text-white">{stats.total_subscriptions.toLocaleString()}</p>
-              </div>
-            </div>
-          </section>
-        )}
+        <div className="mb-8 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('overview')}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+              activeTab === 'overview'
+                ? 'bg-blue-600 text-white'
+                : 'border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700'
+            }`}
+          >
+            Overview
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('mission-control')}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+              activeTab === 'mission-control'
+                ? 'bg-blue-600 text-white'
+                : 'border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700'
+            }`}
+          >
+            Mission control
+          </button>
+        </div>
 
-        {/* Daily Charts: Analyses + Views side by side */}
-        {(dailyAnalyses.length > 0 || dailyViews.length > 0) && (
-          <section className="mb-10">
-            <h2 className="text-lg font-semibold text-white mb-4">Activity (last 30 days)</h2>
-            <div className="flex flex-col md:flex-row gap-4">
-              <DailyBarChart
-                data={dailyAnalyses}
-                color="#3b82f6"
-                label="Analyses per day"
-              />
-              <DailyBarChart
-                data={dailyViews}
-                color="#10b981"
-                label="Report views per day"
-              />
-            </div>
-          </section>
-        )}
-
-        {/* Users */}
-        <section className="mb-10">
-          <h2 className="text-lg font-semibold text-white mb-4">Users ({usersTotal})</h2>
-          {addTokensError && (
-            <div className="mb-3 rounded-lg border border-red-800 bg-red-950/50 px-4 py-2 text-sm text-red-200">
-              {addTokensError}
+        {activeTab === 'mission-control' ? (
+          <section>
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-gray-300">
+                <span>Date</span>
+                <input
+                  type="date"
+                  value={missionDate}
+                  onChange={(e) => setMissionDate(e.target.value)}
+                  className="rounded border border-gray-600 bg-gray-800 px-2 py-1 text-white"
+                />
+              </label>
               <button
                 type="button"
-                onClick={() => setAddTokensError(null)}
-                className="ml-2 text-red-400 hover:text-red-100"
-                aria-label="Dismiss"
+                onClick={() => {
+                  void refreshMissionControl(missionDate);
+                }}
+                disabled={missionLoading}
+                className="rounded bg-gray-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-600 disabled:opacity-50"
               >
-                ×
+                {missionLoading ? 'Refreshing…' : 'Refresh'}
+              </button>
+              <label className="flex items-center gap-2 text-sm text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={missionForceRerun}
+                  onChange={(e) => setMissionForceRerun(e.target.checked)}
+                />
+                Force rerun
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setMissionBulkRunning(true);
+                  void runMissionForTickers(selectedMissionTickers).finally(() => {
+                    setMissionBulkRunning(false);
+                  });
+                }}
+                disabled={missionBulkRunning || selectedMissionTickers.length === 0}
+                className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {missionBulkRunning ? 'Running…' : `Run selected (${selectedMissionTickers.length})`}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMissionBulkRunning(true);
+                  void runMissionForTickers(allMissionTickers).finally(() => {
+                    setMissionBulkRunning(false);
+                  });
+                }}
+                disabled={missionBulkRunning || allMissionTickers.length === 0}
+                className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                Run all major
               </button>
             </div>
-          )}
-          <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-800/80">
-            <table className="w-full min-w-[700px] text-left text-sm">
-              <thead className="sticky top-0 bg-gray-800 z-10">
-                <tr className="border-b border-gray-700">
-                  <th className="px-4 py-3 text-gray-400 font-medium">Email</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Name</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Tokens</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Subscriptions</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Created</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => {
-                  const amountStr = addAmountByUser[u.id] ?? '200';
-                  const amount = Math.max(1, parseInt(amountStr, 10) || 0);
-                  const isAdding = addingForUserId === u.id;
-                  return (
-                    <tr key={u.id} className="border-b border-gray-700/50">
-                      <td className="px-4 py-3 text-gray-300">{u.email}</td>
-                      <td className="px-4 py-3 text-gray-300">{u.name ?? '—'}</td>
-                      <td className="px-4 py-3 text-white">{u.token_balance.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-gray-300">{u.subscription_count}</td>
-                      <td className="px-4 py-3 text-gray-400">{formatDate(u.created_at)}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
+
+            {missionActionInfo && (
+              <div className="mb-3 rounded-lg border border-emerald-800 bg-emerald-950/50 px-4 py-2 text-sm text-emerald-200">
+                {missionActionInfo}
+              </div>
+            )}
+            {missionActionError && (
+              <div className="mb-3 rounded-lg border border-red-800 bg-red-950/50 px-4 py-2 text-sm text-red-200">
+                {missionActionError}
+              </div>
+            )}
+            {missionError && (
+              <div className="mb-3 rounded-lg border border-red-800 bg-red-950/50 px-4 py-2 text-sm text-red-200">
+                {missionError}
+              </div>
+            )}
+
+            <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-lg border border-gray-700 bg-gray-800/80">
+              <table className="w-full min-w-[760px] text-left text-sm">
+                <thead className="sticky top-0 bg-gray-800 z-10">
+                  <tr className="border-b border-gray-700">
+                    <th className="px-4 py-3 text-gray-400 font-medium w-10">
+                      <input
+                        type="checkbox"
+                        checked={allMissionSelected}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedMissionTickers(allMissionTickers);
+                          } else {
+                            setSelectedMissionTickers([]);
+                          }
+                        }}
+                        aria-label="Select all major tickers"
+                      />
+                    </th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">Latest run</th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">Last executed</th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">Has report ({missionDate})</th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">Status</th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {missionItems.map((item) => {
+                    const isSelected = selectedMissionTickerSet.has(item.ticker);
+                    const isRunningThisTicker = missionRunningForTicker === item.ticker;
+                    return (
+                      <tr key={item.ticker} className="border-b border-gray-700/50">
+                        <td className="px-4 py-3">
                           <input
-                            type="number"
-                            min={1}
-                            max={10000}
-                            value={amountStr}
-                            onChange={(e) =>
-                              setAddAmountByUser((prev) => ({ ...prev, [u.id]: e.target.value }))
-                            }
-                            className="w-20 rounded border border-gray-600 bg-gray-700 px-2 py-1 text-white text-right"
-                            disabled={isAdding}
-                            aria-label={`Tokens to add for ${u.email}`}
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              setSelectedMissionTickers((prev) => {
+                                if (e.target.checked) {
+                                  return prev.includes(item.ticker) ? prev : [...prev, item.ticker];
+                                }
+                                return prev.filter((ticker) => ticker !== item.ticker);
+                              });
+                            }}
+                            aria-label={`Select ${item.ticker}`}
                           />
+                        </td>
+                        <td className="px-4 py-3">
+                          <Link
+                            to={`/tickers/${item.ticker}`}
+                            className="text-blue-400 hover:text-blue-300 font-medium"
+                          >
+                            {item.ticker}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 text-gray-300 font-mono text-xs">
+                          {item.latest_run_id ?? '—'}
+                        </td>
+                        <td className="px-4 py-3 text-gray-300">{formatDate(item.last_executed_at)}</td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={
+                              item.has_report_for_date ? 'text-emerald-300 font-medium' : 'text-amber-300 font-medium'
+                            }
+                          >
+                            {item.has_report_for_date ? 'Yes' : 'No'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-300">
+                          {item.is_running ? (
+                            <div>
+                              <p className="text-blue-300 font-medium">Running</p>
+                              {item.running_analysis_id && (
+                                <p className="font-mono text-xs text-gray-400">{item.running_analysis_id}</p>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">Idle</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
                           <button
                             type="button"
-                            onClick={async () => {
-                              setAddTokensError(null);
-                              setAddingForUserId(u.id);
-                              try {
-                                const res = await adminApi.addTokensToUser(u.id, amount);
-                                setUsers((prev) =>
-                                  prev.map((x) =>
-                                    x.id === u.id ? { ...x, token_balance: res.token_balance } : x,
-                                  ),
-                                );
-                              } catch (err: unknown) {
-                                const ax = err as { response?: { data?: { detail?: string } } };
-                                setAddTokensError(
-                                  ax.response?.data?.detail ?? 'Failed to add tokens',
-                                );
-                              } finally {
-                                setAddingForUserId(null);
-                              }
+                            disabled={isRunningThisTicker}
+                            onClick={() => {
+                              setMissionRunningForTicker(item.ticker);
+                              void runMissionForTickers([item.ticker]).finally(() => {
+                                setMissionRunningForTicker(null);
+                              });
                             }}
-                            disabled={isAdding || amount < 1}
                             className="rounded bg-blue-600 px-2 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                           >
-                            {isAdding ? '…' : 'Add tokens'}
+                            {isRunningThisTicker ? 'Running…' : 'Run now'}
                           </button>
-                        </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {missionItems.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
+                        No mission-control rows found.
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : (
+          <>
+            {stats && (
+              <section className="mb-10">
+                <h2 className="text-lg font-semibold text-white mb-4">Overview</h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                  <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
+                    <p className="text-sm text-gray-400">Total users</p>
+                    <p className="text-2xl font-bold text-white">{stats.total_users.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
+                    <p className="text-sm text-gray-400">Total reports</p>
+                    <p className="text-2xl font-bold text-white">{stats.total_reports.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
+                    <p className="text-sm text-gray-400">Analyses (7d)</p>
+                    <p className="text-2xl font-bold text-white">{stats.analyses_last_7d.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
+                    <p className="text-sm text-gray-400">Report views</p>
+                    <p className="text-2xl font-bold text-white">{stats.total_report_views.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
+                    <p className="text-sm text-gray-400">Subscriptions</p>
+                    <p className="text-2xl font-bold text-white">{stats.total_subscriptions.toLocaleString()}</p>
+                  </div>
+                </div>
+              </section>
+            )}
 
-        {/* Recent analyses */}
-        <section className="mb-10">
-          <h2 className="text-lg font-semibold text-white mb-4">Recent analyses ({analysesTotal})</h2>
-          <div className="overflow-x-auto overflow-y-auto max-h-96 rounded-lg border border-gray-700 bg-gray-800/80">
-            <table className="w-full min-w-[500px] text-left text-sm">
-              <thead className="sticky top-0 bg-gray-800 z-10">
-                <tr className="border-b border-gray-700">
-                  <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Run ID</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Creator</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Earned tokens</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {analyses.map((a) => (
-                  <tr key={a.id} className="border-b border-gray-700/50">
-                    <td className="px-4 py-3">
-                      <Link
-                        to={`/tickers/${a.ticker}`}
-                        className="text-blue-400 hover:text-blue-300 font-medium"
-                      >
-                        {a.ticker}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-gray-300 font-mono text-xs">{a.run_id}</td>
-                    <td className="px-4 py-3 text-gray-300">{a.creator_email}</td>
-                    <td className="px-4 py-3 text-white">{a.earned_tokens}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatDate(a.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+            {(dailyAnalyses.length > 0 || dailyViews.length > 0) && (
+              <section className="mb-10">
+                <h2 className="text-lg font-semibold text-white mb-4">Activity (last 30 days)</h2>
+                <div className="flex flex-col md:flex-row gap-4">
+                  <DailyBarChart
+                    data={dailyAnalyses}
+                    color="#3b82f6"
+                    label="Analyses per day"
+                  />
+                  <DailyBarChart
+                    data={dailyViews}
+                    color="#10b981"
+                    label="Report views per day"
+                  />
+                </div>
+              </section>
+            )}
 
-        {/* Latest reports */}
-        <section className="mb-10">
-          <h2 className="text-lg font-semibold text-white mb-4">Latest reports ({reportsTotal})</h2>
-          <div className="overflow-x-auto overflow-y-auto max-h-96 rounded-lg border border-gray-700 bg-gray-800/80">
-            <table className="w-full min-w-[500px] text-left text-sm">
-              <thead className="sticky top-0 bg-gray-800 z-10">
-                <tr className="border-b border-gray-700">
-                  <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Run ID</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Type</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reports.map((r) => (
-                  <tr key={r.id} className="border-b border-gray-700/50">
-                    <td className="px-4 py-3">
-                      <Link
-                        to={`/tickers/${r.ticker}`}
-                        className="text-blue-400 hover:text-blue-300 font-medium"
-                      >
-                        {r.ticker}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-gray-300 font-mono text-xs">{r.run_id}</td>
-                    <td className="px-4 py-3 text-gray-300">{r.report_type}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatDate(r.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+            <section className="mb-10">
+              <h2 className="text-lg font-semibold text-white mb-4">Users ({usersTotal})</h2>
+              {addTokensError && (
+                <div className="mb-3 rounded-lg border border-red-800 bg-red-950/50 px-4 py-2 text-sm text-red-200">
+                  {addTokensError}
+                  <button
+                    type="button"
+                    onClick={() => setAddTokensError(null)}
+                    className="ml-2 text-red-400 hover:text-red-100"
+                    aria-label="Dismiss"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+              <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-800/80">
+                <table className="w-full min-w-[700px] text-left text-sm">
+                  <thead className="sticky top-0 bg-gray-800 z-10">
+                    <tr className="border-b border-gray-700">
+                      <th className="px-4 py-3 text-gray-400 font-medium">Email</th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">Name</th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">Tokens</th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">Subscriptions</th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">Created</th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((u) => {
+                      const amountStr = addAmountByUser[u.id] ?? '200';
+                      const amount = Math.max(1, parseInt(amountStr, 10) || 0);
+                      const isAdding = addingForUserId === u.id;
+                      return (
+                        <tr key={u.id} className="border-b border-gray-700/50">
+                          <td className="px-4 py-3 text-gray-300">{u.email}</td>
+                          <td className="px-4 py-3 text-gray-300">{u.name ?? '—'}</td>
+                          <td className="px-4 py-3 text-white">{u.token_balance.toLocaleString()}</td>
+                          <td className="px-4 py-3 text-gray-300">{u.subscription_count}</td>
+                          <td className="px-4 py-3 text-gray-400">{formatDate(u.created_at)}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min={1}
+                                max={10000}
+                                value={amountStr}
+                                onChange={(e) =>
+                                  setAddAmountByUser((prev) => ({ ...prev, [u.id]: e.target.value }))
+                                }
+                                className="w-20 rounded border border-gray-600 bg-gray-700 px-2 py-1 text-white text-right"
+                                disabled={isAdding}
+                                aria-label={`Tokens to add for ${u.email}`}
+                              />
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  setAddTokensError(null);
+                                  setAddingForUserId(u.id);
+                                  try {
+                                    const res = await adminApi.addTokensToUser(u.id, amount);
+                                    setUsers((prev) =>
+                                      prev.map((x) =>
+                                        x.id === u.id ? { ...x, token_balance: res.token_balance } : x,
+                                      ),
+                                    );
+                                  } catch (err: unknown) {
+                                    const ax = err as { response?: { data?: { detail?: string } } };
+                                    setAddTokensError(
+                                      ax.response?.data?.detail ?? 'Failed to add tokens',
+                                    );
+                                  } finally {
+                                    setAddingForUserId(null);
+                                  }
+                                }}
+                                disabled={isAdding || amount < 1}
+                                className="rounded bg-blue-600 px-2 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                              >
+                                {isAdding ? '…' : 'Add tokens'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
 
-        {/* Subscriptions */}
-        <section>
-          <h2 className="text-lg font-semibold text-white mb-4">Subscriptions ({subscriptionsTotal})</h2>
-          <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-800/80">
-            <table className="w-full min-w-[400px] text-left text-sm">
-              <thead className="sticky top-0 bg-gray-800 z-10">
-                <tr className="border-b border-gray-700">
-                  <th className="px-4 py-3 text-gray-400 font-medium">User email</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Email updates</th>
-                  <th className="px-4 py-3 text-gray-400 font-medium">Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {subscriptions.map((s) => (
-                  <tr key={s.id} className="border-b border-gray-700/50">
-                    <td className="px-4 py-3 text-gray-300">{s.user_email}</td>
-                    <td className="px-4 py-3">
-                      <Link
-                        to={`/tickers/${s.ticker}`}
-                        className="text-blue-400 hover:text-blue-300 font-medium"
-                      >
-                        {s.ticker}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-gray-400">{s.email_updates ? 'Yes' : 'No'}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatDate(s.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+            <section className="mb-10">
+              <h2 className="text-lg font-semibold text-white mb-4">Recent analyses ({analysesTotal})</h2>
+              <div className="overflow-x-auto overflow-y-auto max-h-96 rounded-lg border border-gray-700 bg-gray-800/80">
+                <table className="w-full min-w-[500px] text-left text-sm">
+                  <thead className="sticky top-0 bg-gray-800 z-10">
+                    <tr className="border-b border-gray-700">
+                      <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">Run ID</th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">Creator</th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">Earned tokens</th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">Created</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analyses.map((a) => (
+                      <tr key={a.id} className="border-b border-gray-700/50">
+                        <td className="px-4 py-3">
+                          <Link
+                            to={`/tickers/${a.ticker}`}
+                            className="text-blue-400 hover:text-blue-300 font-medium"
+                          >
+                            {a.ticker}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 text-gray-300 font-mono text-xs">{a.run_id}</td>
+                        <td className="px-4 py-3 text-gray-300">{a.creator_email}</td>
+                        <td className="px-4 py-3 text-white">{a.earned_tokens}</td>
+                        <td className="px-4 py-3 text-gray-400">{formatDate(a.created_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="mb-10">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold text-white">Latest reports ({reportsTotal})</h2>
+                <button
+                  type="button"
+                  onClick={() => setLatestReportsCollapsed((prev) => !prev)}
+                  className="rounded-lg border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
+                  aria-expanded={!latestReportsCollapsed}
+                  aria-controls="latest-reports-table"
+                >
+                  {latestReportsCollapsed ? 'Show reports' : 'Hide reports'}
+                </button>
+              </div>
+              {!latestReportsCollapsed && (
+                <div
+                  id="latest-reports-table"
+                  className="overflow-x-auto overflow-y-auto max-h-96 rounded-lg border border-gray-700 bg-gray-800/80"
+                >
+                  <table className="w-full min-w-[500px] text-left text-sm">
+                    <thead className="sticky top-0 bg-gray-800 z-10">
+                      <tr className="border-b border-gray-700">
+                        <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
+                        <th className="px-4 py-3 text-gray-400 font-medium">Run ID</th>
+                        <th className="px-4 py-3 text-gray-400 font-medium">Type</th>
+                        <th className="px-4 py-3 text-gray-400 font-medium">Created</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reports.map((r) => (
+                        <tr key={r.id} className="border-b border-gray-700/50">
+                          <td className="px-4 py-3">
+                            <Link
+                              to={`/tickers/${r.ticker}`}
+                              className="text-blue-400 hover:text-blue-300 font-medium"
+                            >
+                              {r.ticker}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-3 text-gray-300 font-mono text-xs">{r.run_id}</td>
+                          <td className="px-4 py-3 text-gray-300">{r.report_type}</td>
+                          <td className="px-4 py-3 text-gray-400">{formatDate(r.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            <section>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold text-white">Subscriptions ({subscriptionsTotal})</h2>
+                <button
+                  type="button"
+                  onClick={() => setSubscriptionsCollapsed((prev) => !prev)}
+                  className="rounded-lg border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
+                  aria-expanded={!subscriptionsCollapsed}
+                  aria-controls="subscriptions-table"
+                >
+                  {subscriptionsCollapsed ? 'Show subscriptions' : 'Hide subscriptions'}
+                </button>
+              </div>
+              {!subscriptionsCollapsed && (
+                <div
+                  id="subscriptions-table"
+                  className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-800/80"
+                >
+                  <table className="w-full min-w-[400px] text-left text-sm">
+                    <thead className="sticky top-0 bg-gray-800 z-10">
+                      <tr className="border-b border-gray-700">
+                        <th className="px-4 py-3 text-gray-400 font-medium">User email</th>
+                        <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
+                        <th className="px-4 py-3 text-gray-400 font-medium">Email updates</th>
+                        <th className="px-4 py-3 text-gray-400 font-medium">Created</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {subscriptions.map((s) => (
+                        <tr key={s.id} className="border-b border-gray-700/50">
+                          <td className="px-4 py-3 text-gray-300">{s.user_email}</td>
+                          <td className="px-4 py-3">
+                            <Link
+                              to={`/tickers/${s.ticker}`}
+                              className="text-blue-400 hover:text-blue-300 font-medium"
+                            >
+                              {s.ticker}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-3 text-gray-400">{s.email_updates ? 'Yes' : 'No'}</td>
+                          <td className="px-4 py-3 text-gray-400">{formatDate(s.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </>
+        )}
       </div>
     </div>
   );
