@@ -111,7 +111,55 @@ def fetch_from_nasdaq_ftp() -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Source 3: S&P 500 via Wikipedia (fallback, ~503 tickers)
+# Source 3: Cryptocurrencies via yfinance (top cryptos)
+# ---------------------------------------------------------------------------
+
+def fetch_crypto() -> list[dict]:
+    """
+    Fetch top cryptocurrencies that are tradeable via Yahoo Finance.
+    Returns list of {"ticker": ..., "name": ...} dicts.
+    """
+    # Top cryptocurrencies available on Yahoo Finance (ticker format: SYMBOL-USD)
+    crypto_list = [
+        ("BTC-USD", "Bitcoin USD"),
+        ("ETH-USD", "Ethereum USD"),
+        ("USDT-USD", "Tether USD"),
+        ("BNB-USD", "Binance Coin USD"),
+        ("SOL-USD", "Solana USD"),
+        ("XRP-USD", "XRP USD"),
+        ("USDC-USD", "USD Coin"),
+        ("ADA-USD", "Cardano USD"),
+        ("AVAX-USD", "Avalanche USD"),
+        ("DOGE-USD", "Dogecoin USD"),
+        ("TRX-USD", "TRON USD"),
+        ("DOT-USD", "Polkadot USD"),
+        ("MATIC-USD", "Polygon USD"),
+        ("LTC-USD", "Litecoin USD"),
+        ("SHIB-USD", "Shiba Inu USD"),
+        ("BCH-USD", "Bitcoin Cash USD"),
+        ("LINK-USD", "Chainlink USD"),
+        ("UNI-USD", "Uniswap USD"),
+        ("ATOM-USD", "Cosmos USD"),
+        ("XLM-USD", "Stellar USD"),
+        ("ETC-USD", "Ethereum Classic USD"),
+        ("XMR-USD", "Monero USD"),
+        ("APT-USD", "Aptos USD"),
+        ("FIL-USD", "Filecoin USD"),
+        ("HBAR-USD", "Hedera USD"),
+        ("ARB-USD", "Arbitrum USD"),
+        ("OP-USD", "Optimism USD"),
+        ("NEAR-USD", "NEAR Protocol USD"),
+        ("VET-USD", "VeChain USD"),
+        ("ALGO-USD", "Algorand USD"),
+    ]
+    
+    stocks = [{"ticker": ticker, "name": name} for ticker, name in crypto_list]
+    print(f"  → {len(stocks)} cryptocurrencies added")
+    return stocks
+
+
+# ---------------------------------------------------------------------------
+# Source 4: S&P 500 via Wikipedia (fallback, ~503 tickers)
 # ---------------------------------------------------------------------------
 
 def fetch_sp500() -> list[dict]:
@@ -178,9 +226,9 @@ def main():
     parser = argparse.ArgumentParser(description="Generate stocks.json for frontend search")
     parser.add_argument(
         "--source",
-        choices=["edgar", "nasdaq", "sp500", "all"],
+        choices=["edgar", "nasdaq", "crypto", "sp500", "all"],
         default="all",
-        help="Data source to use (default: all, merges edgar + nasdaq)",
+        help="Data source to use (default: all, merges edgar + nasdaq + crypto)",
     )
     parser.add_argument(
         "--output",
@@ -202,6 +250,12 @@ def main():
             stocks += fetch_from_nasdaq_ftp()
         except Exception as e:
             print(f"NASDAQ FTP fetch failed: {e}")
+
+    if args.source in ("crypto", "all"):
+        try:
+            stocks += fetch_crypto()
+        except Exception as e:
+            print(f"Crypto fetch failed: {e}")
 
     if args.source == "sp500" or (not stocks):
         stocks += fetch_sp500()
