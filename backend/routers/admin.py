@@ -46,6 +46,7 @@ def _load_mission_control_entries(path: Path) -> list[dict[str, Any]]:
     seen: set[str] = set()
     for key, item in data.items():
         ticker_raw = key
+        name: Optional[str] = None
         sector: Optional[str] = None
         industry: Optional[str] = None
         quote_type: Optional[str] = None
@@ -53,10 +54,12 @@ def _load_mission_control_entries(path: Path) -> list[dict[str, Any]]:
 
         if isinstance(item, dict):
             ticker_raw = item.get("ticker") or key
+            name_raw = item.get("name")
             sector_raw = item.get("sector")
             industry_raw = item.get("industry")
             quote_type_raw = item.get("quote_type")
             market_cap_raw = item.get("market_cap")
+            name = str(name_raw).strip() if name_raw is not None else None
             sector = str(sector_raw).strip() if sector_raw is not None else None
             industry = str(industry_raw).strip() if industry_raw is not None else None
             quote_type = (
@@ -75,6 +78,7 @@ def _load_mission_control_entries(path: Path) -> list[dict[str, Any]]:
         entries.append(
             {
                 "ticker": ticker,
+                "name": name or None,
                 "sector": sector or None,
                 "industry": industry or None,
                 "quote_type": quote_type or None,
@@ -237,6 +241,7 @@ class AdminAddTokensResponse(BaseModel):
 
 class MissionControlTickerItem(BaseModel):
     ticker: str
+    name: Optional[str]
     quote_type: Optional[str]
     market_cap: Optional[float]
     last_completed_at: Optional[datetime]
@@ -590,6 +595,7 @@ def get_mission_control(
         items.append(
             MissionControlTickerItem(
                 ticker=ticker_upper,
+                name=entry.get("name"),
                 quote_type=entry.get("quote_type"),
                 market_cap=entry.get("market_cap"),
                 last_completed_at=last_completed.get(ticker_upper),

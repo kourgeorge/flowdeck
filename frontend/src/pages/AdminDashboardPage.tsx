@@ -24,7 +24,7 @@ import {
 } from '../services/adminApi';
 
 type AdminTab = 'overview' | 'mission-control';
-type MissionSortKey = 'ticker' | 'type' | 'market_cap' | 'sector' | 'industry' | 'last_completed' | 'status';
+type MissionSortKey = 'ticker' | 'company' | 'type' | 'market_cap' | 'sector' | 'industry' | 'last_completed' | 'status';
 type MissionSortDirection = 'asc' | 'desc';
 
 function formatDate(s?: string | null, use24Hour = false): string {
@@ -177,6 +177,9 @@ export default function AdminDashboardPage() {
         switch (missionSort.key) {
           case 'ticker':
             cmp = a.ticker.localeCompare(b.ticker, undefined, { sensitivity: 'base' });
+            break;
+          case 'company':
+            cmp = compareNullableString(a.name, b.name);
             break;
           case 'type': {
             const rankDiff = quoteTypeSortRank(a.quote_type) - quoteTypeSortRank(b.quote_type);
@@ -423,13 +426,14 @@ export default function AdminDashboardPage() {
               >
                 {missionBulkRunning ? 'Running…' : `Run selected (${selectedMissionTickers.length})`}
               </button>
+              {missionActionInfo && (
+                <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-700/60 bg-emerald-950/40 px-3 py-1.5 text-sm text-emerald-200">
+                  <span className="text-emerald-300">Status</span>
+                  <span>{missionActionInfo}</span>
+                </div>
+              )}
             </div>
 
-            {missionActionInfo && (
-              <div className="mb-3 rounded-lg border border-emerald-800 bg-emerald-950/50 px-4 py-2 text-sm text-emerald-200">
-                {missionActionInfo}
-              </div>
-            )}
             {missionActionError && (
               <div className="mb-3 rounded-lg border border-red-800 bg-red-950/50 px-4 py-2 text-sm text-red-200">
                 {missionActionError}
@@ -442,7 +446,7 @@ export default function AdminDashboardPage() {
             )}
 
             <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-lg border border-gray-700 bg-gray-800/80">
-              <table className="w-full min-w-[1120px] text-left text-sm">
+              <table className="w-full min-w-[1280px] text-left text-sm">
                 <thead className="sticky top-0 bg-gray-800 z-10">
                   <tr className="border-b border-gray-700">
                     <th className="px-4 py-3 text-gray-400 font-medium w-10">
@@ -466,6 +470,15 @@ export default function AdminDashboardPage() {
                         onClick={() => toggleMissionSort('ticker')}
                       >
                         Ticker <span className="text-xs">{sortIndicator('ticker')}</span>
+                      </button>
+                    </th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 hover:text-gray-200"
+                        onClick={() => toggleMissionSort('company')}
+                      >
+                        Company <span className="text-xs">{sortIndicator('company')}</span>
                       </button>
                     </th>
                     <th className="px-4 py-3 text-gray-400 font-medium">
@@ -555,6 +568,9 @@ export default function AdminDashboardPage() {
                             {item.ticker}
                           </Link>
                         </td>
+                        <td className="px-4 py-3 text-gray-300 max-w-[280px] truncate" title={item.name ?? undefined}>
+                          {item.name ?? '—'}
+                        </td>
                         <td className="px-4 py-3 text-gray-300">{item.quote_type ?? '—'}</td>
                         <td className="px-4 py-3 text-gray-300">{formatMarketCap(item.market_cap)}</td>
                         <td className="px-4 py-3 text-gray-300">{item.sector ?? '—'}</td>
@@ -589,7 +605,7 @@ export default function AdminDashboardPage() {
                   })}
                   {sortedMissionItems.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="px-4 py-6 text-center text-gray-400">
+                      <td colSpan={10} className="px-4 py-6 text-center text-gray-400">
                         No mission-control rows found.
                       </td>
                     </tr>

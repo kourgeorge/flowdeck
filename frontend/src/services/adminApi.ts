@@ -73,6 +73,7 @@ export interface ViewsDailyCount {
 
 export interface MissionControlTickerItem {
   ticker: string;
+  name: string | null;
   quote_type: string | null;
   market_cap: number | null;
   last_completed_at: string | null;
