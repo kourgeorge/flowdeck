@@ -34,7 +34,8 @@ export function useDashboardData(): UseDashboardDataReturn {
   const [loadingMoreRecent, setLoadingMoreRecent] = useState(false);
   const [backgroundLoadingAll, setBackgroundLoadingAll] = useState(false);
   const [tickerToName, setTickerToName] = useState<Record<string, string>>({});
-  const [isLoading, setIsLoading] = useState(true);
+  const [subscriptionsReady, setSubscriptionsReady] = useState(false);
+  const [recentReady, setRecentReady] = useState(false);
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [prefetchCache, setPrefetchCache] = useState<Record<string, StockPageData>>({});
 
@@ -42,6 +43,16 @@ export function useDashboardData(): UseDashboardDataReturn {
   const recentScrollRef = useRef<HTMLDivElement>(null);
   const backgroundLoadStartedRef = useRef(false);
   const prefetchedRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!user) {
+      setSubscriptionsReady(true);
+      setRecentReady(true);
+      return;
+    }
+    setSubscriptionsReady(false);
+    setRecentReady(false);
+  }, [user]);
 
   // Load ticker name map
   useEffect(() => {
@@ -57,9 +68,8 @@ export function useDashboardData(): UseDashboardDataReturn {
 
   // Load subscribed stocks
   const loadSubscriptions = useCallback(async () => {
-    if (!user) { setWidgets([]); setIsLoading(false); return; }
+    if (!user) { setWidgets([]); setSubscriptionsReady(true); return; }
     try {
-      setIsLoading(true);
       const subs = await subscriptionApi.list();
       const tickers = subs.map((s) => s.ticker);
       if (tickers.length > 0) {
@@ -72,7 +82,7 @@ export function useDashboardData(): UseDashboardDataReturn {
     } catch {
       setWidgets([]);
     } finally {
-      setIsLoading(false);
+      setSubscriptionsReady(true);
     }
   }, [user]);
 
@@ -126,9 +136,16 @@ export function useDashboardData(): UseDashboardDataReturn {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setRecentAnalyzedWidgets([]);
+      setRecentTotal(null);
+      setRecentReady(true);
+      return;
+    }
     backgroundLoadStartedRef.current = false;
-    loadRecentPage(0, false).catch(() => { setRecentAnalyzedWidgets([]); setRecentTotal(null); });
+    loadRecentPage(0, false)
+      .catch(() => { setRecentAnalyzedWidgets([]); setRecentTotal(null); })
+      .finally(() => setRecentReady(true));
     const interval = setInterval(() => {
       backgroundLoadStartedRef.current = false;
       loadRecentPage(0, false).catch(() => {});
@@ -217,6 +234,8 @@ export function useDashboardData(): UseDashboardDataReturn {
   const handleSubscriptionChange = useCallback(() => {
     loadSubscriptions();
   }, [loadSubscriptions]);
+
+  const isLoading = !subscriptionsReady || !recentReady;
 
   return {
     widgets,

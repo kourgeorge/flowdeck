@@ -51,7 +51,7 @@ export default function DashboardPage() {
     );
   }
 
-  if (isLoading && widgets.length === 0 && recentAnalyzedWidgets.length === 0) {
+  if (isLoading) {
     return (
       <div className="min-h-[60vh] px-4 py-6 sm:p-6 lg:p-8">
         <div className="max-w-layout mx-auto min-w-0 w-full">
