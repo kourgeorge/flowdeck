@@ -53,12 +53,13 @@ export default function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-[60vh] px-4 py-6 sm:p-6 lg:p-8">
-        <div className="max-w-layout mx-auto min-w-0 w-full">
-          <StockSearch />
-          <div className="mt-6 bg-gray-800 rounded-lg border border-gray-700 p-8 text-center">
-            <p className="text-gray-400">Loading dashboard...</p>
-          </div>
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="text-center">
+          <svg className="w-8 h-8 text-blue-400 animate-spin mx-auto mb-3" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+          <p className="text-gray-400 text-sm">Loading dashboard…</p>
         </div>
       </div>
     );
