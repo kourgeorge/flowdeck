@@ -1,0 +1,866 @@
+{
+  "AAPL": {
+    "ticker": "AAPL",
+    "name": "Apple Inc.",
+    "sector": "Technology",
+    "industry": "Consumer Electronics",
+    "market_cap": 3858499371008,
+    "quote_type": "EQUITY"
+  },
+  "ABBV": {
+    "ticker": "ABBV",
+    "name": "AbbVie Inc.",
+    "sector": "Healthcare",
+    "industry": "Drug Manufacturers - General",
+    "market_cap": 417623834624,
+    "quote_type": "EQUITY"
+  },
+  "ABNB": {
+    "ticker": "ABNB",
+    "name": "Airbnb, Inc.",
+    "sector": "Consumer Cyclical",
+    "industry": "Travel Services",
+    "market_cap": 81258119168,
+    "quote_type": "EQUITY"
+  },
+  "ABT": {
+    "ticker": "ABT",
+    "name": "Abbott Laboratories",
+    "sector": "Healthcare",
+    "industry": "Medical Devices",
+    "market_cap": 196531945472,
+    "quote_type": "EQUITY"
+  },
+  "ACN": {
+    "ticker": "ACN",
+    "name": "Accenture plc",
+    "sector": "Technology",
+    "industry": "Information Technology Services",
+    "market_cap": 130229166080,
+    "quote_type": "EQUITY"
+  },
+  "ADBE": {
+    "ticker": "ADBE",
+    "name": "Adobe Inc.",
+    "sector": "Technology",
+    "industry": "Software - Application",
+    "market_cap": 114328027136,
+    "quote_type": "EQUITY"
+  },
+  "ADI": {
+    "ticker": "ADI",
+    "name": "Analog Devices, Inc.",
+    "sector": "Technology",
+    "industry": "Semiconductors",
+    "market_cap": 166726615040,
+    "quote_type": "EQUITY"
+  },
+  "AMD": {
+    "ticker": "AMD",
+    "name": "Advanced Micro Devices, Inc.",
+    "sector": "Technology",
+    "industry": "Semiconductors",
+    "market_cap": 329457139712,
+    "quote_type": "EQUITY"
+  },
+  "AMGN": {
+    "ticker": "AMGN",
+    "name": "Amgen Inc.",
+    "sector": "Healthcare",
+    "industry": "Drug Manufacturers - General",
+    "market_cap": 204452184064,
+    "quote_type": "EQUITY"
+  },
+  "AMZN": {
+    "ticker": "AMZN",
+    "name": "Amazon.com, Inc.",
+    "sector": "Consumer Cyclical",
+    "industry": "Internet Retail",
+    "market_cap": 2327545643008,
+    "quote_type": "EQUITY"
+  },
+  "AON": {
+    "ticker": "AON",
+    "name": "Aon plc",
+    "sector": "Financial Services",
+    "industry": "Insurance Brokers",
+    "market_cap": 73331613696,
+    "quote_type": "EQUITY"
+  },
+  "APD": {
+    "ticker": "APD",
+    "name": "Air Products and Chemicals, Inc.",
+    "sector": "Basic Materials",
+    "industry": "Specialty Chemicals",
+    "market_cap": 61052276736,
+    "quote_type": "EQUITY"
+  },
+  "AVGO": {
+    "ticker": "AVGO",
+    "name": "Broadcom Inc.",
+    "sector": "Technology",
+    "industry": "Semiconductors",
+    "market_cap": 1505496662016,
+    "quote_type": "EQUITY"
+  },
+  "AXP": {
+    "ticker": "AXP",
+    "name": "American Express Company",
+    "sector": "Financial Services",
+    "industry": "Credit Services",
+    "market_cap": 214377512960,
+    "quote_type": "EQUITY"
+  },
+  "BA": {
+    "ticker": "BA",
+    "name": "The Boeing Company",
+    "sector": "Industrials",
+    "industry": "Aerospace & Defense",
+    "market_cap": 178517245952,
+    "quote_type": "EQUITY"
+  },
+  "BDX": {
+    "ticker": "BDX",
+    "name": "Becton, Dickinson and Company",
+    "sector": "Healthcare",
+    "industry": "Medical Instruments & Supplies",
+    "market_cap": 62129987584,
+    "quote_type": "EQUITY"
+  },
+  "BKNG": {
+    "ticker": "BKNG",
+    "name": "Booking Holdings Inc.",
+    "sector": "Consumer Cyclical",
+    "industry": "Travel Services",
+    "market_cap": 137109118976,
+    "quote_type": "EQUITY"
+  },
+  "BLK": {
+    "ticker": "BLK",
+    "name": "BlackRock, Inc.",
+    "sector": "Financial Services",
+    "industry": "Asset Management",
+    "market_cap": 162788982784,
+    "quote_type": "EQUITY"
+  },
+  "BMY": {
+    "ticker": "BMY",
+    "name": "Bristol-Myers Squibb Company",
+    "sector": "Healthcare",
+    "industry": "Drug Manufacturers - General",
+    "market_cap": 126933409792,
+    "quote_type": "EQUITY"
+  },
+  "BRK-B": {
+    "ticker": "BRK-B",
+    "name": "Berkshire Hathaway Inc.",
+    "sector": "Financial Services",
+    "industry": "Insurance - Diversified",
+    "market_cap": 1051657568256,
+    "quote_type": "EQUITY"
+  },
+  "BSX": {
+    "ticker": "BSX",
+    "name": "Boston Scientific Corporation",
+    "sector": "Healthcare",
+    "industry": "Medical Devices",
+    "market_cap": 107151368192,
+    "quote_type": "EQUITY"
+  },
+  "C": {
+    "ticker": "C",
+    "name": "Citigroup Inc.",
+    "sector": "Financial Services",
+    "industry": "Banks - Diversified",
+    "market_cap": 194734194688,
+    "quote_type": "EQUITY"
+  },
+  "CAT": {
+    "ticker": "CAT",
+    "name": "Caterpillar Inc.",
+    "sector": "Industrials",
+    "industry": "Farm & Heavy Construction Machinery",
+    "market_cap": 342547005440,
+    "quote_type": "EQUITY"
+  },
+  "CB": {
+    "ticker": "CB",
+    "name": "Chubb Limited",
+    "sector": "Financial Services",
+    "industry": "Insurance - Property & Casualty",
+    "market_cap": 131501088768,
+    "quote_type": "EQUITY"
+  },
+  "CI": {
+    "ticker": "CI",
+    "name": "The Cigna Group",
+    "sector": "Healthcare",
+    "industry": "Healthcare Plans",
+    "market_cap": 76061401088,
+    "quote_type": "EQUITY"
+  },
+  "CL": {
+    "ticker": "CL",
+    "name": "Colgate-Palmolive Company",
+    "sector": "Consumer Defensive",
+    "industry": "Household & Personal Products",
+    "market_cap": 76371492864,
+    "quote_type": "EQUITY"
+  },
+  "CMCSA": {
+    "ticker": "CMCSA",
+    "name": "Comcast Corporation",
+    "sector": "Communication Services",
+    "industry": "Telecom Services",
+    "market_cap": 116932575232,
+    "quote_type": "EQUITY"
+  },
+  "CME": {
+    "ticker": "CME",
+    "name": "CME Group Inc.",
+    "sector": "Financial Services",
+    "industry": "Financial Data & Stock Exchanges",
+    "market_cap": 115043975168,
+    "quote_type": "EQUITY"
+  },
+  "COIN": {
+    "ticker": "COIN",
+    "name": "Coinbase Global, Inc.",
+    "sector": "Financial Services",
+    "industry": "Financial Data & Stock Exchanges",
+    "market_cap": 56339558400,
+    "quote_type": "EQUITY"
+  },
+  "COST": {
+    "ticker": "COST",
+    "name": "Costco Wholesale Corporation",
+    "sector": "Consumer Defensive",
+    "industry": "Discount Stores",
+    "market_cap": 446949982208,
+    "quote_type": "EQUITY"
+  },
+  "CRM": {
+    "ticker": "CRM",
+    "name": "Salesforce, Inc.",
+    "sector": "Technology",
+    "industry": "Software - Application",
+    "market_cap": 183812161536,
+    "quote_type": "EQUITY"
+  },
+  "CSCO": {
+    "ticker": "CSCO",
+    "name": "Cisco Systems, Inc.",
+    "sector": "Technology",
+    "industry": "Communication Equipment",
+    "market_cap": 319525027840,
+    "quote_type": "EQUITY"
+  },
+  "CVX": {
+    "ticker": "CVX",
+    "name": "Chevron Corporation",
+    "sector": "Energy",
+    "industry": "Oil & Gas Integrated",
+    "market_cap": 371939737600,
+    "quote_type": "EQUITY"
+  },
+  "DE": {
+    "ticker": "DE",
+    "name": "Deere & Company",
+    "sector": "Industrials",
+    "industry": "Farm & Heavy Construction Machinery",
+    "market_cap": 166450561024,
+    "quote_type": "EQUITY"
+  },
+  "DHR": {
+    "ticker": "DHR",
+    "name": "Danaher Corporation",
+    "sector": "Healthcare",
+    "industry": "Diagnostics & Research",
+    "market_cap": 144772628480,
+    "quote_type": "EQUITY"
+  },
+  "DIS": {
+    "ticker": "DIS",
+    "name": "The Walt Disney Company",
+    "sector": "Communication Services",
+    "industry": "Entertainment",
+    "market_cap": 182729801728,
+    "quote_type": "EQUITY"
+  },
+  "DUK": {
+    "ticker": "DUK",
+    "name": "Duke Energy Corporation",
+    "sector": "Utilities",
+    "industry": "Utilities - Regulated Electric",
+    "market_cap": 102557966336,
+    "quote_type": "EQUITY"
+  },
+  "EOG": {
+    "ticker": "EOG",
+    "name": "EOG Resources, Inc.",
+    "sector": "Energy",
+    "industry": "Oil & Gas E&P",
+    "market_cap": 69354938368,
+    "quote_type": "EQUITY"
+  },
+  "GD": {
+    "ticker": "GD",
+    "name": "General Dynamics Corporation",
+    "sector": "Industrials",
+    "industry": "Aerospace & Defense",
+    "market_cap": 98995101696,
+    "quote_type": "EQUITY"
+  },
+  "GE": {
+    "ticker": "GE",
+    "name": "GE Aerospace",
+    "sector": "Industrials",
+    "industry": "Aerospace & Defense",
+    "market_cap": 358436306944,
+    "quote_type": "EQUITY"
+  },
+  "GILD": {
+    "ticker": "GILD",
+    "name": "Gilead Sciences, Inc.",
+    "sector": "Healthcare",
+    "industry": "Drug Manufacturers - General",
+    "market_cap": 184003346432,
+    "quote_type": "EQUITY"
+  },
+  "GOOGL": {
+    "ticker": "GOOGL",
+    "name": "Alphabet Inc.",
+    "sector": "Communication Services",
+    "industry": "Internet Content & Information",
+    "market_cap": 3666963857408,
+    "quote_type": "EQUITY"
+  },
+  "HD": {
+    "ticker": "HD",
+    "name": "The Home Depot, Inc.",
+    "sector": "Consumer Cyclical",
+    "industry": "Home Improvement Retail",
+    "market_cap": 367453241344,
+    "quote_type": "EQUITY"
+  },
+  "HON": {
+    "ticker": "HON",
+    "name": "Honeywell International Inc.",
+    "sector": "Industrials",
+    "industry": "Conglomerates",
+    "market_cap": 165751734272,
+    "quote_type": "EQUITY"
+  },
+  "INTC": {
+    "ticker": "INTC",
+    "name": "Intel Corporation",
+    "sector": "Technology",
+    "industry": "Semiconductors",
+    "market_cap": 227680239616,
+    "quote_type": "EQUITY"
+  },
+  "INTU": {
+    "ticker": "INTU",
+    "name": "Intuit Inc.",
+    "sector": "Technology",
+    "industry": "Software - Application",
+    "market_cap": 122534977536,
+    "quote_type": "EQUITY"
+  },
+  "ISRG": {
+    "ticker": "ISRG",
+    "name": "Intuitive Surgical, Inc.",
+    "sector": "Healthcare",
+    "industry": "Medical Instruments & Supplies",
+    "market_cap": 177984176128,
+    "quote_type": "EQUITY"
+  },
+  "ITW": {
+    "ticker": "ITW",
+    "name": "Illinois Tool Works Inc.",
+    "sector": "Industrials",
+    "industry": "Specialty Industrial Machinery",
+    "market_cap": 82762399744,
+    "quote_type": "EQUITY"
+  },
+  "JNJ": {
+    "ticker": "JNJ",
+    "name": "Johnson & Johnson",
+    "sector": "Healthcare",
+    "industry": "Drug Manufacturers - General",
+    "market_cap": 591148220416,
+    "quote_type": "EQUITY"
+  },
+  "JPM": {
+    "ticker": "JPM",
+    "name": "JPMorgan Chase & Co.",
+    "sector": "Financial Services",
+    "industry": "Banks - Diversified",
+    "market_cap": 807464599552,
+    "quote_type": "EQUITY"
+  },
+  "KO": {
+    "ticker": "KO",
+    "name": "The Coca-Cola Company",
+    "sector": "Consumer Defensive",
+    "industry": "Beverages - Non-Alcoholic",
+    "market_cap": 335955656704,
+    "quote_type": "EQUITY"
+  },
+  "LIN": {
+    "ticker": "LIN",
+    "name": "Linde plc",
+    "sector": "Basic Materials",
+    "industry": "Specialty Chemicals",
+    "market_cap": 231321731072,
+    "quote_type": "EQUITY"
+  },
+  "LOW": {
+    "ticker": "LOW",
+    "name": "Lowe's Companies, Inc.",
+    "sector": "Consumer Cyclical",
+    "industry": "Home Improvement Retail",
+    "market_cap": 145073274880,
+    "quote_type": "EQUITY"
+  },
+  "LRCX": {
+    "ticker": "LRCX",
+    "name": "Lam Research Corporation",
+    "sector": "Technology",
+    "industry": "Semiconductor Equipment & Materials",
+    "market_cap": 280082120704,
+    "quote_type": "EQUITY"
+  },
+  "LYFT": {
+    "ticker": "LYFT",
+    "name": "Lyft, Inc.",
+    "sector": "Technology",
+    "industry": "Software - Application",
+    "market_cap": 5527051264,
+    "quote_type": "EQUITY"
+  },
+  "MA": {
+    "ticker": "MA",
+    "name": "Mastercard Incorporated",
+    "sector": "Financial Services",
+    "industry": "Credit Services",
+    "market_cap": 466673500160,
+    "quote_type": "EQUITY"
+  },
+  "MCD": {
+    "ticker": "MCD",
+    "name": "McDonald's Corporation",
+    "sector": "Consumer Cyclical",
+    "industry": "Restaurants",
+    "market_cap": 236731121664,
+    "quote_type": "EQUITY"
+  },
+  "MDLZ": {
+    "ticker": "MDLZ",
+    "name": "Mondelez International, Inc.",
+    "sector": "Consumer Defensive",
+    "industry": "Confectioners",
+    "market_cap": 75731140608,
+    "quote_type": "EQUITY"
+  },
+  "MDT": {
+    "ticker": "MDT",
+    "name": "Medtronic plc",
+    "sector": "Healthcare",
+    "industry": "Medical Devices",
+    "market_cap": 122739400704,
+    "quote_type": "EQUITY"
+  },
+  "META": {
+    "ticker": "META",
+    "name": "Meta Platforms, Inc.",
+    "sector": "Communication Services",
+    "industry": "Internet Content & Information",
+    "market_cap": 1689059983360,
+    "quote_type": "EQUITY"
+  },
+  "MMM": {
+    "ticker": "MMM",
+    "name": "3M Company",
+    "sector": "Industrials",
+    "industry": "Conglomerates",
+    "market_cap": 84740759552,
+    "quote_type": "EQUITY"
+  },
+  "MO": {
+    "ticker": "MO",
+    "name": "Altria Group, Inc.",
+    "sector": "Consumer Defensive",
+    "industry": "Tobacco",
+    "market_cap": 114351112192,
+    "quote_type": "EQUITY"
+  },
+  "MRK": {
+    "ticker": "MRK",
+    "name": "Merck & Co., Inc.",
+    "sector": "Healthcare",
+    "industry": "Drug Manufacturers - General",
+    "market_cap": 297379299328,
+    "quote_type": "EQUITY"
+  },
+  "MSFT": {
+    "ticker": "MSFT",
+    "name": "Microsoft Corporation",
+    "sector": "Technology",
+    "industry": "Software - Infrastructure",
+    "market_cap": 3011599663104,
+    "quote_type": "EQUITY"
+  },
+  "NEE": {
+    "ticker": "NEE",
+    "name": "NextEra Energy, Inc.",
+    "sector": "Utilities",
+    "industry": "Utilities - Regulated Electric",
+    "market_cap": 192934133760,
+    "quote_type": "EQUITY"
+  },
+  "NFLX": {
+    "ticker": "NFLX",
+    "name": "Netflix, Inc.",
+    "sector": "Communication Services",
+    "industry": "Entertainment",
+    "market_cap": 418504835072,
+    "quote_type": "EQUITY"
+  },
+  "NKE": {
+    "ticker": "NKE",
+    "name": "NIKE, Inc.",
+    "sector": "Consumer Cyclical",
+    "industry": "Footwear & Accessories",
+    "market_cap": 86809681920,
+    "quote_type": "EQUITY"
+  },
+  "NOC": {
+    "ticker": "NOC",
+    "name": "Northrop Grumman Corporation",
+    "sector": "Industrials",
+    "industry": "Aerospace & Defense",
+    "market_cap": 107588100096,
+    "quote_type": "EQUITY"
+  },
+  "NVDA": {
+    "ticker": "NVDA",
+    "name": "NVIDIA Corporation",
+    "sector": "Technology",
+    "industry": "Semiconductors",
+    "market_cap": 4448787103744,
+    "quote_type": "EQUITY"
+  },
+  "ORCL": {
+    "ticker": "ORCL",
+    "name": "Oracle Corporation",
+    "sector": "Technology",
+    "industry": "Software - Infrastructure",
+    "market_cap": 437925249024,
+    "quote_type": "EQUITY"
+  },
+  "PEP": {
+    "ticker": "PEP",
+    "name": "PepsiCo, Inc.",
+    "sector": "Consumer Defensive",
+    "industry": "Beverages - Non-Alcoholic",
+    "market_cap": 224134397952,
+    "quote_type": "EQUITY"
+  },
+  "PG": {
+    "ticker": "PG",
+    "name": "The Procter & Gamble Company",
+    "sector": "Consumer Defensive",
+    "industry": "Household & Personal Products",
+    "market_cap": 369904910336,
+    "quote_type": "EQUITY"
+  },
+  "PGR": {
+    "ticker": "PGR",
+    "name": "The Progressive Corporation",
+    "sector": "Financial Services",
+    "industry": "Insurance - Property & Casualty",
+    "market_cap": 123859263488,
+    "quote_type": "EQUITY"
+  },
+  "PLD": {
+    "ticker": "PLD",
+    "name": "Prologis, Inc.",
+    "sector": "Real Estate",
+    "industry": "REIT - Industrial",
+    "market_cap": 129599111168,
+    "quote_type": "EQUITY"
+  },
+  "PM": {
+    "ticker": "PM",
+    "name": "Philip Morris International Inc.",
+    "sector": "Consumer Defensive",
+    "industry": "Tobacco",
+    "market_cap": 278707896320,
+    "quote_type": "EQUITY"
+  },
+  "PNC": {
+    "ticker": "PNC",
+    "name": "The PNC Financial Services Group, Inc.",
+    "sector": "Financial Services",
+    "industry": "Banks - Regional",
+    "market_cap": 86466568192,
+    "quote_type": "EQUITY"
+  },
+  "PYPL": {
+    "ticker": "PYPL",
+    "name": "PayPal Holdings, Inc.",
+    "sector": "Financial Services",
+    "industry": "Credit Services",
+    "market_cap": 43741728768,
+    "quote_type": "EQUITY"
+  },
+  "QCOM": {
+    "ticker": "QCOM",
+    "name": "QUALCOMM Incorporated",
+    "sector": "Technology",
+    "industry": "Semiconductors",
+    "market_cap": 149002960896,
+    "quote_type": "EQUITY"
+  },
+  "RBLX": {
+    "ticker": "RBLX",
+    "name": "Roblox Corporation",
+    "sector": "Communication Services",
+    "industry": "Electronic Gaming & Multimedia",
+    "market_cap": 47766790144,
+    "quote_type": "EQUITY"
+  },
+  "REGN": {
+    "ticker": "REGN",
+    "name": "Regeneron Pharmaceuticals, Inc.",
+    "sector": "Healthcare",
+    "industry": "Biotechnology",
+    "market_cap": 83254345728,
+    "quote_type": "EQUITY"
+  },
+  "ROKU": {
+    "ticker": "ROKU",
+    "name": "Roku, Inc.",
+    "sector": "Communication Services",
+    "industry": "Entertainment",
+    "market_cap": 14375683072,
+    "quote_type": "EQUITY"
+  },
+  "RTX": {
+    "ticker": "RTX",
+    "name": "RTX Corporation",
+    "sector": "Industrials",
+    "industry": "Aerospace & Defense",
+    "market_cap": 280296521728,
+    "quote_type": "EQUITY"
+  },
+  "SBUX": {
+    "ticker": "SBUX",
+    "name": "Starbucks Corporation",
+    "sector": "Consumer Cyclical",
+    "industry": "Restaurants",
+    "market_cap": 110682996736,
+    "quote_type": "EQUITY"
+  },
+  "SCHW": {
+    "ticker": "SCHW",
+    "name": "The Charles Schwab Corporation",
+    "sector": "Financial Services",
+    "industry": "Capital Markets",
+    "market_cap": 174333673472,
+    "quote_type": "EQUITY"
+  },
+  "SHOP": {
+    "ticker": "SHOP",
+    "name": "Shopify Inc.",
+    "sector": "Technology",
+    "industry": "Software - Application",
+    "market_cap": 169204088832,
+    "quote_type": "EQUITY"
+  },
+  "SLB": {
+    "ticker": "SLB",
+    "name": "SLB N.V.",
+    "sector": "Energy",
+    "industry": "Oil & Gas Equipment & Services",
+    "market_cap": 71611424768,
+    "quote_type": "EQUITY"
+  },
+  "SNAP": {
+    "ticker": "SNAP",
+    "name": "Snap Inc.",
+    "sector": "Communication Services",
+    "industry": "Internet Content & Information",
+    "market_cap": 9069671424,
+    "quote_type": "EQUITY"
+  },
+  "SO": {
+    "ticker": "SO",
+    "name": "The Southern Company",
+    "sector": "Utilities",
+    "industry": "Utilities - Regulated Electric",
+    "market_cap": 109286162432,
+    "quote_type": "EQUITY"
+  },
+  "SPGI": {
+    "ticker": "SPGI",
+    "name": "S&P Global Inc.",
+    "sector": "Financial Services",
+    "industry": "Financial Data & Stock Exchanges",
+    "market_cap": 134897401856,
+    "quote_type": "EQUITY"
+  },
+  "SYK": {
+    "ticker": "SYK",
+    "name": "Stryker Corporation",
+    "sector": "Healthcare",
+    "industry": "Medical Devices",
+    "market_cap": 146144985088,
+    "quote_type": "EQUITY"
+  },
+  "TGT": {
+    "ticker": "TGT",
+    "name": "Target Corporation",
+    "sector": "Consumer Defensive",
+    "industry": "Discount Stores",
+    "market_cap": 54564249600,
+    "quote_type": "EQUITY"
+  },
+  "TJX": {
+    "ticker": "TJX",
+    "name": "The TJX Companies, Inc.",
+    "sector": "Consumer Cyclical",
+    "industry": "Apparel Retail",
+    "market_cap": 179995574272,
+    "quote_type": "EQUITY"
+  },
+  "TMO": {
+    "ticker": "TMO",
+    "name": "Thermo Fisher Scientific Inc.",
+    "sector": "Healthcare",
+    "industry": "Diagnostics & Research",
+    "market_cap": 192621772800,
+    "quote_type": "EQUITY"
+  },
+  "TMUS": {
+    "ticker": "TMUS",
+    "name": "T-Mobile US, Inc.",
+    "sector": "Communication Services",
+    "industry": "Telecom Services",
+    "market_cap": 245747105792,
+    "quote_type": "EQUITY"
+  },
+  "TSLA": {
+    "ticker": "TSLA",
+    "name": "Tesla, Inc.",
+    "sector": "Consumer Cyclical",
+    "industry": "Auto Manufacturers",
+    "market_cap": 1523262160896,
+    "quote_type": "EQUITY"
+  },
+  "TXN": {
+    "ticker": "TXN",
+    "name": "Texas Instruments Incorporated",
+    "sector": "Technology",
+    "industry": "Semiconductors",
+    "market_cap": 183896211456,
+    "quote_type": "EQUITY"
+  },
+  "UBER": {
+    "ticker": "UBER",
+    "name": "Uber Technologies, Inc.",
+    "sector": "Technology",
+    "industry": "Software - Application",
+    "market_cap": 159265701888,
+    "quote_type": "EQUITY"
+  },
+  "UNH": {
+    "ticker": "UNH",
+    "name": "UnitedHealth Group Incorporated",
+    "sector": "Healthcare",
+    "industry": "Healthcare Plans",
+    "market_cap": 264468627456,
+    "quote_type": "EQUITY"
+  },
+  "UNP": {
+    "ticker": "UNP",
+    "name": "Union Pacific Corporation",
+    "sector": "Industrials",
+    "industry": "Railroads",
+    "market_cap": 158257512448,
+    "quote_type": "EQUITY"
+  },
+  "UPS": {
+    "ticker": "UPS",
+    "name": "United Parcel Service, Inc.",
+    "sector": "Industrials",
+    "industry": "Integrated Freight & Logistics",
+    "market_cap": 93825736704,
+    "quote_type": "EQUITY"
+  },
+  "USB": {
+    "ticker": "USB",
+    "name": "U.S. Bancorp",
+    "sector": "Financial Services",
+    "industry": "Banks - Regional",
+    "market_cap": 84427825152,
+    "quote_type": "EQUITY"
+  },
+  "V": {
+    "ticker": "V",
+    "name": "Visa Inc.",
+    "sector": "Financial Services",
+    "industry": "Credit Services",
+    "market_cap": 617878847488,
+    "quote_type": "EQUITY"
+  },
+  "VRTX": {
+    "ticker": "VRTX",
+    "name": "Vertex Pharmaceuticals Incorporated",
+    "sector": "Healthcare",
+    "industry": "Biotechnology",
+    "market_cap": 121400401920,
+    "quote_type": "EQUITY"
+  },
+  "VZ": {
+    "ticker": "VZ",
+    "name": "Verizon Communications Inc.",
+    "sector": "Communication Services",
+    "industry": "Telecom Services",
+    "market_cap": 215945428992,
+    "quote_type": "EQUITY"
+  },
+  "WFC": {
+    "ticker": "WFC",
+    "name": "Wells Fargo & Company",
+    "sector": "Financial Services",
+    "industry": "Banks - Diversified",
+    "market_cap": 263463370752,
+    "quote_type": "EQUITY"
+  },
+  "WMT": {
+    "ticker": "WMT",
+    "name": "Walmart Inc.",
+    "sector": "Consumer Defensive",
+    "industry": "Discount Stores",
+    "market_cap": 1019010088960,
+    "quote_type": "EQUITY"
+  },
+  "XOM": {
+    "ticker": "XOM",
+    "name": "Exxon Mobil Corporation",
+    "sector": "Energy",
+    "industry": "Oil & Gas Integrated",
+    "market_cap": 624264544256,
+    "quote_type": "EQUITY"
+  },
+  "ZTS": {
+    "ticker": "ZTS",
+    "name": "Zoetis Inc.",
+    "sector": "Healthcare",
+    "industry": "Drug Manufacturers - Specialty & Generic",
+    "market_cap": 55509716992,
+    "quote_type": "EQUITY"
+  }
+}

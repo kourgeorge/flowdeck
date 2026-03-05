@@ -40,9 +40,12 @@ class InfoFetcher:
         self._market_data_service = market_data_service
         self._news_service = news_service
         self._route_to_vendor = None
-        # In-memory cache for sector/industry data (builds up on-demand)
+        # In-memory cache for sector/industry data (loaded from JSON file)
         self._sector_cache: Dict[str, Dict[str, Any]] = {}
         self._sector_cache_lock = threading.Lock()
+        
+        # Load major stocks sector/industry data from JSON file
+        self._load_major_stocks_sectors()
 
     def _get_route_to_vendor(self):
         if self._route_to_vendor is None:
@@ -464,6 +467,40 @@ class InfoFetcher:
             return out
         except Exception:
             return out
+    def _load_major_stocks_sectors(self):
+        """Load major stocks sector/industry data from JSON file.
+        
+        Loads pre-generated sector/industry data from backend/data/major_stocks_sectors.json
+        into the cache. This avoids API rate limits and provides instant lookups.
+        
+        If the file doesn't exist, the cache remains empty and data will be fetched
+        on-demand when needed.
+        """
+        data_file = Path(__file__).parent.parent / "data" / "major_stocks_sectors.json"
+        
+        if not data_file.exists():
+            # File doesn't exist yet - will fetch on-demand
+            return
+        
+        try:
+            with open(data_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            
+            # Load into cache
+            with self._sector_cache_lock:
+                for ticker, info in data.items():
+                    # Only cache if we have valid data (no error field)
+                    if not info.get("error"):
+                        self._sector_cache[ticker] = info
+            
+            # Store list of major tickers for similar ticker lookups
+            self._major_tickers = list(data.keys())
+            
+        except Exception as e:
+            # If loading fails, log but don't crash - will fetch on-demand
+            print(f"Warning: Could not load major_stocks_sectors.json: {e}")
+            self._major_tickers = []
+    
     def _get_or_fetch_sector_info(self, ticker: str) -> Optional[Dict[str, Any]]:
         """Get sector/industry info from cache or fetch from Yahoo Finance.
         
@@ -504,13 +541,11 @@ class InfoFetcher:
     ) -> Dict[str, Any]:
         """Get similar tickers based on sector/industry matching.
         
-        Uses a curated list of major stocks and filters by matching sector/industry.
+        Uses prefetched sector/industry data from cache for fast lookups.
         Returns tickers with basic info (no price data for faster performance).
         
-        Optimized with in-memory sector cache that builds up on-demand.
+        The cache is populated at app startup in a background thread.
         """
-        import yfinance as yf
-        
         ticker = ticker.upper()
         
         # Get target ticker's sector and industry (from cache or fetch)
@@ -552,32 +587,43 @@ class InfoFetcher:
                 "message": "No sector/industry data available for this ticker"
             }
         
-        # Curated list of major stocks (S&P 500 + NASDAQ 100 top stocks)
-        # In production, this could be loaded from a file or database
-        major_tickers = [
-            "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK.B", "V", "UNH",
-            "JNJ", "WMT", "JPM", "MA", "PG", "XOM", "HD", "CVX", "MRK", "ABBV",
-            "KO", "PEP", "COST", "AVGO", "TMO", "MCD", "CSCO", "ACN", "ABT", "LIN",
-            "DHR", "NKE", "VZ", "ADBE", "TXN", "NEE", "CRM", "PM", "ORCL", "CMCSA",
-            "DIS", "WFC", "BMY", "UPS", "RTX", "QCOM", "INTC", "HON", "UNP", "INTU",
-            "AMD", "AMGN", "LOW", "BA", "SBUX", "CAT", "GE", "SPGI", "DE", "AXP",
-            "BLK", "GILD", "MDT", "PLD", "ISRG", "TJX", "MMC", "C", "BKNG", "SYK",
-            "ADI", "VRTX", "REGN", "ZTS", "CB", "MO", "CI", "PGR", "SO", "DUK",
-            "SCHW", "LRCX", "EOG", "BSX", "MDLZ", "TMUS", "BDX", "SLB", "PYPL", "NOC",
-            "MMM", "ITW", "USB", "PNC", "AON", "CL", "APD", "CME", "GD", "TGT",
-            "NFLX", "SHOP", "SQ", "ROKU", "SNAP", "UBER", "LYFT", "ABNB", "COIN", "RBLX"
-        ]
+        # Use yfinance-based method with cached sector/industry data
+        try:
+            return self._get_similar_tickers_yfinance(
+                ticker, target_info, target_sector, target_industry, limit
+            )
+        except Exception as e:
+            return {
+                "ticker": ticker,
+                "sector": target_sector,
+                "industry": target_industry,
+                "similar_tickers": [],
+                "count": 0,
+                "match_type": "error",
+                "error": str(e)
+            }
+    
+    
+    def _get_similar_tickers_yfinance(
+        self,
+        ticker: str,
+        target_info: Dict[str, Any],
+        target_sector: Optional[str],
+        target_industry: Optional[str],
+        limit: int,
+    ) -> Dict[str, Any]:
+        """Get similar tickers using prefetched sector/industry data for fast matching.
         
-        # Remove the target ticker from the list
-        if ticker in major_tickers:
-            major_tickers.remove(ticker)
+        Uses the cached sector/industry data from self._sector_cache which is populated
+        by the background prefetch process on first use.
+        """
+        # Use instance variable for major tickers list
+        major_tickers = [t for t in self._major_tickers if t != ticker]
         
         similar_stocks = []
         
-        # Fetch info for all tickers and filter by sector/industry
-        # Use cached sector info for fast lookups
         for candidate_ticker in major_tickers:
-            # Get sector/industry from cache (or fetch if not cached)
+            # Get from cache (should be prefetched by now, but will fetch if not)
             candidate_info = self._get_or_fetch_sector_info(candidate_ticker)
             if not candidate_info:
                 continue
@@ -585,7 +631,6 @@ class InfoFetcher:
             candidate_sector = candidate_info.get("sector")
             candidate_industry = candidate_info.get("industry")
             
-            # Determine match type
             sector_match = target_sector and candidate_sector == target_sector
             industry_match = target_industry and candidate_industry == target_industry
             
@@ -596,14 +641,13 @@ class InfoFetcher:
                     "sector": candidate_sector,
                     "industry": candidate_industry,
                     "market_cap": candidate_info.get("market_cap"),
-                    "current_price": None,  # Not fetching prices for performance
-                    "change_percent": None,  # Not fetching prices for performance
+                    "current_price": None,
+                    "change_percent": None,
                     "sector_match": sector_match,
                     "industry_match": industry_match,
                 })
                 
-                # Stop if we have enough matches
-                if len(similar_stocks) >= limit * 2:  # Get extra to sort and filter
+                if len(similar_stocks) >= limit * 2:
                     break
         
         # Sort by: 1) both sector and industry match, 2) market cap (descending)
@@ -618,7 +662,6 @@ class InfoFetcher:
         # Limit results
         similar_stocks = similar_stocks[:limit]
         
-        # Determine overall match type
         if not similar_stocks:
             match_type = "no_matches"
         elif all(s["sector_match"] and s["industry_match"] for s in similar_stocks):
@@ -630,7 +673,6 @@ class InfoFetcher:
         else:
             match_type = "mixed"
         
-        # Remove internal matching flags from response
         for stock in similar_stocks:
             stock.pop("sector_match", None)
             stock.pop("industry_match", None)
@@ -642,6 +684,7 @@ class InfoFetcher:
             "similar_tickers": similar_stocks,
             "count": len(similar_stocks),
             "match_type": match_type,
+            "method": "yfinance"
         }
     def get_company_officers(self, ticker: str) -> Dict[str, Any]:
         """Get company officers/management team from Yahoo Finance."""
