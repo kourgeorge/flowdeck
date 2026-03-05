@@ -332,8 +332,14 @@ export default function AdminDashboardPage() {
 
   if (loading && !stats) {
     return (
-      <div className="min-h-screen p-8">
-        <div className="max-w-layout mx-auto text-gray-400">Loading admin dashboard…</div>
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="text-center">
+          <svg className="w-8 h-8 text-blue-400 animate-spin mx-auto mb-3" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+          <p className="text-gray-400 text-sm">Loading admin dashboard…</p>
+        </div>
       </div>
     );
   }
@@ -595,27 +601,62 @@ export default function AdminDashboardPage() {
           <>
             {stats && (
               <section className="mb-10">
-                <h2 className="text-lg font-semibold text-white mb-4">Overview</h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                  <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
-                    <p className="text-sm text-gray-400">Total users</p>
-                    <p className="text-2xl font-bold text-white">{stats.total_users.toLocaleString()}</p>
+                  <div className="flex flex-col gap-0.5 rounded-lg px-3 py-2 border bg-gray-700/40 border-gray-600/50">
+                    <div className="flex items-center gap-1.5 text-gray-400 text-xs font-medium uppercase tracking-wide">
+                      <span className="w-4 h-4 flex items-center justify-center">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5V4H2v16h5m10 0v-2a3 3 0 00-3-3H10a3 3 0 00-3 3v2m10 0H7m8-12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                      </span>
+                      Total users
+                    </div>
+                    <div className="text-lg font-bold leading-tight text-white">{stats.total_users.toLocaleString()}</div>
                   </div>
-                  <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
-                    <p className="text-sm text-gray-400">Total reports</p>
-                    <p className="text-2xl font-bold text-white">{stats.total_reports.toLocaleString()}</p>
+                  <div className="flex flex-col gap-0.5 rounded-lg px-3 py-2 border bg-gray-700/40 border-gray-600/50">
+                    <div className="flex items-center gap-1.5 text-gray-400 text-xs font-medium uppercase tracking-wide">
+                      <span className="w-4 h-4 flex items-center justify-center">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h6l5 5v11a2 2 0 01-2 2z" />
+                        </svg>
+                      </span>
+                      Total reports
+                    </div>
+                    <div className="text-lg font-bold leading-tight text-white">{stats.total_reports.toLocaleString()}</div>
                   </div>
-                  <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
-                    <p className="text-sm text-gray-400">Analyses (7d)</p>
-                    <p className="text-2xl font-bold text-white">{stats.analyses_last_7d.toLocaleString()}</p>
+                  <div className="flex flex-col gap-0.5 rounded-lg px-3 py-2 border bg-gray-700/40 border-gray-600/50">
+                    <div className="flex items-center gap-1.5 text-gray-400 text-xs font-medium uppercase tracking-wide">
+                      <span className="w-4 h-4 flex items-center justify-center">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 3v18m0 0l-4-4m4 4l4-4M4 7h5m6 0h5" />
+                        </svg>
+                      </span>
+                      Analyses (7d)
+                    </div>
+                    <div className="text-lg font-bold leading-tight text-white">{stats.analyses_last_7d.toLocaleString()}</div>
                   </div>
-                  <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
-                    <p className="text-sm text-gray-400">Report views</p>
-                    <p className="text-2xl font-bold text-white">{stats.total_report_views.toLocaleString()}</p>
+                  <div className="flex flex-col gap-0.5 rounded-lg px-3 py-2 border bg-gray-700/40 border-gray-600/50">
+                    <div className="flex items-center gap-1.5 text-gray-400 text-xs font-medium uppercase tracking-wide">
+                      <span className="w-4 h-4 flex items-center justify-center">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      </span>
+                      Report views
+                    </div>
+                    <div className="text-lg font-bold leading-tight text-white">{stats.total_report_views.toLocaleString()}</div>
                   </div>
-                  <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
-                    <p className="text-sm text-gray-400">Subscriptions</p>
-                    <p className="text-2xl font-bold text-white">{stats.total_subscriptions.toLocaleString()}</p>
+                  <div className="flex flex-col gap-0.5 rounded-lg px-3 py-2 border bg-gray-700/40 border-gray-600/50">
+                    <div className="flex items-center gap-1.5 text-gray-400 text-xs font-medium uppercase tracking-wide">
+                      <span className="w-4 h-4 flex items-center justify-center">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                        </svg>
+                      </span>
+                      Subscriptions
+                    </div>
+                    <div className="text-lg font-bold leading-tight text-white">{stats.total_subscriptions.toLocaleString()}</div>
                   </div>
                 </div>
               </section>
@@ -764,16 +805,27 @@ export default function AdminDashboardPage() {
             </section>
 
             <section className="mb-10">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold text-white">Latest reports ({reportsTotal})</h2>
+              <div className="mb-4">
                 <button
                   type="button"
                   onClick={() => setLatestReportsCollapsed((prev) => !prev)}
-                  className="rounded-lg border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
+                  className="group flex w-full items-center gap-3 text-left"
                   aria-expanded={!latestReportsCollapsed}
                   aria-controls="latest-reports-table"
                 >
-                  {latestReportsCollapsed ? 'Show reports' : 'Hide reports'}
+                  <h2 className="text-lg font-semibold text-white">Latest reports ({reportsTotal})</h2>
+                  <span className="h-px flex-1 bg-gray-700 transition-colors group-hover:bg-gray-600" />
+                  <span className="inline-flex items-center gap-1 text-sm text-gray-300">
+                    {latestReportsCollapsed ? 'Show' : 'Hide'}
+                    <svg
+                      className={`h-4 w-4 transition-transform ${latestReportsCollapsed ? '' : 'rotate-180'}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </span>
                 </button>
               </div>
               {!latestReportsCollapsed && (
@@ -813,16 +865,27 @@ export default function AdminDashboardPage() {
             </section>
 
             <section>
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold text-white">Subscriptions ({subscriptionsTotal})</h2>
+              <div className="mb-4">
                 <button
                   type="button"
                   onClick={() => setSubscriptionsCollapsed((prev) => !prev)}
-                  className="rounded-lg border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
+                  className="group flex w-full items-center gap-3 text-left"
                   aria-expanded={!subscriptionsCollapsed}
                   aria-controls="subscriptions-table"
                 >
-                  {subscriptionsCollapsed ? 'Show subscriptions' : 'Hide subscriptions'}
+                  <h2 className="text-lg font-semibold text-white">Subscriptions ({subscriptionsTotal})</h2>
+                  <span className="h-px flex-1 bg-gray-700 transition-colors group-hover:bg-gray-600" />
+                  <span className="inline-flex items-center gap-1 text-sm text-gray-300">
+                    {subscriptionsCollapsed ? 'Show' : 'Hide'}
+                    <svg
+                      className={`h-4 w-4 transition-transform ${subscriptionsCollapsed ? '' : 'rotate-180'}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </span>
                 </button>
               </div>
               {!subscriptionsCollapsed && (
