@@ -3,7 +3,7 @@
 import os
 
 # Default list of major stocks to show on homepage
-MAJOR_STOCKS = [
+MAJOR_TICKERS = [
     "AAPL",  # Apple
     "MSFT",  # Microsoft
     "GOOGL", # Alphabet (Google)

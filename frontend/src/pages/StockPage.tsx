@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import StockDetailPanel from '../components/StockDetailPanel';
-import StockSearch from '../components/StockSearch';
+import TickerSearch from '../components/StockSearch';
 
-export default function StockPage() {
+export default function TickerPage() {
   const { ticker } = useParams<{ ticker: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -87,7 +87,7 @@ export default function StockPage() {
           {/* Search — centered */}
           <div className="flex-1 flex justify-center">
             <div className="w-full max-w-lg">
-              <StockSearch compact />
+              <TickerSearch compact />
             </div>
           </div>
         </div>

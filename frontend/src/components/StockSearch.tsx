@@ -2,22 +2,22 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Fuse from 'fuse.js';
 
-interface Stock {
+interface Ticker {
   ticker: string;
   name: string;
 }
 
-interface StockSearchProps {
+interface TickerSearchProps {
   compact?: boolean;
 }
 
-export default function StockSearch({ compact = false }: StockSearchProps) {
+export default function TickerSearch({ compact = false }: TickerSearchProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [suggestions, setSuggestions] = useState<Stock[]>([]);
+  const [suggestions, setSuggestions] = useState<Ticker[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [, setStocks] = useState<Stock[]>([]);
-  const [fuse, setFuse] = useState<Fuse<Stock> | null>(null);
+  const [, setStocks] = useState<Ticker[]>([]);
+  const [fuse, setFuse] = useState<Fuse<Ticker> | null>(null);
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
@@ -26,7 +26,7 @@ export default function StockSearch({ compact = false }: StockSearchProps) {
   useEffect(() => {
     fetch('/stocks.json')
       .then((res) => res.json())
-      .then((data: Stock[]) => {
+      .then((data: Ticker[]) => {
         setStocks(data);
         // Initialize Fuse.js with both ticker and name as searchable keys
         const fuseInstance = new Fuse(data, {
@@ -77,10 +77,10 @@ export default function StockSearch({ compact = false }: StockSearchProps) {
   };
 
   // Handle suggestion selection
-  const handleSelectSuggestion = (stock: Stock) => {
-    setSearchTerm(stock.ticker);
+  const handleSelectSuggestion = (ticker: Ticker) => {
+    setSearchTerm(ticker.ticker);
     setShowSuggestions(false);
-    navigate(`/tickers/${stock.ticker}`);
+    navigate(`/tickers/${ticker.ticker}`);
   };
 
   // Handle keyboard navigation
@@ -177,10 +177,10 @@ export default function StockSearch({ compact = false }: StockSearchProps) {
                 ref={suggestionsRef}
                 className="absolute z-50 w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl max-h-80 overflow-y-auto"
               >
-                {suggestions.map((stock, index) => (
+                {suggestions.map((ticker, index) => (
                   <div
-                    key={`${stock.ticker}-${index}`}
-                    onClick={() => handleSelectSuggestion(stock)}
+                    key={`${ticker.ticker}-${index}`}
+                    onClick={() => handleSelectSuggestion(ticker)}
                     className={`px-4 cursor-pointer transition-colors ${
                       compact ? 'py-2' : 'py-3'
                     } ${
@@ -192,10 +192,10 @@ export default function StockSearch({ compact = false }: StockSearchProps) {
                     <div className="flex items-center justify-between">
                       <div>
                         <div className={`font-semibold text-white ${compact ? 'text-sm' : ''}`}>
-                          {highlightMatch(stock.ticker, searchTerm)}
+                          {highlightMatch(ticker.ticker, searchTerm)}
                         </div>
                         <div className="text-xs text-gray-400">
-                          {highlightMatch(stock.name, searchTerm)}
+                          {highlightMatch(ticker.name, searchTerm)}
                         </div>
                       </div>
                     </div>

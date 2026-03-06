@@ -1,4 +1,4 @@
-"""FastAPI application for stock dashboard backend."""
+"""FastAPI application for ticker dashboard backend."""
 
 import logging
 import os
@@ -36,7 +36,7 @@ from services.report_service import ReportService
 from services.analysis_service import AnalysisService
 from services.news_service import NewsService
 from services.info_fetcher import get_info_fetcher
-from config import MAJOR_STOCKS, CORS_ORIGINS
+from config import MAJOR_TICKERS, CORS_ORIGINS
 from routers.data_api import router as data_router
 from routers.users import router as users_router
 from routers.subscriptions import router as subscriptions_router
@@ -69,7 +69,7 @@ async def lifespan(app: FastAPI):
             def _scheduled_sync_job():
                 from datetime import datetime
                 analysis_date = datetime.now().strftime("%Y-%m-%d")
-                _run_sync_major_stocks_background(analysis_date)
+                _run_sync_major_tickers_background(analysis_date)
 
             scheduler = BackgroundScheduler()
             scheduler.add_job(_scheduled_sync_job, "cron", hour=hour, minute=minute)
@@ -160,7 +160,7 @@ def _get_ticker_widgets_sync(
     recent_days: Optional[int] = None,
 ) -> WidgetsResponse:
     """Sync implementation of widget data (runs in thread pool to avoid blocking event loop).
-    When only_date=True and tickers is None, returns only tickers that have reports for the given date (no major-stocks list).
+    When only_date=True and tickers is None, returns only tickers that have reports for the given date (no major-tickers list).
     When only_date=True and recent_days>1, returns tickers with reports in that trailing window.
     When only_date=True and limit is set, uses pagination and returns total count."""
     use_major_split = False
@@ -190,9 +190,9 @@ def _get_ticker_widgets_sync(
                     tickers_for_date = report_service.get_tickers_with_reports_for_date(report_date)
                 ticker_list = [t.upper() for t in tickers_for_date]
             else:
-                # Home page: only fetch major stocks (UI shows at most 10); avoid loading all tickers with reports for date
-                major_set = {t.upper() for t in MAJOR_STOCKS}
-                ticker_list = list(MAJOR_STOCKS)
+                # Home page: only fetch major tickers (UI shows at most 10); avoid loading all tickers with reports for date
+                major_set = {t.upper() for t in MAJOR_TICKERS}
+                ticker_list = list(MAJOR_TICKERS)
                 use_major_split = True
 
     widgets = []
@@ -297,7 +297,7 @@ def _get_ticker_widgets_sync(
 
 
 def _get_ticker_page_sync(ticker: str) -> TickerPageData:
-    """Sync implementation of stock page data (runs in thread pool to avoid blocking event loop)."""
+    """Sync implementation of ticker page data (runs in thread pool to avoid blocking event loop)."""
     from models.schemas import ReportData
 
     quote = market_data_service.get_current_quote(ticker)
@@ -465,7 +465,7 @@ class PublicConfigResponse(BaseModel):
 @app.get("/api/config/public", response_model=PublicConfigResponse)
 async def get_public_config():
     """Return public configuration (e.g. preview tickers visible without login)."""
-    return PublicConfigResponse(preview_tickers=list(MAJOR_STOCKS))
+    return PublicConfigResponse(preview_tickers=list(MAJOR_TICKERS))
 
 
 class PublicStatsResponse(BaseModel):
@@ -633,7 +633,7 @@ async def get_ticker_widgets(
     limit: Optional[int] = Query(None, description="When only_date: max number of widgets to return (paginated)"),
     offset: int = Query(0, description="When only_date and limit: pagination offset"),
 ):
-    """Get widget data for stocks. Uses cached batch quote fetch for speed. Runs in thread pool (non-blocking)."""
+    """Get widget data for tickers. Uses cached batch quote fetch for speed. Runs in thread pool (non-blocking)."""
     try:
         return await asyncio.to_thread(_get_ticker_widgets_sync, tickers, date, only_date, limit, offset, recent_days)
     except Exception as e:
@@ -912,8 +912,8 @@ async def websocket_endpoint(websocket: WebSocket, analysis_id: str, token: Opti
             del active_connections[analysis_id]
 
 
-def _run_sync_major_stocks_background(analysis_date: str) -> None:
-    """Background task: run analyses for major stocks missing a report for the given date."""
+def _run_sync_major_tickers_background(analysis_date: str) -> None:
+    """Background task: run analyses for major tickers missing a report for the given date."""
     triggered, skipped = get_missing_and_skipped(analysis_date)
     if not triggered:
         return
@@ -931,13 +931,13 @@ def _run_sync_major_stocks_background(analysis_date: str) -> None:
 
 
 @app.post("/api/sync/major-stocks")
-async def sync_major_stocks(
+async def sync_major_tickers(
     request: Request,
     background_tasks: BackgroundTasks,
     _user=Depends(get_current_admin_user),
 ):
     """
-    Ensure each major stock has a report for today (or the given date). Admin only.
+    Ensure each major tickers has a report for today (or the given date). Admin only.
     Returns immediately with which tickers were triggered vs skipped; analyses run in background.
     """
     body = {}
@@ -949,7 +949,7 @@ async def sync_major_stocks(
         pass
     analysis_date = body.get("analysis_date") or datetime.now().strftime("%Y-%m-%d")
     triggered, skipped = get_missing_and_skipped(analysis_date)
-    background_tasks.add_task(_run_sync_major_stocks_background, analysis_date)
+    background_tasks.add_task(_run_sync_major_tickers_background, analysis_date)
     return {"date": analysis_date, "triggered": triggered, "skipped": skipped}
 
 

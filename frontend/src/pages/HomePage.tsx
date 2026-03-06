@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import StockListView from '../components/StockListView';
-import StockSearch from '../components/StockSearch';
+import TickerSearch from '../components/StockSearch';
 import AuthModal from '../components/AuthModal';
 import { tickerApi, API_BASE_URL } from '../services/api';
 import type { TickerWidget as StockWidgetType } from '../services/types';
@@ -171,7 +171,7 @@ export default function HomePage() {
         <div className="max-w-layout mx-auto">
           {/* Ticker Search */}
           <div className="mb-6">
-            <StockSearch />
+            <TickerSearch />
           </div>
 
           <h2 className="text-2xl font-bold text-white mb-4">Major Stocks</h2>

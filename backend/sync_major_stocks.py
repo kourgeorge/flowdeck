@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timezone
 from typing import List, Tuple
 
-from config import MAJOR_STOCKS, RESULTS_DIR
+from config import MAJOR_TICKERS, RESULTS_DIR
 from services.report_service import ReportService
 from services.analysis_service import AnalysisService
 
@@ -21,7 +21,7 @@ def get_missing_and_skipped(
     report_service = ReportService()
     triggered: List[str] = []
     skipped: List[str] = []
-    for ticker in MAJOR_STOCKS:
+    for ticker in MAJOR_TICKERS:
         t = ticker.upper()
         if report_service.has_report_for_date(ticker, analysis_date):
             skipped.append(t)

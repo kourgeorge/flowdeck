@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import StockSearch from '../components/StockSearch';
+import TickerSearch from '../components/StockSearch';
 import DashboardTopTiles from '../components/DashboardTopTiles';
 import DashboardStockSidebar from '../components/DashboardStockSidebar';
 import StockDetailPanel from '../components/StockDetailPanel';
@@ -69,7 +69,7 @@ export default function DashboardPage() {
     return (
       <div className="min-h-[60vh] px-4 py-6 sm:p-6 lg:p-8">
         <div className="max-w-layout mx-auto min-w-0 w-full">
-          <StockSearch />
+          <TickerSearch />
           <div className="mt-6 bg-gray-800 rounded-lg border border-gray-700 p-12 text-center">
             <p className="text-gray-400 mb-4">You haven't subscribed to any stocks yet.</p>
             <p className="text-gray-500 text-sm mb-6">Add stocks from the search above or browse on Home to build your dashboard.</p>
@@ -102,7 +102,7 @@ export default function DashboardPage() {
       <div className="px-4 pt-2 border-b border-gray-700 bg-gray-900 shrink-0">
         {/* Search row — full width */}
         <div className="pb-2">
-          <StockSearch compact />
+          <TickerSearch compact />
         </div>
         {/* Tabs row */}
         <div className="flex items-end gap-0.5">
