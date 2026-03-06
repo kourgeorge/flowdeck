@@ -27,10 +27,10 @@ _jinja_env = Environment(
 )
 
 # Brand colors and layout (email-safe inline styles)
-_BRAND_PRIMARY = "#0f766e"   # teal-700
-_BRAND_PRIMARY_LIGHT = "#0d9488"  # teal-600
-_BRAND_BG = "#f0fdfa"        # teal-50
-_TEXT_DARK = "#134e4a"       # teal-900
+_BRAND_PRIMARY = "#2563eb"   # blue-600
+_BRAND_PRIMARY_LIGHT = "#3b82f6"  # blue-500
+_BRAND_BG = "#eff6ff"        # blue-50
+_TEXT_DARK = "#1e40af"       # website dark-blue
 _TEXT_MUTED = "#64748b"      # slate-500, readable on white
 _FONT_FAMILY = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
 
@@ -43,7 +43,7 @@ def _html_email_wrapper(
     preheader_html = ""
     if preheader:
         preheader_html = f'<div style="display:none;max-height:0;overflow:hidden;">{preheader}</div>'
-    brand_title = f'<p style="margin:0 0 12px;font-size:26px;font-weight:700;color:{_BRAND_PRIMARY};letter-spacing:0.05em;">Flowdeck</p>'
+    brand_title = f'<p style="margin:0 0 12px;font-size:26px;font-weight:700;color:{_TEXT_DARK};letter-spacing:0.05em;">Flowdeck</p>'
     return f"""
 <!DOCTYPE html>
 <html>
@@ -54,8 +54,8 @@ def _html_email_wrapper(
 <body style="margin:0;padding:0;background:#f1f5f9;font-family:{_FONT_FAMILY};">
   {preheader_html}
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f1f5f9;">
-    <tr><td style="padding:12px 20px;">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;margin:0 auto;background:#ffffff;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+    <tr><td align="center" style="padding:12px 20px;">
+      <table role="presentation" width="560" align="center" cellspacing="0" cellpadding="0" style="width:100%;max-width:560px;margin:0 auto;background:#ffffff;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
         <tr>
           <td style="padding:16px 40px 20px;text-align:center;">
             {brand_title}
@@ -205,7 +205,7 @@ def _build_report_email_bodies(
 
     rec_html = ""
     if recommendation:
-        rec_html = f'<p style="margin:0 0 12px;font-size:15px;color:{_TEXT_DARK};"><strong>Recommendation:</strong> <span style="display:inline-block;padding:4px 10px;background:{_BRAND_BG};color:{_BRAND_PRIMARY};border-radius:6px;font-weight:600;">{safe(recommendation)}</span></p>'
+        rec_html = f'<p style="margin:0 0 12px;font-size:15px;color:{_TEXT_DARK};"><strong>Recommendation:</strong> <span style="display:inline-block;padding:4px 10px;background:{_BRAND_BG};color:{_TEXT_DARK};border-radius:6px;font-weight:600;">{safe(recommendation)}</span></p>'
     conf_html = ""
     if display_confidence is not None:
         conf_html = f'<p style="margin:0 0 20px;font-size:14px;color:#64748b;">Confidence: <strong>{display_confidence:.1f}/10</strong></p>'
@@ -226,9 +226,9 @@ def _build_report_email_bodies(
                 score_color = "#64748b"  # default gray
                 if score is not None:
                     if score >= 7:
-                        score_color = "#059669"  # green-600
+                        score_color = "#1e40af"  # website dark-blue
                     elif score >= 5:
-                        score_color = "#d97706"  # amber-600
+                        score_color = "#1e40af"  # website dark-blue
                     else:
                         score_color = "#dc2626"  # red-600
                 

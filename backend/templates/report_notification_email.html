@@ -5,72 +5,56 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
 </head>
-<body style="margin:0;padding:0;background:#0d1117;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
-  <!-- Preheader text -->
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
   {% if preheader %}
   <div style="display:none;max-height:0;overflow:hidden;">{{ preheader }}</div>
   {% endif %}
-  
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0d1117;">
-    <tr><td style="padding:20px;">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;margin:0 auto;background:linear-gradient(to bottom, #1a1f2e 0%, #0d1117 100%);border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
-        
-        <!-- Header -->
+
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f1f5f9;">
+    <tr><td align="center" style="padding:12px 20px;">
+      <table role="presentation" width="560" align="center" cellspacing="0" cellpadding="0" style="width:100%;max-width:560px;margin:0 auto;background:#ffffff;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+
         <tr>
-          <td style="padding:32px 40px 24px;text-align:center;background:linear-gradient(135deg, #1e293b 0%, #0f172a 100%);border-bottom:1px solid rgba(59, 130, 246, 0.2);">
-            <h1 style="margin:0 0 8px;font-size:28px;font-weight:700;color:#ffffff;letter-spacing:-0.02em;">FlowDeck</h1>
-            <p style="margin:0;font-size:13px;color:#94a3b8;letter-spacing:0.05em;">AI-POWERED TRADING INSIGHTS</p>
-          </td>
-        </tr>
-        
-        <!-- Main Content -->
-        <tr>
-          <td style="padding:40px 40px 32px;">
-            <!-- Title -->
-            <h2 style="margin:0 0 16px;font-size:24px;color:#ffffff;font-weight:700;text-align:center;line-height:1.3;">
-              🎯 Your AI Analysis is Ready
-            </h2>
-            
-            <!-- Ticker Badge -->
-            <div style="text-align:center;margin-bottom:24px;">
-              <span style="display:inline-block;padding:12px 24px;background:linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);color:#ffffff;border-radius:12px;font-weight:700;font-size:20px;letter-spacing:0.05em;box-shadow:0 4px 12px rgba(59, 130, 246, 0.4);">{{ ticker }}</span>
+          <td style="padding:16px 40px 20px;text-align:center;">
+            <p style="margin:0 0 12px;font-size:26px;font-weight:700;color:#1e40af;letter-spacing:0.05em;">Flowdeck</p>
+
+            <h2 style="margin:0 0 12px;font-size:22px;color:#1e40af;font-weight:600;">Your AI analysis is ready</h2>
+
+            <div style="margin:0 0 16px;">
+              <a href="{{ report_url }}" style="display:inline-block;padding:8px 18px;background:#dbeafe;color:#1e40af !important;border-radius:999px;font-weight:700;font-size:16px;letter-spacing:0.06em;text-decoration:none;">{{ ticker }}</a>
             </div>
-            
-            <p style="margin:0 0 28px;font-size:16px;color:#cbd5e1;line-height:1.6;text-align:center;">
-              Our AI committee has completed a comprehensive multi-agent analysis
+
+            <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.6;">
+              Our AI committee completed a new multi-agent analysis.
             </p>
-            
-            <!-- Recommendation Card -->
+
             {% if recommendation %}
-            <div style="margin:0 0 24px;padding:20px;background:{% if recommendation == 'BUY' %}linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(22, 163, 74, 0.1) 100%){% elif recommendation == 'SELL' %}linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.1) 100%){% else %}linear-gradient(135deg, rgba(234, 179, 8, 0.15) 0%, rgba(202, 138, 4, 0.1) 100%){% endif %};border-radius:12px;border:1px solid {% if recommendation == 'BUY' %}rgba(34, 197, 94, 0.3){% elif recommendation == 'SELL' %}rgba(239, 68, 68, 0.3){% else %}rgba(234, 179, 8, 0.3){% endif %};">
-              <div style="text-align:center;">
-                <p style="margin:0 0 8px;font-size:13px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">Final Recommendation</p>
-                <p style="margin:0;font-size:32px;font-weight:800;color:{% if recommendation == 'BUY' %}#22c55e{% elif recommendation == 'SELL' %}#ef4444{% else %}#eab308{% endif %};letter-spacing:-0.02em;">{{ recommendation }}</p>
-                {% if confidence %}
-                <p style="margin:12px 0 0;font-size:14px;color:#cbd5e1;">
-                  <span style="color:#94a3b8;">Confidence:</span> <strong style="color:#ffffff;">{{ confidence }}/10</strong>
-                </p>
-                {% endif %}
-              </div>
+            <div style="margin:0 0 18px;padding:18px;background:{% if recommendation == 'BUY' %}#ecfdf5{% elif recommendation == 'SELL' %}#fef2f2{% else %}#fffbeb{% endif %};border:1px solid {% if recommendation == 'BUY' %}#a7f3d0{% elif recommendation == 'SELL' %}#fecaca{% else %}#fde68a{% endif %};border-radius:10px;">
+              <p style="margin:0 0 8px;font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;font-weight:600;">Final recommendation</p>
+              <p style="margin:0;font-size:30px;font-weight:800;color:{% if recommendation == 'BUY' %}#059669{% elif recommendation == 'SELL' %}#dc2626{% else %}#d97706{% endif %};letter-spacing:-0.01em;">{{ recommendation }}</p>
+              {% if confidence %}
+              <p style="margin:10px 0 0;font-size:14px;color:#475569;">
+                Confidence: <strong style="color:#1e293b;">{{ confidence }}/10</strong>
+              </p>
+              {% endif %}
             </div>
             {% endif %}
-            
-            <!-- Analysis Scores Grid -->
+
             {% if scores %}
-            <div style="margin:0 0 24px;padding:20px;background:rgba(30, 41, 59, 0.5);border-radius:12px;border:1px solid rgba(71, 85, 105, 0.3);">
-              <p style="margin:0 0 16px;font-size:14px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;text-align:center;">📊 Analysis Scores</p>
-              <table style="width:100%;border-collapse:collapse;">
+            <div style="margin:0 0 18px;padding:18px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;text-align:left;">
+              <p style="margin:0 0 12px;font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;font-weight:700;text-align:center;">Analysis scores</p>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;table-layout:fixed;">
                 {% for score_item in scores %}
                 <tr>
-                  <td style="padding:10px 0;font-size:14px;color:#cbd5e1;border-bottom:1px solid rgba(71, 85, 105, 0.2);">
+                  <td style="width:58%;padding:9px 8px 9px 0;font-size:14px;color:#334155;border-bottom:1px solid #e2e8f0;">
                     {{ score_item.name }}
                   </td>
-                  <td style="padding:10px 0;font-size:14px;text-align:right;border-bottom:1px solid rgba(71, 85, 105, 0.2);">
+                  <td style="width:42%;padding:9px 0;font-size:14px;text-align:right;border-bottom:1px solid #e2e8f0;white-space:nowrap;">
                     {% if score_item.score %}
-                    <span style="display:inline-block;padding:4px 12px;background:rgba(59, 130, 246, 0.15);border-radius:6px;font-weight:700;color:{{ score_item.color }};">{{ score_item.score }}/10</span>
+                    <span style="font-weight:700;color:{{ score_item.color }};">{{ score_item.score }}/10</span>
                     {% endif %}
                     {% if score_item.label %}
-                    <span style="color:#64748b;font-size:12px;margin-left:8px;">({{ score_item.label }})</span>
+                    <span style="color:#64748b;font-size:12px;"> ({{ score_item.label }})</span>
                     {% endif %}
                   </td>
                 </tr>
@@ -78,46 +62,44 @@
               </table>
             </div>
             {% endif %}
-            
-            <!-- Key Insights -->
+
             {% if key_insights %}
-            <div style="margin:0 0 24px;padding:20px;background:linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%);border-radius:12px;border:1px solid rgba(251, 191, 36, 0.3);">
-              <p style="margin:0 0 16px;font-size:14px;color:#fbbf24;font-weight:700;text-align:center;">💡 KEY INSIGHTS</p>
-              <ul style="margin:0;padding:0 0 0 20px;color:#fde68a;font-size:14px;line-height:1.7;">
+            <div style="margin:0 0 18px;padding:18px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;text-align:left;">
+              <p style="margin:0 0 12px;font-size:13px;color:#b45309;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">Key insights</p>
+              <ul style="margin:0;padding:0 0 0 20px;color:#78350f;font-size:14px;line-height:1.7;">
                 {% for insight in key_insights %}
-                <li style="margin-bottom:10px;color:#fef3c7;">{{ insight }}</li>
+                <li style="margin-bottom:8px;">{{ insight }}</li>
                 {% endfor %}
               </ul>
             </div>
             {% endif %}
-            
-            <!-- Bull & Bear Views -->
+
             {% if bull_view or bear_view %}
-            <div style="margin:0 0 28px;">
+            <div style="margin:0 0 18px;text-align:left;">
               {% if bull_view %}
-              <div style="margin-bottom:16px;padding:18px;background:linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(22, 163, 74, 0.05) 100%);border-left:4px solid #22c55e;border-radius:10px;">
-                <p style="margin:0 0 12px;font-size:14px;color:#4ade80;font-weight:700;">🐂 BULL CASE</p>
+              <div style="margin-bottom:12px;padding:16px;background:#ecfdf5;border-left:4px solid #22c55e;border-radius:8px;">
+                <p style="margin:0 0 10px;font-size:13px;color:#166534;font-weight:700;letter-spacing:0.04em;">BULL CASE</p>
                 {% if bull_view is string %}
-                <p style="margin:0;font-size:14px;color:#bbf7d0;line-height:1.6;">{{ bull_view }}</p>
+                <p style="margin:0;font-size:14px;color:#14532d;line-height:1.6;">{{ bull_view }}</p>
                 {% else %}
-                <ul style="margin:0;padding:0 0 0 20px;color:#bbf7d0;font-size:14px;line-height:1.7;">
+                <ul style="margin:0;padding:0 0 0 20px;color:#14532d;font-size:14px;line-height:1.7;">
                   {% for point in bull_view %}
-                  <li style="margin-bottom:8px;">{{ point }}</li>
+                  <li style="margin-bottom:6px;">{{ point }}</li>
                   {% endfor %}
                 </ul>
                 {% endif %}
               </div>
               {% endif %}
-              
+
               {% if bear_view %}
-              <div style="padding:18px;background:linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.05) 100%);border-left:4px solid #ef4444;border-radius:10px;">
-                <p style="margin:0 0 12px;font-size:14px;color:#f87171;font-weight:700;">🐻 BEAR CASE</p>
+              <div style="padding:16px;background:#fef2f2;border-left:4px solid #ef4444;border-radius:8px;">
+                <p style="margin:0 0 10px;font-size:13px;color:#991b1b;font-weight:700;letter-spacing:0.04em;">BEAR CASE</p>
                 {% if bear_view is string %}
-                <p style="margin:0;font-size:14px;color:#fecaca;line-height:1.6;">{{ bear_view }}</p>
+                <p style="margin:0;font-size:14px;color:#7f1d1d;line-height:1.6;">{{ bear_view }}</p>
                 {% else %}
-                <ul style="margin:0;padding:0 0 0 20px;color:#fecaca;font-size:14px;line-height:1.7;">
+                <ul style="margin:0;padding:0 0 0 20px;color:#7f1d1d;font-size:14px;line-height:1.7;">
                   {% for point in bear_view %}
-                  <li style="margin-bottom:8px;">{{ point }}</li>
+                  <li style="margin-bottom:6px;">{{ point }}</li>
                   {% endfor %}
                 </ul>
                 {% endif %}
@@ -125,38 +107,31 @@
               {% endif %}
             </div>
             {% endif %}
-            
-            <!-- CTA Button -->
-            <div style="text-align:center;margin:32px 0 0;">
-              <a href="{{ report_url }}" style="display:inline-block;padding:16px 40px;background:linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);color:#ffffff !important;text-decoration:none;font-weight:700;font-size:16px;border-radius:12px;box-shadow:0 8px 24px rgba(59, 130, 246, 0.4);transition:all 0.3s ease;">
-                View Full Report →
-              </a>
-            </div>
-            
-            <!-- Link -->
-            <p style="margin:20px 0 0;font-size:12px;color:#64748b;text-align:center;word-break:break-all;">
-              <a href="{{ report_url }}" style="color:#3b82f6;text-decoration:none;">{{ report_url }}</a>
+
+            <p style="margin:0 0 8px;">
+              <a href="{{ report_url }}" style="display:inline-block;padding:14px 28px;background:#2563eb;color:#ffffff !important;text-decoration:none;font-weight:600;font-size:15px;border-radius:8px;">View Full Report</a>
+            </p>
+
+            <p style="margin:8px 0 0;font-size:13px;color:#64748b;word-break:break-all;">
+              <a href="{{ report_url }}" style="color:#1e40af;text-decoration:none;">{{ report_url }}</a>
             </p>
           </td>
         </tr>
-        
-        <!-- Footer -->
+
         <tr>
-          <td style="padding:24px 40px;background:rgba(15, 23, 42, 0.8);border-top:1px solid rgba(71, 85, 105, 0.3);text-align:center;">
-            <p style="margin:0 0 8px;font-size:13px;color:#94a3b8;">
-              You received this email because you're subscribed to <strong style="color:#cbd5e1;">{{ ticker }}</strong> updates on <strong style="color:#cbd5e1;">FlowDeck</strong>
+          <td style="padding:14px 40px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;">
+            <p style="margin:0;font-size:12px;color:#64748b;">
+              You received this email because you're subscribed to <strong>{{ ticker }}</strong> updates on <strong>Flowdeck</strong>.
             </p>
-            <p style="margin:0;font-size:11px;color:#64748b;">
-              &copy; 2026 FlowDeck. All rights reserved.
+            <p style="margin:6px 0 0;font-size:11px;color:#94a3b8;">
+              &copy; Flowdeck. All rights reserved.
             </p>
-            <div style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(71, 85, 105, 0.2);">
-              <a href="https://flowdeck.biz" style="color:#3b82f6;text-decoration:none;font-size:12px;margin:0 12px;">Dashboard</a>
-              <span style="color:#475569;">•</span>
-              <a href="https://flowdeck.biz/profile" style="color:#3b82f6;text-decoration:none;font-size:12px;margin:0 12px;">Manage Subscriptions</a>
+            <div style="margin-top:10px;">
+              <a href="https://flowdeck.biz/profile" style="color:#1e40af;text-decoration:none;font-size:12px;">Manage subscriptions</a>
             </div>
           </td>
         </tr>
-        
+
       </table>
     </td></tr>
   </table>
