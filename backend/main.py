@@ -151,7 +151,7 @@ def _extract_confidence(*metas: object) -> Optional[float]:
     return None
 
 
-def _get_stock_widgets_sync(
+def _get_ticker_widgets_sync(
     tickers: Optional[str],
     date: Optional[str],
     only_date: bool = False,
@@ -296,7 +296,7 @@ def _get_stock_widgets_sync(
     return WidgetsResponse(widgets=widgets, total=total_count)
 
 
-def _get_stock_page_sync(ticker: str) -> TickerPageData:
+def _get_ticker_page_sync(ticker: str) -> TickerPageData:
     """Sync implementation of stock page data (runs in thread pool to avoid blocking event loop)."""
     from models.schemas import ReportData
 
@@ -625,7 +625,7 @@ async def top_up_tokens(
 
 
 @app.get("/api/tickers/widgets", response_model=WidgetsResponse)
-async def get_stock_widgets(
+async def get_ticker_widgets(
     tickers: Optional[str] = Query(None, description="Comma-separated list of tickers"),
     date: Optional[str] = Query(None, description="Date (YYYY-MM-DD) for report filter; default today"),
     only_date: bool = Query(False, description="When set with no tickers: return only tickers with reports for the given date (no major-stocks list)"),
@@ -635,16 +635,16 @@ async def get_stock_widgets(
 ):
     """Get widget data for stocks. Uses cached batch quote fetch for speed. Runs in thread pool (non-blocking)."""
     try:
-        return await asyncio.to_thread(_get_stock_widgets_sync, tickers, date, only_date, limit, offset, recent_days)
+        return await asyncio.to_thread(_get_ticker_widgets_sync, tickers, date, only_date, limit, offset, recent_days)
     except Exception as e:
-        print(f"Error in get_stock_widgets: {e}")
+        print(f"Error in get_ticker_widgets: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to load widget data: {str(e)}")
 
 
 @app.get("/api/tickers/{ticker}/reports/{run_id}")
-async def get_stock_reports_for_run(
+async def get_ticker_reports_for_run(
     ticker: str,
     run_id: str,
     current_user=Depends(get_current_user_optional),
@@ -689,15 +689,15 @@ async def get_stock_reports_for_run(
 
 
 @app.get("/api/tickers/{ticker}", response_model=TickerPageData)
-async def get_stock_page(
+async def get_ticker_page(
     ticker: str,
     current_user=Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
-    """Get complete stock page data. Accessible without authentication. Runs in thread pool (non-blocking). Views are recorded for creator rewards when user is logged in."""
+    """Get complete ticker page data. Accessible without authentication. Runs in thread pool (non-blocking). Views are recorded for creator rewards when user is logged in."""
     ticker = ticker.upper()
     try:
-        result = await asyncio.to_thread(_get_stock_page_sync, ticker)
+        result = await asyncio.to_thread(_get_ticker_page_sync, ticker)
         if result.report_date and current_user is not None:
             try:
                 token_service.record_view(ticker, result.report_date, current_user.id, db)
@@ -717,10 +717,10 @@ async def get_stock_page(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error in get_stock_page: {e}")
+        print(f"Error in get_ticker_page: {e}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to load stock page: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to load ticker page: {str(e)}")
 
 
 @app.post("/api/analyses/start")
