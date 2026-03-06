@@ -2,8 +2,8 @@ from langchain_core.messages import HumanMessage, RemoveMessage
 
 # Import tools from separate utility files
 from .core_stock_tools import (
-    get_stock_data,
-    get_stock_quote,
+    get_ticker_data,
+    get_ticker_quote,
 )
 from .technical_indicators_tools import (
     get_indicators

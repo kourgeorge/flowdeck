@@ -20,7 +20,7 @@ def _get_fetcher():
 
 
 def fetch_historical(ticker: str, period: str = "6mo", interval: str = "1d") -> Dict[str, Any]:
-    """Fetch OHLCV time series (same data as Market Analyst's get_stock_data / backend historical)."""
+    """Fetch OHLCV time series (same data as Market Analyst's get_ticker_data / backend historical)."""
     fetcher = _get_fetcher()
     return fetcher.get_historical(ticker.upper(), period=period, interval=interval)
 

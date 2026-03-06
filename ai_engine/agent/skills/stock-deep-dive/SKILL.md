@@ -1,7 +1,7 @@
 ---
 name: stock-deep-dive
 description: Run a comprehensive multi-step analysis of a single stock. Use when the user asks for a deep dive, full analysis, complete report, or everything about a specific company or ticker. Fetches current quote, AI platform reports, recent news, technical indicators, and fundamental metrics, then synthesizes them into one structured report.
-allowed-tools: get_stock_quote get_platform_reports get_news get_indicators get_fundamentals
+allowed-tools: get_ticker_quote get_platform_reports get_news get_indicators get_fundamentals
 ---
 
 # Stock Deep Dive
@@ -17,7 +17,7 @@ A single ticker must be identifiable from the user's message.
 
 ## Steps
 1. Extract the ticker symbol from the user's message
-2. Call `get_stock_quote` — current price, daily change, volume
+2. Call `get_ticker_quote` — current price, daily change, volume
 3. Call `get_platform_reports` — FlowDeck AI recommendation and return scenarios
 4. Call `get_news` — recent company news (last 7 days)
 5. Call `get_indicators` — RSI, MACD, Bollinger Bands

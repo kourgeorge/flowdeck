@@ -4,7 +4,7 @@ PortfolioHealthSkill — multi-step portfolio overview workflow.
 Steps (per subscribed ticker):
   1. get_user_subscriptions — fetch the user's subscribed tickers
   2. For each ticker:
-     a. get_stock_quote      — current price and daily change
+     a. get_ticker_quote     — current price and daily change
      b. get_platform_reports — latest AI recommendation + return scenarios
 
 Synthesizes all results into a portfolio health summary with
@@ -39,7 +39,7 @@ _SPEC = SkillSpec(
         "required": [],
     },
     tags=["portfolio", "user", "overview", "health"],
-    uses_tools=["get_user_subscriptions", "get_stock_quote", "get_platform_reports"],
+    uses_tools=["get_user_subscriptions", "get_ticker_quote", "get_platform_reports"],
 )
 
 
@@ -79,7 +79,7 @@ class PortfolioHealthSkill(BaseSkill):
         # Step 2+: Per-ticker quote + reports
         ticker_data: list[dict] = []
         for ticker in tickers[:10]:  # cap at 10 to avoid huge payloads
-            quote_result = call("get_stock_quote", symbol=ticker)
+            quote_result = call("get_ticker_quote", symbol=ticker)
             reports_result = call("get_platform_reports", ticker=ticker)
             ticker_data.append({
                 "ticker": ticker,

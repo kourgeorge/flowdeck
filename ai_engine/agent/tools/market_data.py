@@ -16,7 +16,7 @@ from ai_engine.agent.tool import BaseTool, ExecutionContext, ToolResult, ToolSpe
 # ---------------------------------------------------------------------------
 
 _STOCK_DATA_SPEC = ToolSpec(
-    name="get_stock_data",
+    name="get_ticker_data",
     version="1.0",
     description=(
         "Get historical OHLCV (Open, High, Low, Close, Volume) price data for a ticker over the last 30 days. "
@@ -41,11 +41,11 @@ class StockDataTool(BaseTool):
 
     def execute(self, ctx: ExecutionContext, *, ticker: str, **_) -> ToolResult:
         try:
-            from ai_engine.tradingagents.agents.utils.core_stock_tools import get_stock_data
+            from ai_engine.tradingagents.agents.utils.core_stock_tools import get_ticker_data
             today = datetime.date.today()
             start = (today - datetime.timedelta(days=30)).isoformat()
             end = today.isoformat()
-            data = get_stock_data.invoke({"symbol": ticker.upper(), "start_date": start, "end_date": end})
+            data = get_ticker_data.invoke({"symbol": ticker.upper(), "start_date": start, "end_date": end})
             return ToolResult(ok=True, data=data)
         except Exception as exc:
             return ToolResult(ok=False, error={"code": "TOOL_ERROR", "message": str(exc)})
@@ -61,7 +61,7 @@ _HISTORICAL_PRICES_SPEC = ToolSpec(
     description=(
         "Fetch daily OHLCV (Open, High, Low, Close, Volume) price history for a ticker over a custom date range "
         "(up to 5 years back). Returns CSV data with adjusted close prices. "
-        "Use this — instead of get_stock_data — whenever the user asks about price history beyond the last 30 days: "
+        "Use this — instead of get_ticker_data — whenever the user asks about price history beyond the last 30 days: "
         "e.g. year-to-date performance, 1-year or multi-year returns, correlation between two stocks over a year, "
         "historical volatility, drawdown analysis, or any calculation that requires more than 30 days of price data. "
         "After fetching, pass the CSV to execute_python for calculations."

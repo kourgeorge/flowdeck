@@ -2,7 +2,7 @@
 StockDeepDiveSkill — comprehensive single-stock analysis workflow.
 
 Steps:
-  1. get_stock_quote       — current price and daily performance
+  1. get_ticker_quote      — current price and daily performance
   2. get_platform_reports  — FlowDeck AI recommendation + all report summaries
   3. get_news              — recent company news (last 7 days)
   4. get_indicators        — technical indicators (RSI, MACD, Bollinger)
@@ -44,7 +44,7 @@ _SPEC = SkillSpec(
     },
     tags=["analysis", "stock", "comprehensive", "deep-dive"],
     uses_tools=[
-        "get_stock_quote",
+        "get_ticker_quote",
         "get_platform_reports",
         "get_news",
         "get_indicators",
@@ -71,7 +71,7 @@ class StockDeepDiveSkill(BaseSkill):
         def call(tool_name: str, **kwargs):
             return self.call_tool(tool_executor, ctx, steps, n, tool_name, **kwargs)
 
-        quote_result       = call("get_stock_quote", symbol=ticker)
+        quote_result       = call("get_ticker_quote", symbol=ticker)
         reports_result     = call("get_platform_reports", ticker=ticker)
         news_result        = call("get_news", ticker=ticker)
         indicators_result  = call("get_indicators", ticker=ticker)

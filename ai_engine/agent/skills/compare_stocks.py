@@ -1,4 +1,4 @@
-"""
+gi"""
 CompareStocksSkill — side-by-side multi-ticker comparison workflow.
 
 Two modes:
@@ -54,7 +54,7 @@ _SPEC = SkillSpec(
         "required": ["tickers"],
     },
     tags=["comparison", "multi-stock", "analysis", "indices", "markets", "historical"],
-    uses_tools=["get_stock_quote", "get_fundamentals", "get_indicators", "get_multi_historical_prices"],
+    uses_tools=["get_ticker_quote", "get_fundamentals", "get_indicators", "get_multi_historical_prices"],
 )
 
 
@@ -258,7 +258,7 @@ class CompareStocksSkill(BaseSkill):
         # ----------------------------------------------------------------
         ticker_data: list[dict] = []
         for ticker in tickers:
-            q = call("get_stock_quote", symbol=ticker)
+            q = call("get_ticker_quote", symbol=ticker)
             f = call("get_fundamentals", ticker=ticker)
             ticker_data.append({
                 "ticker": ticker,

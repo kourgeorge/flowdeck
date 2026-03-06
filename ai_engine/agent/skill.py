@@ -204,7 +204,7 @@ class BaseSkill(ABC):
         Example usage inside a skill's ``run()``::
 
             step = [0]
-            result = self.call_tool(tool_executor, ctx, steps, step, "get_stock_quote", symbol="AAPL")
+            result = self.call_tool(tool_executor, ctx, steps, step, "get_ticker_quote", symbol="AAPL")
         """
         import time as _time
 

@@ -44,8 +44,8 @@ def _ctx_from_config(config: Optional[RunnableConfig]) -> Any:
 # ---------------------------------------------------------------------------
 
 @tool
-def get_stock_quote(symbol: str, config: _InjectedConfig = None) -> str:
-    """Get the real-time stock quote for a ticker: current price, daily change ($),
+def get_ticker_quote(symbol: str, config: _InjectedConfig = None) -> str:
+    """Get the real-time ticker quote for a ticker: current price, daily change ($),
     daily change (%), bid/ask, day high/low, 52-week range, volume, and market status.
     Use when the user asks for the current price, today's performance, or live market data."""
     from ai_engine.agent.tools.stock_quote import StockQuoteTool
@@ -54,8 +54,8 @@ def get_stock_quote(symbol: str, config: _InjectedConfig = None) -> str:
 
 
 @tool
-def get_stock_data(ticker: str, config: _InjectedConfig = None) -> str:
-    """Get recent OHLCV price data and basic statistics for a stock ticker (last 30 days).
+def get_ticker_data(ticker: str, config: _InjectedConfig = None) -> str:
+    """Get recent OHLCV price data and basic statistics for a ticker (last 30 days).
     Use for short-term price history, recent trading ranges, or quick technical context."""
     from ai_engine.agent.tools.market_data import StockDataTool
     ctx = _ctx_from_config(config)
@@ -314,10 +314,18 @@ def make_user_lc_tools(user_id: int, db: Any) -> list:
 # Convenience aggregators
 # ---------------------------------------------------------------------------
 
+# Compatibility shims for any legacy direct imports.
+def get_stock_quote(symbol: str, config: _InjectedConfig = None) -> str:
+    return get_ticker_quote(symbol=symbol, config=config)
+
+
+def get_stock_data(ticker: str, config: _InjectedConfig = None) -> str:
+    return get_ticker_data(ticker=ticker, config=config)
+
 # All tools that are always available (no user context required)
 ALL_LC_TOOLS = [
-    get_stock_quote,
-    get_stock_data,
+    get_ticker_quote,
+    get_ticker_data,
     get_historical_prices,
     get_multi_historical_prices,
     get_indicators,

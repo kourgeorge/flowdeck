@@ -83,8 +83,8 @@ def get_insider_transactions(
     return str(data)
 
 
-def get_stock_data(ticker: str, start_date: str, end_date: str, base_url: Optional[str] = None) -> str:
-    """Fetch OHLCV time series from info service. Returns the same string format as route_to_vendor get_stock_data."""
+def get_ticker_data(ticker: str, start_date: str, end_date: str, base_url: Optional[str] = None) -> str:
+    """Fetch OHLCV time series from info service. Returns the same string format as route_to_vendor get_ticker_data."""
     base_url = base_url or _get_info_service_base_url()
     if not base_url:
         raise ValueError("Info service URL not configured (set INFO_SERVICE_URL or config info_service_url)")
@@ -93,6 +93,11 @@ def get_stock_data(ticker: str, start_date: str, end_date: str, base_url: Option
     if isinstance(data, dict) and "data" in data:
         return data["data"]
     return str(data)
+
+
+def get_stock_data(ticker: str, start_date: str, end_date: str, base_url: Optional[str] = None) -> str:
+    """Backward-compatible alias for get_ticker_data."""
+    return get_ticker_data(ticker=ticker, start_date=start_date, end_date=end_date, base_url=base_url)
 
 
 def get_fundamentals(ticker: str, base_url: Optional[str] = None) -> str:

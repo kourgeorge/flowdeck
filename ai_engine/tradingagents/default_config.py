@@ -27,10 +27,10 @@ DEFAULT_CONFIG = {
     },
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {
-        # Example: "get_stock_data": "alpha_vantage",  # Override category default
+        # Example: "get_ticker_data": "alpha_vantage",  # Override category default
         # Example: "get_news": "openai",               # Override category default
     },
-    # Information Fetcher Service: when set, agent tools (get_news, get_stock_data, get_fundamentals, etc.)
+    # Information Fetcher Service: when set, agent tools (get_news, get_ticker_data, get_fundamentals, etc.)
     # fetch data from this URL instead of local vendors. Use the same service as the dashboard UI.
     # Example: "info_service_url": "http://localhost:8002",
     "info_service_url": os.getenv("INFO_SERVICE_URL", "").strip() or None,

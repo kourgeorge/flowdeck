@@ -202,7 +202,7 @@ def _get_portfolio_overview(user_id: int, db: Any) -> str:
 
     from models.db_models import Subscription  # type: ignore[import]
     from services.report_service import ReportService  # type: ignore[import]
-    from ai_engine.tradingagents.agents.utils.core_stock_tools import get_stock_quote
+    from ai_engine.tradingagents.agents.utils.core_stock_tools import get_ticker_quote
 
     subs = (
         db.query(Subscription)
@@ -222,7 +222,7 @@ def _get_portfolio_overview(user_id: int, db: Any) -> str:
 
         # Live quote
         try:
-            quote = get_stock_quote.invoke({"symbol": ticker})
+            quote = get_ticker_quote.invoke({"symbol": ticker})
             lines.append(f"**Quote:** {quote}")
         except Exception as qe:
             lines.append(f"**Quote:** unavailable ({qe})")

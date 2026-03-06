@@ -1,7 +1,7 @@
 ---
 name: compare-stocks
 description: Compare two or more stocks, market indices, or country markets side-by-side — including over a time period (e.g. "last month", "this year", "last week"). Use when the user asks to compare markets, countries, sectors, or specific tickers. Handles natural-language market names such as "usa market", "israeli market", "s&p 500", "nasdaq", "ta-35", "dow jones". Resolves country/index names to ticker symbols automatically. When a period is specified, fetches real historical price data and computes % returns with a chart.
-allowed-tools: get_stock_quote get_fundamentals get_multi_historical_prices
+allowed-tools: get_ticker_quote get_fundamentals get_multi_historical_prices
 ---
 
 # Compare Stocks / Markets / Indices
@@ -56,7 +56,7 @@ Before fetching data, resolve natural-language names to ticker symbols:
 
 ## Steps — Snapshot mode (no period)
 1. Resolve market names to ticker symbols
-2. For each ticker: call `get_stock_quote` and `get_fundamentals`
+2. For each ticker: call `get_ticker_quote` and `get_fundamentals`
 3. Present side-by-side current price, daily change, and key fundamentals
 
 ## Output format — Historical

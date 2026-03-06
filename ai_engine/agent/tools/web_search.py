@@ -17,7 +17,7 @@ _WEB_SEARCH_SPEC = ToolSpec(
     version="1.0",
     description=(
         "Your ONLY gateway to live internet data. Use this tool whenever the information needed is NOT already "
-        "provided by the other available tools (get_platform_reports, get_stock_quote, get_stock_data, "
+        "provided by the other available tools (get_platform_reports, get_ticker_quote, get_ticker_data, "
         "get_indicators, get_fundamentals, get_balance_sheet, get_cashflow, get_income_statement, "
         "get_news, get_global_news, get_insider_transactions, get_insider_sentiment). "
         "This covers ANY online content: breaking news, earnings call transcripts, analyst upgrades/downgrades, "

@@ -21,8 +21,8 @@ from ..dataflows.config import set_config
 
 # Import the new abstract tool methods from agent_utils
 from ..agents.utils.agent_utils import (
-    get_stock_data,
-    get_stock_quote,
+    get_ticker_data,
+    get_ticker_quote,
     get_indicators,
     get_fundamentals,
     get_balance_sheet,
@@ -133,8 +133,8 @@ class TradingAgentsGraph:
             "market": ToolNode(
                 [
                     # Core stock data tools
-                    get_stock_data,
-                    get_stock_quote,
+                    get_ticker_data,
+                    get_ticker_quote,
                     # Technical indicators
                     get_indicators,
                 ]
@@ -167,8 +167,8 @@ class TradingAgentsGraph:
             "technical": ToolNode(
                 [
                     # Core stock data tools
-                    get_stock_data,
-                    get_stock_quote,
+                    get_ticker_data,
+                    get_ticker_quote,
                     # Technical indicators
                     get_indicators,
                     # Advanced technical analysis tools

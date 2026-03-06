@@ -2,7 +2,7 @@ import logging
 
 from langchain_core.messages import AIMessage
 from pydantic import BaseModel, Field
-from ..utils.agent_utils import get_stock_data, get_stock_quote, get_indicators
+from ..utils.agent_utils import get_ticker_data, get_ticker_quote, get_indicators
 from ..utils.advanced_technical_tools import (
     detect_divergence,
     detect_regime,
@@ -32,8 +32,8 @@ def create_technical_analyst(llm):
         ticker = state["company_of_interest"]
 
         tools = [
-            get_stock_data,
-            get_stock_quote,
+            get_ticker_data,
+            get_ticker_quote,
             get_indicators,
             detect_divergence,
             detect_regime,

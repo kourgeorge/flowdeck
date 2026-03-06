@@ -1,7 +1,7 @@
 ---
 name: portfolio-health
 description: Run a portfolio health check for the current user. Use when the user asks about their portfolio, watchlist, subscribed stocks, how their stocks are doing, or wants a portfolio overview or summary. Fetches all subscribed tickers, gets live quotes and AI recommendations for each, then synthesizes into a portfolio health summary with overall sentiment.
-allowed-tools: get_user_subscriptions get_stock_quote get_platform_reports
+allowed-tools: get_user_subscriptions get_ticker_quote get_platform_reports
 ---
 
 # Portfolio Health Check
@@ -19,7 +19,7 @@ This skill requires no arguments — it automatically fetches the user's subscri
 1. Call `get_user_subscriptions` — retrieve the list of tickers the user is subscribed to
 2. If no subscriptions found, inform the user they have no subscribed stocks
 3. For each subscribed ticker (up to 10):
-   a. Call `get_stock_quote` — current price and daily change
+   a. Call `get_ticker_quote` — current price and daily change
    b. Call `get_platform_reports` — latest AI recommendation
 4. Synthesize all results into a portfolio health summary
 

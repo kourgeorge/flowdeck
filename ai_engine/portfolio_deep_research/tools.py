@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from langchain_core.tools import tool
 
-from ai_engine.tradingagents.agents.utils.core_stock_tools import get_stock_data
+from ai_engine.tradingagents.agents.utils.core_stock_tools import get_ticker_data
 from ai_engine.tradingagents.agents.utils.technical_indicators_tools import get_indicators
 from ai_engine.tradingagents.agents.utils.fundamental_data_tools import (
     get_fundamentals,
@@ -163,7 +163,7 @@ def get_data_tools() -> List[Any]:
 
         
     tools.extend([
-            get_stock_data,
+            get_ticker_data,
             get_indicators,
             get_fundamentals,
             get_balance_sheet,

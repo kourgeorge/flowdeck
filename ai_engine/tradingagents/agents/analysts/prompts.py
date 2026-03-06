@@ -27,9 +27,9 @@ Volatility Indicators:
 Volume-Based Indicators:
 - vwma: VWMA: A moving average weighted by volume. Usage: Confirm trends by integrating price action with volume data. Tips: Watch for skewed results from volume spikes; use in combination with other volume analyses.
 
-- Select indicators that provide diverse and complementary information. Avoid redundancy (e.g., do not select both rsi and stochrsi). Also briefly explain why they are suitable for the given market context. When you tool call, please use the exact name of the indicators provided above as they are defined parameters, otherwise your call will fail. Please call `get_stock_quote` to fetch the current quote, and `get_stock_data` to retrieve the CSV needed to generate indicators. Then use get_indicators with the specific indicator names. Write a concise but nuanced market snapshot of trend and momentum context.
+- Select indicators that provide diverse and complementary information. Avoid redundancy (e.g., do not select both rsi and stochrsi). Also briefly explain why they are suitable for the given market context. When you tool call, please use the exact name of the indicators provided above as they are defined parameters, otherwise your call will fail. Please call `get_ticker_quote` to fetch the current quote, and `get_ticker_data` to retrieve the CSV needed to generate indicators. Then use get_indicators with the specific indicator names. Write a concise but nuanced market snapshot of trend and momentum context.
 
-When describing whether price is above/below 50 SMA or 200 SMA, use the numeric value from `get_stock_quote.current_price` and compare it explicitly against the SMA values from `get_indicators`. If quote data is unavailable, state that clearly instead of assuming.
+When describing whether price is above/below 50 SMA or 200 SMA, use the numeric value from `get_ticker_quote.current_price` and compare it explicitly against the SMA values from `get_indicators`. If quote data is unavailable, state that clearly instead of assuming.
 
 Scope boundaries for the Market Analyst:
 - Focus on high-level market/indicator context and consistency checks only.
@@ -123,7 +123,7 @@ TECHNICAL_ANALYST_SYSTEM_MESSAGE = (
                - Moving averages as dynamic support/resistance
 
             **Your Analysis Process:**
-            1. First, call get_stock_quote for the current quote and get_stock_data to retrieve price history
+            1. First, call get_ticker_quote for the current quote and get_ticker_data to retrieve price history
             2. Call detect_regime to understand the current market environment
             3. Call detect_support_resistance to identify key price levels
             4. Call detect_divergence with different indicators (rsi, macd, macdh) to find reversal signals

@@ -41,7 +41,7 @@ def detect_divergence(
         
         try:
             # Call route_to_vendor directly instead of the tool wrapper
-            stock_data_str = route_to_vendor("get_stock_data", symbol, start_date, end_date)
+            stock_data_str = route_to_vendor("get_ticker_data", symbol, start_date, end_date)
         except Exception as e:
             return f"Error: Failed to retrieve stock data for {symbol}. Underlying error: {str(e)}. Please verify the ticker symbol is correct and the data vendor is accessible."
         
@@ -283,7 +283,7 @@ def detect_regime(
         
         try:
             # Call route_to_vendor directly instead of the tool wrapper
-            stock_data_str = route_to_vendor("get_stock_data", symbol, start_date, end_date)
+            stock_data_str = route_to_vendor("get_ticker_data", symbol, start_date, end_date)
         except Exception as e:
             return f"Error: Failed to retrieve stock data for {symbol}. Underlying error: {str(e)}. Please verify the ticker symbol is correct and the data vendor is accessible."
         
@@ -516,7 +516,7 @@ def detect_support_resistance(
         
         try:
             # Call route_to_vendor directly instead of the tool wrapper
-            stock_data_str = route_to_vendor("get_stock_data", symbol, start_date, end_date)
+            stock_data_str = route_to_vendor("get_ticker_data", symbol, start_date, end_date)
         except Exception as e:
             return f"Error: Failed to retrieve stock data for {symbol}. Underlying error: {str(e)}. Please verify the ticker symbol is correct and the data vendor is accessible."
         
@@ -775,4 +775,3 @@ def detect_support_resistance(
         return f"Error in support/resistance detection: Missing required data field. {str(e)}. This may indicate the data structure has changed. Please check the data source."
     except Exception as e:
         return f"Error in support/resistance detection for {symbol}: Unexpected error occurred. {str(e)}. Please verify all inputs are correct and try again. If the issue persists, the data source may be temporarily unavailable."
-

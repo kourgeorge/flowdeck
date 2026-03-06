@@ -23,12 +23,17 @@ from .config import get_config
 
 logger = logging.getLogger(__name__)
 
+METHOD_ALIASES = {
+    # Backward compatibility after stock->ticker rename.
+    "get_stock_data": "get_ticker_data",
+}
+
 # Tools organized by category
 TOOLS_CATEGORIES = {
     "core_stock_apis": {
         "description": "OHLCV stock price data",
         "tools": [
-            "get_stock_data"
+            "get_ticker_data"
         ]
     },
     "technical_indicators": {
@@ -67,7 +72,7 @@ VENDOR_LIST = [
 # Mapping of methods to their vendor-specific implementations
 VENDOR_METHODS = {
     # core_stock_apis
-    "get_stock_data": {
+    "get_ticker_data": {
         "alpha_vantage": get_alpha_vantage_stock,
         "yfinance": get_YFin_data_online,
         "local": get_YFin_data,
@@ -126,6 +131,7 @@ VENDOR_METHODS = {
 
 def get_category_for_method(method: str) -> str:
     """Get the category that contains the specified method."""
+    method = METHOD_ALIASES.get(method, method)
     for category, info in TOOLS_CATEGORIES.items():
         if method in info["tools"]:
             return category
@@ -152,6 +158,7 @@ def get_vendor(category: str, method: str = None) -> str:
 
     # Check tool-level configuration first (if method provided)
     if method:
+        method = METHOD_ALIASES.get(method, method)
         tool_vendors = config.get("tool_vendors", {})
         if method in tool_vendors:
             return tool_vendors[method]
@@ -161,6 +168,7 @@ def get_vendor(category: str, method: str = None) -> str:
 
 def route_to_vendor(method: str, *args, **kwargs):
     """Route method calls to appropriate vendor implementation with fallback support."""
+    method = METHOD_ALIASES.get(method, method)
     category = get_category_for_method(method)
     vendor_config = get_vendor(category, method)
 
