@@ -622,7 +622,15 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                           ? isBlueTab ? 'bg-blue-950/70 text-blue-200 border-blue-500 font-semibold' : 'bg-gray-800 text-white border-blue-500 font-medium'
                           : isBlueTab ? 'bg-blue-950/40 text-blue-200 hover:text-white hover:bg-blue-950/60 border-blue-700/50 font-semibold' : 'text-gray-400 hover:text-white hover:bg-gray-800/70 border-transparent font-medium'
                       }`}>
-                      {tab.label}
+                      <span className="inline-flex items-center gap-1.5">
+                        {tab.id === 'ai-analysis' && (
+                          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <rect x="7" y="7" width="10" height="10" rx="2" strokeWidth={1.8} />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M10 10h4v4h-4zM9 3v2m3-2v2m3-2v2M9 19v2m3-2v2m3-2v2M3 9h2m-2 3h2m-2 3h2M19 9h2m-2 3h2m-2 3h2" />
+                          </svg>
+                        )}
+                        {tab.label}
+                      </span>
                     </button>
                   );
                 })}
