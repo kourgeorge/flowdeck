@@ -579,7 +579,7 @@ def get_view_runs(
     db: Session = Depends(get_db),
     limit: int = Query(100, ge=1, le=500),
 ):
-    """Return report runs with unique view counts, ordered by most viewed."""
+    """Return report runs with unique view counts, ordered for hierarchy browsing."""
     distinct_runs_subquery = (
         db.query(ReportView.ticker, ReportView.run_id)
         .distinct()
@@ -596,8 +596,10 @@ def get_view_runs(
         )
         .group_by(ReportView.ticker, ReportView.run_id)
         .order_by(
-            func.count(ReportView.id).desc(),
+            ReportView.run_id.desc(),
+            ReportView.ticker.asc(),
             func.max(ReportView.viewed_at).desc(),
+            func.count(ReportView.id).desc(),
         )
         .limit(limit)
         .all()

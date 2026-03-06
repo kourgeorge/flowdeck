@@ -28,6 +28,8 @@ import {
 type AdminTab = 'overview' | 'mission-control';
 type MissionSortKey = 'ticker' | 'company' | 'type' | 'market_cap' | 'sector' | 'industry' | 'last_completed' | 'status';
 type MissionSortDirection = 'asc' | 'desc';
+type ViewRunsSortKey = 'ticker' | 'run_id' | 'unique_views' | 'viewed';
+type ViewRunsSortDirection = 'asc' | 'desc';
 
 function formatDate(s?: string | null, use24Hour = false): string {
   if (!s) return '—';
@@ -149,6 +151,13 @@ export default function AdminDashboardPage() {
   const [viewsByRun, setViewsByRun] = useState<Record<string, AdminReportViewItem[]>>({});
   const [expandedViewRunKeys, setExpandedViewRunKeys] = useState<Set<string>>(new Set());
   const [loadingRunViewKeys, setLoadingRunViewKeys] = useState<Set<string>>(new Set());
+  const [viewRunsSort, setViewRunsSort] = useState<{
+    key: ViewRunsSortKey;
+    direction: ViewRunsSortDirection;
+  }>({
+    key: 'run_id',
+    direction: 'desc',
+  });
   const [dailyAnalyses, setDailyAnalyses] = useState<AnalysisDailyCount[]>([]);
   const [dailyViews, setDailyViews] = useState<ViewsDailyCount[]>([]);
 
@@ -221,6 +230,39 @@ export default function AdminDashboardPage() {
     [missionItems, missionSort],
   );
 
+  const sortedViewRuns = useMemo(
+    () =>
+      [...viewRuns].sort((a, b) => {
+        let cmp = 0;
+        switch (viewRunsSort.key) {
+          case 'ticker':
+            cmp = a.ticker.localeCompare(b.ticker, undefined, { sensitivity: 'base' });
+            break;
+          case 'run_id':
+            cmp = a.run_id.localeCompare(b.run_id, undefined, { sensitivity: 'base' });
+            break;
+          case 'unique_views':
+            cmp = a.unique_views - b.unique_views;
+            break;
+          case 'viewed': {
+            const aTime = a.last_viewed_at ? new Date(a.last_viewed_at).getTime() : null;
+            const bTime = b.last_viewed_at ? new Date(b.last_viewed_at).getTime() : null;
+            cmp = compareNullableNumber(aTime, bTime);
+            break;
+          }
+          default:
+            cmp = 0;
+        }
+        if (viewRunsSort.direction === 'desc') cmp *= -1;
+        if (cmp !== 0) return cmp;
+
+        const byRunIdDesc = b.run_id.localeCompare(a.run_id, undefined, { sensitivity: 'base' });
+        if (byRunIdDesc !== 0) return byRunIdDesc;
+        return a.ticker.localeCompare(b.ticker, undefined, { sensitivity: 'base' });
+      }),
+    [viewRuns, viewRunsSort],
+  );
+
   const selectedMissionTickerSet = new Set(selectedMissionTickers);
   const allMissionTickers = sortedMissionItems.map((item) => item.ticker);
   const allMissionSelected =
@@ -239,6 +281,32 @@ export default function AdminDashboardPage() {
 
   const sortIndicator = (key: MissionSortKey): string =>
     missionSort.key === key ? (missionSort.direction === 'asc' ? '↑' : '↓') : '↕';
+
+  const toggleViewRunsSort = (key: ViewRunsSortKey) => {
+    setViewRunsSort((prev) => {
+      if (prev.key === key) {
+        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      const defaultDirection: ViewRunsSortDirection =
+        key === 'unique_views' || key === 'viewed' || key === 'run_id' ? 'desc' : 'asc';
+      return { key, direction: defaultDirection };
+    });
+  };
+
+  const viewRunsSortIndicator = (key: ViewRunsSortKey): string =>
+    viewRunsSort.key === key ? (viewRunsSort.direction === 'asc' ? '↑' : '↓') : '↕';
+
+  const getSortedRunViews = (runViews: AdminReportViewItem[]): AdminReportViewItem[] => {
+    if (runViews.length <= 1) return runViews;
+    const sorted = [...runViews];
+    if (viewRunsSort.key === 'viewed') {
+      sorted.sort((a, b) => new Date(a.viewed_at).getTime() - new Date(b.viewed_at).getTime());
+      if (viewRunsSort.direction === 'desc') sorted.reverse();
+      return sorted;
+    }
+    sorted.sort((a, b) => new Date(b.viewed_at).getTime() - new Date(a.viewed_at).getTime());
+    return sorted;
+  };
 
   const loadViewsForRun = async (ticker: string, runId: string, runKey: string) => {
     if (viewsByRun[runKey] || loadingRunViewKeys.has(runKey)) {
@@ -883,17 +951,50 @@ export default function AdminDashboardPage() {
                 <table className="w-full min-w-[760px] text-left text-sm">
                   <thead className="sticky top-0 bg-gray-800 z-10">
                     <tr className="border-b border-gray-700">
-                      <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
-                      <th className="px-4 py-3 text-gray-400 font-medium">Run ID</th>
-                      <th className="px-4 py-3 text-gray-400 font-medium">Unique views</th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">
+                        <button
+                          type="button"
+                          onClick={() => toggleViewRunsSort('ticker')}
+                          className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                        >
+                          Ticker <span className="text-xs">{viewRunsSortIndicator('ticker')}</span>
+                        </button>
+                      </th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">
+                        <button
+                          type="button"
+                          onClick={() => toggleViewRunsSort('run_id')}
+                          className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                        >
+                          Run ID <span className="text-xs">{viewRunsSortIndicator('run_id')}</span>
+                        </button>
+                      </th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">
+                        <button
+                          type="button"
+                          onClick={() => toggleViewRunsSort('unique_views')}
+                          className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                        >
+                          Unique views <span className="text-xs">{viewRunsSortIndicator('unique_views')}</span>
+                        </button>
+                      </th>
                       <th className="px-4 py-3 text-gray-400 font-medium">Viewer email</th>
-                      <th className="px-4 py-3 text-gray-400 font-medium">Viewed</th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">
+                        <button
+                          type="button"
+                          onClick={() => toggleViewRunsSort('viewed')}
+                          className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                        >
+                          Viewed <span className="text-xs">{viewRunsSortIndicator('viewed')}</span>
+                        </button>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {viewRuns.map((run) => {
+                    {sortedViewRuns.map((run) => {
                       const runKey = `${run.ticker}::${run.run_id}`;
                       const runViews = viewsByRun[runKey] ?? [];
+                      const sortedRunViews = getSortedRunViews(runViews);
                       const isExpanded = expandedViewRunKeys.has(runKey);
                       const isLoadingRunViews = loadingRunViewKeys.has(runKey);
 
@@ -927,7 +1028,7 @@ export default function AdminDashboardPage() {
                           </tr>
                           {isExpanded &&
                             !isLoadingRunViews &&
-                            runViews.map((view) => (
+                            sortedRunViews.map((view) => (
                               <tr key={view.id} className="border-b border-gray-700/30 bg-gray-900/40">
                                 <td className="px-4 py-2 text-gray-500">↳</td>
                                 <td className="px-4 py-2 text-gray-600 font-mono text-xs">{view.run_id}</td>
