@@ -132,6 +132,16 @@ def get_fundamentals(ticker: str, config: _InjectedConfig = None) -> str:
 
 
 @tool
+def get_analysts_recommendation(ticker: str, config: _InjectedConfig = None) -> str:
+    """Get Wall Street analyst recommendation consensus and trend for a stock:
+    BUY/HOLD/SELL signal, strong-buy to strong-sell counts, target-price metadata, and total analyst coverage.
+    Use when the user asks about analyst ratings, consensus recommendation, upgrades/downgrades trend, or analyst sentiment."""
+    from ai_engine.agent.tools.analyst_recommendations import AnalystRecommendationsTool
+    ctx = _ctx_from_config(config)
+    return AnalystRecommendationsTool().execute(ctx, ticker=ticker).to_str()
+
+
+@tool
 def get_income_statement(ticker: str, config: _InjectedConfig = None) -> str:
     """Get the annual income statement for a stock: revenue, gross profit, operating income,
     net income, EPS, and year-over-year growth rates.
@@ -331,6 +341,7 @@ ALL_LC_TOOLS = [
     get_indicators,
     get_specific_indicator,
     get_fundamentals,
+    get_analysts_recommendation,
     get_income_statement,
     get_balance_sheet,
     get_cashflow,

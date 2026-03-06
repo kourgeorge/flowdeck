@@ -25,6 +25,7 @@ from ..agents.utils.agent_utils import (
     get_ticker_quote,
     get_indicators,
     get_fundamentals,
+    get_analysts_recommendation,
     get_balance_sheet,
     get_cashflow,
     get_income_statement,
@@ -137,6 +138,8 @@ class TradingAgentsGraph:
                     get_ticker_quote,
                     # Technical indicators
                     get_indicators,
+                    # Analyst consensus signal
+                    get_analysts_recommendation,
                 ]
             ),
             "social": ToolNode(

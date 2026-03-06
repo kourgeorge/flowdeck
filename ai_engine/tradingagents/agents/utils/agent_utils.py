@@ -10,6 +10,7 @@ from .technical_indicators_tools import (
 )
 from .fundamental_data_tools import (
     get_fundamentals,
+    get_analysts_recommendation,
     get_balance_sheet,
     get_cashflow,
     get_income_statement

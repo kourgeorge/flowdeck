@@ -9,6 +9,7 @@ from ai_engine.agent.tools.stock_quote import StockQuoteTool
 from ai_engine.agent.tools.platform_reports import PlatformReportsTool, HistoricalReportDatesTool
 from ai_engine.agent.tools.market_data import StockDataTool, HistoricalPricesTool, IndicatorsTool
 from ai_engine.agent.tools.multi_market_data import MultiHistoricalPricesTool
+from ai_engine.agent.tools.analyst_recommendations import AnalystRecommendationsTool
 from ai_engine.agent.tools.financials import (
     FundamentalsTool,
     BalanceSheetTool,
@@ -30,6 +31,7 @@ ALL_TOOLS = [
     MultiHistoricalPricesTool(),
     IndicatorsTool(),
     FundamentalsTool(),
+    AnalystRecommendationsTool(),
     BalanceSheetTool(),
     CashflowTool(),
     IncomeStatementTool(),
@@ -50,6 +52,7 @@ __all__ = [
     "MultiHistoricalPricesTool",
     "IndicatorsTool",
     "FundamentalsTool",
+    "AnalystRecommendationsTool",
     "BalanceSheetTool",
     "CashflowTool",
     "IncomeStatementTool",

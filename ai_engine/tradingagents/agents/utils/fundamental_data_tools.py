@@ -8,11 +8,13 @@ try:
     from ...dataflows.info_service_client import (
         get_fundamentals as get_fundamentals_via_service,
         get_financial_statements,
+        get_analyst_recommendations as get_analysts_recommendation_via_service,
         is_configured as info_service_configured,
     )
 except ImportError:
     get_fundamentals_via_service = None
     get_financial_statements = None
+    get_analysts_recommendation_via_service = None
     info_service_configured = lambda: False
 
 
@@ -110,3 +112,28 @@ def get_income_statement(
         if data is not None:
             return _statement_to_str(data, "income_statement")
     return route_to_vendor("get_income_statement", ticker, freq, curr_date)
+
+
+@tool
+def get_analysts_recommendation(
+    ticker: Annotated[str, "ticker symbol"],
+) -> str:
+    """
+    Retrieve analyst recommendation data for a given ticker symbol.
+    Uses the Information Service API when INFO_SERVICE_URL is set, otherwise falls back to yfinance.
+    Args:
+        ticker (str): Ticker symbol of the company
+    Returns:
+        str: JSON payload containing recommendation, trend breakdown, and related metadata.
+    """
+    ticker_upper = ticker.upper()
+
+    if get_analysts_recommendation_via_service is not None and info_service_configured():
+        data = get_analysts_recommendation_via_service(ticker_upper)
+        if data is not None:
+            return json.dumps(data, default=str)
+
+    from ...dataflows.y_finance import get_analyst_recommendations as get_yfinance_analyst_recommendations
+
+    data = get_yfinance_analyst_recommendations(ticker_upper)
+    return json.dumps(data, default=str)

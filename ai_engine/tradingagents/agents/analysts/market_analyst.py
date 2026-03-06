@@ -3,7 +3,12 @@ import logging
 from langchain_core.messages import AIMessage
 from pydantic import BaseModel, Field
 
-from ..utils.agent_utils import get_ticker_data, get_ticker_quote, get_indicators
+from ..utils.agent_utils import (
+    get_ticker_data,
+    get_ticker_quote,
+    get_indicators,
+    get_analysts_recommendation,
+)
 from .helpers import is_tool_result_message, try_structured_response
 from .prompts import build_market_analyst_prompt
 
@@ -31,6 +36,7 @@ def create_market_analyst(llm):
             get_ticker_data,
             get_ticker_quote,
             get_indicators,
+            get_analysts_recommendation,
         ]
 
         prompt = build_market_analyst_prompt(
