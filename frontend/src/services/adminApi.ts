@@ -71,6 +71,23 @@ export interface ViewsDailyCount {
   count: number;
 }
 
+export interface AdminReportViewRunItem {
+  ticker: string;
+  run_id: string;
+  unique_views: number;
+  last_viewed_at: string;
+}
+
+export interface AdminReportViewItem {
+  id: number;
+  ticker: string;
+  run_id: string;
+  viewer_id: number;
+  viewer_email: string;
+  viewer_name: string | null;
+  viewed_at: string;
+}
+
 export interface MissionControlTickerItem {
   ticker: string;
   name: string | null;
@@ -187,6 +204,43 @@ export const adminApi = {
     const res = await api.get<{ data: ViewsDailyCount[] }>(
       '/api/admin/views/daily',
       { params: { days }, headers: authHeaders() },
+    );
+    return res.data;
+  },
+
+  getViewRuns: async (
+    limit = 100,
+  ): Promise<{ runs: AdminReportViewRunItem[]; total_runs_with_views: number }> => {
+    const res = await api.get<{
+      runs: AdminReportViewRunItem[];
+      total_runs_with_views: number;
+    }>('/api/admin/views/runs', {
+      params: { limit },
+      headers: authHeaders(),
+    });
+    return res.data;
+  },
+
+  getViews: async (
+    limit = 200,
+    offset = 0,
+  ): Promise<{ views: AdminReportViewItem[]; total: number }> => {
+    const res = await api.get<{ views: AdminReportViewItem[]; total: number }>(
+      '/api/admin/views',
+      { params: { limit, offset }, headers: authHeaders() },
+    );
+    return res.data;
+  },
+
+  getViewsForRun: async (
+    ticker: string,
+    runId: string,
+    limit = 5000,
+    offset = 0,
+  ): Promise<{ views: AdminReportViewItem[]; total: number }> => {
+    const res = await api.get<{ views: AdminReportViewItem[]; total: number }>(
+      '/api/admin/views/run',
+      { params: { ticker, run_id: runId, limit, offset }, headers: authHeaders() },
     );
     return res.data;
   },

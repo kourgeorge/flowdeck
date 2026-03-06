@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { Fragment, useState, useEffect, useMemo } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -19,6 +19,8 @@ import {
   type AdminSubscriptionItem,
   type AnalysisDailyCount,
   type ViewsDailyCount,
+  type AdminReportViewRunItem,
+  type AdminReportViewItem,
   type MissionControlTickerItem,
   type MissionControlRunResponse,
 } from '../services/adminApi';
@@ -142,6 +144,11 @@ export default function AdminDashboardPage() {
   const [analysesTotal, setAnalysesTotal] = useState(0);
   const [subscriptions, setSubscriptions] = useState<AdminSubscriptionItem[]>([]);
   const [subscriptionsTotal, setSubscriptionsTotal] = useState(0);
+  const [viewRuns, setViewRuns] = useState<AdminReportViewRunItem[]>([]);
+  const [viewRunsTotal, setViewRunsTotal] = useState(0);
+  const [viewsByRun, setViewsByRun] = useState<Record<string, AdminReportViewItem[]>>({});
+  const [expandedViewRunKeys, setExpandedViewRunKeys] = useState<Set<string>>(new Set());
+  const [loadingRunViewKeys, setLoadingRunViewKeys] = useState<Set<string>>(new Set());
   const [dailyAnalyses, setDailyAnalyses] = useState<AnalysisDailyCount[]>([]);
   const [dailyViews, setDailyViews] = useState<ViewsDailyCount[]>([]);
 
@@ -213,6 +220,7 @@ export default function AdminDashboardPage() {
       }),
     [missionItems, missionSort],
   );
+
   const selectedMissionTickerSet = new Set(selectedMissionTickers);
   const allMissionTickers = sortedMissionItems.map((item) => item.ticker);
   const allMissionSelected =
@@ -231,6 +239,46 @@ export default function AdminDashboardPage() {
 
   const sortIndicator = (key: MissionSortKey): string =>
     missionSort.key === key ? (missionSort.direction === 'asc' ? '↑' : '↓') : '↕';
+
+  const loadViewsForRun = async (ticker: string, runId: string, runKey: string) => {
+    if (viewsByRun[runKey] || loadingRunViewKeys.has(runKey)) {
+      return;
+    }
+    setLoadingRunViewKeys((prev) => {
+      const next = new Set(prev);
+      next.add(runKey);
+      return next;
+    });
+    try {
+      const res = await adminApi.getViewsForRun(ticker, runId, 5000, 0);
+      setViewsByRun((prev) => ({ ...prev, [runKey]: res.views }));
+    } catch {
+      setViewsByRun((prev) => ({ ...prev, [runKey]: [] }));
+    } finally {
+      setLoadingRunViewKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(runKey);
+        return next;
+      });
+    }
+  };
+
+  const toggleRunExpanded = (ticker: string, runId: string) => {
+    const runKey = `${ticker}::${runId}`;
+    const isExpanded = expandedViewRunKeys.has(runKey);
+    if (!isExpanded && !viewsByRun[runKey]) {
+      void loadViewsForRun(ticker, runId, runKey);
+    }
+    setExpandedViewRunKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(runKey)) {
+        next.delete(runKey);
+      } else {
+        next.add(runKey);
+      }
+      return next;
+    });
+  };
 
   const refreshMissionControl = async () => {
     setMissionLoading(true);
@@ -278,11 +326,12 @@ export default function AdminDashboardPage() {
       adminApi.getReports(200),
       adminApi.getAnalyses(50),
       adminApi.getSubscriptions(100, 0),
+      adminApi.getViewRuns(100),
       adminApi.getAnalysesDaily(30),
       adminApi.getViewsDaily(30),
       adminApi.getMissionControl(),
     ])
-      .then(([s, u, r, a, sub, dailyA, dailyV, mission]) => {
+      .then(([s, u, r, a, sub, viewRunsRes, dailyA, dailyV, mission]) => {
         if (cancelled) return;
         setStats(s);
         setUsers(u.users);
@@ -293,6 +342,11 @@ export default function AdminDashboardPage() {
         setAnalysesTotal(a.total);
         setSubscriptions(sub.subscriptions);
         setSubscriptionsTotal(sub.total);
+        setViewRuns(viewRunsRes.runs);
+        setViewRunsTotal(viewRunsRes.total_runs_with_views);
+        setViewsByRun({});
+        setExpandedViewRunKeys(new Set());
+        setLoadingRunViewKeys(new Set());
         setDailyAnalyses(dailyA.data);
         setDailyViews(dailyV.data);
         setMissionItems(mission.items);
@@ -816,6 +870,92 @@ export default function AdminDashboardPage() {
                         <td className="px-4 py-3 text-gray-400">{formatDate(a.created_at)}</td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="mb-10">
+              <h2 className="text-lg font-semibold text-white mb-4">
+                Report views hierarchy (runs: {viewRunsTotal}, views: {stats?.total_report_views ?? 0})
+              </h2>
+              <div className="overflow-x-auto overflow-y-auto max-h-[36rem] rounded-lg border border-gray-700 bg-gray-800/80">
+                <table className="w-full min-w-[760px] text-left text-sm">
+                  <thead className="sticky top-0 bg-gray-800 z-10">
+                    <tr className="border-b border-gray-700">
+                      <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">Run ID</th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">Unique views</th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">Viewer email</th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">Viewed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {viewRuns.map((run) => {
+                      const runKey = `${run.ticker}::${run.run_id}`;
+                      const runViews = viewsByRun[runKey] ?? [];
+                      const isExpanded = expandedViewRunKeys.has(runKey);
+                      const isLoadingRunViews = loadingRunViewKeys.has(runKey);
+
+                      return (
+                        <Fragment key={runKey}>
+                          <tr key={runKey} className="border-b border-gray-700/50 bg-gray-800">
+                            <td className="px-4 py-3">
+                              <button
+                                type="button"
+                                onClick={() => toggleRunExpanded(run.ticker, run.run_id)}
+                                className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 font-medium"
+                                aria-expanded={isExpanded}
+                                aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${run.ticker} ${run.run_id}`}
+                              >
+                                <span className={`inline-block transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                                  ▶
+                                </span>
+                                <span>{run.ticker}</span>
+                              </button>
+                            </td>
+                            <td className="px-4 py-3 text-gray-300 font-mono text-xs">{run.run_id}</td>
+                            <td className="px-4 py-3 text-white">{run.unique_views.toLocaleString()}</td>
+                            <td className="px-4 py-3 text-gray-500">
+                              {isExpanded
+                                ? isLoadingRunViews
+                                  ? 'Loading viewers...'
+                                  : `${runViews.length} viewer${runViews.length === 1 ? '' : 's'}`
+                                : 'Expand to view viewers'}
+                            </td>
+                            <td className="px-4 py-3 text-gray-400">{formatDate(run.last_viewed_at)}</td>
+                          </tr>
+                          {isExpanded &&
+                            !isLoadingRunViews &&
+                            runViews.map((view) => (
+                              <tr key={view.id} className="border-b border-gray-700/30 bg-gray-900/40">
+                                <td className="px-4 py-2 text-gray-500">↳</td>
+                                <td className="px-4 py-2 text-gray-600 font-mono text-xs">{view.run_id}</td>
+                                <td className="px-4 py-2 text-gray-600">-</td>
+                                <td className="px-4 py-2 text-gray-300">{view.viewer_email}</td>
+                                <td className="px-4 py-2 text-gray-400">{formatDate(view.viewed_at)}</td>
+                              </tr>
+                            ))}
+                          {isExpanded && !isLoadingRunViews && runViews.length === 0 && (
+                            <tr className="border-b border-gray-700/30 bg-gray-900/40">
+                              <td className="px-4 py-2 text-gray-500">↳</td>
+                              <td className="px-4 py-2 text-gray-600 font-mono text-xs">{run.run_id}</td>
+                              <td className="px-4 py-2 text-gray-600">-</td>
+                              <td className="px-4 py-2 text-gray-500" colSpan={2}>
+                                No viewer rows found for this run.
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                    {viewRuns.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-6 text-center text-gray-400">
+                          No report views yet.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
