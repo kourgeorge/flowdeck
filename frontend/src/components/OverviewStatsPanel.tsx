@@ -378,7 +378,8 @@ export function SubscribedChangeColumnsChart({ widgets, height = 340 }: Subscrib
       <div className="overflow-x-auto pb-1">
         <div className="min-w-full" style={{ width: Math.max(620, changeBarsData.length * 56), height: chartHeight }}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={changeBarsData} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
+            {/* Extra left spacing prevents Y-axis percent labels from clipping (especially negatives). */}
+            <BarChart data={changeBarsData} margin={{ top: 8, right: 12, left: 16, bottom: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
               <XAxis
                 dataKey="ticker"
@@ -389,7 +390,7 @@ export function SubscribedChangeColumnsChart({ widgets, height = 340 }: Subscrib
                 textAnchor={changeBarsData.length > 12 ? 'end' : 'middle'}
               />
               <YAxis
-                width={44}
+                width={56}
                 tick={{ fill: '#9ca3af', fontSize: 11 }}
                 ticks={yAxisTicks}
                 tickFormatter={(v: number) => `${v.toFixed(2)}%`}
