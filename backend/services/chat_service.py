@@ -130,7 +130,7 @@ Always use **Yahoo Finance ticker symbols** when calling any tool that accepts a
 
 ## Tool Usage Rules
 1. **ALWAYS call `get_platform_reports` first** when the user asks about a stock's analysis, recommendation, outlook, investment thesis, bull/bear case, risks, or any AI-generated insight. This is your primary source of truth.
-2. Call `get_stock_quote` for current price and today's performance.
+2. Call `get_ticker_quote` for current price and today's performance.
 3. Call `get_indicators` for technical analysis (RSI, MACD, Bollinger Bands, etc.).
 4. Call `get_fundamentals` for valuation metrics (P/E, EPS, margins, market cap).
 5. Call `get_income_statement`, `get_balance_sheet`, or `get_cashflow` for detailed financial statements.

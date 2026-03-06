@@ -22,13 +22,17 @@ function detectRTL(text: string): boolean {
 
 // ── Friendly display names for tool names ──────────────────────────────────
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
-  get_stock_quote: 'Stock Quote',
+  get_ticker_quote: 'Ticker Quote',
+  get_ticker_data: 'Historical Data',
+  // Legacy aliases kept for rendering older stored chat events.
+  get_stock_quote: 'Ticker Quote',
   get_platform_reports: 'AI Reports',
   get_news: 'Company News',
   get_fundamentals: 'Fundamentals',
   get_balance_sheet: 'Balance Sheet',
   get_cashflow: 'Cash Flow',
   get_income_statement: 'Income Statement',
+  // Legacy alias kept for rendering older stored chat events.
   get_stock_data: 'Historical Data',
   get_indicators: 'Technical Indicators',
   get_insider_transactions: 'Insider Transactions',

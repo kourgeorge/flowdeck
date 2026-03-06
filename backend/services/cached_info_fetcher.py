@@ -141,8 +141,8 @@ class CachedInfoFetcher:
             ),
         )
 
-    def get_stock_data(self, ticker: str, start_date: str, end_date: str) -> str:
-        key = f"stock_data:{ticker.upper()}:{start_date}:{end_date}"
+    def get_ticker_data(self, ticker: str, start_date: str, end_date: str) -> str:
+        key = f"ticker_data:{ticker.upper()}:{start_date}:{end_date}"
         return get_cached(
             key,
             DATA_CACHE_TTL_STOCK_DATA,
