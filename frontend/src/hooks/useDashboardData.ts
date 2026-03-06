@@ -26,7 +26,11 @@ export interface UseDashboardDataReturn {
   handleSubscriptionChange: () => void;
 }
 
-export function useDashboardData(): UseDashboardDataReturn {
+interface UseDashboardDataOptions {
+  enablePrefetch?: boolean;
+}
+
+export function useDashboardData({ enablePrefetch = true }: UseDashboardDataOptions = {}): UseDashboardDataReturn {
   const { user } = useAuth();
   const [widgets, setWidgets] = useState<StockWidgetType[]>([]);
   const [recentAnalyzedWidgets, setRecentAnalyzedWidgets] = useState<StockWidgetType[]>([]);
@@ -162,24 +166,28 @@ export function useDashboardData(): UseDashboardDataReturn {
 
   // Prefetch stock page data
   useEffect(() => {
-    if (!user) return;
-    const allTickers = [
+    if (!user || !enablePrefetch) return;
+
+    const allTickers = Array.from(new Set([
       ...widgets.map((w) => w.ticker),
       ...recentAnalyzedWidgets.map((w) => w.ticker),
-    ];
+    ]));
     const newTickers = allTickers.filter((t) => !prefetchedRef.current.has(t));
     if (newTickers.length === 0) return;
 
     newTickers.forEach((t) => prefetchedRef.current.add(t));
+    let cancelled = false;
 
     const fetchBatch = async (batch: string[]) => {
       await Promise.all(
         batch.map((ticker) =>
           tickerApi.getTickerPage(ticker)
             .then((data) => {
+              if (cancelled) return;
               setPrefetchCache((prev) => ({ ...prev, [ticker]: data }));
             })
             .catch(() => {
+              if (cancelled) return;
               prefetchedRef.current.delete(ticker);
             })
         )
@@ -188,12 +196,16 @@ export function useDashboardData(): UseDashboardDataReturn {
 
     const runQueue = async () => {
       for (let i = 0; i < newTickers.length; i += PREFETCH_CONCURRENCY) {
+        if (cancelled) return;
         await fetchBatch(newTickers.slice(i, i + PREFETCH_CONCURRENCY));
       }
     };
 
-    runQueue();
-  }, [user, widgets, recentAnalyzedWidgets]);
+    void runQueue();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, widgets, recentAnalyzedWidgets, enablePrefetch]);
 
   // Infinite scroll for sidebar
   const handleSidebarScroll = useCallback(() => {

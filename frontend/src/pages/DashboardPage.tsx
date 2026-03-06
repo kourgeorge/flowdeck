@@ -36,7 +36,7 @@ export default function DashboardPage() {
     handleSidebarScroll,
     handleRecentScroll,
     handleSubscriptionChange,
-  } = useDashboardData();
+  } = useDashboardData({ enablePrefetch: dashboardTab === 'stock-view' });
 
   if (!user) {
     return (
@@ -51,21 +51,7 @@ export default function DashboardPage() {
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="text-center">
-          <svg className="w-8 h-8 text-blue-400 animate-spin mx-auto mb-3" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-          </svg>
-          <p className="text-gray-400 text-sm">Loading dashboard…</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (widgets.length === 0 && recentAnalyzedWidgets.length === 0) {
+  if (!isLoading && widgets.length === 0 && recentAnalyzedWidgets.length === 0) {
     return (
       <div className="min-h-[60vh] px-4 py-6 sm:p-6 lg:p-8">
         <div className="max-w-layout mx-auto min-w-0 w-full">
@@ -246,6 +232,17 @@ export default function DashboardPage() {
         <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="px-4 py-6 sm:p-6 lg:p-8">
             <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
+              {isLoading && widgets.length === 0 && recentAnalyzedWidgets.length === 0 && (
+                <div className="mb-6 bg-gray-800 rounded-lg border border-gray-700 p-6">
+                  <div className="flex items-center gap-2 text-gray-300 text-sm">
+                    <svg className="w-4 h-4 text-blue-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    <span>Loading dashboard data…</span>
+                  </div>
+                </div>
+              )}
 
               {/* Subscribed stocks stats by market/exchange */}
               {widgets.length > 0 && (
