@@ -146,7 +146,7 @@ class CachedInfoFetcher:
         return get_cached(
             key,
             DATA_CACHE_TTL_STOCK_DATA,
-            lambda: self._fetcher.get_stock_data(ticker, start_date, end_date),
+            lambda: self._fetcher.get_ticker_data(ticker, start_date, end_date),
         )
 
     def get_financial_charts(self, ticker: str, freq: str = "annual") -> Dict[str, Any]:

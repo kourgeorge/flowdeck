@@ -46,7 +46,7 @@ class InfoFetcher:
         self._sector_cache_lock = threading.Lock()
         
         # Load major stocks sector/industry data from JSON file
-        self._load_major_stocks_sectors()
+        self._load_major_tickers_sectors()
 
     def _get_route_to_vendor(self):
         if self._route_to_vendor is None:
@@ -306,10 +306,10 @@ class InfoFetcher:
         from services.financial_statements_service import get_financial_statements as get_statements
         return get_statements(ticker, statement_type=statement_type, freq=freq)
 
-    def get_stock_data(self, ticker: str, start_date: str, end_date: str) -> str:
+    def get_ticker_data(self, ticker: str, start_date: str, end_date: str) -> str:
         """Get OHLCV time series as string (for agents). Uses tradingagents route_to_vendor."""
         route = self._get_route_to_vendor()
-        return route("get_stock_data", ticker.upper(), start_date, end_date)
+        return route("get_ticker_data", ticker.upper(), start_date, end_date)
 
     def get_financial_charts(self, ticker: str, freq: str = "annual") -> Dict[str, Any]:
         """Get chart-ready time series for fundamentals (Revenue, EPS, Debt, FCF, etc.)."""
@@ -468,8 +468,8 @@ class InfoFetcher:
             return out
         except Exception:
             return out
-    def _load_major_stocks_sectors(self):
-        """Load major stocks sector/industry data from JSON file.
+    def _load_major_tickers_sectors(self):
+        """Load major tickers sector/industry data from JSON file.
         
         Loads pre-generated sector/industry data from backend/data/major_stocks_sectors.json
         into the cache. This avoids API rate limits and provides instant lookups.
@@ -800,12 +800,12 @@ class InfoFetcher:
             return payload
         return {}
 
-    def _enrich_similar_tickers_with_batch_quotes(self, similar_stocks: List[Dict[str, Any]]) -> None:
+    def _enrich_similar_tickers_with_batch_quotes(self, similar_tickers: List[Dict[str, Any]]) -> None:
         """Populate price and fundamentals fields using batched yahooquery requests."""
-        if not similar_stocks:
+        if not similar_tickers:
             return
 
-        symbols = [stock.get("ticker") for stock in similar_stocks if stock.get("ticker")]
+        symbols = [ticker.get("ticker") for ticker in similar_tickers if ticker.get("ticker")]
         if not symbols:
             return
 
@@ -852,8 +852,8 @@ class InfoFetcher:
         except Exception:
             pass
 
-        for stock in similar_stocks:
-            symbol = stock.get("ticker")
+        for ticker in similar_tickers:
+            symbol = ticker.get("ticker")
             if not symbol:
                 continue
 
@@ -864,88 +864,88 @@ class InfoFetcher:
 
             market_price = self._coerce_float(symbol_price.get("regularMarketPrice"))
             if market_price is not None:
-                stock["current_price"] = round(market_price, 2)
+                ticker["current_price"] = round(market_price, 2)
 
             change_percent = self._coerce_float(symbol_price.get("regularMarketChangePercent"))
             if change_percent is not None:
                 # yahooquery `regularMarketChangePercent` is fractional (e.g. -0.016 = -1.6%).
-                stock["change_percent"] = round(change_percent * 100.0, 2)
+                ticker["change_percent"] = round(change_percent * 100.0, 2)
 
             market_cap = self._coerce_float(symbol_price.get("marketCap"))
             if market_cap is None:
                 market_cap = self._coerce_float(symbol_summary_detail.get("marketCap"))
             if market_cap is not None:
-                stock["market_cap"] = int(market_cap)
+                ticker["market_cap"] = int(market_cap)
 
             trailing_pe = self._coerce_float(symbol_summary_detail.get("trailingPE"))
             if trailing_pe is not None:
-                stock["trailing_pe"] = trailing_pe
+                ticker["trailing_pe"] = trailing_pe
 
             forward_pe = self._coerce_float(symbol_summary_detail.get("forwardPE"))
             if forward_pe is not None:
-                stock["forward_pe"] = forward_pe
+                ticker["forward_pe"] = forward_pe
 
             dividend_yield = self._coerce_float(symbol_summary_detail.get("dividendYield"))
             if dividend_yield is not None:
-                stock["dividend_yield"] = dividend_yield
+                ticker["dividend_yield"] = dividend_yield
 
             beta = self._coerce_float(symbol_summary_detail.get("beta"))
             if beta is None:
                 beta = self._coerce_float(symbol_key_stats.get("beta"))
             if beta is not None:
-                stock["beta"] = beta
+                ticker["beta"] = beta
 
             fifty_two_week_high = self._coerce_float(symbol_summary_detail.get("fiftyTwoWeekHigh"))
             if fifty_two_week_high is None:
                 fifty_two_week_high = self._coerce_float(symbol_price.get("fiftyTwoWeekHigh"))
             if fifty_two_week_high is not None:
-                stock["fifty_two_week_high"] = fifty_two_week_high
+                ticker["fifty_two_week_high"] = fifty_two_week_high
 
             fifty_two_week_low = self._coerce_float(symbol_summary_detail.get("fiftyTwoWeekLow"))
             if fifty_two_week_low is None:
                 fifty_two_week_low = self._coerce_float(symbol_price.get("fiftyTwoWeekLow"))
             if fifty_two_week_low is not None:
-                stock["fifty_two_week_low"] = fifty_two_week_low
+                ticker["fifty_two_week_low"] = fifty_two_week_low
 
             trailing_eps = self._coerce_float(symbol_key_stats.get("trailingEps"))
             if trailing_eps is not None:
-                stock["trailing_eps"] = trailing_eps
+                ticker["trailing_eps"] = trailing_eps
 
             forward_eps = self._coerce_float(symbol_key_stats.get("forwardEps"))
             if forward_eps is not None:
-                stock["forward_eps"] = forward_eps
+                ticker["forward_eps"] = forward_eps
 
             ebitda = self._coerce_float(symbol_financial_data.get("ebitda"))
             if ebitda is not None:
-                stock["ebitda"] = int(ebitda)
+                ticker["ebitda"] = int(ebitda)
 
             revenue = self._coerce_float(symbol_financial_data.get("totalRevenue"))
             if revenue is not None:
-                stock["revenue"] = int(revenue)
+                ticker["revenue"] = int(revenue)
 
             profit_margin = self._coerce_float(symbol_financial_data.get("profitMargins"))
             if profit_margin is not None:
-                stock["profit_margin"] = profit_margin
+                ticker["profit_margin"] = profit_margin
 
             gross_margin = self._coerce_float(symbol_financial_data.get("grossMargins"))
             if gross_margin is not None:
-                stock["gross_margin"] = gross_margin
+                ticker["gross_margin"] = gross_margin
 
             operating_margin = self._coerce_float(symbol_financial_data.get("operatingMargins"))
             if operating_margin is not None:
-                stock["operating_margin"] = operating_margin
+                ticker["operating_margin"] = operating_margin
 
             ebitda_margin = self._coerce_float(symbol_financial_data.get("ebitdaMargins"))
             if ebitda_margin is not None:
-                stock["ebitda_margin"] = ebitda_margin
+                ticker["ebitda_margin"] = ebitda_margin
 
             target_mean_price = self._coerce_float(symbol_financial_data.get("targetMeanPrice"))
             if target_mean_price is not None:
-                stock["target_mean_price"] = target_mean_price
+                ticker["target_mean_price"] = target_mean_price
 
             recommendation_key = symbol_financial_data.get("recommendationKey")
             if isinstance(recommendation_key, str) and recommendation_key.strip():
-                stock["recommendation_key"] = recommendation_key.strip()
+                ticker["recommendation_key"] = recommendation_key.strip()
 
     def get_company_officers(self, ticker: str) -> Dict[str, Any]:
         """Get company officers/management team from Yahoo Finance."""

@@ -122,13 +122,13 @@ async def data_historical(
 
 
 @router.get("/ticker-data/{ticker}")
-async def data_stock_data(
+async def data_ticker_data(
     ticker: str,
     start_date: str = Query(..., description="Start date YYYY-MM-DD"),
     end_date: str = Query(..., description="End date YYYY-MM-DD"),
 ):
     """Get OHLCV time series as text (for agents). Returns CSV-like string."""
-    data = await asyncio.to_thread(_engine().get_stock_data, ticker, start_date, end_date)
+    data = await asyncio.to_thread(_engine().get_ticker_data, ticker, start_date, end_date)
     return {"ticker": ticker.upper(), "start_date": start_date, "end_date": end_date, "data": data}
 
 
