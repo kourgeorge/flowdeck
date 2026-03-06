@@ -166,7 +166,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   };
 
   const fetchSimilarTickersPage = useCallback(async (page: number): Promise<boolean> => {
-    if (!ticker) return false;
+    if (!ticker || !user) return false;
 
     const safePage = Math.max(1, page);
     const offset = (safePage - 1) * SIMILAR_STOCKS_PER_PAGE;
@@ -194,7 +194,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     } finally {
       setIsLoadingSimilarTickers(false);
     }
-  }, [ticker]);
+  }, [ticker, user]);
 
   const loadStockData = async () => {
     if (!ticker) return;
@@ -226,10 +226,6 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     stockApi.getAnalystRecommendations(ticker).then(setAnalystRecommendations).catch(() => {}).finally(() => setIsLoadingRecommendations(false));
     setIsLoadingFutureEvents(true);
     stockApi.getFutureEvents(ticker).then(setFutureEvents).catch(() => {}).finally(() => setIsLoadingFutureEvents(false));
-    setSimilarStocksPage(1);
-    setSimilarTickerPages({});
-    setSimilarHasMoreByPage({});
-    void fetchSimilarTickersPage(1);
   };
 
   useEffect(() => {
@@ -271,10 +267,6 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       stockApi.getAnalystRecommendations(ticker).then(setAnalystRecommendations).catch(() => {}).finally(() => setIsLoadingRecommendations(false));
       setIsLoadingFutureEvents(true);
       stockApi.getFutureEvents(ticker).then(setFutureEvents).catch(() => {}).finally(() => setIsLoadingFutureEvents(false));
-      setSimilarStocksPage(1);
-      setSimilarTickerPages({});
-      setSimilarHasMoreByPage({});
-      void fetchSimilarTickersPage(1);
     } else {
       setStockData(null);
       setIsLoading(true);
@@ -282,6 +274,37 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     }
     return () => { if (wsClientRef.current) wsClientRef.current.disconnect(); };
   }, [ticker]);
+
+  useEffect(() => {
+    if (!user) {
+      if (
+        similarTickers ||
+        Object.keys(similarTickerPages).length > 0 ||
+        Object.keys(similarHasMoreByPage).length > 0 ||
+        similarStocksPage !== 1 ||
+        isLoadingSimilarTickers
+      ) {
+        setSimilarTickers(null);
+        setSimilarTickerPages({});
+        setSimilarHasMoreByPage({});
+        setSimilarStocksPage(1);
+        setIsLoadingSimilarTickers(false);
+      }
+      return;
+    }
+
+    if (isLoadingSimilarTickers) return;
+    if (similarTickers || Object.keys(similarTickerPages).length > 0) return;
+    void fetchSimilarTickersPage(1);
+  }, [
+    user,
+    similarTickers,
+    similarTickerPages,
+    similarHasMoreByPage,
+    similarStocksPage,
+    isLoadingSimilarTickers,
+    fetchSimilarTickersPage,
+  ]);
 
   useEffect(() => {
     // Fallback polling mechanism:
@@ -583,21 +606,21 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
               <nav className="flex flex-wrap gap-0.5 px-2 pt-1" aria-label="Stock sections">
                 {[
                   { id: 'overview', label: 'Overview' },
-                  { id: 'similar-stocks', label: 'Similar Stocks' },
                   ...(hasFundamentals ? [{ id: 'fundamentals', label: 'Fundamentals' }] : []),
                   ...(isUSCompany ? [{ id: 'sec-filings', label: 'SEC Filings' }] : []),
                   { id: 'insider-transactions', label: 'Insider Transactions' },
                   { id: 'news', label: 'News' },
+                  { id: 'similar-stocks', label: 'Similar Stocks' },
                   { id: 'ai-analysis', label: 'AI Analysis' },
                 ].map((tab) => {
                   const isActive = activeTab === tab.id;
-                  const isAiTab = tab.id === 'ai-analysis';
+                  const isBlueTab = tab.id === 'ai-analysis' || tab.id === 'similar-stocks';
                   return (
                     <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                       className={`px-3 py-2 text-sm rounded-t-lg transition-colors border-b-2 -mb-px ${
                         isActive
-                          ? isAiTab ? 'bg-blue-950/70 text-blue-200 border-blue-500 font-semibold' : 'bg-gray-800 text-white border-blue-500 font-medium'
-                          : isAiTab ? 'bg-blue-950/40 text-blue-200 hover:text-white hover:bg-blue-950/60 border-blue-700/50 font-semibold' : 'text-gray-400 hover:text-white hover:bg-gray-800/70 border-transparent font-medium'
+                          ? isBlueTab ? 'bg-blue-950/70 text-blue-200 border-blue-500 font-semibold' : 'bg-gray-800 text-white border-blue-500 font-medium'
+                          : isBlueTab ? 'bg-blue-950/40 text-blue-200 hover:text-white hover:bg-blue-950/60 border-blue-700/50 font-semibold' : 'text-gray-400 hover:text-white hover:bg-gray-800/70 border-transparent font-medium'
                       }`}>
                       {tab.label}
                     </button>
@@ -756,6 +779,21 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
 
           {/* Similar Stocks Tab */}
           {activeTab === 'similar-stocks' && (
+            !user ? (
+              <div className="flex flex-col items-center justify-center py-16 rounded-lg border border-gray-700 bg-gray-800/60">
+                <svg className="w-10 h-10 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <h3 className="text-lg font-semibold text-white mb-2">Sign in to view Similar Stocks</h3>
+                <p className="text-gray-400 text-sm mb-5 text-center max-w-xs">Create a free account to access similar stocks and peer comparisons.</p>
+                <button
+                  onClick={() => { setAuthModalMessage('Sign in to access similar stocks.'); setAuthModalOpen(true); }}
+                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+                >
+                  Sign In / Register
+                </button>
+              </div>
+            ) : (
             <div className="space-y-4">
               {isLoadingSimilarTickers && visibleSimilarStocks.length === 0 ? (
                 <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
@@ -895,6 +933,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                 </div>
               )}
             </div>
+            )
           )}
 
           {/* AI Analysis Tab */}
