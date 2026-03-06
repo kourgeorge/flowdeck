@@ -108,6 +108,8 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const isPreviewTicker = previewTickers.has(normalizedTicker);
   const canAccessGuestPreviewContent = Boolean(user || isPreviewTicker);
   const hasFundamentals = quoteType === 'EQUITY' || quoteType == null;
+  const hasInsiderTransactions = quoteType === 'EQUITY' || quoteType == null;
+  const hasSimilarStocks = quoteType === 'EQUITY' || quoteType == null;
   const isUSCompany = companyInfo?.country === 'United States' || companyInfo?.country === 'USA';
 
   useEffect(() => {
@@ -118,6 +120,14 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
 
   useEffect(() => {
     if (activeTab === 'fundamentals' && quoteType != null && quoteType !== 'EQUITY') setActiveTab('overview');
+  }, [quoteType, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'insider-transactions' && quoteType != null && quoteType !== 'EQUITY') setActiveTab('overview');
+  }, [quoteType, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'similar-stocks' && quoteType != null && quoteType !== 'EQUITY') setActiveTab('overview');
   }, [quoteType, activeTab]);
 
   useEffect(() => {
@@ -169,7 +179,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   };
 
   const fetchSimilarTickersPage = useCallback(async (page: number): Promise<boolean> => {
-    if (!ticker || !canAccessGuestPreviewContent) return false;
+    if (!ticker || !canAccessGuestPreviewContent || !hasSimilarStocks) return false;
 
     const safePage = Math.max(1, page);
     const offset = (safePage - 1) * SIMILAR_STOCKS_PER_PAGE;
@@ -197,7 +207,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     } finally {
       setIsLoadingSimilarTickers(false);
     }
-  }, [ticker, canAccessGuestPreviewContent]);
+  }, [ticker, canAccessGuestPreviewContent, hasSimilarStocks]);
 
   const loadStockData = async () => {
     if (!ticker) return;
@@ -279,7 +289,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   }, [ticker]);
 
   useEffect(() => {
-    if (!canAccessGuestPreviewContent) {
+    if (!canAccessGuestPreviewContent || !hasSimilarStocks) {
       if (
         similarTickers ||
         Object.keys(similarTickerPages).length > 0 ||
@@ -301,6 +311,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     void fetchSimilarTickersPage(1);
   }, [
     canAccessGuestPreviewContent,
+    hasSimilarStocks,
     similarTickers,
     similarTickerPages,
     similarHasMoreByPage,
@@ -444,7 +455,11 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
 
   useEffect(() => { if (activeTab === 'news' && ticker && !isLoadingNews) fetchNews(); }, [activeTab, ticker, fetchNews]);
   useEffect(() => { if (activeTab === 'overview' && ticker && !isLoadingOfficers && companyOfficers.length === 0) fetchCompanyOfficers(); }, [activeTab, ticker, fetchCompanyOfficers, isLoadingOfficers, companyOfficers.length]);
-  useEffect(() => { if (activeTab === 'insider-transactions' && ticker && !isLoadingInsiderTransactions) fetchInsiderTransactions(); }, [activeTab, ticker, fetchInsiderTransactions]);
+  useEffect(() => {
+    if (activeTab === 'insider-transactions' && hasInsiderTransactions && ticker && !isLoadingInsiderTransactions) {
+      fetchInsiderTransactions();
+    }
+  }, [activeTab, hasInsiderTransactions, ticker, fetchInsiderTransactions, isLoadingInsiderTransactions]);
 
   useEffect(() => {
     if (activeTab !== 'sec-filings' || !ticker) return;
@@ -613,9 +628,9 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                   { id: 'overview', label: 'Overview' },
                   ...(hasFundamentals ? [{ id: 'fundamentals', label: 'Fundamentals' }] : []),
                   ...(isUSCompany ? [{ id: 'sec-filings', label: 'SEC Filings' }] : []),
-                  { id: 'insider-transactions', label: 'Insider Transactions' },
+                  ...(hasInsiderTransactions ? [{ id: 'insider-transactions', label: 'Insider Transactions' }] : []),
                   { id: 'news', label: 'News' },
-                  { id: 'similar-stocks', label: 'Similar Stocks' },
+                  ...(hasSimilarStocks ? [{ id: 'similar-stocks', label: 'Similar Stocks' }] : []),
                   { id: 'ai-analysis', label: 'AI Analysis' },
                 ].map((tab) => {
                   const isActive = activeTab === tab.id;
@@ -791,7 +806,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
           )}
 
           {/* Similar Stocks Tab */}
-          {activeTab === 'similar-stocks' && (
+          {activeTab === 'similar-stocks' && hasSimilarStocks && (
             !canAccessGuestPreviewContent ? (
               <div className="flex flex-col items-center justify-center py-16 rounded-lg border border-gray-700 bg-gray-800/60">
                 <svg className="w-10 h-10 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1149,7 +1164,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
           )}
 
           {/* Insider Transactions Tab */}
-          {activeTab === 'insider-transactions' && (
+          {activeTab === 'insider-transactions' && hasInsiderTransactions && (
             <div>
               {isLoadingInsiderTransactions ? (
                 <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 animate-pulse"><div className="h-5 bg-gray-700 rounded w-64 mb-3" /><div className="space-y-3">{[1,2,3].map((i) => <div key={i} className="h-10 bg-gray-700 rounded" />)}</div></div>
