@@ -1,4 +1,4 @@
-gi"""
+"""
 CompareStocksSkill — side-by-side multi-ticker comparison workflow.
 
 Two modes:
