@@ -790,24 +790,55 @@ def get_analyst_recommendations(
                 "latest_date": None
             }
         
-        # Sort by date (most recent first) - yfinance recommendations are typically already sorted
-        # but we'll ensure we get the most recent
-        if isinstance(recommendations.index, pd.DatetimeIndex):
-            recommendations = recommendations.sort_index(ascending=False)
-        
-        # Get the most recent recommendation row (first row after sorting)
-        latest_row = recommendations.iloc[0]
-        
-        # Extract recommendation counts
-        breakdown = {}
-        total = 0
-        recommendation_columns = ['Strong Buy', 'Buy', 'Hold', 'Sell', 'Strong Sell']
-        
-        for col in recommendation_columns:
-            if col in latest_row.index:
-                count = int(latest_row[col]) if pd.notna(latest_row[col]) else 0
-                breakdown[col] = count
-                total += count
+        def _count_from_row(row: pd.Series, *keys: str) -> int:
+            for key in keys:
+                if key in row.index:
+                    val = row[key]
+                    if pd.notna(val):
+                        try:
+                            return int(val)
+                        except Exception:
+                            return 0
+            return 0
+
+        # Yahoo has two observed shapes:
+        # 1) legacy columns: Strong Buy/Buy/Hold/Sell/Strong Sell with DatetimeIndex
+        # 2) trend columns: period/strongBuy/buy/hold/sell/strongSell with integer index
+        latest_date = None
+        if "period" in recommendations.columns:
+            rec_df = recommendations.copy()
+            try:
+                period_series = rec_df["period"].astype(str)
+                zero_month_rows = rec_df[period_series == "0m"]
+                latest_row = zero_month_rows.iloc[0] if not zero_month_rows.empty else rec_df.iloc[0]
+            except Exception:
+                latest_row = rec_df.iloc[0]
+            # No explicit date in trend payload; keep None.
+            latest_date = None
+        else:
+            if isinstance(recommendations.index, pd.DatetimeIndex):
+                recommendations = recommendations.sort_index(ascending=False)
+            latest_row = recommendations.iloc[0]
+            latest_index = recommendations.index[0]
+            if hasattr(latest_index, "strftime"):
+                latest_date = latest_index.strftime("%Y-%m-%d")
+            else:
+                latest_date = str(latest_index)
+
+        strong_buy = _count_from_row(latest_row, "Strong Buy", "strongBuy", "strong_buy")
+        buy = _count_from_row(latest_row, "Buy", "buy")
+        hold = _count_from_row(latest_row, "Hold", "hold")
+        sell = _count_from_row(latest_row, "Sell", "sell")
+        strong_sell = _count_from_row(latest_row, "Strong Sell", "strongSell", "strong_sell")
+
+        breakdown = {
+            "Strong Buy": strong_buy,
+            "Buy": buy,
+            "Hold": hold,
+            "Sell": sell,
+            "Strong Sell": strong_sell,
+        }
+        total = strong_buy + buy + hold + sell + strong_sell
         
         # Determine overall recommendation based on highest count
         recommendation = None
@@ -822,18 +853,19 @@ def get_analyst_recommendations(
             else:
                 recommendation = 'HOLD'
         
-        # Get target price from info
         info = ticker_obj.info
+        # Get target price from info
         target_price = info.get('targetMeanPrice') or info.get('targetHighPrice') or info.get('targetLowPrice')
-        
-        # Get latest date
-        latest_date = None
-        if not recommendations.empty:
-            latest_index = recommendations.index[0]
-            if hasattr(latest_index, 'strftime'):
-                latest_date = latest_index.strftime("%Y-%m-%d")
-            else:
-                latest_date = str(latest_index)
+
+        # Fallback recommendation from Yahoo key if counts are unavailable.
+        if recommendation is None:
+            key = str(info.get("recommendationKey") or "").strip().lower()
+            if key in ("strong_buy", "buy"):
+                recommendation = "BUY"
+            elif key in ("strong_sell", "sell"):
+                recommendation = "SELL"
+            elif key in ("hold",):
+                recommendation = "HOLD"
         
         return {
             "ticker": ticker.upper(),

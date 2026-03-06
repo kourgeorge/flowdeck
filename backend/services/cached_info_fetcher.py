@@ -158,7 +158,7 @@ class CachedInfoFetcher:
         )
 
     def get_analyst_recommendations(self, ticker: str) -> Dict[str, Any]:
-        key = f"analyst:{ticker.upper()}"
+        key = f"analyst:v5:{ticker.upper()}"
         return get_cached(
             key,
             DATA_CACHE_TTL_ANALYST,

@@ -134,7 +134,7 @@ async def data_ticker_data(
 
 @router.get("/analyst-recommendations/{ticker}")
 async def data_analyst_recommendations(ticker: str):
-    """Get analyst recommendations from Yahoo Finance."""
+    """Get analyst recommendations from YahooQuery."""
     return await asyncio.to_thread(_engine().get_analyst_recommendations, ticker)
 
 
