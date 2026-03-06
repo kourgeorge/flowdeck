@@ -7,7 +7,7 @@ import StockDetailPanel from '../components/TickerDetailPanel';
 import TickerListView from '../components/StockListView';
 import DashboardNewsSection from '../components/DashboardNewsSection';
 import DashboardPriceTrendsChart from '../components/DashboardPriceTrendsChart';
-import OverviewStatsPanel, { ByMarketSection } from '../components/OverviewStatsPanel';
+import OverviewStatsPanel, { ByMarketSection, SubscribedChangeColumnsChart } from '../components/OverviewStatsPanel';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -256,8 +256,13 @@ export default function DashboardPage() {
 
               {/* Price trends chart */}
               {subscribedTickers.length > 0 && (
-                <div className="min-h-[340px]">
-                  <DashboardPriceTrendsChart tickers={subscribedTickers} period="6mo" height={340} />
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  <div className="min-h-[340px]">
+                    <DashboardPriceTrendsChart tickers={subscribedTickers} period="6mo" height={340} />
+                  </div>
+                  <div className="min-h-[340px]">
+                    <SubscribedChangeColumnsChart widgets={widgets} height={340} />
+                  </div>
                 </div>
               )}
 

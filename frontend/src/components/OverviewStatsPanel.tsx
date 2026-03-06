@@ -6,6 +6,12 @@ import {
   Cell,
   Tooltip,
   ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ReferenceLine,
 } from 'recharts';
 import { tickerApi } from '../services/api';
 import type { TickerWidget as StockWidgetType } from '../services/types';
@@ -31,6 +37,15 @@ interface OverviewStatsPanelProps {
   widgets: StockWidgetType[];
   tickerToName: Record<string, string>;
   hideByMarket?: boolean;
+}
+
+interface SubscribedChangeColumnsChartProps {
+  widgets: StockWidgetType[];
+  height?: number;
+}
+
+interface HistoricalPricePoint {
+  close: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -110,8 +125,43 @@ const PIE_COLORS = [
   '#0ea5e9', '#d946ef', '#fb923c', '#4ade80', '#facc15',
 ];
 
+const CHANGE_PERIODS = [
+  { label: '1D', value: '1d' },
+  { label: '1W', value: '5d' },
+  { label: '1M', value: '1mo' },
+  { label: '3M', value: '3mo' },
+  { label: '6M', value: '6mo' },
+  { label: 'YTD', value: 'ytd' },
+  { label: '1Y', value: '1y' },
+  { label: '5Y', value: '5y' },
+  { label: '10Y', value: '10y' },
+  { label: 'MAX', value: 'max' },
+];
+
 function pieColor(i: number) {
   return PIE_COLORS[i % PIE_COLORS.length];
+}
+
+function signedPercent(value: number): string {
+  const sign = value >= 0 ? '+' : '';
+  return `${sign}${value.toFixed(2)}%`;
+}
+
+function changeBarColor(value: number): string {
+  if (value > 0) return '#4ade80';
+  if (value < 0) return '#f87171';
+  return '#94a3b8';
+}
+
+function getNiceTickStep(range: number, targetTickCount: number): number {
+  if (!Number.isFinite(range) || range <= 0) return 1;
+  const rawStep = range / Math.max(1, targetTickCount - 1);
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const residual = rawStep / magnitude;
+  if (residual <= 1) return 1 * magnitude;
+  if (residual <= 2) return 2 * magnitude;
+  if (residual <= 5) return 5 * magnitude;
+  return 10 * magnitude;
 }
 
 // Build [{name, value}] from a string-keyed count map, sorted desc
@@ -165,6 +215,197 @@ function PieTooltip({ active, payload }: { active?: boolean; payload?: Array<{ n
     <div className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm shadow-lg">
       <span className="text-white font-medium">{name}</span>
       <span className="text-gray-400 ml-2">{value} stock{value !== 1 ? 's' : ''}</span>
+    </div>
+  );
+}
+
+function ChangeBarsTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: { ticker: string; changePct: number } }> }) {
+  if (!active || !payload?.length) return null;
+  const point = payload[0].payload;
+  return (
+    <div className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm shadow-lg">
+      <div className="text-white font-semibold">{point.ticker}</div>
+      <div className={point.changePct >= 0 ? 'text-green-400' : 'text-red-400'}>
+        {signedPercent(point.changePct)}
+      </div>
+    </div>
+  );
+}
+
+export function SubscribedChangeColumnsChart({ widgets, height = 340 }: SubscribedChangeColumnsChartProps) {
+  const [selectedPeriod, setSelectedPeriod] = useState('1d');
+  const [periodChangeMap, setPeriodChangeMap] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const selectedPeriodLabel = CHANGE_PERIODS.find((p) => p.value === selectedPeriod)?.label ?? selectedPeriod.toUpperCase();
+
+  useEffect(() => {
+    if (widgets.length === 0) {
+      setPeriodChangeMap({});
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    if (selectedPeriod === '1d') {
+      setPeriodChangeMap({});
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    let cancelled = false;
+    const fallbackMap: Record<string, number> = Object.fromEntries(
+      widgets.map((w) => [w.ticker, w.daily_change_percent])
+    );
+
+    const fetchPeriodChanges = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const results = await Promise.allSettled(
+          widgets.map((w) => tickerApi.getHistoricalPrices(w.ticker, selectedPeriod, '1d'))
+        );
+        const next: Record<string, number> = { ...fallbackMap };
+        let successCount = 0;
+
+        results.forEach((result, i) => {
+          if (result.status !== 'fulfilled') return;
+          const ticker = widgets[i].ticker;
+          const prices = (result.value?.data as HistoricalPricePoint[] | undefined) ?? [];
+          if (prices.length < 2) return;
+          const firstClose = prices[0]?.close;
+          const lastClose = prices[prices.length - 1]?.close;
+          if (firstClose == null || lastClose == null || firstClose <= 0) return;
+          const pct = ((lastClose - firstClose) / firstClose) * 100;
+          if (!Number.isFinite(pct)) return;
+          next[ticker] = pct;
+          successCount += 1;
+        });
+
+        if (!cancelled) {
+          setPeriodChangeMap(next);
+          if (successCount === 0) {
+            setError(`Could not load ${selectedPeriodLabel} historical changes; showing daily values.`);
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setPeriodChangeMap(fallbackMap);
+          setError(`Could not load ${selectedPeriodLabel} historical changes; showing daily values.`);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    fetchPeriodChanges();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPeriod, selectedPeriodLabel, widgets]);
+
+  const changeBarsData = useMemo(() => {
+    return widgets
+      .map((w) => ({
+        ticker: w.ticker,
+        changePct:
+          selectedPeriod === '1d'
+            ? w.daily_change_percent
+            : (periodChangeMap[w.ticker] ?? w.daily_change_percent),
+      }))
+      .sort((a, b) => b.changePct - a.changePct);
+  }, [widgets, periodChangeMap, selectedPeriod]);
+
+  const maxAbsChange = useMemo(() => {
+    const max = changeBarsData.reduce((acc, row) => Math.max(acc, Math.abs(row.changePct)), 0);
+    return Math.max(1, max);
+  }, [changeBarsData]);
+
+  const { yAxisMax, yAxisTicks } = useMemo(() => {
+    const padded = maxAbsChange * 1.15;
+    const step = getNiceTickStep(padded * 2, 7);
+    const axisMax = Math.ceil(padded / step) * step;
+    const ticks: number[] = [];
+    for (let value = -axisMax; value <= axisMax + step / 2; value += step) {
+      ticks.push(Number(value.toFixed(10)));
+    }
+    return { yAxisMax: axisMax, yAxisTicks: ticks };
+  }, [maxAbsChange]);
+
+  const chartHeight = Math.max(220, height);
+
+  if (changeBarsData.length === 0) {
+    return (
+      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 h-full">
+        <h3 className="text-lg font-semibold text-white mb-2">% change by ticker</h3>
+        <p className="text-gray-400 text-sm">Subscribe to stocks to see % change columns.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 sm:p-6 h-full flex flex-col">
+      <div className="mb-2 shrink-0">
+        <h3 className="text-lg font-semibold text-white">% change by ticker</h3>
+        <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
+          All subscribed tickers, sorted by {selectedPeriodLabel} % change.
+        </p>
+      </div>
+      <div className="mb-2 shrink-0 flex flex-wrap gap-1.5 justify-end">
+        {CHANGE_PERIODS.map((p) => (
+          <button
+            key={p.value}
+            type="button"
+            onClick={() => setSelectedPeriod(p.value)}
+            className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+              selectedPeriod === p.value
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+      {loading && selectedPeriod !== '1d' && (
+        <div className="text-gray-400 text-xs mb-2">Loading {selectedPeriodLabel} changes…</div>
+      )}
+      {error && (
+        <div className="text-amber-400 text-xs mb-2">{error}</div>
+      )}
+      <div className="overflow-x-auto pb-1">
+        <div className="min-w-full" style={{ width: Math.max(620, changeBarsData.length * 56), height: chartHeight }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={changeBarsData} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <XAxis
+                dataKey="ticker"
+                tick={{ fill: '#9ca3af', fontSize: 11 }}
+                interval={0}
+                height={changeBarsData.length > 12 ? 48 : 24}
+                angle={changeBarsData.length > 12 ? -30 : 0}
+                textAnchor={changeBarsData.length > 12 ? 'end' : 'middle'}
+              />
+              <YAxis
+                width={44}
+                tick={{ fill: '#9ca3af', fontSize: 11 }}
+                ticks={yAxisTicks}
+                tickFormatter={(v: number) => `${v.toFixed(2)}%`}
+                domain={[-yAxisMax, yAxisMax]}
+              />
+              <ReferenceLine y={0} stroke="rgba(148, 163, 184, 0.45)" strokeDasharray="4 4" />
+              <Tooltip content={<ChangeBarsTooltip />} />
+              <Bar dataKey="changePct" isAnimationActive={false}>
+                {changeBarsData.map((row) => (
+                  <Cell key={row.ticker} fill={changeBarColor(row.changePct)} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
     </div>
   );
 }
