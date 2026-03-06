@@ -1,18 +1,18 @@
 ---
 name: flowdeck
 version: 1.0.0
-description: AI-powered stock analysis platform with multi-agent analysis, conversational AI analyst, market data API, and token-based economy for agents.
+description: AI-powered ticker analysis platform with multi-agent analysis, conversational AI analyst, market data API, and token-based economy for agents.
 homepage: https://flowdeck.biz
 metadata: {"emoji":"📊","category":"trading","api_base":"https://flowdeck.biz"}
 ---
 
 # Flowdeck
 
-AI-powered stock analysis platform for agents. Features include:
+AI-powered ticker analysis platform for agents. Features include:
 - **Multi-agent AI analysis** (BUY/SELL/HOLD recommendations)
 - **Conversational AI Analyst** (chat with streaming responses)
 - **Comprehensive market data** (quotes, fundamentals, news, SEC filings, technical indicators)
-- **Trader Copilot** workspace (watchlist + stock detail + AI chat)
+- **Trader Copilot** workspace (watchlist + ticker detail + AI chat)
 - **Token economy** (1000 free tokens on signup; 200 tokens per analysis, variable cost for chat)
 - **API key management** for programmatic access
 
@@ -85,7 +85,7 @@ curl https://flowdeck.biz/api/me \
 
 ---
 
-## Public endpoints (no auth)
+## Public and mixed-access endpoints
 
 Use these without a token for market research and data.
 
@@ -96,7 +96,7 @@ GET /                    # {"message": "Stock Dashboard API", "status": "running
 GET /health              # {"status": "healthy", "service": "tradingagents-api"}
 ```
 
-### Stock widgets
+### Ticker widgets
 
 Batch widget data for one or more tickers (optional date for report-of-day filter):
 
@@ -105,7 +105,7 @@ GET /api/tickers/widgets?tickers=AAPL,MSFT
 GET /api/tickers/widgets?date=2025-02-14
 ```
 
-### Stock page
+### Ticker page
 
 Full page data for a ticker (reports, quote, etc.). Optional auth records the view for creator rewards.
 
@@ -116,7 +116,7 @@ GET /api/tickers/AAPL   # with Authorization: Bearer TOKEN (records view)
 
 ### Data API (market & fundamentals)
 
-All under `/api/data/`. No auth required.
+All under `/api/data/`. Most endpoints are public; auth-required endpoints are marked.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -124,15 +124,19 @@ All under `/api/data/`. No auth required.
 | GET | `/api/data/company/{ticker}` | Company profile (name, sector, industry, exchange, country, website) |
 | GET | `/api/data/extended-info/{ticker}` | Extended metrics (beta, market cap, margins, PE, etc.) |
 | GET | `/api/data/news?ticker=AAPL` | News articles (optional: `vendor`, `lookback_days=7`) |
+| GET | `/api/data/insider-transactions/{ticker}?limit=50` | Latest insider transactions |
 | GET | `/api/data/fundamentals/{ticker}` | Fundamental data |
 | GET | `/api/data/fund-info/{ticker}` | ETF/fund data (AUM, expense ratio, holdings, sector weightings) |
 | GET | `/api/data/financial-statements/{ticker}?statement_type=all&freq=quarterly` | Balance sheet, cashflow, income statement |
 | GET | `/api/data/financial-charts/{ticker}?freq=annual` | Chart-ready fundamental time series |
 | GET | `/api/data/historical/{ticker}?period=6mo&interval=1d` | OHLCV history (`period`: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max) |
-| GET | `/api/data/stock-data/{ticker}?start_date=2024-01-01&end_date=2024-12-31` | OHLCV as CSV-like text for agents |
+| GET | `/api/data/ticker-data/{ticker}?start_date=2024-01-01&end_date=2024-12-31` | OHLCV as CSV-like text for agents |
 | GET | `/api/data/analyst-recommendations/{ticker}` | Analyst recommendations (Yahoo) |
+| GET | `/api/data/future-events/{ticker}` | Upcoming earnings and ex-dividend dates |
+| GET | `/api/data/similar-tickers/{ticker}?limit=10&offset=0` | Similar tickers based on sector/industry matching (paginated) |
+| GET | `/api/data/company-officers/{ticker}` | Company officers / management team |
 | GET | `/api/data/edgar-filings/{ticker}` | SEC 10-K / 10-Q filings list |
-| GET | `/api/data/edgar-filing-content/{ticker}?form=10-K&limit=1` | Extracted SEC sections (risk factors, MD&A); uses LLM |
+| GET | `/api/data/edgar-filing-content/{ticker}?form=10-K&limit=1` | **[Auth required]** Extracted SEC sections (risk factors, MD&A); uses LLM |
 | GET | `/api/data/reports/{ticker}` | **[Auth required]** Latest AI-generated reports with recommendations |
 | POST | `/api/data/reports/batch` | **[Auth required]** Batch fetch reports for multiple tickers |
 
@@ -178,6 +182,12 @@ Content-Type: application/json
 {"current_password": "old", "new_password": "new"}   # to change password
 ```
 
+### Profile stats
+
+```bash
+GET /api/me/stats
+```
+
 ### Subscriptions (ticker watchlist)
 
 List:
@@ -196,6 +206,14 @@ Content-Type: application/json
 Unsubscribe:
 ```bash
 DELETE /api/subscriptions/AAPL
+```
+
+Update subscription preferences:
+```bash
+PATCH /api/subscriptions/AAPL
+Content-Type: application/json
+
+{"email_updates": false}
 ```
 
 ---
@@ -411,7 +429,7 @@ Content-Type: application/json
 {
   "ticker": "AAPL",
   "analysis_date": "2025-02-14",
-  "analysts": ["market", "news", "fundamentals", "sec"],
+  "analysts": ["market", "news", "fundamentals", "technical", "sec"],
   "research_depth": 2,
   "llm_provider": "azure"
 }
@@ -419,9 +437,9 @@ Content-Type: application/json
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| ticker | ✅ | Stock symbol (e.g. AAPL) |
+| ticker | ✅ | Ticker symbol (e.g. AAPL) |
 | analysis_date | No | YYYY-MM-DD (default: today) |
-| analysts | No | Default `["market", "news", "fundamentals", "sec"]` |
+| analysts | No | Default `["market", "news", "fundamentals", "technical", "sec"]` |
 | research_depth | No | Default 2 |
 | llm_provider | No | Default "azure" |
 
@@ -449,9 +467,9 @@ The **initiator** (the user whose token is used) is notified by **email** when t
 GET /api/analyses/{analysis_id}/status
 ```
 
-No auth required for status. Returns current status (e.g. running, completed, failed) and progress info.
+Requires authentication. Returns current status (e.g. running, completed, failed) and progress info.
 
-Poll this until the analysis is complete, then the user can open the stock page for that ticker to see the report (or receive the email).
+Poll this until the analysis is complete, then the user can open the ticker page for that ticker to see the report (or receive the email).
 
 ### WebSocket (optional)
 
@@ -554,24 +572,32 @@ Check balance via `GET /api/me` → `token_balance`.
 |--------|----------|------|-------------|
 | GET | `/`, `/health` | No | Health and root |
 | GET | `/api/tickers/widgets` | No | Widget data (tickers, optional date) |
-| GET | `/api/tickers/{ticker}` | Optional | Stock page (auth records view) |
-| GET | `/api/data/*` | No | Quote, company, news, fundamentals, historical, EDGAR, etc. |
+| GET | `/api/tickers/{ticker}` | Optional | Ticker page (auth records view) |
+| GET | `/api/tickers/{ticker}/reports/{run_id}` | Optional | Reports for a specific historical run |
+| GET | `/api/data/*` | Mixed | Quote, company, news, fundamentals, historical, ticker-data, similar tickers, EDGAR, etc. |
+| GET | `/api/data/similar-tickers/{ticker}` | No | Similar tickers (sector/industry matching, supports `limit` and `offset`) |
+| GET | `/api/data/edgar-filing-content/{ticker}` | Yes | Extract SEC sections from latest filings |
 | GET | `/api/data/reports/{ticker}` | Yes | Get latest reports for ticker (no token cost) |
 | POST | `/api/data/reports/batch` | Yes | Get reports for multiple tickers (no token cost) |
 | POST | `/api/auth/register` | No | Register (email, password) |
 | POST | `/api/auth/login` | No | Login (email, password) |
+| DELETE | `/api/auth/account` | Yes | Delete account |
 | GET | `/api/me` | Yes | Profile and token balance |
+| GET | `/api/me/stats` | Yes | User usage statistics |
 | PATCH | `/api/me` | Yes | Update name / password |
 | GET | `/api/subscriptions` | Yes | List subscriptions |
 | POST | `/api/subscriptions` | Yes | Subscribe to ticker |
+| PATCH | `/api/subscriptions/{ticker}` | Yes | Update subscription preferences |
 | DELETE | `/api/subscriptions/{ticker}` | Yes | Unsubscribe |
 | POST | `/api/chat` | Yes | Chat with AI analyst (variable tokens) |
 | POST | `/api/chat/stream` | Yes | Chat with streaming (variable tokens) |
 | POST | `/api/api-keys` | Yes | Create API key |
 | GET | `/api/api-keys` | Yes | List API keys |
+| PATCH | `/api/api-keys/{key_id}/deactivate` | Yes | Deactivate API key |
+| PATCH | `/api/api-keys/{key_id}/activate` | Yes | Activate API key |
 | DELETE | `/api/api-keys/{key_id}` | Yes | Revoke API key |
 | POST | `/api/analyses/start` | Yes | Start AI analysis (200 tokens) |
-| GET | `/api/analyses/{analysis_id}/status` | No | Analysis status |
+| GET | `/api/analyses/{analysis_id}/status` | Yes | Analysis status |
 
 ---
 
@@ -581,12 +607,12 @@ Check balance via `GET /api/me` → `token_balance`.
 |--------|------------------|
 | **Register / login** | `POST /api/auth/register` or `/api/auth/login` |
 | **Create API key** | `POST /api/api-keys` (for programmatic access) |
-| **Get market data** | `GET /api/data/quote/{ticker}`, `/company`, `/news`, `/fundamentals`, `/historical`, etc. |
+| **Get market data** | `GET /api/data/quote/{ticker}`, `/company`, `/news`, `/fundamentals`, `/historical`, `/ticker-data/{ticker}`, `/similar-tickers/{ticker}`, etc. |
 | **Get existing reports** | `GET /api/data/reports/{ticker}` or `POST /api/data/reports/batch` (no token cost) |
-| **Get stock page** | `GET /api/tickers/{ticker}` (optional auth for view tracking) |
+| **Get ticker page** | `GET /api/tickers/{ticker}` (optional auth for view tracking) |
 | **Check token balance** | `GET /api/me` → `token_balance` |
 | **Chat with AI analyst** | `POST /api/chat` or `/api/chat/stream` (variable tokens) |
-| **Start AI analysis** | `POST /api/analyses/start` (200 tokens); poll `GET /api/analyses/{id}/status` |
+| **Start AI analysis** | `POST /api/analyses/start` (200 tokens); poll `GET /api/analyses/{analysis_id}/status` |
 | **Manage watchlist** | `GET/POST/DELETE /api/subscriptions` |
 | **Update profile** | `PATCH /api/me` (name, password) |
 | **Manage API keys** | `GET/POST/DELETE /api/api-keys` |
