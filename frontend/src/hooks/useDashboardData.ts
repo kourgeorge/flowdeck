@@ -14,6 +14,11 @@ export interface UseDashboardDataReturn {
   recentTotal: number | null;
   loadingMoreRecent: boolean;
   backgroundLoadingAll: boolean;
+  prefetchProgress: {
+    completed: number;
+    inFlight: number;
+    total: number;
+  };
   tickerToName: Record<string, string>;
   isLoading: boolean;
   selectedTicker: string | null;
@@ -28,15 +33,20 @@ export interface UseDashboardDataReturn {
 
 interface UseDashboardDataOptions {
   enablePrefetch?: boolean;
+  enableRecentAnalyzed?: boolean;
 }
 
-export function useDashboardData({ enablePrefetch = true }: UseDashboardDataOptions = {}): UseDashboardDataReturn {
+export function useDashboardData({
+  enablePrefetch = true,
+  enableRecentAnalyzed = true,
+}: UseDashboardDataOptions = {}): UseDashboardDataReturn {
   const { user } = useAuth();
   const [widgets, setWidgets] = useState<StockWidgetType[]>([]);
   const [recentAnalyzedWidgets, setRecentAnalyzedWidgets] = useState<StockWidgetType[]>([]);
   const [recentTotal, setRecentTotal] = useState<number | null>(null);
   const [loadingMoreRecent, setLoadingMoreRecent] = useState(false);
   const [backgroundLoadingAll, setBackgroundLoadingAll] = useState(false);
+  const [prefetchProgress, setPrefetchProgress] = useState({ completed: 0, inFlight: 0, total: 0 });
   const [tickerToName, setTickerToName] = useState<Record<string, string>>({});
   const [subscriptionsReady, setSubscriptionsReady] = useState(false);
   const [recentReady, setRecentReady] = useState(false);
@@ -47,16 +57,33 @@ export function useDashboardData({ enablePrefetch = true }: UseDashboardDataOpti
   const recentScrollRef = useRef<HTMLDivElement>(null);
   const backgroundLoadStartedRef = useRef(false);
   const prefetchedRef = useRef<Set<string>>(new Set());
+  const prefetchingRef = useRef<Set<string>>(new Set());
+  const updatePrefetchProgress = useCallback((tickers: string[]) => {
+    const total = tickers.length;
+    const completed = tickers.filter((t) => prefetchedRef.current.has(t)).length;
+    const inFlight = tickers.filter((t) => prefetchingRef.current.has(t)).length;
+    setPrefetchProgress((prev) => (
+      prev.completed === completed && prev.inFlight === inFlight && prev.total === total
+        ? prev
+        : { completed, inFlight, total }
+    ));
+  }, []);
 
   useEffect(() => {
     if (!user) {
       setSubscriptionsReady(true);
-      setRecentReady(true);
       return;
     }
     setSubscriptionsReady(false);
-    setRecentReady(false);
   }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      setRecentReady(true);
+      return;
+    }
+    setRecentReady(!enableRecentAnalyzed);
+  }, [user, enableRecentAnalyzed]);
 
   // Load ticker name map
   useEffect(() => {
@@ -146,6 +173,12 @@ export function useDashboardData({ enablePrefetch = true }: UseDashboardDataOpti
       setRecentReady(true);
       return;
     }
+    if (!enableRecentAnalyzed) {
+      setRecentReady(true);
+      return;
+    }
+
+    setRecentReady(false);
     backgroundLoadStartedRef.current = false;
     loadRecentPage(0, false)
       .catch(() => { setRecentAnalyzedWidgets([]); setRecentTotal(null); })
@@ -155,14 +188,14 @@ export function useDashboardData({ enablePrefetch = true }: UseDashboardDataOpti
       loadRecentPage(0, false).catch(() => {});
     }, 60000);
     return () => clearInterval(interval);
-  }, [user, loadRecentPage]);
+  }, [user, loadRecentPage, enableRecentAnalyzed]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !enableRecentAnalyzed) return;
     if (recentTotal == null || backgroundLoadStartedRef.current) return;
     if (recentAnalyzedWidgets.length >= recentTotal) return;
     loadAllRecentInBackground(recentTotal, recentAnalyzedWidgets.length);
-  }, [user, recentTotal, recentAnalyzedWidgets.length, loadAllRecentInBackground]);
+  }, [user, recentTotal, recentAnalyzedWidgets.length, loadAllRecentInBackground, enableRecentAnalyzed]);
 
   // Prefetch stock page data
   useEffect(() => {
@@ -172,23 +205,32 @@ export function useDashboardData({ enablePrefetch = true }: UseDashboardDataOpti
       ...widgets.map((w) => w.ticker),
       ...recentAnalyzedWidgets.map((w) => w.ticker),
     ]));
-    const newTickers = allTickers.filter((t) => !prefetchedRef.current.has(t));
+    updatePrefetchProgress(allTickers);
+    const prioritizedTickers = selectedTicker
+      ? [selectedTicker, ...allTickers.filter((t) => t !== selectedTicker)]
+      : allTickers;
+    const newTickers = prioritizedTickers.filter(
+      (t) => !prefetchedRef.current.has(t) && !prefetchingRef.current.has(t)
+    );
     if (newTickers.length === 0) return;
 
-    newTickers.forEach((t) => prefetchedRef.current.add(t));
-    let cancelled = false;
+    newTickers.forEach((t) => prefetchingRef.current.add(t));
+    updatePrefetchProgress(allTickers);
 
     const fetchBatch = async (batch: string[]) => {
       await Promise.all(
         batch.map((ticker) =>
           tickerApi.getTickerPage(ticker)
             .then((data) => {
-              if (cancelled) return;
               setPrefetchCache((prev) => ({ ...prev, [ticker]: data }));
+              prefetchedRef.current.add(ticker);
             })
             .catch(() => {
-              if (cancelled) return;
-              prefetchedRef.current.delete(ticker);
+              // leave out of prefetched set so it can retry later
+            })
+            .finally(() => {
+              prefetchingRef.current.delete(ticker);
+              updatePrefetchProgress(allTickers);
             })
         )
       );
@@ -196,16 +238,12 @@ export function useDashboardData({ enablePrefetch = true }: UseDashboardDataOpti
 
     const runQueue = async () => {
       for (let i = 0; i < newTickers.length; i += PREFETCH_CONCURRENCY) {
-        if (cancelled) return;
         await fetchBatch(newTickers.slice(i, i + PREFETCH_CONCURRENCY));
       }
     };
 
     void runQueue();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, widgets, recentAnalyzedWidgets, enablePrefetch]);
+  }, [user, widgets, recentAnalyzedWidgets, enablePrefetch, selectedTicker, updatePrefetchProgress]);
 
   // Infinite scroll for sidebar
   const handleSidebarScroll = useCallback(() => {
@@ -255,6 +293,7 @@ export function useDashboardData({ enablePrefetch = true }: UseDashboardDataOpti
     recentTotal,
     loadingMoreRecent,
     backgroundLoadingAll,
+    prefetchProgress,
     tickerToName,
     isLoading,
     selectedTicker,

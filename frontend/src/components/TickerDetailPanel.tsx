@@ -288,6 +288,15 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     return () => { if (wsClientRef.current) wsClientRef.current.disconnect(); };
   }, [ticker]);
 
+  // If prefetch completes after mount, hydrate immediately instead of waiting for full fetch.
+  useEffect(() => {
+    if (!prefetchedData) return;
+    if (!isLoading || stockData) return;
+    setStockData(prefetchedData);
+    setIsLoading(false);
+    applyStockData(prefetchedData);
+  }, [prefetchedData, isLoading, stockData, applyStockData]);
+
   useEffect(() => {
     if (!canAccessGuestPreviewContent || !hasSimilarStocks) {
       if (
