@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { stockApi } from '../services/api';
-import type { StockQuote } from '../services/types';
+import type { TickerQuote } from '../services/types';
 
 /**
  * Polls for the latest quote every N seconds for the given ticker.
@@ -10,8 +10,8 @@ import type { StockQuote } from '../services/types';
 export function useQuoteRefresh(
   ticker: string,
   intervalMs: number
-): StockQuote | null {
-  const [quote, setQuote] = useState<StockQuote | null>(null);
+): TickerQuote | null {
+  const [quote, setQuote] = useState<TickerQuote | null>(null);
 
   useEffect(() => {
     if (!ticker) {

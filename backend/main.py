@@ -23,10 +23,10 @@ env_path = Path(__file__).parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
 from models.schemas import (
-    StockQuote,
-    StockWidget,
+    TickerQuote,
+    TickerWidget,
     WidgetsResponse,
-    StockPageData,
+    TickerPageData,
     Recommendation,
     HistoricalAnalysis,
     ReportScoreSummary,
@@ -217,7 +217,7 @@ def _get_stock_widgets_sync(
         quote = None
         if quote_data and isinstance(quote_data, dict):
             try:
-                quote = StockQuote(**quote_data)
+                quote = TickerQuote(**quote_data)
             except Exception:
                 quote = None
         # Fallback: batch may return partial data; try single-ticker fetch for missing quotes
@@ -225,7 +225,7 @@ def _get_stock_widgets_sync(
             try:
                 quote_data = cached_fetcher.get_quote(ticker)
                 if quote_data and isinstance(quote_data, dict):
-                    quote = StockQuote(**quote_data)
+                    quote = TickerQuote(**quote_data)
             except Exception:
                 pass
 
@@ -261,7 +261,7 @@ def _get_stock_widgets_sync(
         is_major = (ticker.upper() in major_set) if use_major_split else None
         company_name = company_names.get(ticker)
         if quote:
-            widget = StockWidget(
+            widget = TickerWidget(
                 ticker=ticker,
                 name=company_name,
                 current_price=quote.current_price,
@@ -276,7 +276,7 @@ def _get_stock_widgets_sync(
                 is_major=is_major,
             )
         else:
-            widget = StockWidget(
+            widget = TickerWidget(
                 ticker=ticker,
                 name=company_name,
                 current_price=0.0,
@@ -296,7 +296,7 @@ def _get_stock_widgets_sync(
     return WidgetsResponse(widgets=widgets, total=total_count)
 
 
-def _get_stock_page_sync(ticker: str) -> StockPageData:
+def _get_stock_page_sync(ticker: str) -> TickerPageData:
     """Sync implementation of stock page data (runs in thread pool to avoid blocking event loop)."""
     from models.schemas import ReportData
 
@@ -409,7 +409,7 @@ def _get_stock_page_sync(ticker: str) -> StockPageData:
     bear_case_return_pct = investment_plan_meta.get("bear_case_return_pct")
     bull_case_return_pct = investment_plan_meta.get("bull_case_return_pct")
 
-    return StockPageData(
+    return TickerPageData(
         ticker=ticker,
         quote=quote,
         recommendation=latest_recommendation,
@@ -688,7 +688,7 @@ async def get_stock_reports_for_run(
         raise HTTPException(status_code=500, detail=f"Failed to load reports: {str(e)}")
 
 
-@app.get("/api/tickers/{ticker}", response_model=StockPageData)
+@app.get("/api/tickers/{ticker}", response_model=TickerPageData)
 async def get_stock_page(
     ticker: str,
     current_user=Depends(get_current_user_optional),

@@ -4,7 +4,7 @@ import StockListView from '../components/StockListView';
 import StockSearch from '../components/StockSearch';
 import AuthModal from '../components/AuthModal';
 import { stockApi, API_BASE_URL } from '../services/api';
-import type { StockWidget as StockWidgetType } from '../services/types';
+import type { TickerWidget as StockWidgetType } from '../services/types';
 import { LOGO_PATH, COPILOT_NAME } from '../config';
 import { useAuth } from '../contexts/AuthContext';
 

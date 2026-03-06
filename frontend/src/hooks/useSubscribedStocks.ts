@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { stockApi } from '../services/api';
 import { subscriptionApi } from '../services/subscriptionApi';
-import type { StockWidget as StockWidgetType, StockPageData } from '../services/types';
+import type { TickerWidget as StockWidgetType, StockPageData } from '../services/types';
 import { useAuth } from '../contexts/AuthContext';
 
 const PREFETCH_CONCURRENCY = 3;

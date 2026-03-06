@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import type { StockWidget as StockWidgetType } from '../services/types';
+import type { TickerWidget as StockWidgetType } from '../services/types';
 
 interface DashboardPricesBarProps {
   widgets: StockWidgetType[];

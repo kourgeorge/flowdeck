@@ -8,7 +8,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { stockApi } from '../services/api';
-import type { StockWidget as StockWidgetType } from '../services/types';
+import type { TickerWidget as StockWidgetType } from '../services/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

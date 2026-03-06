@@ -40,7 +40,7 @@ class ReportInsight(BaseModel):
     days_ago: Optional[int] = None     # computed: report age in days for staleness display
 
 
-class StockQuote(BaseModel):
+class TickerQuote(BaseModel):
     """Real-time market quote data."""
     ticker: str
     current_price: float
@@ -78,7 +78,7 @@ class StockQuote(BaseModel):
 
 
 class Recommendation(BaseModel):
-    """Stock recommendation data."""
+    """Ticker recommendation data."""
     recommendation: str  # "BUY", "SELL", "HOLD"
     confidence: Optional[float] = None
     source: str  # "final_trade_decision" or "trader_investment_plan"
@@ -91,7 +91,7 @@ class ReportScoreSummary(BaseModel):
     score_label: Optional[str] = None
 
 
-class StockWidget(BaseModel):
+class TickerWidget(BaseModel):
     """Widget data for homepage."""
     ticker: str
     name: Optional[str] = None  # Company full name (e.g. "JFrog Ltd.")
@@ -121,8 +121,8 @@ class StockWidget(BaseModel):
 
 
 class WidgetsResponse(BaseModel):
-    """Response containing multiple stock widgets. total is set when using only_date with limit (paginated)."""
-    widgets: List[StockWidget]
+    """Response containing multiple ticker widgets. total is set when using only_date with limit (paginated)."""
+    widgets: List[TickerWidget]
     total: Optional[int] = None
 
 
@@ -158,10 +158,10 @@ class ReportData(BaseModel):
     tps_plan: Optional[str] = None
 
 
-class StockPageData(BaseModel):
-    """Complete stock page data."""
+class TickerPageData(BaseModel):
+    """Complete ticker page data."""
     ticker: str
-    quote: Optional[StockQuote] = None
+    quote: Optional[TickerQuote] = None
     recommendation: Optional[Recommendation] = None
     report_date: Optional[str] = None
     report_days_ago: Optional[int] = None  # staleness: days since report for "Report from X days ago"

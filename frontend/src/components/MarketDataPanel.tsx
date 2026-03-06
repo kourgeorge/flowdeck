@@ -1,7 +1,7 @@
-import type { StockQuote } from '../services/types';
+import type { TickerQuote } from '../services/types';
 
 interface MarketDataPanelProps {
-  quote: StockQuote;
+  quote: TickerQuote;
 }
 
 export default function MarketDataPanel({ quote }: MarketDataPanelProps) {

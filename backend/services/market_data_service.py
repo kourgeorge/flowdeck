@@ -5,7 +5,7 @@ import yfinance as yf
 import pandas as pd
 from typing import List, Optional, Dict
 from datetime import datetime
-from models.schemas import StockQuote
+from models.schemas import TickerQuote
 
 
 def _is_valid_price(price: float) -> bool:
@@ -87,7 +87,7 @@ class MarketDataService:
             return 'UNKNOWN'
     
     @staticmethod
-    def get_current_quote(ticker: str) -> Optional[StockQuote]:
+    def get_current_quote(ticker: str) -> Optional[TickerQuote]:
         """Get current market quote for a ticker."""
         try:
             ticker_obj = yf.Ticker(ticker.upper())
@@ -136,7 +136,7 @@ class MarketDataService:
             # Get market status
             market_status = MarketDataService._get_market_status(info)
             
-            return StockQuote(
+            return TickerQuote(
                 ticker=ticker.upper(),
                 current_price=round(float(current_price), 2),
                 daily_change=round(float(daily_change), 2),
@@ -159,17 +159,17 @@ class MarketDataService:
             return None
     
     @staticmethod
-    def get_multiple_quotes(tickers: List[str]) -> Dict[str, Optional[StockQuote]]:
+    def get_multiple_quotes(tickers: List[str]) -> Dict[str, Optional[TickerQuote]]:
         """Get quotes for multiple tickers (sequential fallback). Prefer get_multiple_quotes_batch for speed."""
         return MarketDataService.get_multiple_quotes_batch(tickers)
 
     @staticmethod
-    def get_multiple_quotes_batch(tickers: List[str]) -> Dict[str, Optional[StockQuote]]:
+    def get_multiple_quotes_batch(tickers: List[str]) -> Dict[str, Optional[TickerQuote]]:
         """Fetch quotes for multiple tickers in one batch request via yf.download."""
         if not tickers:
             return {}
         tickers = [t.upper() for t in tickers]
-        results: Dict[str, Optional[StockQuote]] = {t: None for t in tickers}
+        results: Dict[str, Optional[TickerQuote]] = {t: None for t in tickers}
         try:
             # One network request for all tickers (period=5d gives us current + previous close)
             data = yf.download(
@@ -211,7 +211,7 @@ class MarketDataService:
                             prev = current
                         daily_change = current - prev
                         daily_change_percent = (daily_change / prev * 100) if prev and prev > 0 else 0.0
-                        results[t] = StockQuote(
+                        results[t] = TickerQuote(
                             ticker=t,
                             current_price=round(current, 2),
                             daily_change=round(daily_change, 2),
@@ -232,7 +232,7 @@ class MarketDataService:
                 elif close_series is not None and len(close_series) == 1:
                     current = _safe_float(close_series.iloc[-1])
                     if current is not None and _is_valid_price(current):
-                        results[t] = StockQuote(
+                        results[t] = TickerQuote(
                             ticker=t,
                             current_price=round(current, 2),
                             daily_change=0.0,
@@ -290,7 +290,7 @@ class MarketDataService:
                                 high = _safe_float(data["High"][t].iloc[-1])
                             if "Low" in data.columns and t in data["Low"].columns:
                                 low = _safe_float(data["Low"][t].iloc[-1])
-                        results[t] = StockQuote(
+                        results[t] = TickerQuote(
                             ticker=t,
                             current_price=round(current, 2),
                             daily_change=round(daily_change, 2),

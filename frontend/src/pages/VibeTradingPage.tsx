@@ -5,7 +5,7 @@ import StockDetailPanel from '../components/StockDetailPanel';
 import CopilotChatPanel from '../components/CopilotChatPanel';
 import { useSubscribedStocks } from '../hooks/useSubscribedStocks';
 import { useAuth } from '../contexts/AuthContext';
-import type { StockPageData, StockWidget } from '../services/types';
+import type { StockPageData, TickerWidget } from '../services/types';
 
 export default function VibeTradingPage() {
   const { user } = useAuth();
@@ -25,7 +25,7 @@ export default function VibeTradingPage() {
   } = useSubscribedStocks();
 
   // All tickers in the user's watchlist — passed to the AI analyst for full context
-  const allTickers = widgets.map((w: StockWidget) => w.ticker);
+  const allTickers = widgets.map((w: TickerWidget) => w.ticker);
 
   // ── Not logged in ──
   if (!user) {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Fuse from 'fuse.js';
-import type { StockWidget as StockWidgetType } from '../services/types';
+import type { TickerWidget as StockWidgetType } from '../services/types';
 
 interface Stock {
   ticker: string;

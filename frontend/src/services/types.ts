@@ -3,7 +3,7 @@ export interface ReportScoreSummary {
   score_label: string | null;
 }
 
-export interface StockWidget {
+export interface TickerWidget {
   ticker: string;
   name?: string | null;
   current_price: number;
@@ -22,12 +22,12 @@ export interface StockWidget {
 }
 
 export interface WidgetsResponse {
-  widgets: StockWidget[];
+  widgets: TickerWidget[];
   /** Set when using only_date with limit (paginated recently analyzed). */
   total?: number;
 }
 
-export interface StockQuote {
+export interface TickerQuote {
   ticker: string;
   current_price: number;
   daily_change: number;
@@ -85,7 +85,7 @@ export interface ReportData {
 
 export interface StockPageData {
   ticker: string;
-  quote: StockQuote | null;
+  quote: TickerQuote | null;
   recommendation: Recommendation | null;
   report_date: string | null;
   report_days_ago?: number | null;

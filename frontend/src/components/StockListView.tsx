@@ -1,6 +1,6 @@
 import type { RefObject } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { StockWidget as StockWidgetType } from '../services/types';
+import type { TickerWidget as StockWidgetType } from '../services/types';
 import { parseReportDate } from '../utils/date';
 import AspectSpiderChart, { getScoreColor, formatReportKey, getAnalysisScoreEntries } from './AspectSpiderChart';
 

@@ -6,7 +6,7 @@ import CopilotChatPanel from '../components/CopilotChatPanel';
 import { useSubscribedStocks } from '../hooks/useSubscribedStocks';
 import { useAuth } from '../contexts/AuthContext';
 import { COPILOT_NAME } from '../config';
-import type { StockPageData, StockWidget } from '../services/types';
+import type { StockPageData, TickerWidget } from '../services/types';
 import { useChatState } from '../components/ChatView';
 import { profileApi } from '../services/authApi';
 
@@ -32,7 +32,7 @@ export default function CopilotPage() {
   } = useSubscribedStocks();
 
   // All tickers in the user's watchlist — passed to the AI analyst for full context
-  const allTickers = widgets.map((w: StockWidget) => w.ticker);
+  const allTickers = widgets.map((w: TickerWidget) => w.ticker);
 
   // Build context object with all tickers so the AI knows the full watchlist
   const context = useMemo(

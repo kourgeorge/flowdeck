@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { stockApi } from '../services/api';
-import type { StockWidget as StockWidgetType } from '../services/types';
+import type { TickerWidget as StockWidgetType } from '../services/types';
 
 const SPARKLINE_WIDTH = 88;
 const SPARKLINE_HEIGHT = 20;

@@ -2,7 +2,7 @@ import axios from 'axios';
 import type {
   WidgetsResponse,
   StockPageData,
-  StockQuote,
+  TickerQuote,
   SimilarTickersResponse,
 } from './types';
 import { getStoredToken, getStoredUser } from './authApi';
@@ -61,8 +61,8 @@ export const stockApi = {
   },
 
   // Get stock quote (raw market data via /api/data)
-  getQuote: async (ticker: string): Promise<StockQuote> => {
-    const response = await api.get<StockQuote>(`/api/data/quote/${ticker}`);
+  getQuote: async (ticker: string): Promise<TickerQuote> => {
+    const response = await api.get<TickerQuote>(`/api/data/quote/${ticker}`);
     return response.data;
   },
 
