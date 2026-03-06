@@ -83,7 +83,7 @@ export interface ReportData {
   tps_plan?: string | null;
 }
 
-export interface StockPageData {
+export interface TickerPageData {
   ticker: string;
   quote: TickerQuote | null;
   recommendation: Recommendation | null;

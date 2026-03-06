@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { stockApi, configApi } from '../services/api';
+import { tickerApi, configApi } from '../services/api';
 import { WebSocketClient } from '../services/websocket';
-import type { SimilarTicker, StockPageData, SimilarTickersResponse } from '../services/types';
+import type { SimilarTicker, TickerPageData, SimilarTickersResponse } from '../services/types';
 import { useQuoteRefresh } from '../hooks/useQuoteRefresh';
 import { useAuth } from '../contexts/AuthContext';
 import { subscriptionApi, type Subscription } from '../services/subscriptionApi';
@@ -35,7 +35,7 @@ interface ExtendedInfo {
 interface StockDetailPanelProps {
   ticker: string;
   /** Pre-fetched stock page data from the dashboard cache (avoids loading spinner). */
-  prefetchedData?: StockPageData | null;
+  prefetchedData?: TickerPageData | null;
   onSubscriptionChange?: () => void;
 }
 const REPORT_PROCESS_ORDER = [
@@ -50,7 +50,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalMessage, setAuthModalMessage] = useState('Please sign in to run a fresh analysis.');
   const [previewTickers, setPreviewTickers] = useState<Set<string>>(new Set());
-  const [stockData, setStockData] = useState<StockPageData | null>(prefetchedData ?? null);
+  const [stockData, setStockData] = useState<TickerPageData | null>(prefetchedData ?? null);
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
   const [extendedInfo, setExtendedInfo] = useState<ExtendedInfo | null>(null);
   const [isLoading, setIsLoading] = useState(!prefetchedData);
@@ -141,7 +141,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     prevPriceRef.current = currentPrice;
   }, [refreshedQuote?.current_price, stockData?.quote?.current_price]);
 
-  const applyStockData = (data: StockPageData) => {
+  const applyStockData = (data: TickerPageData) => {
     setStockData(data);
     // Reset historical run selection when stock data refreshes
     setSelectedRunId(null);
@@ -159,7 +159,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
         const c = msg?.data?.current_agent;
         if (s) setAnalysisProgress({ agent_statuses: s, current_agent: c ?? null });
         // Update stock data to get new reports, but keep the existing data structure
-        stockApi.getStockPage(ticker).then((freshData) => {
+        tickerApi.getTickerPage(ticker).then((freshData) => {
           setStockData(freshData);
           // Update selected report if new reports are available
           if (freshData.reports && Object.keys(freshData.reports).length > 0) {
@@ -186,7 +186,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
 
     setIsLoadingSimilarTickers(true);
     try {
-      const data = await stockApi.getSimilarTickers(ticker, SIMILAR_STOCKS_PER_PAGE, offset);
+      const data = await tickerApi.getSimilarTickers(ticker, SIMILAR_STOCKS_PER_PAGE, offset);
       console.log('Similar tickers response:', data);
       const rows = data.similar_tickers || [];
       const hasMore = typeof data.has_more === 'boolean'
@@ -213,7 +213,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     if (!ticker) return;
     try {
       setIsLoading(true); setLoadError(null);
-      const data = await stockApi.getStockPage(ticker);
+      const data = await tickerApi.getTickerPage(ticker);
       applyStockData(data);
     } catch (error: any) {
       const detail = error?.response?.data?.detail;
@@ -222,23 +222,23 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       setStockData(null);
     } finally { setIsLoading(false); }
 
-    stockApi.getCompanyInfo(ticker).then((info) => {
+    tickerApi.getCompanyInfo(ticker).then((info) => {
       setCompanyInfo(info);
       const qt = info.quoteType;
       if (qt === 'EQUITY' || qt == null) {
         setIsLoadingFundamentals(true);
-        stockApi.getFundamentals(ticker).then((r) => r && setFundamentalsData(r.fundamentals)).catch(() => {}).finally(() => setIsLoadingFundamentals(false));
+        tickerApi.getFundamentals(ticker).then((r) => r && setFundamentalsData(r.fundamentals)).catch(() => {}).finally(() => setIsLoadingFundamentals(false));
       } else { setFundamentalsData(null); setIsLoadingFundamentals(false); }
       if (qt === 'ETF') {
         setIsLoadingFundInfo(true);
-        stockApi.getFundInfo(ticker).then(setFundInfo).catch(() => {}).finally(() => setIsLoadingFundInfo(false));
+        tickerApi.getFundInfo(ticker).then(setFundInfo).catch(() => {}).finally(() => setIsLoadingFundInfo(false));
       } else { setFundInfo(null); }
     }).catch(() => {});
-    stockApi.getExtendedInfo(ticker).then(setExtendedInfo).catch(() => {});
+    tickerApi.getExtendedInfo(ticker).then(setExtendedInfo).catch(() => {});
     setIsLoadingRecommendations(true);
-    stockApi.getAnalystRecommendations(ticker).then(setAnalystRecommendations).catch(() => {}).finally(() => setIsLoadingRecommendations(false));
+    tickerApi.getAnalystRecommendations(ticker).then(setAnalystRecommendations).catch(() => {}).finally(() => setIsLoadingRecommendations(false));
     setIsLoadingFutureEvents(true);
-    stockApi.getFutureEvents(ticker).then(setFutureEvents).catch(() => {}).finally(() => setIsLoadingFutureEvents(false));
+    tickerApi.getFutureEvents(ticker).then(setFutureEvents).catch(() => {}).finally(() => setIsLoadingFutureEvents(false));
   };
 
   useEffect(() => {
@@ -261,25 +261,25 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       applyStockData(prefetchedData);
       // Silently refresh stock page data in the background to pick up any changes
       // since the prefetch (e.g. new report, updated price). No loading spinner shown.
-      stockApi.getStockPage(ticker).then((fresh) => applyStockData(fresh)).catch(() => {});
+      tickerApi.getTickerPage(ticker).then((fresh) => applyStockData(fresh)).catch(() => {});
       // Kick off background fetches for secondary data (company info, extended info, etc.)
-      stockApi.getCompanyInfo(ticker).then((info) => {
+      tickerApi.getCompanyInfo(ticker).then((info) => {
         setCompanyInfo(info);
         const qt = info.quoteType;
         if (qt === 'EQUITY' || qt == null) {
           setIsLoadingFundamentals(true);
-          stockApi.getFundamentals(ticker).then((r) => r && setFundamentalsData(r.fundamentals)).catch(() => {}).finally(() => setIsLoadingFundamentals(false));
+          tickerApi.getFundamentals(ticker).then((r) => r && setFundamentalsData(r.fundamentals)).catch(() => {}).finally(() => setIsLoadingFundamentals(false));
         } else { setFundamentalsData(null); setIsLoadingFundamentals(false); }
         if (qt === 'ETF') {
           setIsLoadingFundInfo(true);
-          stockApi.getFundInfo(ticker).then(setFundInfo).catch(() => {}).finally(() => setIsLoadingFundInfo(false));
+          tickerApi.getFundInfo(ticker).then(setFundInfo).catch(() => {}).finally(() => setIsLoadingFundInfo(false));
         } else { setFundInfo(null); }
       }).catch(() => {});
-      stockApi.getExtendedInfo(ticker).then(setExtendedInfo).catch(() => {});
+      tickerApi.getExtendedInfo(ticker).then(setExtendedInfo).catch(() => {});
       setIsLoadingRecommendations(true);
-      stockApi.getAnalystRecommendations(ticker).then(setAnalystRecommendations).catch(() => {}).finally(() => setIsLoadingRecommendations(false));
+      tickerApi.getAnalystRecommendations(ticker).then(setAnalystRecommendations).catch(() => {}).finally(() => setIsLoadingRecommendations(false));
       setIsLoadingFutureEvents(true);
-      stockApi.getFutureEvents(ticker).then(setFutureEvents).catch(() => {}).finally(() => setIsLoadingFutureEvents(false));
+      tickerApi.getFutureEvents(ticker).then(setFutureEvents).catch(() => {}).finally(() => setIsLoadingFutureEvents(false));
     } else {
       setStockData(null);
       setIsLoading(true);
@@ -330,7 +330,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     const pollInterval = hasWebSocket ? 6000 : 3500; // 6s with WS, 3.5s without
     
     const interval = setInterval(() => {
-      stockApi.getStockPage(ticker).then((data) => {
+      tickerApi.getTickerPage(ticker).then((data) => {
         setStockData(data);
         if (data.reports && Object.keys(data.reports).length > 0) {
           const keys = Object.keys(data.reports);
@@ -354,8 +354,8 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     if (!fundamentalsData && !isLoadingFundamentals) {
       setIsLoadingFundamentals(true);
       Promise.all([
-        stockApi.getFundamentals(ticker).catch(() => null),
-        stockApi.getFinancialStatements(ticker, 'all', 'quarterly').catch(() => null),
+        tickerApi.getFundamentals(ticker).catch(() => null),
+        tickerApi.getFinancialStatements(ticker, 'all', 'quarterly').catch(() => null),
       ]).then(([fundamentals, st]) => {
         if (fundamentals) setFundamentalsData(fundamentals.fundamentals);
         if (st) setFinancialStatements(st.statements);
@@ -363,28 +363,28 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       });
     } else {
       setIsLoadingFundamentals(true);
-      stockApi.getFinancialStatements(ticker, 'all', 'quarterly').then((r) => setFinancialStatements(r.statements)).catch(() => {}).finally(() => setIsLoadingFundamentals(false));
+      tickerApi.getFinancialStatements(ticker, 'all', 'quarterly').then((r) => setFinancialStatements(r.statements)).catch(() => {}).finally(() => setIsLoadingFundamentals(false));
     }
   }, [activeTab, ticker, fundamentalsData, financialStatements, isLoadingFundamentals, companyInfo?.quoteType]);
 
   const fetchNews = useCallback(() => {
     if (!ticker) return;
     setNewsError(null); setIsLoadingNews(true);
-    stockApi.getNews(ticker).then((r) => { setNewsData(r.articles || []); setNewsError('error' in r ? r.error ?? null : null); setIsLoadingNews(false); })
+    tickerApi.getNews(ticker).then((r) => { setNewsData(r.articles || []); setNewsError('error' in r ? r.error ?? null : null); setIsLoadingNews(false); })
       .catch((err) => { setNewsError(err.response?.data?.detail ?? err.message ?? 'Unable to fetch news.'); setNewsData([]); setIsLoadingNews(false); });
   }, [ticker]);
 
   const fetchInsiderTransactions = useCallback(() => {
     if (!ticker) return;
     setInsiderTransactionsError(null); setIsLoadingInsiderTransactions(true);
-    stockApi.getInsiderTransactions(ticker, 50).then((r) => { setInsiderTransactions(r.transactions || []); setInsiderTransactionsError('error' in r ? r.error ?? null : null); setIsLoadingInsiderTransactions(false); })
+    tickerApi.getInsiderTransactions(ticker, 50).then((r) => { setInsiderTransactions(r.transactions || []); setInsiderTransactionsError('error' in r ? r.error ?? null : null); setIsLoadingInsiderTransactions(false); })
       .catch((err) => { setInsiderTransactionsError(err.response?.data?.detail ?? err.message ?? 'Unable to fetch insider transactions.'); setInsiderTransactions([]); setIsLoadingInsiderTransactions(false); });
   }, [ticker]);
 
   const fetchCompanyOfficers = useCallback(() => {
     if (!ticker) return;
     setIsLoadingOfficers(true);
-    stockApi.getCompanyOfficers(ticker)
+    tickerApi.getCompanyOfficers(ticker)
       .then((r) => {
         setCompanyOfficers(r.officers || []);
         setIsLoadingOfficers(false);
@@ -425,7 +425,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     setSelectedRunId(runId);
     setIsLoadingHistoricalRun(true);
     try {
-      const data = await stockApi.getHistoricalReports(ticker, runId);
+      const data = await tickerApi.getHistoricalReports(ticker, runId);
       setHistoricalReportsData(data);
       const keys = Object.keys(data).sort((a, b) => {
         const ia = REPORT_PROCESS_ORDER.indexOf(a), ib = REPORT_PROCESS_ORDER.indexOf(b);
@@ -465,7 +465,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     if (activeTab !== 'sec-filings' || !ticker) return;
     let cancelled = false;
     setIsLoadingEdgar(true); setEdgarFilingsError(null);
-    stockApi.getEdgarFilings(ticker)
+    tickerApi.getEdgarFilings(ticker)
       .then((data) => { if (!cancelled) { setEdgarFilings(data); if (data.error) setEdgarFilingsError(data.error); } })
       .catch((err) => { if (!cancelled) { setEdgarFilingsError(err.response?.data?.detail ?? err.message ?? 'Unable to load SEC filings.'); setEdgarFilings(null); } })
       .finally(() => { if (!cancelled) setIsLoadingEdgar(false); });
@@ -476,7 +476,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     if (!ticker) return;
     setAnalysisError(null);
     if (!user) { setAuthModalMessage(source === 'generate' ? 'Please sign in to generate an analysis report.' : 'Please sign in to run a fresh analysis.'); setAuthModalOpen(true); return; }
-    try { await stockApi.startAnalysis(ticker); setAnalysisError(null); await loadStockData(); }
+    try { await tickerApi.startAnalysis(ticker); setAnalysisError(null); await loadStockData(); }
     catch (error: unknown) {
       const axiosError = error as { response?: { status?: number; data?: { detail?: string | string[] } } };
       const detail = axiosError.response?.data?.detail;

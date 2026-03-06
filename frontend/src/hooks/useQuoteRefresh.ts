@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { stockApi } from '../services/api';
+import { tickerApi } from '../services/api';
 import type { TickerQuote } from '../services/types';
 
 /**
@@ -20,7 +20,7 @@ export function useQuoteRefresh(
     }
 
     const fetchQuote = () => {
-      stockApi
+      tickerApi
         .getQuote(ticker)
         .then(setQuote)
         .catch((err) => console.error('Quote refresh failed:', err));

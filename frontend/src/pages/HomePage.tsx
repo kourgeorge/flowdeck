@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import StockListView from '../components/StockListView';
 import StockSearch from '../components/StockSearch';
 import AuthModal from '../components/AuthModal';
-import { stockApi, API_BASE_URL } from '../services/api';
+import { tickerApi, API_BASE_URL } from '../services/api';
 import type { TickerWidget as StockWidgetType } from '../services/types';
 import { LOGO_PATH, COPILOT_NAME } from '../config';
 import { useAuth } from '../contexts/AuthContext';
@@ -39,7 +39,7 @@ export default function HomePage() {
   useEffect(() => {
     const loadStats = async () => {
       try {
-        const stats = await stockApi.getPublicStats();
+        const stats = await tickerApi.getPublicStats();
         setPublicStats(stats);
       } catch (err) {
         console.error('Failed to load public stats:', err);
@@ -53,7 +53,7 @@ export default function HomePage() {
       setIsLoading(true);
       setError(null);
       const today = new Date().toISOString().slice(0, 10);
-      const response = await stockApi.getWidgets(undefined, today);
+      const response = await tickerApi.getWidgets(undefined, today);
       setWidgets(response.widgets);
     } catch (err: any) {
       console.error('Failed to load widgets:', err);

@@ -6,7 +6,7 @@ import CopilotChatPanel from '../components/CopilotChatPanel';
 import { useSubscribedStocks } from '../hooks/useSubscribedStocks';
 import { useAuth } from '../contexts/AuthContext';
 import { COPILOT_NAME } from '../config';
-import type { StockPageData, TickerWidget } from '../services/types';
+import type { TickerPageData, TickerWidget } from '../services/types';
 import { useChatState } from '../components/ChatView';
 import { profileApi } from '../services/authApi';
 
@@ -273,7 +273,7 @@ function MobileStockChatTabs({
 }: {
   selectedTicker: string | null;
   tickers: string[];
-  prefetchCache: Record<string, StockPageData>;
+  prefetchCache: Record<string, TickerPageData>;
   onSubscriptionChange: () => void;
   chatState: ReturnType<typeof useChatState>;
 }) {

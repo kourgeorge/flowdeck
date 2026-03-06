@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { stockApi } from '../services/api';
+import { tickerApi } from '../services/api';
 
 export interface NewsArticleWithTicker {
   uuid: string;
@@ -48,7 +48,7 @@ export default function DashboardNewsSection({
     setError(null);
     try {
       const results = await Promise.allSettled(
-        tickers.map((t) => stockApi.getNews(t))
+        tickers.map((t) => tickerApi.getNews(t))
       );
       const merged: NewsArticleWithTicker[] = [];
       results.forEach((result, i) => {

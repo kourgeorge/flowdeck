@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { stockApi } from '../services/api';
+import { tickerApi } from '../services/api';
 import { subscriptionApi } from '../services/subscriptionApi';
-import type { TickerWidget as StockWidgetType, StockPageData } from '../services/types';
+import type { TickerWidget as StockWidgetType, TickerPageData } from '../services/types';
 import { useAuth } from '../contexts/AuthContext';
 
 const RECENT_PAGE_SIZE = 20;
@@ -18,7 +18,7 @@ export interface UseDashboardDataReturn {
   isLoading: boolean;
   selectedTicker: string | null;
   setSelectedTicker: (ticker: string | null) => void;
-  prefetchCache: Record<string, StockPageData>;
+  prefetchCache: Record<string, TickerPageData>;
   sidebarScrollRef: React.RefObject<HTMLDivElement>;
   recentScrollRef: React.RefObject<HTMLDivElement>;
   handleSidebarScroll: () => void;
@@ -37,7 +37,7 @@ export function useDashboardData(): UseDashboardDataReturn {
   const [subscriptionsReady, setSubscriptionsReady] = useState(false);
   const [recentReady, setRecentReady] = useState(false);
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
-  const [prefetchCache, setPrefetchCache] = useState<Record<string, StockPageData>>({});
+  const [prefetchCache, setPrefetchCache] = useState<Record<string, TickerPageData>>({});
 
   const sidebarScrollRef = useRef<HTMLDivElement>(null);
   const recentScrollRef = useRef<HTMLDivElement>(null);
@@ -73,7 +73,7 @@ export function useDashboardData(): UseDashboardDataReturn {
       const subs = await subscriptionApi.list();
       const tickers = subs.map((s) => s.ticker);
       if (tickers.length > 0) {
-        const res = await stockApi.getWidgets(tickers);
+        const res = await tickerApi.getWidgets(tickers);
         setWidgets(res.widgets);
         setSelectedTicker((prev) => prev ?? (res.widgets[0]?.ticker ?? null));
       } else {
@@ -95,7 +95,7 @@ export function useDashboardData(): UseDashboardDataReturn {
   // Load first page of recently analyzed
   const loadRecentPage = useCallback(async (offset: number, append: boolean) => {
     const today = new Date().toISOString().slice(0, 10);
-    const res = await stockApi.getWidgets(undefined, today, true, RECENT_PAGE_SIZE, offset, RECENT_ANALYZED_DAYS);
+    const res = await tickerApi.getWidgets(undefined, today, true, RECENT_PAGE_SIZE, offset, RECENT_ANALYZED_DAYS);
     if (res.total != null) setRecentTotal(res.total);
     if (append) {
       setRecentAnalyzedWidgets((prev) => [...prev, ...res.widgets]);
@@ -118,7 +118,7 @@ export function useDashboardData(): UseDashboardDataReturn {
       const today = new Date().toISOString().slice(0, 10);
       let offset = alreadyLoaded;
       while (offset < knownTotal) {
-        const res = await stockApi.getWidgets(undefined, today, true, RECENT_PAGE_SIZE, offset, RECENT_ANALYZED_DAYS);
+        const res = await tickerApi.getWidgets(undefined, today, true, RECENT_PAGE_SIZE, offset, RECENT_ANALYZED_DAYS);
         if (res.total != null) setRecentTotal(res.total);
         setRecentAnalyzedWidgets((prev) => {
           const existingTickers = new Set(prev.map((w) => w.ticker));
@@ -175,7 +175,7 @@ export function useDashboardData(): UseDashboardDataReturn {
     const fetchBatch = async (batch: string[]) => {
       await Promise.all(
         batch.map((ticker) =>
-          stockApi.getStockPage(ticker)
+          tickerApi.getTickerPage(ticker)
             .then((data) => {
               setPrefetchCache((prev) => ({ ...prev, [ticker]: data }));
             })
@@ -203,7 +203,7 @@ export function useDashboardData(): UseDashboardDataReturn {
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
       setLoadingMoreRecent(true);
       const today = new Date().toISOString().slice(0, 10);
-      stockApi
+      tickerApi
         .getWidgets(undefined, today, true, RECENT_PAGE_SIZE, recentAnalyzedWidgets.length, RECENT_ANALYZED_DAYS)
         .then((res) => {
           if (res.total != null) setRecentTotal(res.total);
@@ -221,7 +221,7 @@ export function useDashboardData(): UseDashboardDataReturn {
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 120) {
       setLoadingMoreRecent(true);
       const today = new Date().toISOString().slice(0, 10);
-      stockApi
+      tickerApi
         .getWidgets(undefined, today, true, RECENT_PAGE_SIZE, recentAnalyzedWidgets.length, RECENT_ANALYZED_DAYS)
         .then((res) => {
           if (res.total != null) setRecentTotal(res.total);

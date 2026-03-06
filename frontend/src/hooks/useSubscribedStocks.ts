@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { stockApi } from '../services/api';
+import { tickerApi } from '../services/api';
 import { subscriptionApi } from '../services/subscriptionApi';
-import type { TickerWidget as StockWidgetType, StockPageData } from '../services/types';
+import type { TickerWidget as StockWidgetType, TickerPageData } from '../services/types';
 import { useAuth } from '../contexts/AuthContext';
 
 const PREFETCH_CONCURRENCY = 3;
@@ -12,7 +12,7 @@ export interface UseSubscribedStocksReturn {
   isLoading: boolean;
   selectedTicker: string | null;
   setSelectedTicker: (ticker: string | null) => void;
-  prefetchCache: Record<string, StockPageData>;
+  prefetchCache: Record<string, TickerPageData>;
   handleSubscriptionChange: () => void;
   /** Add a ticker to the vibe list (fetches widget data on the fly) */
   addTicker: (ticker: string) => Promise<void>;
@@ -33,7 +33,7 @@ export function useSubscribedStocks(): UseSubscribedStocksReturn {
   const [tickerToName, setTickerToName] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
-  const [prefetchCache, setPrefetchCache] = useState<Record<string, StockPageData>>({});
+  const [prefetchCache, setPrefetchCache] = useState<Record<string, TickerPageData>>({});
 
   const prefetchedRef = useRef<Set<string>>(new Set());
   // Track which tickers were loaded from subscriptions so we can detect
@@ -66,7 +66,7 @@ export function useSubscribedStocks(): UseSubscribedStocksReturn {
       );
 
       if (allTickers.length > 0) {
-        const res = await stockApi.getWidgets(allTickers);
+        const res = await tickerApi.getWidgets(allTickers);
         setWidgets(res.widgets);
         setSelectedTicker((prev) => prev ?? (res.widgets[0]?.ticker ?? null));
       } else {
@@ -96,7 +96,7 @@ export function useSubscribedStocks(): UseSubscribedStocksReturn {
     const fetchBatch = async (batch: string[]) => {
       await Promise.all(
         batch.map((ticker) =>
-          stockApi.getStockPage(ticker)
+          tickerApi.getTickerPage(ticker)
             .then((data) => {
               setPrefetchCache((prev) => ({ ...prev, [ticker]: data }));
             })
@@ -126,7 +126,7 @@ export function useSubscribedStocks(): UseSubscribedStocksReturn {
     if (widgets.some((w) => w.ticker === upper)) return; // already in list
     userAddedRef.current.add(upper);
     try {
-      const res = await stockApi.getWidgets([upper]);
+      const res = await tickerApi.getWidgets([upper]);
       if (res.widgets.length > 0) {
         setWidgets((prev) => {
           if (prev.some((w) => w.ticker === upper)) return prev;

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { stockApi } from '../services/api';
+import { tickerApi } from '../services/api';
 import type { TickerWidget as StockWidgetType } from '../services/types';
 
 const SPARKLINE_WIDTH = 88;
@@ -101,7 +101,7 @@ function DashboardTile({
   const [chartData, setChartData] = useState<SparklineData | null>(null);
   useEffect(() => {
     let cancelled = false;
-    stockApi
+    tickerApi
       .getHistoricalPrices(w.ticker, '1mo', '1d')
       .then((res: { data?: Array<{ open: number; close: number }> }) => {
         if (cancelled || !res?.data?.length) return;

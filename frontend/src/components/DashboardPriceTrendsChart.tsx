@@ -10,7 +10,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from 'recharts';
-import { stockApi } from '../services/api';
+import { tickerApi } from '../services/api';
 
 interface HistoricalPrice {
   date: string;
@@ -117,7 +117,7 @@ export default function DashboardPriceTrendsChart({
       try {
         const interval = selectedPeriod === '1d' ? '5m' : '1d';
         const results = await Promise.allSettled(
-          tickers.map((ticker) => stockApi.getHistoricalPrices(ticker, selectedPeriod, interval))
+          tickers.map((ticker) => tickerApi.getHistoricalPrices(ticker, selectedPeriod, interval))
         );
 
         const next: Record<string, { date: string; pct: number }[]> = {};

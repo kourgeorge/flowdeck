@@ -5,7 +5,7 @@ import StockDetailPanel from '../components/StockDetailPanel';
 import CopilotChatPanel from '../components/CopilotChatPanel';
 import { useSubscribedStocks } from '../hooks/useSubscribedStocks';
 import { useAuth } from '../contexts/AuthContext';
-import type { StockPageData, TickerWidget } from '../services/types';
+import type { TickerPageData, TickerWidget } from '../services/types';
 
 export default function VibeTradingPage() {
   const { user } = useAuth();
@@ -216,7 +216,7 @@ function MobileStockChatTabs({
 }: {
   selectedTicker: string | null;
   tickers: string[];
-  prefetchCache: Record<string, StockPageData>;
+  prefetchCache: Record<string, TickerPageData>;
   onSubscriptionChange: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<'stock' | 'chat'>('stock');

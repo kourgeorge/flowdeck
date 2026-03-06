@@ -7,7 +7,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { stockApi } from '../services/api';
+import { tickerApi } from '../services/api';
 import type { TickerWidget as StockWidgetType } from '../services/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -349,7 +349,7 @@ export default function OverviewStatsPanel({ widgets, tickerToName, hideByMarket
     setLoading(true);
     Promise.allSettled(
       missing.map((ticker) =>
-        stockApi.getCompanyInfo(ticker).then((info) => ({ ticker, info }))
+        tickerApi.getCompanyInfo(ticker).then((info) => ({ ticker, info }))
       )
     ).then((results) => {
       const updates: Record<string, TickerInfo> = {};
@@ -551,7 +551,7 @@ export function ByMarketSection({ widgets, tickerToName }: ByMarketSectionProps)
     setLoading(true);
     Promise.allSettled(
       missing.map((ticker) =>
-        stockApi.getCompanyInfo(ticker).then((info) => ({ ticker, info }))
+        tickerApi.getCompanyInfo(ticker).then((info) => ({ ticker, info }))
       )
     ).then((results) => {
       const updates: Record<string, TickerInfo> = {};

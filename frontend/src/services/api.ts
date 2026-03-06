@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type {
   WidgetsResponse,
-  StockPageData,
+  TickerPageData,
   TickerQuote,
   SimilarTickersResponse,
 } from './types';
@@ -25,8 +25,8 @@ export const configApi = {
   },
 };
 
-export const stockApi = {
-  // Get widgets for stocks (optional date YYYY-MM-DD for report-of-day filter when no tickers).
+export const tickerApi = {
+  // Get widgets for tickers (optional date YYYY-MM-DD for report-of-day filter when no tickers).
   // When onlyAnalyzedToday=true and no tickers, returns only tickers that have reports for the date (no major-stocks list).
   // With recentDays>1 and onlyAnalyzedToday, returns tickers analyzed in the trailing N-day window ending at date.
   // When limit/offset are set with onlyAnalyzedToday, returns paginated results and response.total is set.
@@ -50,9 +50,9 @@ export const stockApi = {
   },
 
   // Get stock page data (sends auth when logged in so views count for creator rewards)
-  getStockPage: async (ticker: string): Promise<StockPageData> => {
+  getTickerPage: async (ticker: string): Promise<TickerPageData> => {
     const token = getStoredToken();
-    const response = await api.get<StockPageData>(`/api/tickers/${ticker}`, {
+    const response = await api.get<TickerPageData>(`/api/tickers/${ticker}`, {
       headers: {
         ...(token && { Authorization: `Bearer ${token}` }),
       },
@@ -60,7 +60,7 @@ export const stockApi = {
     return response.data;
   },
 
-  // Get stock quote (raw market data via /api/data)
+  // Get ticker quote (raw market data via /api/data)
   getQuote: async (ticker: string): Promise<TickerQuote> => {
     const response = await api.get<TickerQuote>(`/api/data/quote/${ticker}`);
     return response.data;
@@ -100,7 +100,7 @@ export const stockApi = {
     return response.data;
   },
 
-  // Get extended stock info (raw market data via /api/data)
+  // Get extended ticker info (raw market data via /api/data)
   getExtendedInfo: async (ticker: string): Promise<any> => {
     const response = await api.get(`/api/data/extended-info/${ticker}`);
     return response.data;
@@ -534,4 +534,4 @@ export const chatApi = {
   },
 };
 
-export default stockApi;
+export default tickerApi;

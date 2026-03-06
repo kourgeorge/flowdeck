@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { createChart, IChartApi, ISeriesApi, CandlestickData, HistogramData, UTCTimestamp, ColorType } from 'lightweight-charts';
-import { stockApi } from '../services/api';
+import { tickerApi } from '../services/api';
 
 interface HistoricalPrice {
   date: string;
@@ -65,7 +65,7 @@ export default function PriceTrendWidget({ ticker, period = '6mo', height = 300,
         setLoading(true);
         setError(null);
         const interval = selectedPeriod === '1d' ? '5m' : '1d';
-        const historicalData = await stockApi.getHistoricalPrices(ticker, selectedPeriod, interval);
+        const historicalData = await tickerApi.getHistoricalPrices(ticker, selectedPeriod, interval);
         setData(historicalData);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load data');
