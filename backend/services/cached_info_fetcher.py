@@ -184,7 +184,8 @@ class CachedInfoFetcher:
 
     def get_similar_tickers(self, ticker: str, limit: int = 10, offset: int = 0) -> Dict[str, Any]:
         """Get similar tickers based on sector/industry matching (cached)."""
-        key = f"similar_tickers:{ticker.upper()}:{limit}:{offset}"
+        # Version key so matcher behavior changes do not serve stale cached payloads.
+        key = f"similar_tickers:v2:{ticker.upper()}:{limit}:{offset}"
         return get_cached(
             key,
             DATA_CACHE_TTL_SIMILAR_TICKERS,

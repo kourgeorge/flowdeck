@@ -727,18 +727,33 @@ class InfoFetcher:
         exact_matches.sort(key=lambda x: x["market_cap"] if x["market_cap"] else 0, reverse=True)
         sector_only_matches.sort(key=lambda x: x["market_cap"] if x["market_cap"] else 0, reverse=True)
 
-        all_matches = exact_matches + sector_only_matches
-        total_count = len(all_matches)
         safe_offset = max(0, int(offset))
         safe_limit = max(1, int(limit))
-        similar_stocks = all_matches[safe_offset:safe_offset + safe_limit]
 
-        if total_count == 0:
-            match_type = "no_matches"
-        elif total_count <= len(exact_matches):
-            match_type = "sector_and_industry"
+        # Prefer same sector+industry only. Fall back to same sector only when exact matches are scarce.
+        # Product requirement: only backfill with sector peers when fewer than 10 exact peers exist.
+        fallback_threshold = 10
+        use_sector_fallback = len(exact_matches) < fallback_threshold
+
+        if use_sector_fallback:
+            all_matches = exact_matches + sector_only_matches
+            match_type = "sector_only" if all_matches else "no_matches"
         else:
-            match_type = "sector_only"
+            all_matches = exact_matches
+            match_type = "sector_and_industry" if all_matches else "no_matches"
+
+        # Always prioritize same-industry peers at the top when mixed with fallback peers.
+        if target_industry:
+            all_matches.sort(
+                key=lambda x: (
+                    0 if x.get("industry") == target_industry else 1,
+                    -(x["market_cap"] if isinstance(x.get("market_cap"), (int, float)) else 0),
+                    x.get("ticker", ""),
+                )
+            )
+
+        total_count = len(all_matches)
+        similar_stocks = all_matches[safe_offset:safe_offset + safe_limit]
 
         # Fill current_price/change_percent in one batch call.
         self._enrich_similar_tickers_with_batch_quotes(similar_stocks)
