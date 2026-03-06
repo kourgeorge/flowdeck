@@ -555,6 +555,110 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const canGoToPreviousSimilarStocksPage = currentSimilarStocksPage > 1;
   const shouldShowSimilarPaginationControls = canGoToPreviousSimilarStocksPage || canGoToNextSimilarStocksPage;
 
+  const parseRecommendationPeriodOffset = (period: string): number => {
+    const match = String(period).trim().match(/^-?\d+/);
+    if (!match) return 0;
+    const n = Number(match[0]);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const formatRecommendationPeriodLabel = (period: string): string => {
+    const offset = parseRecommendationPeriodOffset(period);
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + offset);
+    return d.toLocaleDateString(undefined, { month: 'short' });
+  };
+
+  const analystTrendRows: Array<{
+    period: string;
+    strongBuy: number;
+    buy: number;
+    hold: number;
+    sell: number;
+    strongSell: number;
+    total: number;
+  }> = Array.isArray(analystRecommendations?.recommendation_trend)
+    ? analystRecommendations.recommendation_trend
+      .map((row: any) => ({
+        period: String(row?.period ?? ''),
+        strongBuy: Number(row?.strongBuy ?? 0) || 0,
+        buy: Number(row?.buy ?? 0) || 0,
+        hold: Number(row?.hold ?? 0) || 0,
+        sell: Number(row?.sell ?? 0) || 0,
+        strongSell: Number(row?.strongSell ?? 0) || 0,
+        total: Number(row?.total ?? (
+          Number(row?.strongBuy ?? 0) +
+          Number(row?.buy ?? 0) +
+          Number(row?.hold ?? 0) +
+          Number(row?.sell ?? 0) +
+          Number(row?.strongSell ?? 0)
+        )) || 0,
+      }))
+      .filter((row: { period: string }) => row.period.length > 0)
+    : [];
+  const analystTrendRowsSorted = [...analystTrendRows].sort(
+    (a, b) => parseRecommendationPeriodOffset(a.period) - parseRecommendationPeriodOffset(b.period),
+  );
+  const analystPriceTargets = (analystRecommendations?.price_targets && typeof analystRecommendations.price_targets === 'object')
+    ? analystRecommendations.price_targets
+    : {};
+  const analystFinancialData = (analystRecommendations?.financial_data && typeof analystRecommendations.financial_data === 'object')
+    ? analystRecommendations.financial_data
+    : {};
+  const analystPriceCurrent = Number(analystFinancialData.currentPrice ?? analystPriceTargets.current ?? Number.NaN);
+  const analystPriceAverage = Number(
+    analystFinancialData.targetMeanPrice
+      ?? analystPriceTargets.average
+      ?? analystRecommendations?.target_price
+      ?? Number.NaN,
+  );
+  const analystPriceLow = Number(analystFinancialData.targetLowPrice ?? analystPriceTargets.low ?? Number.NaN);
+  const analystPriceHigh = Number(analystFinancialData.targetHighPrice ?? analystPriceTargets.high ?? Number.NaN);
+  const analystHasPriceCurrent = Number.isFinite(analystPriceCurrent);
+  const analystHasPriceAverage = Number.isFinite(analystPriceAverage);
+  const analystHasPriceLow = Number.isFinite(analystPriceLow);
+  const analystHasPriceHigh = Number.isFinite(analystPriceHigh);
+  const analystPriceValues = [analystPriceLow, analystPriceCurrent, analystPriceAverage, analystPriceHigh]
+    .filter((n) => Number.isFinite(n));
+  const analystHasAnyTargets = analystPriceValues.length > 0;
+  const analystHasData = Boolean(
+    analystRecommendations?.recommendation ||
+    Number(analystRecommendations?.total_analysts ?? 0) > 0 ||
+    (analystRecommendations?.breakdown && Object.keys(analystRecommendations.breakdown).length > 0) ||
+    analystRecommendations?.target_price != null ||
+    analystTrendRowsSorted.length > 0 ||
+    analystPriceValues.length > 0,
+  );
+  const analystBreakdownFallback = {
+    period: '0m',
+    strongBuy: Number(analystRecommendations?.breakdown?.['Strong Buy'] ?? 0) || 0,
+    buy: Number(analystRecommendations?.breakdown?.Buy ?? 0) || 0,
+    hold: Number(analystRecommendations?.breakdown?.Hold ?? 0) || 0,
+    sell: Number(analystRecommendations?.breakdown?.Sell ?? 0) || 0,
+    strongSell: Number(analystRecommendations?.breakdown?.['Strong Sell'] ?? 0) || 0,
+    total: Number(analystRecommendations?.total_analysts ?? 0) || 0,
+  };
+  const analystTrendDisplayRows = analystTrendRowsSorted.length > 0
+    ? analystTrendRowsSorted
+    : analystBreakdownFallback.total > 0
+      ? [analystBreakdownFallback]
+      : [];
+  const analystTrendSeries = [
+    { key: 'strongBuy', label: 'Strong Buy', colorClass: 'bg-emerald-600' },
+    { key: 'buy', label: 'Buy', colorClass: 'bg-lime-500' },
+    { key: 'hold', label: 'Hold', colorClass: 'bg-yellow-400' },
+    { key: 'sell', label: 'Sell', colorClass: 'bg-orange-500' },
+    { key: 'strongSell', label: 'Strong Sell', colorClass: 'bg-red-600' },
+  ] as const;
+  const analystTrendMaxValue = analystTrendDisplayRows.reduce((max, row) => {
+    const rowMax = analystTrendSeries.reduce(
+      (innerMax, series) => Math.max(innerMax, Number(row[series.key]) || 0),
+      0,
+    );
+    return Math.max(max, rowMax);
+  }, 0);
+
   const handleNextSimilarStocksPage = async () => {
     if (!canGoToNextSimilarStocksPage || isLoadingSimilarTickers) return;
     const nextPage = currentSimilarStocksPage + 1;
@@ -784,6 +888,122 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                 </div>
               ) : null}
 
+              {/* Analyst Recommendations*/}
+              {isLoadingRecommendations ? (
+                <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+                  <div className="animate-pulse">
+                    <div className="h-6 bg-gray-700 rounded w-56 mb-4" />
+                    <div className="h-28 bg-gray-700 rounded" />
+                  </div>
+                </div>
+              ) : analystRecommendations && analystHasData ? (
+                  <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 sm:p-6">
+                    <h3 className="text-sm sm:text-base font-semibold text-white mb-3 sm:mb-4">Analyst Recommendations</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6">
+                      <div className="rounded-lg border border-gray-700 bg-gray-900/20 p-4 md:col-span-4 lg:col-span-3">
+                        <h4 className="text-lg font-semibold text-white mb-4">Price Targets</h4>
+                        <>
+                          <div className="space-y-2">
+                            <div className="rounded border border-gray-700 bg-gray-800/60 px-3 py-2 flex items-center justify-between gap-3">
+                              <div className="text-sm text-gray-400">Current</div>
+                              <div className="text-sm font-semibold text-white">
+                                {analystHasPriceCurrent ? `$${analystPriceCurrent.toFixed(2)}` : 'N/A'}
+                              </div>
+                            </div>
+                            <div className="rounded border border-gray-700 bg-gray-800/60 px-3 py-2 flex items-center justify-between gap-3">
+                              <div className="text-sm text-gray-400">Target Low</div>
+                              <div className="text-sm font-semibold text-white">
+                                {analystHasPriceLow ? `$${analystPriceLow.toFixed(2)}` : 'N/A'}
+                              </div>
+                            </div>
+                            <div className="rounded border border-gray-700 bg-gray-800/60 px-3 py-2 flex items-center justify-between gap-3">
+                              <div className="text-sm text-gray-400">Target Mean</div>
+                              <div className="text-sm font-semibold text-white">
+                                {analystHasPriceAverage ? `$${analystPriceAverage.toFixed(2)}` : 'N/A'}
+                              </div>
+                            </div>
+                            <div className="rounded border border-gray-700 bg-gray-800/60 px-3 py-2 flex items-center justify-between gap-3">
+                              <div className="text-sm text-gray-400">Target High</div>
+                              <div className="text-sm font-semibold text-white">
+                                {analystHasPriceHigh ? `$${analystPriceHigh.toFixed(2)}` : 'N/A'}
+                              </div>
+                            </div>
+                            <div className="rounded border border-gray-700 bg-gray-800/60 px-3 py-2 flex items-center justify-between gap-3">
+                              <div className="text-sm text-gray-400">Total Analysts</div>
+                              <div className="text-sm font-semibold text-white">
+                                {analystRecommendations.total_analysts ?? 0}
+                              </div>
+                            </div>
+                          </div>
+                          {!analystHasAnyTargets && (
+                            <p className="text-xs text-gray-400 mt-2">
+                              No analyst price targets returned in YahooQuery financial_data for this ticker.
+                            </p>
+                          )}
+                          {analystRecommendations.latest_date && (
+                            <div className="text-xs text-gray-500 mt-2">
+                              Updated: {new Date(analystRecommendations.latest_date).toLocaleDateString()}
+                            </div>
+                          )}
+                        </>
+                      </div>
+
+                      <div className="rounded-lg border border-gray-700 bg-gray-900/20 p-4 md:col-span-8 lg:col-span-9">
+                        <h4 className="text-lg font-semibold text-white mb-4">Recommendations</h4>
+                        {analystTrendDisplayRows.length > 0 ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                            {analystTrendDisplayRows.map((row) => (
+                              <div key={row.period} className="rounded border border-gray-700 bg-gray-800/40 p-2.5">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-sm font-semibold text-white">{formatRecommendationPeriodLabel(row.period)}</span>
+                                  <span className="text-xs text-gray-300">Total {Number(row.total) || 0}</span>
+                                </div>
+                                <div className="space-y-1.5">
+                                  {analystTrendSeries.map((series) => {
+                                    const value = Number(row[series.key]) || 0;
+                                    const widthPct = analystTrendMaxValue > 0 ? (value / analystTrendMaxValue) * 100 : 0;
+                                    return (
+                                      <div key={`${row.period}-${series.key}`} className="space-y-0.5">
+                                        <div className="flex items-center justify-between text-[11px] text-gray-300">
+                                          <span>{series.label}</span>
+                                          <span>{value}</span>
+                                        </div>
+                                        <div className="h-2.5 rounded bg-gray-700/80 overflow-hidden">
+                                          <div
+                                            className={`h-full ${series.colorClass}`}
+                                            style={{ width: `${widthPct}%` }}
+                                            title={`${series.label}: ${value}`}
+                                          />
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-gray-400">No monthly recommendation history available.</div>
+                        )}
+                        <div className="mt-3 pt-2 border-t border-gray-700 flex items-center justify-between">
+                          <span className="text-sm font-semibold text-gray-300">Current Recommendation</span>
+                          <span className={`text-sm font-bold ${
+                            analystRecommendations.recommendation === 'BUY'
+                              ? 'text-green-400'
+                              : analystRecommendations.recommendation === 'SELL'
+                                ? 'text-red-400'
+                                : analystRecommendations.recommendation === 'HOLD'
+                                  ? 'text-yellow-300'
+                                  : 'text-gray-300'
+                          }`}>
+                            {analystRecommendations.recommendation || 'N/A'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+              ) : null}
+
               {/* Fundamentals summary */}
               {quoteType === 'ETF' ? (
                 isLoadingFundInfo ? (
@@ -832,8 +1052,6 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
               ) : fundamentalsData && typeof fundamentalsData === 'object' ? (
                 <FundamentalPanes
                   data={fundamentalsData}
-                  analystRecommendations={analystRecommendations}
-                  isLoadingRecommendations={isLoadingRecommendations}
                   companyOfficers={companyOfficers}
                   isLoadingOfficers={isLoadingOfficers}
                 />

@@ -18,6 +18,289 @@ const api = axios.create({
   },
 });
 
+type AnalystRecommendationsResponse = {
+  ticker: string;
+  recommendation: string | null;
+  target_price: number | null;
+  recommendation_trend: Array<{
+    period: string;
+    strongBuy: number;
+    buy: number;
+    hold: number;
+    sell: number;
+    strongSell: number;
+    total: number;
+  }>;
+  price_targets: {
+    current: number | null;
+    average: number | null;
+    low: number | null;
+    high: number | null;
+  };
+  breakdown: {
+    'Strong Buy'?: number;
+    'Buy'?: number;
+    'Hold'?: number;
+    'Sell'?: number;
+    'Strong Sell'?: number;
+  };
+  total_analysts: number;
+  latest_date: string | null;
+  financial_data: {
+    maxAge: number | null;
+    currentPrice: number | null;
+    targetHighPrice: number | null;
+    targetLowPrice: number | null;
+    targetMeanPrice: number | null;
+    targetMedianPrice: number | null;
+    recommendationMean: number | null;
+    recommendationKey: string | null;
+    numberOfAnalystOpinions: number | null;
+  };
+  error?: string;
+};
+
+function toSafeCount(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+function toSafeNumber(value: unknown): number | null {
+  if (value == null) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function toSafeLatestDate(value: unknown): string | null {
+  if (value == null) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+  // Guard against numeric row-index values from recommendation trend payloads (e.g. "0").
+  if (/^\d+$/.test(s) && Number(s) < 10000) return null;
+  const ts = new Date(s).getTime();
+  return Number.isNaN(ts) ? null : s;
+}
+
+function normalizeRecommendationFromCounts(
+  strongBuy: number,
+  buy: number,
+  hold: number,
+  sell: number,
+  strongSell: number,
+): string | null {
+  const buyScore = strongBuy + buy;
+  const sellScore = sell + strongSell;
+  const holdScore = hold;
+  const maxScore = Math.max(buyScore, sellScore, holdScore);
+  if (maxScore <= 0) return null;
+  if (maxScore === buyScore) return 'BUY';
+  if (maxScore === sellScore) return 'SELL';
+  return 'HOLD';
+}
+
+function normalizeAnalystRecommendationsPayload(
+  payload: unknown,
+  ticker: string,
+): AnalystRecommendationsResponse {
+  const tickerUpper = ticker.toUpperCase();
+  const empty: AnalystRecommendationsResponse = {
+    ticker: tickerUpper,
+    recommendation: null,
+    target_price: null,
+    recommendation_trend: [],
+    price_targets: {
+      current: null,
+      average: null,
+      low: null,
+      high: null,
+    },
+    breakdown: {},
+    total_analysts: 0,
+    latest_date: null,
+    financial_data: {
+      maxAge: null,
+      currentPrice: null,
+      targetHighPrice: null,
+      targetLowPrice: null,
+      targetMeanPrice: null,
+      targetMedianPrice: null,
+      recommendationMean: null,
+      recommendationKey: null,
+      numberOfAnalystOpinions: null,
+    },
+  };
+
+  const normalizeTrendRow = (row: Record<string, unknown>) => {
+    const strongBuy = toSafeCount(row.strongBuy ?? row['Strong Buy']);
+    const buy = toSafeCount(row.buy ?? row.Buy);
+    const hold = toSafeCount(row.hold ?? row.Hold);
+    const sell = toSafeCount(row.sell ?? row.Sell);
+    const strongSell = toSafeCount(row.strongSell ?? row['Strong Sell']);
+    return {
+      period: String(row.period ?? ''),
+      strongBuy,
+      buy,
+      hold,
+      sell,
+      strongSell,
+      total: strongBuy + buy + hold + sell + strongSell,
+    };
+  };
+
+  const mapCounts = (row: Record<string, unknown>) => {
+    const normalizedRow = normalizeTrendRow(row);
+    const strongBuy = normalizedRow.strongBuy;
+    const buy = normalizedRow.buy;
+    const hold = normalizedRow.hold;
+    const sell = normalizedRow.sell;
+    const strongSell = normalizedRow.strongSell;
+    const breakdown = {
+      'Strong Buy': strongBuy,
+      Buy: buy,
+      Hold: hold,
+      Sell: sell,
+      'Strong Sell': strongSell,
+    };
+    const total = strongBuy + buy + hold + sell + strongSell;
+    return {
+      breakdown,
+      total,
+      recommendation: normalizeRecommendationFromCounts(strongBuy, buy, hold, sell, strongSell),
+    };
+  };
+
+  if (Array.isArray(payload)) {
+    const rows = payload.filter((v) => v && typeof v === 'object') as Record<string, unknown>[];
+    const trendRows = rows.map((row) => normalizeTrendRow(row));
+    const latest = rows.find((row) => String(row.period ?? '') === '0m') ?? rows[0];
+    if (!latest) return empty;
+    const normalized = mapCounts(latest);
+    return {
+      ...empty,
+      recommendation_trend: trendRows,
+      breakdown: normalized.breakdown,
+      total_analysts: normalized.total,
+      recommendation: normalized.recommendation,
+    };
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return empty;
+  }
+
+  const raw = payload as Record<string, unknown>;
+
+  const trendSource = Array.isArray(raw.recommendation_trend)
+    ? raw.recommendation_trend
+    : Array.isArray(raw.recommendationTrend)
+      ? raw.recommendationTrend
+      : null;
+
+  if (
+    trendSource !== null ||
+    raw.recommendation !== undefined ||
+    raw.breakdown !== undefined ||
+    raw.total_analysts !== undefined ||
+    raw.target_price !== undefined ||
+    raw.financial_data !== undefined ||
+    raw.financialData !== undefined
+  ) {
+    const breakdownRaw = (raw.breakdown && typeof raw.breakdown === 'object')
+      ? (raw.breakdown as Record<string, unknown>)
+      : {};
+    const priceTargetsRaw = (raw.price_targets && typeof raw.price_targets === 'object')
+      ? (raw.price_targets as Record<string, unknown>)
+      : {};
+    const financialDataRaw = (
+      (raw.financial_data && typeof raw.financial_data === 'object')
+      ? raw.financial_data
+      : (raw.financialData && typeof raw.financialData === 'object')
+        ? raw.financialData
+        : {}
+    ) as Record<string, unknown>;
+    const trendRows = Array.isArray(raw.recommendation_trend)
+      ? (raw.recommendation_trend as unknown[])
+        .filter((v) => v && typeof v === 'object')
+        .map((v) => normalizeTrendRow(v as Record<string, unknown>))
+      : [];
+    const latestTrend = trendRows.find((row) => row.period === '0m') ?? trendRows[0];
+    const breakdown = {
+      'Strong Buy': toSafeCount(breakdownRaw['Strong Buy']),
+      Buy: toSafeCount(breakdownRaw.Buy),
+      Hold: toSafeCount(breakdownRaw.Hold),
+      Sell: toSafeCount(breakdownRaw.Sell),
+      'Strong Sell': toSafeCount(breakdownRaw['Strong Sell']),
+    };
+    const breakdownTotal = Object.values(breakdown).reduce((sum, n) => sum + n, 0);
+    const finalBreakdown = breakdownTotal > 0
+      ? breakdown
+      : latestTrend
+        ? {
+          'Strong Buy': latestTrend.strongBuy,
+          Buy: latestTrend.buy,
+          Hold: latestTrend.hold,
+          Sell: latestTrend.sell,
+          'Strong Sell': latestTrend.strongSell,
+        }
+        : breakdown;
+    const totalAnalysts = toSafeCount(raw.total_analysts);
+    const analystOpinions = toSafeCount(financialDataRaw.numberOfAnalystOpinions);
+    const finalTotal = totalAnalysts > 0
+      ? totalAnalysts
+      : analystOpinions > 0
+        ? analystOpinions
+      : latestTrend?.total ?? Object.values(finalBreakdown).reduce((sum, n) => sum + n, 0);
+    const normalizedRecommendation = raw.recommendation == null
+      ? normalizeRecommendationFromCounts(
+        finalBreakdown['Strong Buy'] ?? 0,
+        finalBreakdown.Buy ?? 0,
+        finalBreakdown.Hold ?? 0,
+        finalBreakdown.Sell ?? 0,
+        finalBreakdown['Strong Sell'] ?? 0,
+      )
+      : String(raw.recommendation);
+    return {
+      ticker: String(raw.ticker ?? tickerUpper).toUpperCase(),
+      recommendation: normalizedRecommendation,
+      target_price: toSafeNumber(raw.target_price) ?? toSafeNumber(financialDataRaw.targetMeanPrice),
+      recommendation_trend: trendRows,
+      price_targets: {
+        current: toSafeNumber(priceTargetsRaw.current) ?? toSafeNumber(financialDataRaw.currentPrice),
+        average: toSafeNumber(priceTargetsRaw.average)
+          ?? toSafeNumber(raw.target_price)
+          ?? toSafeNumber(financialDataRaw.targetMeanPrice),
+        low: toSafeNumber(priceTargetsRaw.low) ?? toSafeNumber(financialDataRaw.targetLowPrice),
+        high: toSafeNumber(priceTargetsRaw.high) ?? toSafeNumber(financialDataRaw.targetHighPrice),
+      },
+      breakdown: finalBreakdown,
+      total_analysts: finalTotal,
+      latest_date: toSafeLatestDate(raw.latest_date),
+      financial_data: {
+        maxAge: toSafeNumber(financialDataRaw.maxAge),
+        currentPrice: toSafeNumber(financialDataRaw.currentPrice),
+        targetHighPrice: toSafeNumber(financialDataRaw.targetHighPrice),
+        targetLowPrice: toSafeNumber(financialDataRaw.targetLowPrice),
+        targetMeanPrice: toSafeNumber(financialDataRaw.targetMeanPrice),
+        targetMedianPrice: toSafeNumber(financialDataRaw.targetMedianPrice),
+        recommendationMean: toSafeNumber(financialDataRaw.recommendationMean),
+        recommendationKey: financialDataRaw.recommendationKey == null
+          ? null
+          : String(financialDataRaw.recommendationKey),
+        numberOfAnalystOpinions: toSafeNumber(financialDataRaw.numberOfAnalystOpinions),
+      },
+      error: raw.error == null ? undefined : String(raw.error),
+    };
+  }
+
+  const normalized = mapCounts(raw);
+  return {
+    ...empty,
+    breakdown: normalized.breakdown,
+    total_analysts: normalized.total,
+    recommendation: normalized.recommendation,
+  };
+}
+
 export const configApi = {
   getPublicConfig: async (): Promise<{ preview_tickers: string[] }> => {
     const response = await api.get<{ preview_tickers: string[] }>('/api/config/public');
@@ -254,23 +537,9 @@ export const tickerApi = {
   },
 
   // Get analyst recommendations from Yahoo (raw market data via /api/data)
-  getAnalystRecommendations: async (ticker: string): Promise<{
-    ticker: string;
-    recommendation: string | null;
-    target_price: number | null;
-    breakdown: {
-      'Strong Buy'?: number;
-      'Buy'?: number;
-      'Hold'?: number;
-      'Sell'?: number;
-      'Strong Sell'?: number;
-    };
-    total_analysts: number;
-    latest_date: string | null;
-    error?: string;
-  }> => {
+  getAnalystRecommendations: async (ticker: string): Promise<AnalystRecommendationsResponse> => {
     const response = await api.get(`/api/data/analyst-recommendations/${ticker}`);
-    return response.data;
+    return normalizeAnalystRecommendationsPayload(response.data, ticker);
   },
 
   // Get financial charts (raw market data via /api/data)

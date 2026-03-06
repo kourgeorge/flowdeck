@@ -317,21 +317,189 @@ class InfoFetcher:
         return get_charts(ticker.upper(), freq=freq)
 
     def get_analyst_recommendations(self, ticker: str) -> Dict[str, Any]:
-        """Get analyst recommendations from yfinance."""
+        """Get analyst recommendations from yahooquery."""
         try:
-            _tradingagents_route_to_vendor()  # ensure path
-            from ai_engine.tradingagents.dataflows.y_finance import get_analyst_recommendations as get_rec
-            return get_rec(ticker.upper())
-        except Exception as e:
-            return {
-                "ticker": ticker.upper(),
-                "recommendation": None,
-                "target_price": None,
-                "breakdown": {},
-                "total_analysts": 0,
-                "latest_date": None,
-                "error": str(e),
+            from yahooquery import Ticker as YahooQueryTicker
+            import pandas as pd
+
+            ticker_upper = ticker.upper()
+            ticker_obj = YahooQueryTicker(ticker_upper)
+
+            def _safe_int(value: Any) -> int:
+                try:
+                    if value is None:
+                        return 0
+                    if isinstance(value, bool):
+                        return 0
+                    if isinstance(value, (int, float)):
+                        return int(value)
+                    return int(float(str(value)))
+                except Exception:
+                    return 0
+
+            def _safe_optional_int(value: Any) -> Optional[int]:
+                try:
+                    if value is None:
+                        return None
+                    if isinstance(value, bool):
+                        return None
+                    if isinstance(value, (int, float)):
+                        return int(value)
+                    return int(float(str(value)))
+                except Exception:
+                    return None
+
+            def _normalize_trend_row(row: Dict[str, Any]) -> Dict[str, Any]:
+                return {
+                    "period": str(row.get("period") or ""),
+                    "strongBuy": _safe_int(row.get("strongBuy")),
+                    "buy": _safe_int(row.get("buy")),
+                    "hold": _safe_int(row.get("hold")),
+                    "sell": _safe_int(row.get("sell")),
+                    "strongSell": _safe_int(row.get("strongSell")),
+                }
+
+            def _extract_trend_rows(raw: Any) -> List[Dict[str, Any]]:
+                if raw is None:
+                    return []
+                if isinstance(raw, dict):
+                    candidate = raw.get(ticker_upper)
+                    if candidate is None:
+                        for key, value in raw.items():
+                            if str(key).upper() == ticker_upper:
+                                candidate = value
+                                break
+                    if isinstance(candidate, dict):
+                        if candidate.get("error"):
+                            return []
+                        return [_normalize_trend_row(candidate)]
+                    if isinstance(candidate, list):
+                        rows = [r for r in candidate if isinstance(r, dict)]
+                        return [_normalize_trend_row(r) for r in rows]
+                    row_keys = {"period", "strongBuy", "buy", "hold", "sell", "strongSell"}
+                    # Fallback only when dictionary is row-like (not a symbol-keyed map we failed to match).
+                    if row_keys.intersection(raw.keys()):
+                        return [_normalize_trend_row(raw)]
+                    return []
+                if isinstance(raw, list):
+                    rows = [r for r in raw if isinstance(r, dict)]
+                    return [_normalize_trend_row(r) for r in rows]
+                if isinstance(raw, pd.DataFrame):
+                    if raw.empty:
+                        return []
+                    rows: List[Dict[str, Any]] = []
+                    for _, r in raw.iterrows():
+                        try:
+                            rows.append(_normalize_trend_row(r.to_dict()))
+                        except Exception:
+                            continue
+                    return rows
+                return []
+
+            def _extract_latest_row(raw: Any) -> Optional[Dict[str, Any]]:
+                if raw is None:
+                    return None
+                trend_rows = _extract_trend_rows(raw)
+                if not trend_rows:
+                    return None
+                zero_month_row = next((r for r in trend_rows if r.get("period") == "0m"), None)
+                return zero_month_row or trend_rows[0]
+
+            trend_raw = getattr(ticker_obj, "recommendation_trend", None)
+            trend_rows = _extract_trend_rows(trend_raw)
+            trend_row = _extract_latest_row(trend_raw)
+
+            strong_buy = _safe_int((trend_row or {}).get("strongBuy"))
+            buy = _safe_int((trend_row or {}).get("buy"))
+            hold = _safe_int((trend_row or {}).get("hold"))
+            sell = _safe_int((trend_row or {}).get("sell"))
+            strong_sell = _safe_int((trend_row or {}).get("strongSell"))
+
+            breakdown = {
+                "Strong Buy": strong_buy,
+                "Buy": buy,
+                "Hold": hold,
+                "Sell": sell,
+                "Strong Sell": strong_sell,
             }
+            trend_total = strong_buy + buy + hold + sell + strong_sell
+
+            recommendation: Optional[str] = None
+            if trend_total > 0:
+                buy_score = strong_buy + buy
+                sell_score = sell + strong_sell
+                hold_score = hold
+                best = max(buy_score, sell_score, hold_score)
+                if best == buy_score:
+                    recommendation = "BUY"
+                elif best == sell_score:
+                    recommendation = "SELL"
+                else:
+                    recommendation = "HOLD"
+
+            financial_data_raw = getattr(ticker_obj, "financial_data", None)
+            financial_data_map = self._get_symbol_payload(financial_data_raw, ticker_upper)
+            if not isinstance(financial_data_map, dict):
+                financial_data_map = {}
+
+            current_price = self._coerce_float(financial_data_map.get("currentPrice"))
+            target_price = self._coerce_float(financial_data_map.get("targetMeanPrice"))
+            target_low_price = self._coerce_float(financial_data_map.get("targetLowPrice"))
+            target_high_price = self._coerce_float(financial_data_map.get("targetHighPrice"))
+            target_median_price = self._coerce_float(financial_data_map.get("targetMedianPrice"))
+            recommendation_mean = self._coerce_float(financial_data_map.get("recommendationMean"))
+            number_of_analyst_opinions = _safe_optional_int(
+                financial_data_map.get("numberOfAnalystOpinions")
+            )
+            max_age = _safe_optional_int(financial_data_map.get("maxAge"))
+
+            total = (
+                number_of_analyst_opinions
+                if isinstance(number_of_analyst_opinions, int) and number_of_analyst_opinions > 0
+                else trend_total
+            )
+
+            recommendation_key_raw = financial_data_map.get("recommendationKey")
+            recommendation_key = str(recommendation_key_raw or "").strip().lower()
+            if recommendation is None:
+                if recommendation_key in ("strong_buy", "buy"):
+                    recommendation = "BUY"
+                elif recommendation_key in ("strong_sell", "sell"):
+                    recommendation = "SELL"
+                elif recommendation_key == "hold":
+                    recommendation = "HOLD"
+
+            return {
+                "ticker": ticker_upper,
+                "recommendation": recommendation,
+                "target_price": target_price,
+                "breakdown": breakdown,
+                "total_analysts": total,
+                # recommendation_trend payload is period-relative and usually has no true date field
+                "latest_date": None,
+                "recommendation_trend": trend_rows,
+                "price_targets": {
+                    "current": current_price,
+                    "average": target_price,
+                    "low": target_low_price,
+                    "high": target_high_price,
+                },
+                "financial_data": {
+                    "maxAge": max_age,
+                    "currentPrice": current_price,
+                    "targetHighPrice": target_high_price,
+                    "targetLowPrice": target_low_price,
+                    "targetMeanPrice": target_price,
+                    "targetMedianPrice": target_median_price,
+                    "recommendationMean": recommendation_mean,
+                    "recommendationKey": (
+                        str(recommendation_key_raw).strip() if recommendation_key_raw is not None else None
+                    ),
+                    "numberOfAnalystOpinions": number_of_analyst_opinions,
+                },
+            }
+        except Exception:
+            raise
 
     def get_future_events(self, ticker: str) -> Dict[str, Any]:
         """Get upcoming earnings and ex-dividend dates from Yahoo Finance (yfinance)."""
@@ -777,6 +945,12 @@ class InfoFetcher:
         """Convert values to float when possible; return None for invalid values."""
         if value is None or isinstance(value, bool):
             return None
+        if isinstance(value, dict):
+            # YahooQuery sometimes returns wrapped numeric objects like {"raw": 293.31, "fmt": "293.31"}.
+            for key in ("raw", "value", "fmt", "longFmt"):
+                if key in value:
+                    return InfoFetcher._coerce_float(value.get(key))
+            return None
         if isinstance(value, numbers.Real):
             val = float(value)
             if math.isnan(val) or math.isinf(val):
@@ -795,9 +969,27 @@ class InfoFetcher:
         """Extract per-symbol payload from yahooquery batch response."""
         if not isinstance(batch_map, dict):
             return {}
+        symbol_upper = str(symbol).upper()
         payload = batch_map.get(symbol)
+        if payload is None:
+            for key, value in batch_map.items():
+                if str(key).upper() == symbol_upper:
+                    payload = value
+                    break
         if isinstance(payload, dict) and not payload.get("error"):
             return payload
+        # Single-symbol yahooquery responses can already be the payload dict (not nested by symbol key).
+        # Detect common market-data keys and use the dict directly.
+        direct_keys = {
+            "regularMarketPrice",
+            "targetMeanPrice",
+            "targetLowPrice",
+            "targetHighPrice",
+            "currentPrice",
+            "recommendationKey",
+        }
+        if direct_keys.intersection(batch_map.keys()) and not batch_map.get("error"):
+            return batch_map
         return {}
 
     def _enrich_similar_tickers_with_batch_quotes(self, similar_tickers: List[Dict[str, Any]]) -> None:
