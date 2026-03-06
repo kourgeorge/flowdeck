@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { stockApi, configApi } from '../services/api';
 import { WebSocketClient } from '../services/websocket';
-import type { StockPageData, SimilarTickersResponse } from '../services/types';
+import type { SimilarTicker, StockPageData, SimilarTickersResponse } from '../services/types';
 import { useQuoteRefresh } from '../hooks/useQuoteRefresh';
 import { useAuth } from '../contexts/AuthContext';
 import { subscriptionApi, type Subscription } from '../services/subscriptionApi';
@@ -42,6 +42,7 @@ const REPORT_PROCESS_ORDER = [
   'market_report','sentiment_report','news_report','technical_report',
   'fundamentals_report','sec_report','investment_plan','trader_investment_plan','final_trade_decision',
 ];
+const SIMILAR_STOCKS_PER_PAGE = 10;
 
 export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptionChange }: StockDetailPanelProps) {
   const navigate = useNavigate();
@@ -87,6 +88,9 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const [subscriptionForTicker, setSubscriptionForTicker] = useState<Subscription | null>(null);
   const [emailPreferenceToggling, setEmailPreferenceToggling] = useState(false);
   const [similarTickers, setSimilarTickers] = useState<SimilarTickersResponse | null>(null);
+  const [similarTickerPages, setSimilarTickerPages] = useState<Record<number, SimilarTicker[]>>({});
+  const [similarHasMoreByPage, setSimilarHasMoreByPage] = useState<Record<number, boolean>>({});
+  const [similarStocksPage, setSimilarStocksPage] = useState(1);
   const [isLoadingSimilarTickers, setIsLoadingSimilarTickers] = useState(false);
   const [priceFlash, setPriceFlash] = useState(false);
   const [companyOfficers, setCompanyOfficers] = useState<any[]>([]);
@@ -161,6 +165,37 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     } else { setAnalysisProgress(null); }
   };
 
+  const fetchSimilarTickersPage = useCallback(async (page: number): Promise<boolean> => {
+    if (!ticker) return false;
+
+    const safePage = Math.max(1, page);
+    const offset = (safePage - 1) * SIMILAR_STOCKS_PER_PAGE;
+
+    setIsLoadingSimilarTickers(true);
+    try {
+      const data = await stockApi.getSimilarTickers(ticker, SIMILAR_STOCKS_PER_PAGE, offset);
+      console.log('Similar tickers response:', data);
+      const rows = data.similar_tickers || [];
+      const hasMore = typeof data.has_more === 'boolean'
+        ? data.has_more
+        : rows.length === SIMILAR_STOCKS_PER_PAGE;
+      setSimilarTickers(data);
+      setSimilarTickerPages((prev) => ({ ...prev, [safePage]: rows }));
+      setSimilarHasMoreByPage((prev) => ({ ...prev, [safePage]: hasMore }));
+      return safePage === 1 || rows.length > 0;
+    } catch (error) {
+      console.error('Error fetching similar tickers:', error);
+      if (safePage === 1) {
+        setSimilarTickers(null);
+        setSimilarTickerPages({});
+        setSimilarHasMoreByPage({});
+      }
+      return false;
+    } finally {
+      setIsLoadingSimilarTickers(false);
+    }
+  }, [ticker]);
+
   const loadStockData = async () => {
     if (!ticker) return;
     try {
@@ -191,17 +226,10 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     stockApi.getAnalystRecommendations(ticker).then(setAnalystRecommendations).catch(() => {}).finally(() => setIsLoadingRecommendations(false));
     setIsLoadingFutureEvents(true);
     stockApi.getFutureEvents(ticker).then(setFutureEvents).catch(() => {}).finally(() => setIsLoadingFutureEvents(false));
-    setIsLoadingSimilarTickers(true);
-    stockApi.getSimilarTickers(ticker, 10)
-      .then((data) => {
-        console.log('Similar tickers response:', data);
-        setSimilarTickers(data);
-      })
-      .catch((error) => {
-        console.error('Error fetching similar tickers:', error);
-        setSimilarTickers(null);
-      })
-      .finally(() => setIsLoadingSimilarTickers(false));
+    setSimilarStocksPage(1);
+    setSimilarTickerPages({});
+    setSimilarHasMoreByPage({});
+    void fetchSimilarTickersPage(1);
   };
 
   useEffect(() => {
@@ -210,7 +238,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     setFinancialStatements(null); setNewsData([]); setNewsError(null); setInsiderTransactions([]);
     setInsiderTransactionsError(null); setFundamentalsSubTab('charts'); setFundInfo(null);
     setAnalysisProgress(null); setEdgarFilings(null); setEdgarFilingsError(null); setFutureEvents(null);
-    setSimilarTickers(null);
+    setSimilarTickers(null); setSimilarTickerPages({}); setSimilarHasMoreByPage({}); setSimilarStocksPage(1);
     setActiveTab('ai-analysis'); setSelectedReport(null); setLoadError(null); setAnalysisError(null);
     // EXPERIMENTAL: reset historical run state
     setSelectedRunId(null); setHistoricalReportsData(null);
@@ -243,17 +271,10 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       stockApi.getAnalystRecommendations(ticker).then(setAnalystRecommendations).catch(() => {}).finally(() => setIsLoadingRecommendations(false));
       setIsLoadingFutureEvents(true);
       stockApi.getFutureEvents(ticker).then(setFutureEvents).catch(() => {}).finally(() => setIsLoadingFutureEvents(false));
-      setIsLoadingSimilarTickers(true);
-      stockApi.getSimilarTickers(ticker, 10)
-        .then((data) => {
-          console.log('Similar tickers response:', data);
-          setSimilarTickers(data);
-        })
-        .catch((error) => {
-          console.error('Error fetching similar tickers:', error);
-          setSimilarTickers(null);
-        })
-        .finally(() => setIsLoadingSimilarTickers(false));
+      setSimilarStocksPage(1);
+      setSimilarTickerPages({});
+      setSimilarHasMoreByPage({});
+      void fetchSimilarTickersPage(1);
     } else {
       setStockData(null);
       setIsLoading(true);
@@ -436,6 +457,36 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   };
   const formatRatio = (value: number | null | undefined): string => value == null ? 'N/A' : value.toFixed(2);
   const formatPercent = (value: number | null | undefined): string => value == null ? 'N/A' : `${(value * 100).toFixed(2)}%`;
+  const knownTotalSimilarStockCount = typeof similarTickers?.total_count === 'number'
+    ? similarTickers.total_count
+    : null;
+  const totalSimilarStockPages = knownTotalSimilarStockCount != null
+    ? Math.max(1, Math.ceil(knownTotalSimilarStockCount / SIMILAR_STOCKS_PER_PAGE))
+    : null;
+  const currentSimilarStocksPage = totalSimilarStockPages != null
+    ? Math.min(similarStocksPage, totalSimilarStockPages)
+    : similarStocksPage;
+  const visibleSimilarStocks = similarTickerPages[currentSimilarStocksPage] ?? [];
+  const similarStartIndex = (currentSimilarStocksPage - 1) * SIMILAR_STOCKS_PER_PAGE;
+  const similarEndIndex = similarStartIndex + SIMILAR_STOCKS_PER_PAGE;
+  const currentPageHasMore = totalSimilarStockPages != null
+    ? currentSimilarStocksPage < totalSimilarStockPages
+    : (similarHasMoreByPage[currentSimilarStocksPage] ?? false);
+  const canGoToNextSimilarStocksPage = Boolean(similarTickerPages[currentSimilarStocksPage + 1]) || currentPageHasMore;
+  const canGoToPreviousSimilarStocksPage = currentSimilarStocksPage > 1;
+  const shouldShowSimilarPaginationControls = canGoToPreviousSimilarStocksPage || canGoToNextSimilarStocksPage;
+
+  const handleNextSimilarStocksPage = async () => {
+    if (!canGoToNextSimilarStocksPage || isLoadingSimilarTickers) return;
+    const nextPage = currentSimilarStocksPage + 1;
+    if (similarTickerPages[nextPage]) {
+      setSimilarStocksPage(nextPage);
+      return;
+    }
+
+    const fetched = await fetchSimilarTickersPage(nextPage);
+    if (fetched) setSimilarStocksPage(nextPage);
+  };
 
   if (isLoading) return (
     <div className="flex-1 min-h-0 overflow-y-auto p-6">
@@ -706,12 +757,23 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
           {/* Similar Stocks Tab */}
           {activeTab === 'similar-stocks' && (
             <div className="space-y-4">
-              {isLoadingSimilarTickers ? (
-                <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 animate-pulse">
-                  <div className="h-5 bg-gray-700 rounded w-40 mb-3" />
-                  <div className="h-20 bg-gray-700 rounded" />
+              {isLoadingSimilarTickers && visibleSimilarStocks.length === 0 ? (
+                <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-blue-400 animate-spin mt-0.5" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    <div>
+                      <p className="text-sm font-semibold text-white">Loading Similar Stocks</p>
+                      <p className="text-xs text-gray-400 mt-1">Fetching peer companies and market metrics...</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 h-1.5 w-full rounded bg-gray-700 overflow-hidden">
+                    <div className="h-full w-1/3 bg-blue-500 animate-pulse rounded" />
+                  </div>
                 </div>
-              ) : similarTickers && similarTickers.similar_tickers && similarTickers.similar_tickers.length > 0 ? (
+              ) : similarTickers && visibleSimilarStocks.length > 0 ? (
                 <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-semibold text-white">
@@ -723,56 +785,103 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                        similarTickers.match_type === 'industry_only' ? 'Same industry' : 'Related'}
                     </span>
                   </div>
-                  <div className="overflow-x-auto rounded-lg border border-gray-700">
-                    <table className="min-w-[1350px] w-full text-xs">
-                      <thead className="bg-gray-900/70">
-                        <tr className="text-left text-gray-300">
-                          <th className="px-3 py-2">Ticker</th>
-                          <th className="px-3 py-2">Name</th>
-                          <th className="px-3 py-2">Price</th>
-                          <th className="px-3 py-2">Change %</th>
-                          <th className="px-3 py-2">Market Cap</th>
-                          <th className="px-3 py-2">Revenue</th>
-                          <th className="px-3 py-2">EBITDA</th>
-                          <th className="px-3 py-2">P/E (TTM)</th>
-                          <th className="px-3 py-2">EPS (TTM)</th>
-                          <th className="px-3 py-2">Profit Margin</th>
-                          <th className="px-3 py-2">Beta</th>
-                          <th className="px-3 py-2">Dividend Yield</th>
-                          <th className="px-3 py-2">52W Range</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {similarTickers.similar_tickers.slice(0, 10).map((similar) => (
-                          <tr
-                            key={similar.ticker}
-                            onClick={() => navigate(`/tickers/${similar.ticker}`)}
-                            className="border-t border-gray-700/80 hover:bg-gray-700/30 cursor-pointer"
-                          >
-                            <td className="px-3 py-2 text-blue-300 font-semibold">{similar.ticker}</td>
-                            <td className="px-3 py-2 text-white max-w-[220px] truncate" title={similar.name}>{similar.name}</td>
-                            <td className="px-3 py-2 text-white">{formatNumber(similar.current_price, 2)}</td>
-                            <td className={`px-3 py-2 ${similar.change_percent == null ? 'text-gray-400' : similar.change_percent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                              {formatSignedPercent(similar.change_percent)}
-                            </td>
-                            <td className="px-3 py-2 text-gray-200">{formatNumber(similar.market_cap, 2)}</td>
-                            <td className="px-3 py-2 text-gray-200">{formatNumber(similar.revenue, 2)}</td>
-                            <td className="px-3 py-2 text-gray-200">{formatNumber(similar.ebitda, 2)}</td>
-                            <td className="px-3 py-2 text-gray-200">{formatRatio(similar.trailing_pe)}</td>
-                            <td className="px-3 py-2 text-gray-200">{formatRatio(similar.trailing_eps)}</td>
-                            <td className="px-3 py-2 text-gray-200">{formatPercent(similar.profit_margin)}</td>
-                            <td className="px-3 py-2 text-gray-200">{formatRatio(similar.beta)}</td>
-                            <td className="px-3 py-2 text-gray-200">{formatPercent(similar.dividend_yield)}</td>
-                            <td className="px-3 py-2 text-gray-200">
-                              {similar.fifty_two_week_low != null || similar.fifty_two_week_high != null
-                                ? `${formatNumber(similar.fifty_two_week_low, 2)} - ${formatNumber(similar.fifty_two_week_high, 2)}`
-                                : 'N/A'}
-                            </td>
+                  <div className="relative">
+                    <div className="overflow-x-auto rounded-lg border border-gray-700">
+                      <table className="min-w-[1350px] w-full text-xs">
+                        <thead className="bg-gray-900/70">
+                          <tr className="text-left text-gray-300">
+                            <th className="px-3 py-2">Ticker</th>
+                            <th className="px-3 py-2">Name</th>
+                            <th className="px-3 py-2">Price</th>
+                            <th className="px-3 py-2">Change %</th>
+                            <th className="px-3 py-2">Market Cap</th>
+                            <th className="px-3 py-2">Revenue</th>
+                            <th className="px-3 py-2">EBITDA</th>
+                            <th className="px-3 py-2">P/E (TTM)</th>
+                            <th className="px-3 py-2">EPS (TTM)</th>
+                            <th className="px-3 py-2">Profit Margin</th>
+                            <th className="px-3 py-2">Beta</th>
+                            <th className="px-3 py-2">Dividend Yield</th>
+                            <th className="px-3 py-2">52W Range</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {visibleSimilarStocks.map((similar) => (
+                            <tr
+                              key={similar.ticker}
+                              onClick={() => navigate(`/tickers/${similar.ticker}`)}
+                              className="border-t border-gray-700/80 hover:bg-gray-700/30 cursor-pointer"
+                            >
+                              <td className="px-3 py-2 text-blue-300 font-semibold">{similar.ticker}</td>
+                              <td className="px-3 py-2 text-white max-w-[220px] truncate" title={similar.name}>{similar.name}</td>
+                              <td className="px-3 py-2 text-white">{formatNumber(similar.current_price, 2)}</td>
+                              <td className={`px-3 py-2 ${similar.change_percent == null ? 'text-gray-400' : similar.change_percent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {formatSignedPercent(similar.change_percent)}
+                              </td>
+                              <td className="px-3 py-2 text-gray-200">{formatNumber(similar.market_cap, 2)}</td>
+                              <td className="px-3 py-2 text-gray-200">{formatNumber(similar.revenue, 2)}</td>
+                              <td className="px-3 py-2 text-gray-200">{formatNumber(similar.ebitda, 2)}</td>
+                              <td className="px-3 py-2 text-gray-200">{formatRatio(similar.trailing_pe)}</td>
+                              <td className="px-3 py-2 text-gray-200">{formatRatio(similar.trailing_eps)}</td>
+                              <td className="px-3 py-2 text-gray-200">{formatPercent(similar.profit_margin)}</td>
+                              <td className="px-3 py-2 text-gray-200">{formatRatio(similar.beta)}</td>
+                              <td className="px-3 py-2 text-gray-200">{formatPercent(similar.dividend_yield)}</td>
+                              <td className="px-3 py-2 text-gray-200">
+                                {similar.fifty_two_week_low != null || similar.fifty_two_week_high != null
+                                  ? `${formatNumber(similar.fifty_two_week_low, 2)} - ${formatNumber(similar.fifty_two_week_high, 2)}`
+                                  : 'N/A'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {isLoadingSimilarTickers && visibleSimilarStocks.length > 0 && (
+                      <div className="absolute inset-0 rounded-lg bg-gray-900/70 backdrop-blur-[1px] flex items-center justify-center">
+                        <div className="flex items-center gap-2 px-3 py-2 rounded border border-gray-600 bg-gray-800/90">
+                          <svg className="w-4 h-4 text-blue-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                          </svg>
+                          <span className="text-xs text-gray-200 font-medium">Loading next page...</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
+                  {shouldShowSimilarPaginationControls && (
+                    <div className="pt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <p className="text-gray-500 text-xs text-center sm:text-left">
+                        {knownTotalSimilarStockCount != null
+                          ? `Showing ${similarStartIndex + 1}-${Math.min(similarEndIndex, knownTotalSimilarStockCount)} of ${knownTotalSimilarStockCount} similar stocks`
+                          : `Showing ${similarStartIndex + 1}-${similarStartIndex + visibleSimilarStocks.length} similar stocks`
+                        }
+                      </p>
+                      <div className="flex items-center justify-center sm:justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSimilarStocksPage(Math.max(1, currentSimilarStocksPage - 1))}
+                          disabled={!canGoToPreviousSimilarStocksPage || isLoadingSimilarTickers}
+                          className="px-3 py-1 text-xs rounded border border-gray-600 text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
+                        >
+                          Previous
+                        </button>
+                        <span className="text-xs text-gray-400">
+                          {totalSimilarStockPages != null
+                            ? `Page ${currentSimilarStocksPage} of ${totalSimilarStockPages}`
+                            : `Page ${currentSimilarStocksPage}`
+                          }
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => { void handleNextSimilarStocksPage(); }}
+                          disabled={!canGoToNextSimilarStocksPage || isLoadingSimilarTickers}
+                          className="px-3 py-1 text-xs rounded border border-gray-600 text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
+                        >
+                          {isLoadingSimilarTickers ? 'Loading...' : 'Next'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : similarTickers && similarTickers.message ? (
                 <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">

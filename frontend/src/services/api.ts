@@ -107,9 +107,9 @@ export const stockApi = {
   },
 
   // Get similar tickers based on sector/industry (raw market data via /api/data)
-  getSimilarTickers: async (ticker: string, limit: number = 10): Promise<SimilarTickersResponse> => {
+  getSimilarTickers: async (ticker: string, limit: number = 10, offset: number = 0): Promise<SimilarTickersResponse> => {
     const response = await api.get(`/api/data/similar-tickers/${ticker}`, {
-      params: { limit },
+      params: { limit, offset },
     });
     return response.data;
   },

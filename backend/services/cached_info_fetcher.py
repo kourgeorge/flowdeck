@@ -182,13 +182,13 @@ class CachedInfoFetcher:
             lambda: self._fetcher.get_future_events(ticker),
         )
 
-    def get_similar_tickers(self, ticker: str, limit: int = 10) -> Dict[str, Any]:
+    def get_similar_tickers(self, ticker: str, limit: int = 10, offset: int = 0) -> Dict[str, Any]:
         """Get similar tickers based on sector/industry matching (cached)."""
-        key = f"similar_tickers:{ticker.upper()}:{limit}"
+        key = f"similar_tickers:{ticker.upper()}:{limit}:{offset}"
         return get_cached(
             key,
             DATA_CACHE_TTL_SIMILAR_TICKERS,
-            lambda: self._fetcher.get_similar_tickers(ticker, limit),
+            lambda: self._fetcher.get_similar_tickers(ticker, limit, offset),
         )
 
     def get_company_officers(self, ticker: str) -> Dict[str, Any]:

@@ -134,9 +134,17 @@ export interface SimilarTickersResponse {
   sector: string | null;
   industry: string | null;
   similar_tickers: SimilarTicker[];
+  /** Number of items in this page */
   count: number;
+  /** Total matches available across all pages */
+  total_count?: number;
+  /** Echoed pagination limit */
+  limit?: number;
+  /** Echoed pagination offset */
+  offset?: number;
+  /** Whether additional results are available after this page */
+  has_more?: boolean;
   match_type: 'sector_and_industry' | 'sector_only' | 'industry_only' | 'mixed' | 'no_matches' | 'not_applicable' | 'no_data';
   message?: string;
   error?: string;
 }
-

@@ -80,6 +80,8 @@ const FundamentalPanes: React.FC<FundamentalPanesProps> = ({
   isLoadingOfficers = false
 }) => {
   const fundamentalData = data;
+  const OFFICERS_PER_PAGE = 5;
+  const [officersPage, setOfficersPage] = React.useState(1);
 
   // Format number with appropriate units
   const formatNumber = (value: string | number | null | undefined, decimals: number = 2): string => {
@@ -128,6 +130,18 @@ const FundamentalPanes: React.FC<FundamentalPanesProps> = ({
   const strongSell = parseFloat(String(fundamentalData.AnalystRatingStrongSell || 0));
   const totalRatings = strongBuy + buy + hold + sell + strongSell;
   const buyPercentage = totalRatings > 0 ? ((strongBuy + buy) / totalRatings) * 100 : 0;
+  const totalOfficerPages = Math.max(1, Math.ceil(companyOfficers.length / OFFICERS_PER_PAGE));
+  const officerStartIndex = (officersPage - 1) * OFFICERS_PER_PAGE;
+  const officerEndIndex = officerStartIndex + OFFICERS_PER_PAGE;
+  const visibleOfficers = companyOfficers.slice(officerStartIndex, officerEndIndex);
+
+  React.useEffect(() => {
+    setOfficersPage((prevPage) => Math.min(prevPage, totalOfficerPages));
+  }, [totalOfficerPages]);
+
+  React.useEffect(() => {
+    setOfficersPage(1);
+  }, [companyOfficers]);
 
   return (
     <div className="space-y-6">
@@ -533,7 +547,7 @@ const FundamentalPanes: React.FC<FundamentalPanesProps> = ({
             Company Officers
           </h3>
           <div className="space-y-3">
-            {companyOfficers.slice(0, 5).map((officer, idx) => (
+            {visibleOfficers.map((officer, idx) => (
               <div
                 key={idx}
                 className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-3 border-b border-gray-700 last:border-0"
@@ -559,9 +573,32 @@ const FundamentalPanes: React.FC<FundamentalPanesProps> = ({
               </div>
             ))}
             {companyOfficers.length > 5 && (
-              <p className="text-gray-500 text-xs text-center pt-2">
-                Showing 5 of {companyOfficers.length} officers
-              </p>
+              <div className="pt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <p className="text-gray-500 text-xs text-center sm:text-left">
+                  Showing {officerStartIndex + 1}-{Math.min(officerEndIndex, companyOfficers.length)} of {companyOfficers.length} officers
+                </p>
+                <div className="flex items-center justify-center sm:justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setOfficersPage((prevPage) => Math.max(1, prevPage - 1))}
+                    disabled={officersPage === 1}
+                    className="px-3 py-1 text-xs rounded border border-gray-600 text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-xs text-gray-400">
+                    Page {officersPage} of {totalOfficerPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setOfficersPage((prevPage) => Math.min(totalOfficerPages, prevPage + 1))}
+                    disabled={officersPage === totalOfficerPages}
+                    className="px-3 py-1 text-xs rounded border border-gray-600 text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>

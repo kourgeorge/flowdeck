@@ -150,9 +150,10 @@ async def data_future_events(ticker: str):
 async def data_similar_tickers(
     ticker: str,
     limit: int = Query(10, ge=1, le=50, description="Maximum number of similar tickers to return"),
+    offset: int = Query(0, ge=0, description="Result offset for pagination"),
 ):
     """Get similar tickers based on sector/industry matching."""
-    return await asyncio.to_thread(_engine().get_similar_tickers, ticker, limit)
+    return await asyncio.to_thread(_engine().get_similar_tickers, ticker, limit, offset)
 
 @router.get("/company-officers/{ticker}")
 async def data_company_officers(ticker: str):

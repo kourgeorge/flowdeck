@@ -555,6 +555,7 @@ class InfoFetcher:
         self,
         ticker: str,
         limit: int = 10,
+        offset: int = 0,
     ) -> Dict[str, Any]:
         """Get similar tickers based on sector/industry matching.
         
@@ -574,6 +575,10 @@ class InfoFetcher:
                 "industry": None,
                 "similar_tickers": [],
                 "count": 0,
+                "total_count": 0,
+                "limit": limit,
+                "offset": offset,
+                "has_more": False,
                 "error": "Failed to fetch ticker information"
             }
         
@@ -589,6 +594,10 @@ class InfoFetcher:
                 "industry": target_industry,
                 "similar_tickers": [],
                 "count": 0,
+                "total_count": 0,
+                "limit": limit,
+                "offset": offset,
+                "has_more": False,
                 "match_type": "not_applicable",
                 "message": f"Similar tickers not available for {target_quote_type} type"
             }
@@ -600,6 +609,10 @@ class InfoFetcher:
                 "industry": None,
                 "similar_tickers": [],
                 "count": 0,
+                "total_count": 0,
+                "limit": limit,
+                "offset": offset,
+                "has_more": False,
                 "match_type": "no_data",
                 "message": "No sector/industry data available for this ticker"
             }
@@ -607,7 +620,7 @@ class InfoFetcher:
         # Use cached sector/industry matching with batch quote enrichment.
         try:
             return self._get_similar_tickers_cached(
-                ticker, target_info, target_sector, target_industry, limit
+                ticker, target_info, target_sector, target_industry, limit, offset
             )
         except Exception as e:
             return {
@@ -616,6 +629,10 @@ class InfoFetcher:
                 "industry": target_industry,
                 "similar_tickers": [],
                 "count": 0,
+                "total_count": 0,
+                "limit": limit,
+                "offset": offset,
+                "has_more": False,
                 "match_type": "error",
                 "error": str(e)
             }
@@ -628,6 +645,7 @@ class InfoFetcher:
         target_sector: Optional[str],
         target_industry: Optional[str],
         limit: int,
+        offset: int,
     ) -> Dict[str, Any]:
         """Get similar tickers using prefetched sector/industry data for fast matching.
         
@@ -705,18 +723,19 @@ class InfoFetcher:
                     "recommendation_key": candidate_info.get("recommendation_key"),
                 })
                 
-            if len(exact_matches) >= limit and len(sector_only_matches) >= limit:
-                break
-        
         # Prioritize exact sector+industry matches first, then sector-only matches.
         exact_matches.sort(key=lambda x: x["market_cap"] if x["market_cap"] else 0, reverse=True)
         sector_only_matches.sort(key=lambda x: x["market_cap"] if x["market_cap"] else 0, reverse=True)
-        
-        similar_stocks = (exact_matches + sector_only_matches)[:limit]
-        
-        if not similar_stocks:
+
+        all_matches = exact_matches + sector_only_matches
+        total_count = len(all_matches)
+        safe_offset = max(0, int(offset))
+        safe_limit = max(1, int(limit))
+        similar_stocks = all_matches[safe_offset:safe_offset + safe_limit]
+
+        if total_count == 0:
             match_type = "no_matches"
-        elif len(similar_stocks) <= len(exact_matches):
+        elif total_count <= len(exact_matches):
             match_type = "sector_and_industry"
         else:
             match_type = "sector_only"
@@ -730,6 +749,10 @@ class InfoFetcher:
             "industry": target_industry,
             "similar_tickers": similar_stocks,
             "count": len(similar_stocks),
+            "total_count": total_count,
+            "limit": safe_limit,
+            "offset": safe_offset,
+            "has_more": safe_offset + len(similar_stocks) < total_count,
             "match_type": match_type,
             "method": "yahooquery_batch"
         }
