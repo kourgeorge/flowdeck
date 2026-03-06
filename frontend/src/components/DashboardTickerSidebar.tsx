@@ -1,25 +1,25 @@
 import { useState, useEffect, useRef } from 'react';
 import Fuse from 'fuse.js';
-import type { TickerWidget as StockWidgetType } from '../services/types';
+import type { TickerWidget as TickerWidgetType } from '../services/types';
 
-interface Stock {
+interface Ticker {
   ticker: string;
   name: string;
 }
 
-function SidebarStockSearch({ onSelect }: { onSelect: (ticker: string) => void }) {
+function SidebarTickerSearch({ onSelect }: { onSelect: (ticker: string) => void }) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [suggestions, setSuggestions] = useState<Stock[]>([]);
+  const [suggestions, setSuggestions] = useState<Ticker[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [fuse, setFuse] = useState<Fuse<Stock> | null>(null);
+  const [fuse, setFuse] = useState<Fuse<Ticker> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch('/stocks.json')
       .then((res) => res.json())
-      .then((data: Stock[]) => {
+      .then((data: Ticker[]) => {
         const fuseInstance = new Fuse(data, {
           keys: [
             { name: 'ticker', weight: 0.7 },
@@ -66,7 +66,7 @@ function SidebarStockSearch({ onSelect }: { onSelect: (ticker: string) => void }
     }
   };
 
-  const handleSelect = (stock: Stock) => {
+  const handleSelect = (stock: Ticker) => {
     setSearchTerm('');
     setSuggestions([]);
     setShowSuggestions(false);
@@ -156,7 +156,7 @@ function SidebarStockSearch({ onSelect }: { onSelect: (ticker: string) => void }
 }
 
 
-interface StockSidebarItem {
+interface TickerSidebarItem {
   ticker: string;
   name: string;
   current_price: number;
@@ -167,9 +167,9 @@ interface StockSidebarItem {
   source: 'subscribed' | 'recent' | 'radar';
 }
 
-interface DashboardStockSidebarProps {
-  subscribedWidgets: StockWidgetType[];
-  recentWidgets: StockWidgetType[];
+interface DashboardTickerSidebarProps {
+  subscribedWidgets: TickerWidgetType[];
+  recentWidgets: TickerWidgetType[];
   tickerToName: Record<string, string>;
   selectedTicker: string | null;
   onSelect: (ticker: string) => void;
@@ -200,7 +200,7 @@ function SidebarRow({
   onSelect,
   onRemove,
 }: {
-  item: StockSidebarItem;
+  item: TickerSidebarItem;
   isSelected: boolean;
   onSelect: (ticker: string) => void;
   onRemove?: (ticker: string) => void;
@@ -255,7 +255,7 @@ function SidebarRow({
   );
 }
 
-export default function DashboardStockSidebar({
+export default function DashboardTickerSidebar({
   subscribedWidgets,
   recentWidgets,
   tickerToName,
@@ -263,11 +263,11 @@ export default function DashboardStockSidebar({
   onSelect,
   onAdd,
   onRemove,
-}: DashboardStockSidebarProps) {
+}: DashboardTickerSidebarProps) {
   const subscribedTickers = new Set(subscribedWidgets.map((w) => w.ticker));
   const recentOnly = recentWidgets.filter((w) => !subscribedTickers.has(w.ticker));
 
-  const toItem = (w: StockWidgetType, source: StockSidebarItem['source']): StockSidebarItem => ({
+  const toItem = (w: TickerWidgetType, source: TickerSidebarItem['source']): TickerSidebarItem => ({
     ticker: w.ticker,
     name: w.name || tickerToName[w.ticker] || w.ticker,
     current_price: w.current_price,
@@ -295,7 +295,7 @@ export default function DashboardStockSidebar({
   if (!hasSubscribed && !hasRecent) {
     return (
       <div className="flex flex-col">
-        <SidebarStockSearch onSelect={handleSearchSelect} />
+        <SidebarTickerSearch onSelect={handleSearchSelect} />
         <div className="p-4 text-center text-gray-500 text-sm">
           No tickers yet. Search above to add tickers.
         </div>
@@ -305,7 +305,7 @@ export default function DashboardStockSidebar({
 
   return (
     <div className="flex flex-col min-h-0 overflow-y-auto">
-      <SidebarStockSearch onSelect={handleSearchSelect} />
+      <SidebarTickerSearch onSelect={handleSearchSelect} />
       {hasSubscribed && (
         <div>
           <div className="px-3 py-2 text-xs font-semibold text-amber-400/80 uppercase tracking-wider bg-gray-800/60 border-b border-gray-700 sticky top-0 z-10">

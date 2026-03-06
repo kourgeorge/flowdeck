@@ -1,6 +1,6 @@
 import type { RefObject } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { TickerWidget as StockWidgetType } from '../services/types';
+import type { TickerWidget as TickerWidgetType } from '../services/types';
 import { parseReportDate } from '../utils/date';
 import AspectSpiderChart, { getScoreColor, formatReportKey, getAnalysisScoreEntries } from './AspectSpiderChart';
 
@@ -15,8 +15,8 @@ function getTableHeightPx(rowCount: number): number {
   return TABLE_HEADER_HEIGHT_PX + visibleRows * ROW_HEIGHT_PX;
 }
 
-interface StockListViewProps {
-  widgets: StockWidgetType[];
+interface TickerListViewProps {
+  widgets: TickerWidgetType[];
   tickerToName: Record<string, string>;
   /** Optional ref for the scroll container (e.g. for load-more). */
   scrollRef?: RefObject<HTMLDivElement>;
@@ -49,7 +49,7 @@ function getRecommendationBadge(rec: string | null) {
   );
 }
 
-function getWidgetConfidence(widget: StockWidgetType): number | null {
+function getWidgetConfidence(widget: TickerWidgetType): number | null {
   const direct = widget.confidence;
   if (direct != null && direct >= 0 && direct <= 1) return direct;
   const finalScore = widget.report_scores?.final_trade_decision?.score;
@@ -57,11 +57,11 @@ function getWidgetConfidence(widget: StockWidgetType): number | null {
   return null;
 }
 
-function getConfidenceValue(widget: StockWidgetType): number {
+function getConfidenceValue(widget: TickerWidgetType): number {
   return getWidgetConfidence(widget) ?? -1;
 }
 
-export default function StockListView({ widgets, tickerToName, scrollRef, onScroll, footer, preserveOrder = false }: StockListViewProps) {
+export default function TickerListView({ widgets, tickerToName, scrollRef, onScroll, footer, preserveOrder = false }: TickerListViewProps) {
   const navigate = useNavigate();
   const sortedWidgets = preserveOrder
     ? widgets

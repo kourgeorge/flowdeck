@@ -210,14 +210,14 @@ export default function TickerMentionInput({
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Mention a ticker</span>
           </div>
           <ul className="max-h-52 overflow-y-auto">
-            {suggestions.map((stock, i) => (
-              <li key={stock.ticker}>
+            {suggestions.map((ticker, i) => (
+              <li key={ticker.ticker}>
                 <button
                   type="button"
                   onMouseDown={(e) => {
                     // Use mousedown so it fires before the textarea blur
                     e.preventDefault();
-                    insertMention(stock);
+                    insertMention(ticker);
                   }}
                   className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${
                     i === selectedIndex
@@ -226,9 +226,9 @@ export default function TickerMentionInput({
                   }`}
                 >
                   <span className="shrink-0 w-10 text-xs font-bold text-blue-300 font-mono">
-                    {stock.ticker}
+                    {ticker.ticker}
                   </span>
-                  <span className="text-xs text-slate-400 truncate">{stock.name}</span>
+                  <span className="text-xs text-slate-400 truncate">{ticker.name}</span>
                 </button>
               </li>
             ))}

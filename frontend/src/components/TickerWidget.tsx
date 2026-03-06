@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import type { TickerWidget as StockWidgetType } from '../services/types';
+import type { TickerWidget as TickerWidgetType } from '../services/types';
 import { parseReportDate } from '../utils/date';
 
 const DASHBOARD_TILE_COLORS = [
@@ -21,15 +21,15 @@ function getDashboardTileColor(ticker: string): string {
   return DASHBOARD_TILE_COLORS[index];
 }
 
-interface StockWidgetProps {
-  widget: StockWidgetType;
+interface TickerWidgetProps {
+  widget: TickerWidgetType;
   /** Dashboard variant: larger tile with company name and distinct accent color */
   variant?: 'default' | 'dashboard';
   /** Company name for dashboard variant (e.g. from stocks.json) */
   companyName?: string;
 }
 
-export default function StockWidget({ widget, variant = 'default', companyName }: StockWidgetProps) {
+export default function TickerWidget({ widget, variant = 'default', companyName }: TickerWidgetProps) {
   const navigate = useNavigate();
 
   const getRecommendationColor = (rec: string | null) => {

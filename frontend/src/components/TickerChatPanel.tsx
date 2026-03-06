@@ -13,7 +13,7 @@ function detectRTL(text: string): boolean {
   return rtlRegex.test(text);
 }
 
-interface StockChatPanelProps {
+interface TickerChatPanelProps {
   onClose: () => void;
   initialBalance?: number;
 }
@@ -115,7 +115,7 @@ function MessageBubble({ message }: { message: ChatMessage & { tokens_used?: num
   );
 }
 
-export default function StockChatPanel({ onClose, initialBalance }: StockChatPanelProps) {
+export default function TickerChatPanel({ onClose, initialBalance }: TickerChatPanelProps) {
   const [messages, setMessages] = useState<(ChatMessage & { tokens_used?: number })[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -190,7 +190,7 @@ export default function StockChatPanel({ onClose, initialBalance }: StockChatPan
               </svg>
             </div>
             <div>
-              <div className="text-sm font-semibold text-white">Stock Market Analyst</div>
+              <div className="text-sm font-semibold text-white">Market Analyst</div>
               <div className="text-xs text-slate-400">AI-powered · uses live data</div>
             </div>
           </div>
@@ -227,7 +227,7 @@ export default function StockChatPanel({ onClose, initialBalance }: StockChatPan
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
                   </svg>
                 </div>
-                <p className="text-sm font-medium text-white mb-1">Ask me anything about stocks</p>
+                <p className="text-sm font-medium text-white mb-1">Ask me anything about the market</p>
                 <p className="text-xs text-slate-400">I have access to live prices, fundamentals, news, and more</p>
               </div>
               <div className="w-full space-y-2">

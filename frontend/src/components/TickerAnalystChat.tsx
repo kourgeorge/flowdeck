@@ -18,7 +18,7 @@ function StreamingCursor() {
   return <span className="inline-block w-0.5 h-3.5 bg-blue-400 ml-0.5 align-middle animate-pulse" />;
 }
 
-interface StockAnalystChatProps {
+interface TickerAnalystChatProps {
   ticker: string;
   companyName?: string | null;
 }
@@ -156,7 +156,7 @@ function MessageBubble({
   );
 }
 
-export default function StockAnalystChat({ ticker, companyName }: StockAnalystChatProps) {
+export default function TickerAnalystChat({ ticker, companyName }: TickerAnalystChatProps) {
   const [messages, setMessages] = useState<(ChatMessage & { tokens_used?: number; tools_called?: number })[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -291,7 +291,7 @@ export default function StockAnalystChat({ ticker, companyName }: StockAnalystCh
           </div>
           <div>
             <div className="text-sm font-semibold text-white">
-              Stock Market Analyst
+              Market Analyst
               <span className="ml-2 text-xs font-normal text-blue-400 bg-blue-500/10 border border-blue-500/30 rounded px-1.5 py-0.5">
                 {ticker}
               </span>

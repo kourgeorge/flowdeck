@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import StockDetailPanel from '../components/StockDetailPanel';
-import TickerSearch from '../components/StockSearch';
+import StockDetailPanel from '../components/TickerDetailPanel';
+import TickerSearch from '../components/TickerSearch';
 
 export default function TickerPage() {
   const { ticker } = useParams<{ ticker: string }>();

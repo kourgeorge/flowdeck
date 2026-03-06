@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import TickerSearch from '../components/StockSearch';
+import TickerSearch from '../components/TickerSearch';
 import DashboardTopTiles from '../components/DashboardTopTiles';
-import DashboardStockSidebar from '../components/DashboardStockSidebar';
-import StockDetailPanel from '../components/StockDetailPanel';
-import StockListView from '../components/StockListView';
+import DashboardTickerSidebar from '../components/DashboardTickerSidebar';
+import StockDetailPanel from '../components/TickerDetailPanel';
+import TickerListView from '../components/StockListView';
 import DashboardNewsSection from '../components/DashboardNewsSection';
 import DashboardPriceTrendsChart from '../components/DashboardPriceTrendsChart';
 import OverviewStatsPanel, { ByMarketSection } from '../components/OverviewStatsPanel';
@@ -142,7 +142,7 @@ export default function DashboardPage() {
                 onScroll={handleSidebarScroll}
                 className="flex-1 min-w-0 min-h-0 overflow-y-auto"
               >
-                <DashboardStockSidebar
+                <DashboardTickerSidebar
                   subscribedWidgets={widgets}
                   recentWidgets={recentAnalyzedWidgets}
                   tickerToName={tickerToName}
@@ -196,7 +196,7 @@ export default function DashboardPage() {
               </button>
               {!sidebarCollapsed && (
                 <div style={{ maxHeight: '35vh', overflowY: 'auto' }}>
-                  <DashboardStockSidebar
+                  <DashboardTickerSidebar
                     subscribedWidgets={widgets}
                     recentWidgets={recentAnalyzedWidgets}
                     tickerToName={tickerToName}
@@ -297,7 +297,7 @@ export default function DashboardPage() {
 
                 {/* Subscribed tab content */}
                 {stockListTab === 'subscribed' && (
-                  <StockListView widgets={widgets} tickerToName={tickerToName} />
+                  <TickerListView widgets={widgets} tickerToName={tickerToName} />
                 )}
 
                 {/* Recently analyzed tab content */}
@@ -307,7 +307,7 @@ export default function DashboardPage() {
                       <p className="text-gray-400 text-sm">No analyzed stocks in the last 3 days.</p>
                     </div>
                   ) : (
-                    <StockListView
+                    <TickerListView
                       widgets={recentAnalyzedNonSubscribed}
                       tickerToName={tickerToName}
                       scrollRef={recentScrollRef}

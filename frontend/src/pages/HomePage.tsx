@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import StockListView from '../components/StockListView';
-import TickerSearch from '../components/StockSearch';
+import TickerListView from '../components/StockListView';
+import TickerSearch from '../components/TickerSearch';
 import AuthModal from '../components/AuthModal';
 import { tickerApi, API_BASE_URL } from '../services/api';
 import type { TickerWidget as StockWidgetType } from '../services/types';
@@ -193,7 +193,7 @@ export default function HomePage() {
               </button>
             </div>
           ) : (
-            <StockListView widgets={majorWidgets} tickerToName={tickerToName} />
+            <TickerListView widgets={majorWidgets} tickerToName={tickerToName} />
           )}
         </div>
       </section>

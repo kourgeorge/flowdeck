@@ -16,7 +16,7 @@ export default function TickerSearch({ compact = false }: TickerSearchProps) {
   const [suggestions, setSuggestions] = useState<Ticker[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [, setStocks] = useState<Ticker[]>([]);
+  const [, setTickers] = useState<Ticker[]>([]);
   const [fuse, setFuse] = useState<Fuse<Ticker> | null>(null);
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -27,7 +27,7 @@ export default function TickerSearch({ compact = false }: TickerSearchProps) {
     fetch('/stocks.json')
       .then((res) => res.json())
       .then((data: Ticker[]) => {
-        setStocks(data);
+        setTickers(data);
         // Initialize Fuse.js with both ticker and name as searchable keys
         const fuseInstance = new Fuse(data, {
           keys: [

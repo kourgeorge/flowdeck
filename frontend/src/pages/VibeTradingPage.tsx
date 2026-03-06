@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import DashboardStockSidebar from '../components/DashboardStockSidebar';
-import StockDetailPanel from '../components/StockDetailPanel';
+import DashboardTickerSidebar from '../components/DashboardTickerSidebar';
+import StockDetailPanel from '../components/TickerDetailPanel';
 import CopilotChatPanel from '../components/CopilotChatPanel';
 import { useSubscribedStocks } from '../hooks/useSubscribedStocks';
 import { useAuth } from '../contexts/AuthContext';
@@ -95,7 +95,7 @@ export default function VibeTradingPage() {
         >
           {!sidebarCollapsed && (
             <div className="flex-1 min-w-0 min-h-0 overflow-y-auto">
-              <DashboardStockSidebar
+              <DashboardTickerSidebar
                 subscribedWidgets={widgets}
                 recentWidgets={[]}
                 tickerToName={tickerToName}
@@ -181,7 +181,7 @@ export default function VibeTradingPage() {
             </button>
             {!sidebarCollapsed && (
               <div className="absolute top-full left-0 right-0 z-50 bg-gray-800 border-4 border-blue-900/40 shadow-2xl" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
-                <DashboardStockSidebar
+                <DashboardTickerSidebar
                   subscribedWidgets={widgets}
                   recentWidgets={[]}
                   tickerToName={tickerToName}
