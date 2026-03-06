@@ -72,6 +72,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const [insiderTransactions, setInsiderTransactions] = useState<any[]>([]);
   const [insiderTransactionsError, setInsiderTransactionsError] = useState<string | null>(null);
   const [isLoadingInsiderTransactions, setIsLoadingInsiderTransactions] = useState(false);
+  const [hasLoadedInsiderTransactions, setHasLoadedInsiderTransactions] = useState(false);
   const [analystRecommendations, setAnalystRecommendations] = useState<any>(null);
   const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false);
   const [fundamentalsSubTab, setFundamentalsSubTab] = useState<'statements' | 'charts'>('charts');
@@ -100,6 +101,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const refreshedQuote = useQuoteRefresh(ticker, 60000);
   const prevPriceRef = useRef<number | null>(null);
   const wsClientRef = useRef<WebSocketClient | null>(null);
+  const insiderFetchIdRef = useRef(0);
 
   const quoteType = companyInfo?.quoteType ?? (
     fundamentalsData && typeof fundamentalsData === 'object' && 'QuoteType' in fundamentalsData
@@ -262,9 +264,11 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
 
   useEffect(() => {
     // Reset all per-ticker state
+    insiderFetchIdRef.current += 1;
     setCompanyInfo(null); setExtendedInfo(null); setFundamentalsData(null);
     setFinancialStatements(null); setNewsData([]); setNewsError(null); setInsiderTransactions([]);
-    setInsiderTransactionsError(null); setFundamentalsSubTab('charts'); setFundInfo(null);
+    setInsiderTransactionsError(null); setIsLoadingInsiderTransactions(false); setHasLoadedInsiderTransactions(false);
+    setFundamentalsSubTab('charts'); setFundInfo(null);
     setAnalysisProgress(null); setEdgarFilings(null); setEdgarFilingsError(null); setFutureEvents(null);
     setSimilarTickers(null); setSimilarTickerPages({}); setSimilarHasMoreByPage({}); setSimilarStocksPage(1);
     setActiveTab('ai-analysis'); setSelectedReport(null); setLoadError(null); setAnalysisError(null);
@@ -405,9 +409,25 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
 
   const fetchInsiderTransactions = useCallback(() => {
     if (!ticker) return;
+    const requestId = insiderFetchIdRef.current + 1;
+    insiderFetchIdRef.current = requestId;
     setInsiderTransactionsError(null); setIsLoadingInsiderTransactions(true);
-    tickerApi.getInsiderTransactions(ticker, 50).then((r) => { setInsiderTransactions(r.transactions || []); setInsiderTransactionsError('error' in r ? r.error ?? null : null); setIsLoadingInsiderTransactions(false); })
-      .catch((err) => { setInsiderTransactionsError(err.response?.data?.detail ?? err.message ?? 'Unable to fetch insider transactions.'); setInsiderTransactions([]); setIsLoadingInsiderTransactions(false); });
+    tickerApi.getInsiderTransactions(ticker, 50)
+      .then((r) => {
+        if (insiderFetchIdRef.current !== requestId) return;
+        setInsiderTransactions(r.transactions || []);
+        setInsiderTransactionsError('error' in r ? r.error ?? null : null);
+      })
+      .catch((err) => {
+        if (insiderFetchIdRef.current !== requestId) return;
+        setInsiderTransactionsError(err.response?.data?.detail ?? err.message ?? 'Unable to fetch insider transactions.');
+        setInsiderTransactions([]);
+      })
+      .finally(() => {
+        if (insiderFetchIdRef.current !== requestId) return;
+        setIsLoadingInsiderTransactions(false);
+        setHasLoadedInsiderTransactions(true);
+      });
   }, [ticker]);
 
   const fetchCompanyOfficers = useCallback(() => {
@@ -485,10 +505,16 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   useEffect(() => { if (activeTab === 'news' && ticker && !isLoadingNews) fetchNews(); }, [activeTab, ticker, fetchNews]);
   useEffect(() => { if (activeTab === 'overview' && ticker && !isLoadingOfficers && companyOfficers.length === 0) fetchCompanyOfficers(); }, [activeTab, ticker, fetchCompanyOfficers, isLoadingOfficers, companyOfficers.length]);
   useEffect(() => {
-    if (activeTab === 'insider-transactions' && hasInsiderTransactions && ticker && !isLoadingInsiderTransactions) {
+    if (
+      activeTab === 'insider-transactions'
+      && hasInsiderTransactions
+      && ticker
+      && !hasLoadedInsiderTransactions
+      && !isLoadingInsiderTransactions
+    ) {
       fetchInsiderTransactions();
     }
-  }, [activeTab, hasInsiderTransactions, ticker, fetchInsiderTransactions, isLoadingInsiderTransactions]);
+  }, [activeTab, hasInsiderTransactions, ticker, fetchInsiderTransactions, hasLoadedInsiderTransactions, isLoadingInsiderTransactions]);
 
   useEffect(() => {
     if (activeTab !== 'sec-filings' || !ticker) return;
