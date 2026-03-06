@@ -104,6 +104,9 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     fundamentalsData && typeof fundamentalsData === 'object' && 'QuoteType' in fundamentalsData
       ? (fundamentalsData as { QuoteType?: string }).QuoteType : undefined
   );
+  const normalizedTicker = (ticker ?? '').toUpperCase();
+  const isPreviewTicker = previewTickers.has(normalizedTicker);
+  const canAccessGuestPreviewContent = Boolean(user || isPreviewTicker);
   const hasFundamentals = quoteType === 'EQUITY' || quoteType == null;
   const isUSCompany = companyInfo?.country === 'United States' || companyInfo?.country === 'USA';
 
@@ -166,7 +169,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   };
 
   const fetchSimilarTickersPage = useCallback(async (page: number): Promise<boolean> => {
-    if (!ticker || !user) return false;
+    if (!ticker || !canAccessGuestPreviewContent) return false;
 
     const safePage = Math.max(1, page);
     const offset = (safePage - 1) * SIMILAR_STOCKS_PER_PAGE;
@@ -194,7 +197,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     } finally {
       setIsLoadingSimilarTickers(false);
     }
-  }, [ticker, user]);
+  }, [ticker, canAccessGuestPreviewContent]);
 
   const loadStockData = async () => {
     if (!ticker) return;
@@ -276,7 +279,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   }, [ticker]);
 
   useEffect(() => {
-    if (!user) {
+    if (!canAccessGuestPreviewContent) {
       if (
         similarTickers ||
         Object.keys(similarTickerPages).length > 0 ||
@@ -297,7 +300,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     if (similarTickers || Object.keys(similarTickerPages).length > 0) return;
     void fetchSimilarTickersPage(1);
   }, [
-    user,
+    canAccessGuestPreviewContent,
     similarTickers,
     similarTickerPages,
     similarHasMoreByPage,
@@ -468,11 +471,13 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
 
   const formatNumber = (value: number | null | undefined, decimals = 2): string => {
     if (value == null) return 'N/A';
-    if (value >= 1e12) return `$${(value / 1e12).toFixed(decimals)}T`;
-    if (value >= 1e9) return `$${(value / 1e9).toFixed(decimals)}B`;
-    if (value >= 1e6) return `$${(value / 1e6).toFixed(decimals)}M`;
-    if (value >= 1e3) return `$${(value / 1e3).toFixed(decimals)}K`;
-    return `$${value.toFixed(decimals)}`;
+    const absValue = Math.abs(value);
+    const sign = value < 0 ? '-' : '';
+    if (absValue >= 1e12) return `${sign}$${(absValue / 1e12).toFixed(decimals)}T`;
+    if (absValue >= 1e9) return `${sign}$${(absValue / 1e9).toFixed(decimals)}B`;
+    if (absValue >= 1e6) return `${sign}$${(absValue / 1e6).toFixed(decimals)}M`;
+    if (absValue >= 1e3) return `${sign}$${(absValue / 1e3).toFixed(decimals)}K`;
+    return `${sign}$${absValue.toFixed(decimals)}`;
   };
   const formatSignedPercent = (value: number | null | undefined): string => {
     if (value == null) return 'N/A';
@@ -787,7 +792,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
 
           {/* Similar Stocks Tab */}
           {activeTab === 'similar-stocks' && (
-            !user ? (
+            !canAccessGuestPreviewContent ? (
               <div className="flex flex-col items-center justify-center py-16 rounded-lg border border-gray-700 bg-gray-800/60">
                 <svg className="w-10 h-10 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -947,7 +952,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
           {/* AI Analysis Tab */}
           {activeTab === 'ai-analysis' && (
             <div className="space-y-4">
-              {!user && !previewTickers.has((ticker ?? '').toUpperCase()) ? (
+              {!canAccessGuestPreviewContent ? (
                 <div className="flex flex-col items-center justify-center py-16 rounded-lg border border-gray-700 bg-gray-800/60">
                   <svg className="w-10 h-10 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
