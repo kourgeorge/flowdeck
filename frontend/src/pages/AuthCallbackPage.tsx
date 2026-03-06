@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { setStoredAuth } from '../services/authApi';
+import { consumePostAuthRedirect, setStoredAuth } from '../services/authApi';
 
 export default function AuthCallbackPage() {
   const [searchParams] = useSearchParams();
@@ -25,12 +25,10 @@ export default function AuthCallbackPage() {
     if (token && email && userId) {
       // Store authentication
       setStoredAuth(token, email, parseInt(userId, 10));
-      
-      // Redirect to dashboard
-      navigate('/dashboard');
-      
-      // Reload to update auth context
-      window.location.reload();
+
+      const target = consumePostAuthRedirect() ?? '/dashboard';
+      // Force full reload so auth context initializes from stored credentials.
+      window.location.replace(target);
     } else {
       setError('Invalid authentication response');
       setTimeout(() => {

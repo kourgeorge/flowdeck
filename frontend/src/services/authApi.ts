@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? '';
+const POST_AUTH_REDIRECT_KEY = 'flowdeck_post_auth_redirect';
 
 const api = axios.create({
   baseURL: API_BASE_URL || undefined,
@@ -24,6 +25,8 @@ export const authApi = {
     return res.data;
   },
   googleLogin: (): void => {
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    localStorage.setItem(POST_AUTH_REDIRECT_KEY, currentPath);
     // Redirect to backend Google OAuth endpoint
     window.location.href = `${API_BASE_URL}/api/auth/google`;
   },
@@ -36,6 +39,16 @@ export const authApi = {
     });
   },
 };
+
+export function consumePostAuthRedirect(): string | null {
+  const value = localStorage.getItem(POST_AUTH_REDIRECT_KEY);
+  localStorage.removeItem(POST_AUTH_REDIRECT_KEY);
+  if (!value) return null;
+  // Only allow same-origin relative paths to avoid open redirects.
+  if (!value.startsWith('/') || value.startsWith('//')) return null;
+  if (value.startsWith('/auth/callback')) return null;
+  return value;
+}
 
 const AUTH_KEY = 'flowdeck_token';
 const USER_KEY = 'flowdeck_user';
