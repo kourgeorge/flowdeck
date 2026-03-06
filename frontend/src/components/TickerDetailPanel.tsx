@@ -79,6 +79,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const [isLoadingFundInfo, setIsLoadingFundInfo] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [isStartingAnalysis, setIsStartingAnalysis] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState<{ agent_statuses: Record<string,string>; current_agent?: string | null } | null>(null);
   const [edgarFilings, setEdgarFilings] = useState<any>(null);
   const [edgarFilingsError, setEdgarFilingsError] = useState<string | null>(null);
@@ -172,7 +173,10 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
           }
         }).catch(() => {});
       });
-      client.on('completed', () => { setAnalysisProgress(null); loadStockData(); });
+      client.on('completed', () => {
+        setAnalysisProgress(null);
+        void loadStockData({ showGlobalLoading: false, refreshSupportingData: false });
+      });
       client.connect();
       wsClientRef.current = client;
     } else { setAnalysisProgress(null); }
@@ -209,18 +213,33 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     }
   }, [ticker, canAccessGuestPreviewContent, hasSimilarStocks]);
 
-  const loadStockData = async () => {
+  const loadStockData = async ({
+    showGlobalLoading = true,
+    refreshSupportingData = true,
+  }: {
+    showGlobalLoading?: boolean;
+    refreshSupportingData?: boolean;
+  } = {}) => {
     if (!ticker) return;
     try {
-      setIsLoading(true); setLoadError(null);
+      if (showGlobalLoading) {
+        setIsLoading(true);
+        setLoadError(null);
+      }
       const data = await tickerApi.getTickerPage(ticker);
       applyStockData(data);
     } catch (error: any) {
-      const detail = error?.response?.data?.detail;
-      const is404 = error?.response?.status === 404;
-      setLoadError(typeof detail === 'string' ? detail : is404 ? `Ticker "${ticker}" not found.` : 'Unable to load stock data.');
-      setStockData(null);
-    } finally { setIsLoading(false); }
+      if (showGlobalLoading) {
+        const detail = error?.response?.data?.detail;
+        const is404 = error?.response?.status === 404;
+        setLoadError(typeof detail === 'string' ? detail : is404 ? `Ticker "${ticker}" not found.` : 'Unable to load stock data.');
+        setStockData(null);
+      }
+    } finally {
+      if (showGlobalLoading) setIsLoading(false);
+    }
+
+    if (!refreshSupportingData) return;
 
     tickerApi.getCompanyInfo(ticker).then((info) => {
       setCompanyInfo(info);
@@ -249,6 +268,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     setAnalysisProgress(null); setEdgarFilings(null); setEdgarFilingsError(null); setFutureEvents(null);
     setSimilarTickers(null); setSimilarTickerPages({}); setSimilarHasMoreByPage({}); setSimilarStocksPage(1);
     setActiveTab('ai-analysis'); setSelectedReport(null); setLoadError(null); setAnalysisError(null);
+    setIsStartingAnalysis(false);
     // EXPERIMENTAL: reset historical run state
     setSelectedRunId(null); setHistoricalReportsData(null);
     // END EXPERIMENTAL
@@ -485,11 +505,18 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     if (!ticker) return;
     setAnalysisError(null);
     if (!user) { setAuthModalMessage(source === 'generate' ? 'Please sign in to generate an analysis report.' : 'Please sign in to run a fresh analysis.'); setAuthModalOpen(true); return; }
-    try { await tickerApi.startAnalysis(ticker); setAnalysisError(null); await loadStockData(); }
+    try {
+      setIsStartingAnalysis(true);
+      await tickerApi.startAnalysis(ticker);
+      setAnalysisError(null);
+      await loadStockData({ showGlobalLoading: false, refreshSupportingData: false });
+    }
     catch (error: unknown) {
       const axiosError = error as { response?: { status?: number; data?: { detail?: string | string[] } } };
       const detail = axiosError.response?.data?.detail;
       setAnalysisError(typeof detail === 'string' ? detail : Array.isArray(detail) && detail.length > 0 ? String(detail[0]) : axiosError.response?.status === 402 ? 'Insufficient token balance. Need 200 tokens to create a report.' : 'Failed to start analysis. Please try again.');
+    } finally {
+      setIsStartingAnalysis(false);
     }
   };
 
@@ -1129,9 +1156,16 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                           )}
                         </div>
                         {!stockData.is_generating && (
-                          <button onClick={() => handleGenerateReport('fresh')} className="shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleGenerateReport('fresh')}
+                            disabled={isStartingAnalysis}
+                            className={`shrink-0 px-4 py-2 text-white font-medium rounded-lg transition-colors flex items-center gap-2 ${
+                              isStartingAnalysis ? 'bg-blue-500/60 cursor-not-allowed opacity-80' : 'bg-blue-600 hover:bg-blue-700'
+                            }`}
+                          >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                            Run Fresh Analysis
+                            {isStartingAnalysis ? 'Starting...' : 'Run Fresh Analysis'}
                           </button>
                         )}
                       </div>
@@ -1160,7 +1194,16 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                     {!stockData.has_reports && !stockData.is_generating && (
                       <div className="text-center py-8">
                         <p className="text-gray-400 mb-4">No analysis reports available yet.</p>
-                        <button onClick={() => handleGenerateReport('generate')} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors">Generate Analysis Report →</button>
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateReport('generate')}
+                          disabled={isStartingAnalysis}
+                          className={`px-6 py-3 text-white font-semibold rounded-lg transition-colors ${
+                            isStartingAnalysis ? 'bg-blue-500/60 cursor-not-allowed opacity-80' : 'bg-blue-600 hover:bg-blue-700'
+                          }`}
+                        >
+                          {isStartingAnalysis ? 'Starting Analysis...' : 'Generate Analysis Report →'}
+                        </button>
                       </div>
                     )}
                     {stockData.is_generating && (
