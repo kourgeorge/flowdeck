@@ -1261,88 +1261,9 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                 </div>
               ) : (
                 <>
-                  {/* EXPERIMENTAL: historical run selector lives in the disclaimer panel — remove this block to disable */}
-                  <div className="text-sm text-amber-400/90 bg-amber-950/30 border border-amber-700/40 rounded-lg px-4 py-2 flex flex-wrap items-center gap-2">
-                    <span className="shrink-0">For informational purposes only. Not investment advice.</span>
-                    {stockData.has_reports && !stockData.is_generating && (stockData.historical_analyses?.length ?? 0) > 1 && (
-                      <div ref={runSelectorRef} className="relative ml-auto shrink-0">
-                        {/* Trigger button */}
-                        <button
-                          type="button"
-                          disabled={isLoadingHistoricalRun}
-                          onClick={() => setRunSelectorOpen((o) => !o)}
-                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-900/40 border border-amber-700/50 text-amber-300 hover:bg-amber-900/70 hover:border-amber-600/70 transition-colors disabled:opacity-50 text-xs font-medium"
-                        >
-                          {isLoadingHistoricalRun ? (
-                            <svg className="w-3 h-3 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                            </svg>
-                          ) : (
-                            <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                          )}
-                          <span className="max-w-[140px] truncate">
-                            {selectedRunId
-                              ? (() => { const h = stockData.historical_analyses.find((x) => x.date === selectedRunId); return h ? `${h.date}${h.recommendation ? ` · ${h.recommendation}` : ''}` : selectedRunId; })()
-                              : `Latest · ${stockData.report_date ?? ''}`}
-                          </span>
-                          <svg className={`w-3 h-3 shrink-0 transition-transform ${runSelectorOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </button>
-                        {/* Dropdown list */}
-                        {runSelectorOpen && (
-                          <div className="absolute right-0 top-full mt-1 z-50 min-w-[200px] bg-gray-900 border border-amber-700/50 rounded-lg shadow-xl overflow-hidden">
-                            <div className="px-3 py-1.5 border-b border-amber-900/50">
-                              <span className="text-xs text-amber-600/80 font-medium uppercase tracking-wide">Analysis runs</span>
-                            </div>
-                            <ul className="max-h-52 overflow-y-auto py-1">
-                              {/* Latest option */}
-                              <li>
-                                <button
-                                  type="button"
-                                  onClick={() => { handleSelectHistoricalRun(null); setRunSelectorOpen(false); }}
-                                  className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between gap-2 transition-colors ${
-                                    !selectedRunId
-                                      ? 'bg-amber-900/40 text-amber-200'
-                                      : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                                  }`}
-                                >
-                                  <span className="font-medium">Latest</span>
-                                  <span className="text-gray-500 shrink-0">{stockData.report_date ?? ''}</span>
-                                </button>
-                              </li>
-                              {stockData.historical_analyses.slice(1).map((h) => (
-                                <li key={h.date}>
-                                  <button
-                                    type="button"
-                                    onClick={() => { handleSelectHistoricalRun(h.date); setRunSelectorOpen(false); }}
-                                    className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between gap-2 transition-colors ${
-                                      selectedRunId === h.date
-                                        ? 'bg-amber-900/40 text-amber-200'
-                                        : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                                    }`}
-                                  >
-                                    <span>{h.date}</span>
-                                    {h.recommendation && (
-                                      <span className={`shrink-0 font-semibold ${
-                                        h.recommendation === 'BUY' ? 'text-green-400' :
-                                        h.recommendation === 'SELL' ? 'text-red-400' :
-                                        h.recommendation === 'HOLD' ? 'text-yellow-400' : 'text-gray-400'
-                                      }`}>{h.recommendation}</span>
-                                    )}
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                  <div className="text-sm text-amber-400/90 bg-amber-950/30 border border-amber-700/40 rounded-lg px-4 py-2">
+                    <span>For informational purposes only. Not investment advice.</span>
                   </div>
-                  {/* END EXPERIMENTAL */}
                   {analysisError && (
                     <div className="flex items-center gap-3 rounded-lg border border-red-800 bg-red-950/50 px-4 py-3 text-red-200" role="alert">
                       <svg className="h-5 w-5 shrink-0 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -1412,17 +1333,89 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                           )}
                         </div>
                         {!stockData.is_generating && (
-                          <button
-                            type="button"
-                            onClick={() => handleGenerateReport('fresh')}
-                            disabled={isStartingAnalysis}
-                            className={`shrink-0 px-4 py-2 text-white font-medium rounded-lg transition-colors flex items-center gap-2 ${
-                              isStartingAnalysis ? 'bg-blue-500/60 cursor-not-allowed opacity-80' : 'bg-blue-600 hover:bg-blue-700'
-                            }`}
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                            {isStartingAnalysis ? 'Starting...' : 'Run Fresh Analysis'}
-                          </button>
+                          <div ref={runSelectorRef} className="relative flex items-stretch w-fit max-w-full rounded-lg border border-blue-500 bg-blue-600 hover:bg-blue-700 transition-colors">
+                            <button
+                              type="button"
+                              onClick={() => handleGenerateReport('fresh')}
+                              disabled={isStartingAnalysis}
+                              className={`flex items-center gap-2 px-4 py-2 text-white font-medium transition-colors ${isStartingAnalysis ? 'bg-blue-500/60 cursor-not-allowed opacity-80' : ''} ${(stockData.historical_analyses?.length ?? 0) > 1 ? 'pr-2 rounded-l-lg' : 'rounded-lg'}`}
+                            >
+                              {isStartingAnalysis ? (
+                                <svg className="w-4 h-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                                </svg>
+                              ) : (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                              )}
+                              {isStartingAnalysis ? 'Starting...' : 'Run Fresh Analysis'}
+                            </button>
+                            {stockData.has_reports && (stockData.historical_analyses?.length ?? 0) > 1 && (
+                              <>
+                                <div className="w-px bg-white/20 shrink-0" aria-hidden />
+                                <button
+                                  type="button"
+                                  disabled={isLoadingHistoricalRun}
+                                  onClick={() => setRunSelectorOpen((o) => !o)}
+                                  className="flex items-center justify-center px-2 py-2 text-white/90 hover:bg-white/10 transition-colors disabled:opacity-50 rounded-r-lg"
+                                  title="Previous analysis runs"
+                                  aria-label="Previous analysis runs"
+                                >
+                                  {isLoadingHistoricalRun ? (
+                                    <svg className="w-4 h-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                                    </svg>
+                                  ) : (
+                                    <svg className={`w-4 h-4 transition-transform ${runSelectorOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  )}
+                                </button>
+                                {runSelectorOpen && (
+                                  <div className="absolute right-0 top-full mt-1 z-50 min-w-[200px] bg-gray-900 border border-gray-600 rounded-lg shadow-xl overflow-hidden">
+                                    <div className="px-3 py-1.5 border-b border-gray-700">
+                                      <span className="text-xs text-gray-400 font-medium uppercase tracking-wide">Analysis runs</span>
+                                    </div>
+                                    <ul className="max-h-52 overflow-y-auto py-1">
+                                      <li>
+                                        <button
+                                          type="button"
+                                          onClick={() => { handleSelectHistoricalRun(null); setRunSelectorOpen(false); }}
+                                          className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between gap-2 transition-colors ${
+                                            !selectedRunId ? 'bg-blue-900/50 text-blue-200' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                                          }`}
+                                        >
+                                          <span className="font-medium">Latest</span>
+                                          <span className="text-gray-500 shrink-0">{stockData.report_date ?? ''}</span>
+                                        </button>
+                                      </li>
+                                      {stockData.historical_analyses.slice(1).map((h) => (
+                                        <li key={h.date}>
+                                          <button
+                                            type="button"
+                                            onClick={() => { handleSelectHistoricalRun(h.date); setRunSelectorOpen(false); }}
+                                            className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between gap-2 transition-colors ${
+                                              selectedRunId === h.date ? 'bg-blue-900/50 text-blue-200' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                                            }`}
+                                          >
+                                            <span>{h.date}</span>
+                                            {h.recommendation && (
+                                              <span className={`shrink-0 font-semibold ${
+                                                h.recommendation === 'BUY' ? 'text-green-400' :
+                                                h.recommendation === 'SELL' ? 'text-red-400' :
+                                                h.recommendation === 'HOLD' ? 'text-yellow-400' : 'text-gray-400'
+                                              }`}>{h.recommendation}</span>
+                                            )}
+                                          </button>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
