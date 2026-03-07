@@ -1352,15 +1352,25 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                       </button>
                     </div>
                   )}
-                  {stockData.has_reports && stockData.report_date && (() => {
-                    const summaryScoreEntries = getAnalysisScoreEntries(stockData.reports_with_scores ?? null);
+                  {stockData.has_reports && (stockData.report_date || selectedRunId) && (() => {
+                    const activeDate = selectedRunId ?? stockData.report_date ?? null;
+                    const summaryScoreEntries = getAnalysisScoreEntries(activeReportsSource ?? null);
+                    const activeRecommendation = selectedRunId
+                      ? stockData.historical_analyses.find((x) => x.date === selectedRunId)?.recommendation ?? null
+                      : stockData.recommendation?.recommendation ?? null;
+                    const activeConfidence = selectedRunId ? null : stockData.recommendation?.confidence ?? null;
+                    const planReport = activeReportsSource?.investment_plan;
+                    const activeExpected = selectedRunId ? (planReport?.expected_return_pct ?? null) : stockData.expected_return_pct ?? null;
+                    const activeBear = selectedRunId ? (planReport?.bear_case_return_pct ?? null) : stockData.bear_case_return_pct ?? null;
+                    const activeBull = selectedRunId ? (planReport?.bull_case_return_pct ?? null) : stockData.bull_case_return_pct ?? null;
+                    const hasReturnScenarios = activeExpected != null || activeBear != null || activeBull != null;
                     return (
                     <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 rounded-lg border border-blue-700/50 p-5">
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                         <div className="flex-1">
                           <div className="text-sm text-gray-400 mb-0.5">Last Analysis Date</div>
                           <div className="text-lg font-semibold text-white">
-                            {parseReportDate(stockData.report_date)?.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) ?? 'N/A'}
+                            {parseReportDate(activeDate)?.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) ?? 'N/A'}
                           </div>
                           {modelsUsed && (modelsUsed.provider || modelsUsed.deep_think || modelsUsed.quick_think) && (
                             <div className="text-xs text-gray-400 mt-0.5 space-y-0.5">
@@ -1372,7 +1382,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                                   {modelsUsed.quick_think && <span>Fast: {modelsUsed.quick_think}</span>}
                                 </div>
                               )}
-                              {stockData.report_days_ago != null && stockData.report_days_ago > 7 && <div className="text-amber-400/90">Consider re-running for fresh insights.</div>}
+                              {!selectedRunId && stockData.report_days_ago != null && stockData.report_days_ago > 7 && <div className="text-amber-400/90">Consider re-running for fresh insights.</div>}
                             </div>
                           )}
                         </div>
@@ -1383,20 +1393,20 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                           )}
                           <div className="text-right">
                             <div className="text-sm text-gray-400 mb-0.5">AI Decision</div>
-                            <div className={`text-2xl font-bold ${stockData.recommendation?.recommendation === 'BUY' ? 'text-green-400' : stockData.recommendation?.recommendation === 'SELL' ? 'text-red-400' : stockData.recommendation?.recommendation === 'HOLD' ? 'text-yellow-400' : 'text-white'}`}>
-                              {stockData.recommendation?.recommendation || 'N/A'}
+                            <div className={`text-2xl font-bold ${activeRecommendation === 'BUY' ? 'text-green-400' : activeRecommendation === 'SELL' ? 'text-red-400' : activeRecommendation === 'HOLD' ? 'text-yellow-400' : 'text-white'}`}>
+                              {activeRecommendation || 'N/A'}
                             </div>
-                            {stockData.recommendation?.confidence && <div className="text-sm text-gray-400 mt-0.5">Confidence: {(stockData.recommendation.confidence * 100).toFixed(0)}%</div>}
+                            {activeConfidence != null && <div className="text-sm text-gray-400 mt-0.5">Confidence: {(activeConfidence * 100).toFixed(0)}%</div>}
                           </div>
                         </div>
                       </div>
                       <div className="mt-3 pt-3 border-t border-gray-600/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div className="flex-1">
-                          {(stockData.expected_return_pct != null || stockData.bear_case_return_pct != null || stockData.bull_case_return_pct != null) && (
+                          {hasReturnScenarios && (
                             <ReturnScenarioBar
-                              expected={stockData.expected_return_pct}
-                              bear={stockData.bear_case_return_pct}
-                              bull={stockData.bull_case_return_pct}
+                              expected={activeExpected}
+                              bear={activeBear}
+                              bull={activeBull}
                               compact
                             />
                           )}

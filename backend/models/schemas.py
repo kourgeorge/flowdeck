@@ -156,6 +156,15 @@ class ReportData(BaseModel):
     safe_viewpoint: Optional[List[str]] = None
     neutral_viewpoint: Optional[List[str]] = None
     tps_plan: Optional[str] = None
+    # Return scenarios (typically on investment_plan report; used for historical run header)
+    expected_return_pct: Optional[float] = None
+    bear_case_return_pct: Optional[float] = None
+    bull_case_return_pct: Optional[float] = None
+
+    @field_validator('expected_return_pct', 'bear_case_return_pct', 'bull_case_return_pct', mode='before')
+    @classmethod
+    def sanitize_return_pcts(cls, v):
+        return _sanitize_float(v) if v is not None else None
 
 
 class TickerPageData(BaseModel):

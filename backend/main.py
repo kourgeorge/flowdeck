@@ -675,6 +675,9 @@ async def get_ticker_reports_for_run(
                 safe_viewpoint=v.get("safe_viewpoint"),
                 neutral_viewpoint=v.get("neutral_viewpoint"),
                 tps_plan=v.get("tps_plan"),
+                expected_return_pct=v.get("expected_return_pct"),
+                bear_case_return_pct=v.get("bear_case_return_pct"),
+                bull_case_return_pct=v.get("bull_case_return_pct"),
             )
             for k, v in scores_raw.items()
         }

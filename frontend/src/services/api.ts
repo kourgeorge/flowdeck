@@ -586,6 +586,9 @@ export const tickerApi = {
     safe_viewpoint: string[] | null;
     neutral_viewpoint: string[] | null;
     tps_plan: string | null;
+    expected_return_pct?: number | null;
+    bear_case_return_pct?: number | null;
+    bull_case_return_pct?: number | null;
   }>> => {
     const token = getStoredToken();
     const response = await api.get(`/api/tickers/${ticker}/reports/${encodeURIComponent(runId)}`, {
