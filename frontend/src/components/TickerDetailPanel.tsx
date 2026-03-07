@@ -102,6 +102,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const prevPriceRef = useRef<number | null>(null);
   const wsClientRef = useRef<WebSocketClient | null>(null);
   const insiderFetchIdRef = useRef(0);
+  const viewingHistoricalRunRef = useRef(false);
 
   const quoteType = companyInfo?.quoteType ?? (
     fundamentalsData && typeof fundamentalsData === 'object' && 'QuoteType' in fundamentalsData
@@ -144,6 +145,10 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     prevPriceRef.current = currentPrice;
   }, [refreshedQuote?.current_price, stockData?.quote?.current_price]);
 
+  useEffect(() => {
+    viewingHistoricalRunRef.current = !!selectedRunId;
+  }, [selectedRunId]);
+
   const applyStockData = (data: TickerPageData) => {
     setStockData(data);
     // Reset historical run selection when stock data refreshes
@@ -164,11 +169,11 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
         // Update stock data to get new reports, but keep the existing data structure
         tickerApi.getTickerPage(ticker).then((freshData) => {
           setStockData(freshData);
-          // Update selected report if new reports are available
+          // Don't change report tab when user is viewing a previous run
+          if (viewingHistoricalRunRef.current) return;
           if (freshData.reports && Object.keys(freshData.reports).length > 0) {
             const keys = Object.keys(freshData.reports);
             setSelectedReport((prev) => {
-              // Keep current selection if it still exists, otherwise pick final_trade_decision or first
               if (prev && keys.includes(prev)) return prev;
               return keys.includes('final_trade_decision') ? 'final_trade_decision' : keys[0];
             });
@@ -365,7 +370,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     const interval = setInterval(() => {
       tickerApi.getTickerPage(ticker).then((data) => {
         setStockData(data);
-        if (data.reports && Object.keys(data.reports).length > 0) {
+        if (!viewingHistoricalRunRef.current && data.reports && Object.keys(data.reports).length > 0) {
           const keys = Object.keys(data.reports);
           setSelectedReport((prev) => {
             if (prev && keys.includes(prev)) return prev;
@@ -1289,9 +1294,21 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                     <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 rounded-lg border border-blue-700/50 p-5">
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                         <div className="flex-1">
-                          <div className="text-sm text-gray-400 mb-0.5">Last Analysis Date</div>
-                          <div className="text-lg font-semibold text-white">
-                            {parseReportDate(activeDate)?.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) ?? 'N/A'}
+                          <div className="text-sm text-gray-400 mb-0.5">
+                            {stockData.is_generating ? 'Status' : 'Last Analysis Date'}
+                          </div>
+                          <div className="text-lg font-semibold text-white flex items-center gap-2 flex-wrap">
+                            {stockData.is_generating ? (
+                              <span className="inline-flex items-center gap-1.5 text-amber-400">
+                                <svg className="w-4 h-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                                </svg>
+                                Running…
+                              </span>
+                            ) : (
+                              parseReportDate(activeDate)?.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) ?? 'N/A'
+                            )}
                           </div>
                           {modelsUsed && (modelsUsed.provider || modelsUsed.deep_think || modelsUsed.quick_think) && (
                             <div className="text-xs text-gray-400 mt-0.5 space-y-0.5">
@@ -1332,15 +1349,19 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                             />
                           )}
                         </div>
-                        {!stockData.is_generating && (
-                          <div ref={runSelectorRef} className="relative flex items-stretch w-fit max-w-full rounded-lg border border-blue-500 bg-blue-600 hover:bg-blue-700 transition-colors">
+                        <div ref={runSelectorRef} className="relative flex items-stretch w-fit max-w-full rounded-lg border border-blue-500 bg-blue-600 hover:bg-blue-700 transition-colors">
                             <button
                               type="button"
                               onClick={() => handleGenerateReport('fresh')}
-                              disabled={isStartingAnalysis}
-                              className={`flex items-center gap-2 px-4 py-2 text-white font-medium transition-colors ${isStartingAnalysis ? 'bg-blue-500/60 cursor-not-allowed opacity-80' : ''} ${(stockData.historical_analyses?.length ?? 0) > 1 ? 'pr-2 rounded-l-lg' : 'rounded-lg'}`}
+                              disabled={isStartingAnalysis || stockData.is_generating}
+                              className={`flex items-center gap-2 px-4 py-2 text-white font-medium transition-colors ${isStartingAnalysis || stockData.is_generating ? 'bg-blue-500/60 cursor-not-allowed opacity-80' : ''} ${(stockData.historical_analyses?.length ?? 0) > 1 ? 'pr-2 rounded-l-lg' : 'rounded-lg'}`}
                             >
                               {isStartingAnalysis ? (
+                                <svg className="w-4 h-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                                </svg>
+                              ) : stockData.is_generating ? (
                                 <svg className="w-4 h-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
                                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
@@ -1348,7 +1369,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                               ) : (
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                               )}
-                              {isStartingAnalysis ? 'Starting...' : 'Run Fresh Analysis'}
+                              {isStartingAnalysis ? 'Starting...' : stockData.is_generating ? 'Running…' : 'Run Fresh Analysis'}
                             </button>
                             {stockData.has_reports && (stockData.historical_analyses?.length ?? 0) > 1 && (
                               <>
@@ -1416,13 +1437,12 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                               </>
                             )}
                           </div>
-                        )}
                       </div>
                     </div>
                     );
                   })()}
                   <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
-                    {stockData.has_reports && !stockData.is_generating && (
+                    {((stockData.has_reports && !stockData.is_generating) || (selectedRunId && historicalReportsData)) && (
                       <div>
                         <ReportTabs
                           availableReports={availableReports}
@@ -1455,7 +1475,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                         </button>
                       </div>
                     )}
-                    {stockData.is_generating && (
+                    {stockData.is_generating && !(selectedRunId && historicalReportsData) && (
                       <AIAnalysisLoadingView existingReportKeys={Object.keys(stockData.reports || {})} agentStatuses={analysisProgress?.agent_statuses ?? null} currentAgent={analysisProgress?.current_agent ?? null} />
                     )}
                   </div>
