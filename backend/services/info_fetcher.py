@@ -16,6 +16,21 @@ import numbers
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+def _default_company_info(symbol: str, quote_type: Any = None) -> Dict[str, Any]:
+    """Return a minimal company info dict when fetch fails."""
+    if quote_type is None and symbol.startswith("^"):
+        quote_type = "INDEX"
+    return {
+        "name": symbol,
+        "sector": "N/A",
+        "industry": "N/A",
+        "exchange": "N/A",
+        "country": "N/A",
+        "website": "N/A",
+        "quoteType": quote_type,
+    }
+
+
 # Lazy tradingagents import to avoid hard dependency at import time
 def _tradingagents_route_to_vendor():
     import sys
@@ -216,14 +231,59 @@ class InfoFetcher:
         }
 
     # ---------- Company & fundamentals ----------
+    def get_company_info_batch(self, tickers: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Get company profile (name, sector, industry, etc.) for multiple tickers in one batch via yahooquery."""
+        if not tickers:
+            return {}
+        symbols = [t.upper() for t in tickers]
+        try:
+            from yahooquery import Ticker as YahooQueryTicker
+        except Exception:
+            return {}
+        try:
+            ticker_obj = YahooQueryTicker(symbols)
+        except Exception:
+            return {}
+        try:
+            raw = ticker_obj.get_modules("price quoteType summaryProfile")
+        except Exception:
+            raw = {}
+        if not isinstance(raw, dict):
+            return {}
+        result: Dict[str, Dict[str, Any]] = {}
+        for symbol in symbols:
+            per = raw.get(symbol) or raw.get(symbol.upper()) or raw.get(symbol.lower())
+            if not isinstance(per, dict):
+                result[symbol] = _default_company_info(symbol)
+                continue
+            price = per.get("price") if isinstance(per.get("price"), dict) else {}
+            quote_type = per.get("quoteType") if isinstance(per.get("quoteType"), dict) else {}
+            profile = per.get("summaryProfile") if isinstance(per.get("summaryProfile"), dict) else {}
+            name = (price or {}).get("longName") or (price or {}).get("shortName") or (profile or {}).get("longName") or (profile or {}).get("shortName") or symbol
+            qt = (quote_type or price or {}).get("quoteType")
+            if qt is None and symbol.startswith("^"):
+                qt = "INDEX"
+            result[symbol] = {
+                "name": name,
+                "sector": (profile or {}).get("sector") or "N/A",
+                "industry": (profile or {}).get("industry") or "N/A",
+                "exchange": (quote_type or {}).get("exchange") or "N/A",
+                "country": (profile or {}).get("country") or "N/A",
+                "website": (profile or {}).get("website") or "N/A",
+                "quoteType": qt,
+            }
+        return result
+
     def get_company_info(self, ticker: str) -> Dict[str, Any]:
         """Get company profile (name, sector, industry, etc.)."""
-        import yfinance as yf
         ticker = ticker.upper()
+        batch = self.get_company_info_batch([ticker])
+        if ticker in batch:
+            return batch[ticker]
+        import yfinance as yf
         try:
             info = yf.Ticker(ticker).info
             quote_type = info.get("quoteType")
-            # Yahoo often omits quoteType for indices; infer INDEX when symbol starts with ^
             if quote_type is None and ticker.startswith("^"):
                 quote_type = "INDEX"
             return {
@@ -236,17 +296,8 @@ class InfoFetcher:
                 "quoteType": quote_type,
             }
         except Exception:
-            # Infer index for ^ tickers even on error
             quote_type = "INDEX" if ticker.startswith("^") else None
-            return {
-                "name": ticker,
-                "sector": "N/A",
-                "industry": "N/A",
-                "exchange": "N/A",
-                "country": "N/A",
-                "website": "N/A",
-                "quoteType": quote_type,
-            }
+            return _default_company_info(ticker, quote_type=quote_type)
 
     def get_extended_info(self, ticker: str) -> Dict[str, Any]:
         """Get extended metrics (beta, market cap, margins, etc.)."""

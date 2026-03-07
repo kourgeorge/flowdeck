@@ -118,6 +118,21 @@ class CachedInfoFetcher:
         key = f"company:{ticker.upper()}"
         return get_cached(key, DATA_CACHE_TTL_COMPANY, lambda: self._fetcher.get_company_info(ticker))
 
+    def get_company_info_batch(self, tickers: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Get company info for multiple tickers; on cache miss fetches all missing in one batch."""
+        if not tickers:
+            return {}
+        tickers = [t.upper() for t in tickers]
+        key_ttl_pairs = [(f"company:{t}", DATA_CACHE_TTL_COMPANY) for t in tickers]
+
+        def batch_fetch(missing_keys: List[str]) -> Dict[str, Dict[str, Any]]:
+            to_fetch = [k.replace("company:", "") for k in missing_keys]
+            batch = self._fetcher.get_company_info_batch(to_fetch)
+            return {k: batch.get(k.replace("company:", ""), {}) for k in missing_keys}
+
+        raw = get_cached_batch(key_ttl_pairs, batch_fetch)
+        return {k.replace("company:", ""): raw[k] for k in raw if raw.get(k)}
+
     def get_extended_info(self, ticker: str) -> Dict[str, Any]:
         key = f"extended:{ticker.upper()}"
         return get_cached(key, DATA_CACHE_TTL_EXTENDED, lambda: self._fetcher.get_extended_info(ticker))

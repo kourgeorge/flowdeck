@@ -203,14 +203,16 @@ def _get_ticker_widgets_sync(
     except Exception as e:
         print(f"Warning: Failed to fetch market quotes: {e}")
 
-    # Fetch company names (cached); best-effort — fall back to None on error
+    # Fetch company names in one batch (cached); best-effort — fall back to None on error
     company_names: dict[str, Optional[str]] = {}
-    for ticker in ticker_list:
-        try:
-            info = cached_fetcher.get_company_info(ticker)
-            company_names[ticker] = info.get("name") or None
-        except Exception:
-            company_names[ticker] = None
+    try:
+        company_infos = cached_fetcher.get_company_info_batch(ticker_list)
+        company_names = {
+            t: (company_infos.get(t) or {}).get("name") or None
+            for t in ticker_list
+        }
+    except Exception:
+        company_names = {t: None for t in ticker_list}
 
     for ticker in ticker_list:
         quote_data = quotes_dict.get(ticker) if quotes_dict else None
