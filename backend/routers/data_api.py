@@ -34,12 +34,25 @@ def _engine():
     return get_info_fetcher()
 
 
+def _ticker_not_found_detail(ticker: str) -> str:
+    """Standard 404 detail when a ticker does not exist (quote/data not found)."""
+    return f"Ticker '{ticker}' not found. Check the symbol and try again."
+
+
+async def _ensure_ticker_exists(ticker: str) -> None:
+    """Raise 404 with standard detail if the ticker has no quote (does not exist)."""
+    t = ticker.upper()
+    quote = await asyncio.to_thread(_engine().get_quote, t)
+    if quote is None:
+        raise HTTPException(status_code=404, detail=_ticker_not_found_detail(t))
+
+
 @router.get("/quote/{ticker}")
 async def data_quote(ticker: str):
     """Get current market quote for a ticker."""
     result = await asyncio.to_thread(_engine().get_quote, ticker)
     if result is None:
-        raise HTTPException(status_code=404, detail="Quote not found")
+        raise HTTPException(status_code=404, detail=_ticker_not_found_detail(ticker))
     return result
 
 
@@ -50,6 +63,7 @@ async def data_news(
     lookback_days: int = Query(7, ge=1, le=90, description="Days to look back"),
 ):
     """Get news articles for a ticker."""
+    await _ensure_ticker_exists(ticker)
     engine = _engine()
     return await asyncio.to_thread(
         lambda: engine.get_news(ticker, vendor=vendor, lookback_days=lookback_days)
@@ -62,30 +76,35 @@ async def data_insider_transactions(
     limit: int = Query(50, ge=1, le=200, description="Maximum number of insider transactions to return"),
 ):
     """Get latest insider transactions for a ticker."""
+    await _ensure_ticker_exists(ticker)
     return await asyncio.to_thread(_engine().get_insider_transactions, ticker, limit)
 
 
 @router.get("/company/{ticker}")
 async def data_company(ticker: str):
     """Get company profile (name, sector, industry, exchange, country, website)."""
+    await _ensure_ticker_exists(ticker)
     return await asyncio.to_thread(_engine().get_company_info, ticker)
 
 
 @router.get("/extended-info/{ticker}")
 async def data_extended(ticker: str):
     """Get extended metrics (beta, market cap, margins, PE, etc.)."""
+    await _ensure_ticker_exists(ticker)
     return await asyncio.to_thread(_engine().get_extended_info, ticker)
 
 
 @router.get("/fund-info/{ticker}")
 async def data_fund_info(ticker: str):
     """Get ETF/fund-specific data (AUM, expense ratio, category, holdings, sector weightings)."""
+    await _ensure_ticker_exists(ticker)
     return await asyncio.to_thread(_engine().get_fund_info, ticker)
 
 
 @router.get("/fundamentals/{ticker}")
 async def data_fundamentals(ticker: str):
     """Get fundamental data for a ticker."""
+    await _ensure_ticker_exists(ticker)
     return await asyncio.to_thread(_engine().get_fundamentals, ticker)
 
 
@@ -96,6 +115,7 @@ async def data_financial_statements(
     freq: str = Query("quarterly", description="quarterly | annual"),
 ):
     """Get balance sheet, cashflow, and/or income statement."""
+    await _ensure_ticker_exists(ticker)
     engine = _engine()
     return await asyncio.to_thread(
         lambda: engine.get_financial_statements(ticker, statement_type=statement_type, freq=freq)
@@ -108,6 +128,7 @@ async def data_financial_charts(
     freq: str = Query("annual", description="annual | quarterly"),
 ):
     """Get chart-ready time series for fundamentals (Revenue, EPS, Debt, FCF, etc.)."""
+    await _ensure_ticker_exists(ticker)
     return await asyncio.to_thread(_engine().get_financial_charts, ticker, freq)
 
 
@@ -118,6 +139,7 @@ async def data_historical(
     interval: str = Query("1d", description="1m, 2m, 5m, 15m, 30m, 60m, 1d, 5d, 1wk, 1mo, 3mo"),
 ):
     """Get historical OHLCV price data."""
+    await _ensure_ticker_exists(ticker)
     return await asyncio.to_thread(_engine().get_historical, ticker, period, interval)
 
 
@@ -128,6 +150,7 @@ async def data_ticker_data(
     end_date: str = Query(..., description="End date YYYY-MM-DD"),
 ):
     """Get OHLCV time series as text (for agents). Returns CSV-like string."""
+    await _ensure_ticker_exists(ticker)
     data = await asyncio.to_thread(_engine().get_ticker_data, ticker, start_date, end_date)
     return {"ticker": ticker.upper(), "start_date": start_date, "end_date": end_date, "data": data}
 
@@ -135,12 +158,14 @@ async def data_ticker_data(
 @router.get("/analyst-recommendations/{ticker}")
 async def data_analyst_recommendations(ticker: str):
     """Get analyst recommendations from YahooQuery."""
+    await _ensure_ticker_exists(ticker)
     return await asyncio.to_thread(_engine().get_analyst_recommendations, ticker)
 
 
 @router.get("/future-events/{ticker}")
 async def data_future_events(ticker: str):
     """Get upcoming earnings and ex-dividend dates (Yahoo Finance)."""
+    await _ensure_ticker_exists(ticker)
     try:
         return await asyncio.to_thread(_engine().get_future_events, ticker)
     except Exception as e:
@@ -153,11 +178,13 @@ async def data_similar_tickers(
     offset: int = Query(0, ge=0, description="Result offset for pagination"),
 ):
     """Get similar tickers based on sector/industry matching."""
+    await _ensure_ticker_exists(ticker)
     return await asyncio.to_thread(_engine().get_similar_tickers, ticker, limit, offset)
 
 @router.get("/company-officers/{ticker}")
 async def data_company_officers(ticker: str):
     """Get company officers/management team from Yahoo Finance."""
+    await _ensure_ticker_exists(ticker)
     return await asyncio.to_thread(_engine().get_company_officers, ticker)
 
 
@@ -166,6 +193,7 @@ async def data_company_officers(ticker: str):
 @router.get("/edgar-filings/{ticker}")
 async def data_edgar_filings(ticker: str):
     """Get recent 10-K and 10-Q SEC EDGAR filings for a ticker. Returns empty filings if not in EDGAR or on error."""
+    await _ensure_ticker_exists(ticker)
     engine = get_edgar_service()
     return await asyncio.to_thread(engine.get_filings, ticker)
 
@@ -178,6 +206,7 @@ async def data_edgar_filing_content(
     _current_user=Depends(get_current_user),
 ):
     """Get extracted SEC EDGAR sections (risk factors, MD&A, competition) for a ticker. Requires authentication and LLM (OpenAI or Azure)."""
+    await _ensure_ticker_exists(ticker)
     engine = get_edgar_service()
     return await asyncio.to_thread(engine.get_filing_content, ticker, form, limit)
 
@@ -200,6 +229,7 @@ async def data_reports_ticker(
     _current_user=Depends(get_current_user),
 ):
     """Get latest reports for one ticker. Requires authentication. Returns report_date and reports dict (report_type -> content, score, key_takeaways, etc.)."""
+    await _ensure_ticker_exists(ticker)
     svc = _get_report_service()
     report_date = await asyncio.to_thread(svc.get_latest_report_date, ticker.upper())
     if not report_date:
@@ -215,6 +245,8 @@ async def data_reports_batch(
 ):
     """Get latest reports for multiple tickers. Requires authentication. Body: { \"tickers\": [\"AAPL\", \"MSFT\", ...] }. Returns tickers -> { report_date, reports }."""
     tickers = [str(t).upper() for t in (body.tickers or []) if t][:50]
+    for t in tickers:
+        await _ensure_ticker_exists(t)
     svc = _get_report_service()
     result = {}
     for t in tickers:

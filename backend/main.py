@@ -738,7 +738,14 @@ async def start_analysis(
         ticker = body.get("ticker", "").upper()
         if not ticker:
             raise HTTPException(status_code=400, detail="Ticker is required")
-        
+
+        quote = await asyncio.to_thread(market_data_service.get_current_quote, ticker)
+        if quote is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Ticker '{ticker}' not found. Check the symbol and try again.",
+            )
+
         analysis_date = body.get("analysis_date") or datetime.now().strftime("%Y-%m-%d")
         analysts = body.get("analysts", ["market", "news", "fundamentals", "technical", "sec"])
         research_depth = body.get("research_depth", 2)
@@ -961,6 +968,6 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=8002,
-        workers=4,
+        workers=1,
         log_config=str(Path(__file__).with_name("uvicorn_logging.json")),
     )

@@ -168,6 +168,7 @@ export default function TickerSearch({ compact = false }: TickerSearchProps) {
                 }
               }}
               placeholder="Ticker search…"
+              title="Use any Yahoo Finance symbol — even if it doesn't appear in the dropdown."
               className={`w-full bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                 compact ? 'px-3 py-1.5 text-sm' : 'px-4 py-3'
               }`}
@@ -213,6 +214,11 @@ export default function TickerSearch({ compact = false }: TickerSearchProps) {
             Search
           </button>
         </div>
+        {!compact && (
+          <p className="mt-1.5 text-xs text-gray-500">
+            Use any Yahoo Finance symbol — even if it doesn’t appear in the dropdown.
+          </p>
+        )}
       </form>
     </div>
   );

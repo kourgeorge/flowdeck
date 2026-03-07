@@ -127,7 +127,8 @@ function SidebarTickerSearch({ onSelect }: { onSelect: (ticker: string) => void 
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
-            placeholder="Add ticker…"
+            placeholder="Add ticker (Yahoo symbol)…"
+            title="Use any Yahoo Finance symbol — even if it doesn't appear in the dropdown."
             className="w-full pl-8 pr-3 py-1.5 bg-gray-700/60 border border-gray-600 rounded text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
