@@ -807,6 +807,12 @@ def run_mission_control(
             if existing:
                 already_running.append(MissionControlRunItem(ticker=ticker, analysis_id=analysis_id))
             else:
+                # Record in analysis_runs so home-page "AI Analyses Generated" counter updates
+                info = _MISSION_ANALYSIS_SERVICE.running_analyses.get(analysis_id)
+                if info:
+                    run_id = info.get("run_id")
+                    if run_id:
+                        token_service.record_analysis_run(_user.id, ticker, run_id, db)
                 triggered.append(MissionControlRunItem(ticker=ticker, analysis_id=analysis_id))
         except Exception as e:
             failed.append(MissionControlRunErrorItem(ticker=ticker, error=str(e)))

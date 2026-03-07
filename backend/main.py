@@ -46,7 +46,7 @@ from routers.payments import router as payments_router
 from routers.chat import router as chat_router
 from routers.api_keys import router as api_keys_router
 from sync_major_stocks import get_missing_and_skipped, run_analyses_for_tickers
-from database import init_db, get_db
+from database import init_db, get_db, SessionLocal
 from models.db_models import User
 from auth import get_current_user, get_current_user_optional, get_current_admin_user, hash_password, verify_password
 from sqlalchemy.orm import Session
@@ -929,17 +929,23 @@ def _run_sync_major_tickers_background(analysis_date: str) -> None:
     triggered, skipped = get_missing_and_skipped(analysis_date)
     if not triggered:
         return
-    run_analyses_for_tickers(
-        tickers=triggered,
-        analysis_date=analysis_date,
-        analysis_service=analysis_service,
-        analysts=["market", "news", "fundamentals", "technical", "sec"],
-        research_depth=5,
-        llm_provider="azure",
-        wait_for_completion=True,
-        poll_interval_seconds=10.0,
-        completion_timeout_seconds=3600.0,
-    )
+    db = SessionLocal()
+    try:
+        run_analyses_for_tickers(
+            tickers=triggered,
+            analysis_date=analysis_date,
+            analysis_service=analysis_service,
+            db=db,
+            creator_id=None,
+            analysts=["market", "news", "fundamentals", "technical", "sec"],
+            research_depth=5,
+            llm_provider="azure",
+            wait_for_completion=True,
+            poll_interval_seconds=10.0,
+            completion_timeout_seconds=3600.0,
+        )
+    finally:
+        db.close()
 
 
 @app.post("/api/sync/major-stocks")

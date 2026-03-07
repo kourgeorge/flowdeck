@@ -2,11 +2,15 @@
 
 import time
 from datetime import datetime, timezone
-from typing import List, Tuple
+from typing import List, Optional, Tuple
+
+from sqlalchemy.orm import Session
 
 from config import MAJOR_TICKERS, RESULTS_DIR
+from database import SessionLocal
 from services.report_service import ReportService
 from services.analysis_service import AnalysisService
+from services import token_service
 
 
 def get_missing_and_skipped(
@@ -34,6 +38,8 @@ def run_analyses_for_tickers(
     tickers: List[str],
     analysis_date: str,
     analysis_service: AnalysisService,
+    db: Session,
+    creator_id: Optional[int] = None,
     analysts: List[str] = None,
     research_depth: int = 5,
     llm_provider: str = "azure",
@@ -43,11 +49,14 @@ def run_analyses_for_tickers(
 ) -> None:
     """
     Start analysis for each ticker in tickers, sequentially. Optionally wait for each to complete.
+    Records each new run in analysis_runs (using creator_id or system user).
     """
     if analysts is None:
         analysts = ["market", "news", "fundamentals", "technical"]
+    if creator_id is None:
+        creator_id = token_service.get_system_user_id(db)
     for ticker in tickers:
-        analysis_id, _ = analysis_service.start_analysis(
+        analysis_id, existing = analysis_service.start_analysis(
             ticker=ticker,
             analysis_date=analysis_date,
             analysts=analysts,
@@ -55,6 +64,10 @@ def run_analyses_for_tickers(
             llm_provider=llm_provider,
             progress_callback=None,
         )
+        if not existing:
+            info = analysis_service.running_analyses.get(analysis_id)
+            if info and info.get("run_id"):
+                token_service.record_analysis_run(creator_id, ticker, info["run_id"], db)
         if wait_for_completion:
             _wait_for_analysis(
                 analysis_service,
@@ -88,17 +101,23 @@ def run_sync(
     analysis_service = AnalysisService(results_dir=RESULTS_DIR)
     if analysts is None:
         analysts = ["market", "news", "fundamentals", "technical"]
-    run_analyses_for_tickers(
-        tickers=triggered,
-        analysis_date=analysis_date,
-        analysis_service=analysis_service,
-        analysts=analysts,
-        research_depth=research_depth,
-        llm_provider=llm_provider,
-        wait_for_completion=wait_for_completion,
-        poll_interval_seconds=poll_interval_seconds,
-        completion_timeout_seconds=completion_timeout_seconds,
-    )
+    db = SessionLocal()
+    try:
+        run_analyses_for_tickers(
+            tickers=triggered,
+            analysis_date=analysis_date,
+            analysis_service=analysis_service,
+            db=db,
+            creator_id=None,
+            analysts=analysts,
+            research_depth=research_depth,
+            llm_provider=llm_provider,
+            wait_for_completion=wait_for_completion,
+            poll_interval_seconds=poll_interval_seconds,
+            completion_timeout_seconds=completion_timeout_seconds,
+        )
+    finally:
+        db.close()
     return {
         "date": analysis_date,
         "triggered": triggered,

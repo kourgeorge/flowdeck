@@ -12,6 +12,24 @@ EARNINGS_PER_UNIQUE_VIEW = 1
 MAX_REWARD_PER_REPORT = 400
 REWARD_WINDOW_DAYS = 14  # 0 = no window
 
+SYSTEM_USER_EMAIL = "system@flowdeck.internal"
+
+
+def get_system_user_id(db: Session) -> int:
+    """Return user id for the system account (sync/cron runs). Creates the user if missing."""
+    user = db.query(User).filter(User.email == SYSTEM_USER_EMAIL).first()
+    if user:
+        return user.id
+    user = User(
+        email=SYSTEM_USER_EMAIL,
+        name="System",
+        token_balance=0,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user.id
+
 
 def ensure_user_balance(user_id: int, db: Session) -> None:
     """Set token_balance to INITIAL_BALANCE for legacy users missing the column (idempotent)."""
@@ -64,6 +82,32 @@ def deduct_for_analysis(user_id: int, ticker: str, run_id: str, db: Session) -> 
     except Exception:
         db.rollback()
         return False
+
+
+def record_analysis_run(creator_id: int, ticker: str, run_id: str, db: Session) -> None:
+    """
+    Record an analysis run without deducting tokens (e.g. admin/mission-control runs).
+    Idempotent: if (ticker, run_id) already exists, does nothing.
+    """
+    ticker_upper = ticker.upper()
+    existing = (
+        db.query(AnalysisRun)
+        .filter(
+            AnalysisRun.ticker == ticker_upper,
+            AnalysisRun.run_id == run_id,
+        )
+        .first()
+    )
+    if existing:
+        return
+    run = AnalysisRun(
+        ticker=ticker_upper,
+        run_id=run_id,
+        creator_id=creator_id,
+        earned_tokens=0,
+    )
+    db.add(run)
+    db.commit()
 
 
 def record_view(ticker: str, run_id: str, viewer_id: int, db: Session) -> bool:
