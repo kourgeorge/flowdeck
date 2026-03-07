@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 from services.key_takeaways import extract_key_takeaways
 from database import SessionLocal
-from models.db_models import Report
+from models.db_models import Report, AnalysisRun
 
 
 def _date_part(run_id_or_date: Optional[str]) -> Optional[str]:
@@ -112,8 +112,7 @@ def save_report(
         row = (
             db.query(Report)
             .filter(
-                Report.ticker == ticker.upper(),
-                Report.run_id == run_id,
+                Report.analysis_run_id == analysis_run_id,
                 Report.report_type == report_type,
             )
             .first()
@@ -122,11 +121,11 @@ def save_report(
             row.content = content or ""
             row.metadata_json = metadata_json
             row.analysis_run_id = analysis_run_id
+            row.ticker = ticker.upper()
             action = "updated"
         else:
             row = Report(
                 ticker=ticker.upper(),
-                run_id=run_id,
                 report_type=report_type,
                 content=content or "",
                 metadata_json=metadata_json,
@@ -159,9 +158,10 @@ class ReportService:
         db = SessionLocal()
         try:
             row = (
-                db.query(Report.run_id)
+                db.query(AnalysisRun.run_id)
+                .join(Report, Report.analysis_run_id == AnalysisRun.id)
                 .filter(Report.ticker == ticker.upper())
-                .order_by(Report.run_id.desc())
+                .order_by(AnalysisRun.run_id.desc())
                 .first()
             )
             return row.run_id if row else None
@@ -173,25 +173,16 @@ class ReportService:
         db = SessionLocal()
         try:
             ticker_upper = ticker.upper()
-            if "_" in date:
-                count = (
-                    db.query(Report)
-                    .filter(Report.ticker == ticker_upper, Report.run_id == date)
-                    .limit(1)
-                    .count()
-                )
-                return count > 0
-            # Match any run that starts with date (YYYY-MM-DD)
-            count = (
+            q = (
                 db.query(Report)
-                .filter(
-                    Report.ticker == ticker_upper,
-                    Report.run_id.like(f"{date}%"),
-                )
-                .limit(1)
-                .count()
+                .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
+                .filter(Report.ticker == ticker_upper)
             )
-            return count > 0
+            if "_" in date:
+                q = q.filter(AnalysisRun.run_id == date)
+            else:
+                q = q.filter(AnalysisRun.run_id.like(f"{date}%"))
+            return q.limit(1).count() > 0
         finally:
             db.close()
 
@@ -199,10 +190,12 @@ class ReportService:
         """date can be YYYY-MM-DD (tickers with any run that day) or full run id (exact)."""
         db = SessionLocal()
         try:
+            q = db.query(Report.ticker).join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
             if "_" in date:
-                rows = db.query(Report.ticker).filter(Report.run_id == date).distinct().all()
+                q = q.filter(AnalysisRun.run_id == date)
             else:
-                rows = db.query(Report.ticker).filter(Report.run_id.like(f"{date}%")).distinct().all()
+                q = q.filter(AnalysisRun.run_id.like(f"{date}%"))
+            rows = q.distinct().all()
             return [r.ticker for r in rows]
         finally:
             db.close()
@@ -214,13 +207,20 @@ class ReportService:
         db = SessionLocal()
         try:
             if "_" in date:
-                rows = db.query(Report.ticker).filter(Report.run_id == date).distinct().all()
+                rows = (
+                    db.query(Report.ticker)
+                    .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
+                    .filter(AnalysisRun.run_id == date)
+                    .distinct()
+                    .all()
+                )
                 tickers = [r.ticker for r in rows]
                 return (tickers[offset : offset + limit], len(tickers))
             rows = (
-                db.query(Report.ticker, Report.run_id)
-                .filter(Report.run_id.like(f"{date}%"))
-                .order_by(Report.run_id.desc())
+                db.query(Report.ticker, AnalysisRun.run_id)
+                .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
+                .filter(AnalysisRun.run_id.like(f"{date}%"))
+                .order_by(AnalysisRun.run_id.desc())
                 .all()
             )
             seen: set[str] = set()
@@ -261,9 +261,10 @@ class ReportService:
         db = SessionLocal()
         try:
             rows = (
-                db.query(Report.ticker, Report.run_id)
-                .filter(Report.run_id >= start_bound, Report.run_id < end_exclusive)
-                .order_by(Report.run_id.desc())
+                db.query(Report.ticker, AnalysisRun.run_id)
+                .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
+                .filter(AnalysisRun.run_id >= start_bound, AnalysisRun.run_id < end_exclusive)
+                .order_by(AnalysisRun.run_id.desc())
                 .all()
             )
             seen: set[str] = set()
@@ -292,9 +293,10 @@ class ReportService:
         db = SessionLocal()
         try:
             rows = (
-                db.query(Report.ticker, Report.run_id)
-                .filter(Report.run_id >= start_bound, Report.run_id < end_exclusive)
-                .order_by(Report.run_id.desc())
+                db.query(Report.ticker, AnalysisRun.run_id)
+                .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
+                .filter(AnalysisRun.run_id >= start_bound, AnalysisRun.run_id < end_exclusive)
+                .order_by(AnalysisRun.run_id.desc())
                 .all()
             )
             seen: set[str] = set()
@@ -319,16 +321,22 @@ class ReportService:
             if "_" not in date:
                 # Find latest run_id that starts with this date
                 latest = (
-                    db.query(Report.run_id)
-                    .filter(Report.ticker == ticker_upper, Report.run_id.like(f"{date}%"))
-                    .order_by(Report.run_id.desc())
+                    db.query(AnalysisRun.run_id)
+                    .join(Report, Report.analysis_run_id == AnalysisRun.id)
+                    .filter(Report.ticker == ticker_upper, AnalysisRun.run_id.like(f"{date}%"))
+                    .order_by(AnalysisRun.run_id.desc())
                     .first()
                 )
                 run_id = latest.run_id if latest else date
-            rows = db.query(Report).filter(Report.ticker == ticker_upper, Report.run_id == run_id).all()
+            rows = (
+                db.query(Report)
+                .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
+                .filter(Report.ticker == ticker_upper, AnalysisRun.run_id == run_id)
+                .all()
+            )
             result = {}
             for row in rows:
-                result[row.report_type] = _report_row_to_dict(row, row.run_id)
+                result[row.report_type] = _report_row_to_dict(row, run_id)
             return result
         finally:
             db.close()
@@ -345,7 +353,8 @@ class ReportService:
         db = SessionLocal()
         try:
             rows = (
-                db.query(Report.run_id, Report.report_type)
+                db.query(AnalysisRun.run_id, Report.report_type)
+                .join(Report, Report.analysis_run_id == AnalysisRun.id)
                 .filter(Report.ticker == ticker.upper())
                 .all()
             )

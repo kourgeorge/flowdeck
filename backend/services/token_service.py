@@ -136,18 +136,6 @@ def record_view(ticker: str, run_id: str, viewer_id: int, db: Session) -> bool:
     Rules: no self-views, earned_tokens < MAX_REWARD_PER_REPORT, optional 14-day window.
     """
     ticker_upper = ticker.upper()
-    existing = (
-        db.query(ReportView)
-        .filter(
-            ReportView.ticker == ticker_upper,
-            ReportView.run_id == run_id,
-            ReportView.viewer_id == viewer_id,
-        )
-        .first()
-    )
-    if existing:
-        return False
-
     run = (
         db.query(AnalysisRun)
         .filter(
@@ -156,12 +144,26 @@ def record_view(ticker: str, run_id: str, viewer_id: int, db: Session) -> bool:
         )
         .first()
     )
+    if not run:
+        view = ReportView(viewer_id=viewer_id, analysis_run_id=None)
+        db.add(view)
+        db.commit()
+        return True
+
+    existing = (
+        db.query(ReportView)
+        .filter(
+            ReportView.analysis_run_id == run.id,
+            ReportView.viewer_id == viewer_id,
+        )
+        .first()
+    )
+    if existing:
+        return False
 
     view = ReportView(
-        ticker=ticker_upper,
-        run_id=run_id,
         viewer_id=viewer_id,
-        analysis_run_id=run.id if run else None,
+        analysis_run_id=run.id,
     )
     db.add(view)
 
@@ -271,12 +273,12 @@ def top_up(user_id: int, amount: int, db: Session) -> None:
 
 def get_view_count(ticker: str, run_id: str, db: Session) -> int:
     """Return number of unique views for this run."""
+    analysis_run_id = get_analysis_run_id(ticker, run_id, db)
+    if analysis_run_id is None:
+        return 0
     return (
         db.query(ReportView)
-        .filter(
-            ReportView.ticker == ticker.upper(),
-            ReportView.run_id == run_id,
-        )
+        .filter(ReportView.analysis_run_id == analysis_run_id)
         .count()
     )
 

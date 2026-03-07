@@ -414,8 +414,9 @@ def get_admin_reports(
 ):
     """Latest reports. Ordered by created_at desc."""
     total = db.query(func.count(Report.id)).scalar() or 0
-    rows = (
-        db.query(Report)
+    rows_with_run = (
+        db.query(Report, AnalysisRun.run_id)
+        .outerjoin(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
         .order_by(Report.created_at.desc())
         .limit(limit)
         .all()
@@ -424,11 +425,11 @@ def get_admin_reports(
         AdminReportItem(
             id=r.id,
             ticker=r.ticker,
-            run_id=r.run_id,
+            run_id=run_id or "",
             report_type=r.report_type,
             created_at=r.created_at,
         )
-        for r in rows
+        for r, run_id in rows_with_run
     ]
     return AdminReportsResponse(reports=items, total=total)
 
@@ -510,13 +511,17 @@ def get_views_for_run(
 ):
     """Return individual views for one ticker/run with viewer identity (admin only)."""
     ticker_upper = ticker.upper()
+    ar = (
+        db.query(AnalysisRun)
+        .filter(AnalysisRun.ticker == ticker_upper, AnalysisRun.run_id == run_id)
+        .first()
+    )
+    if not ar:
+        return AdminReportViewsResponse(views=[], total=0)
     base_query = (
         db.query(ReportView, User.email, User.name)
         .outerjoin(User, User.id == ReportView.viewer_id)
-        .filter(
-            ReportView.ticker == ticker_upper,
-            ReportView.run_id == run_id,
-        )
+        .filter(ReportView.analysis_run_id == ar.id)
     )
     total = base_query.count() or 0
     rows = (
@@ -529,8 +534,8 @@ def get_views_for_run(
     items = [
         AdminReportViewItem(
             id=view.id,
-            ticker=view.ticker,
-            run_id=view.run_id,
+            ticker=ticker_upper,
+            run_id=run_id,
             viewer_id=view.viewer_id,
             viewer_email=email or f"[deleted user id={view.viewer_id}]",
             viewer_name=name,
@@ -551,7 +556,8 @@ def get_views(
     """Return individual report views with viewer identity (admin only)."""
     total = db.query(func.count(ReportView.id)).scalar() or 0
     rows = (
-        db.query(ReportView, User.email, User.name)
+        db.query(ReportView, AnalysisRun.ticker, AnalysisRun.run_id, User.email, User.name)
+        .outerjoin(AnalysisRun, ReportView.analysis_run_id == AnalysisRun.id)
         .outerjoin(User, User.id == ReportView.viewer_id)
         .order_by(ReportView.viewed_at.desc())
         .offset(offset)
@@ -561,14 +567,14 @@ def get_views(
     items = [
         AdminReportViewItem(
             id=view.id,
-            ticker=view.ticker,
-            run_id=view.run_id,
+            ticker=(ticker or "").upper(),
+            run_id=run_id or "",
             viewer_id=view.viewer_id,
             viewer_email=email or f"[deleted user id={view.viewer_id}]",
             viewer_name=name,
             viewed_at=view.viewed_at,
         )
-        for view, email, name in rows
+        for view, ticker, run_id, email, name in rows
     ]
     return AdminReportViewsResponse(views=items, total=total)
 
@@ -580,35 +586,35 @@ def get_view_runs(
     limit: int = Query(100, ge=1, le=500),
 ):
     """Return report runs with unique view counts, ordered for hierarchy browsing."""
-    distinct_runs_subquery = (
-        db.query(ReportView.ticker, ReportView.run_id)
-        .distinct()
-        .subquery()
-    )
-    total_runs_with_views = db.query(func.count()).select_from(distinct_runs_subquery).scalar() or 0
-
     rows = (
         db.query(
-            ReportView.ticker,
-            ReportView.run_id,
+            AnalysisRun.ticker,
+            AnalysisRun.run_id,
             func.count(ReportView.id).label("unique_views"),
             func.max(ReportView.viewed_at).label("last_viewed_at"),
         )
-        .group_by(ReportView.ticker, ReportView.run_id)
+        .join(ReportView, ReportView.analysis_run_id == AnalysisRun.id)
+        .group_by(AnalysisRun.id, AnalysisRun.ticker, AnalysisRun.run_id)
         .order_by(
-            ReportView.run_id.desc(),
-            ReportView.ticker.asc(),
+            AnalysisRun.run_id.desc(),
+            AnalysisRun.ticker.asc(),
             func.max(ReportView.viewed_at).desc(),
             func.count(ReportView.id).desc(),
         )
         .limit(limit)
         .all()
     )
+    total_runs_with_views = (
+        db.query(func.count(func.distinct(ReportView.analysis_run_id)))
+        .filter(ReportView.analysis_run_id.isnot(None))
+        .scalar()
+        or 0
+    )
 
     items = [
         AdminReportViewRunItem(
-            ticker=ticker,
-            run_id=run_id,
+            ticker=(ticker or "").upper(),
+            run_id=run_id or "",
             unique_views=int(unique_views or 0),
             last_viewed_at=last_viewed_at,
         )
@@ -718,7 +724,8 @@ def get_mission_control(
     has_report_today = {
         str(ticker).upper()
         for (ticker,) in db.query(Report.ticker)
-        .filter(Report.run_id.like(f"{date_str}%"))
+        .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
+        .filter(AnalysisRun.run_id.like(f"{date_str}%"))
         .distinct()
         .all()
         if ticker
@@ -772,7 +779,8 @@ def run_mission_control(
     has_report_today = {
         str(ticker).upper()
         for (ticker,) in db.query(Report.ticker)
-        .filter(Report.run_id.like(f"{date_str}%"))
+        .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
+        .filter(AnalysisRun.run_id.like(f"{date_str}%"))
         .distinct()
         .all()
         if ticker

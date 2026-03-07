@@ -29,17 +29,16 @@ class Report(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     analysis_run_id = Column(Integer, ForeignKey("analysis_runs.id", ondelete="CASCADE"), nullable=True, index=True)
-    ticker = Column(String(32), nullable=False, index=True)
-    run_id = Column(String(64), nullable=False)  # YYYY-MM-DD or YYYY-MM-DD_HH-MM-SS
+    ticker = Column(String(32), nullable=False, index=True)  # denormalized from analysis_runs for query convenience
     report_type = Column(String(64), nullable=False)  # market_report, news_report, etc.
     content = Column(Text, nullable=True)
     metadata_json = Column(Text, nullable=True)  # JSON: score, score_label, key_takeaways, etc.
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     __table_args__ = (
-        UniqueConstraint("ticker", "run_id", "report_type", name="uq_report_ticker_run_type"),
-        Index("idx_reports_ticker_run", "ticker", "run_id"),
-        Index("idx_reports_run_date", "run_id"),
+        UniqueConstraint("analysis_run_id", "report_type", name="uq_report_analysis_run_type"),
+        Index("idx_reports_ticker", "ticker"),
+        Index("idx_reports_analysis_run_id", "analysis_run_id"),
     )
 
 
@@ -66,14 +65,12 @@ class ReportView(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     analysis_run_id = Column(Integer, ForeignKey("analysis_runs.id", ondelete="CASCADE"), nullable=True, index=True)
-    ticker = Column(String(32), nullable=False, index=True)
-    run_id = Column(String(64), nullable=False, index=True)
     viewer_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     viewed_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     __table_args__ = (
-        UniqueConstraint("ticker", "run_id", "viewer_id", name="uq_report_view_ticker_run_viewer"),
-        Index("idx_report_views_ticker_run", "ticker", "run_id"),
+        UniqueConstraint("analysis_run_id", "viewer_id", name="uq_report_view_analysis_run_viewer"),
+        Index("idx_report_views_analysis_run_id", "analysis_run_id"),
     )
 
 
