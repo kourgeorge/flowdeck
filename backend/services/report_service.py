@@ -99,12 +99,16 @@ def save_report(
     report_type: str,
     content: str = "",
     metadata: Optional[Dict[str, Any]] = None,
+    analysis_run_id: Optional[int] = None,
 ) -> None:
-    """Save or upsert a report into the database."""
+    """Save or upsert a report into the database. When analysis_run_id is None, looks up by (ticker, run_id) if an AnalysisRun exists."""
     meta = metadata or {}
     metadata_json = json.dumps(meta) if meta else None
     db = SessionLocal()
     try:
+        if analysis_run_id is None:
+            from services import token_service
+            analysis_run_id = token_service.get_analysis_run_id(ticker, run_id, db)
         row = (
             db.query(Report)
             .filter(
@@ -117,6 +121,7 @@ def save_report(
         if row:
             row.content = content or ""
             row.metadata_json = metadata_json
+            row.analysis_run_id = analysis_run_id
             action = "updated"
         else:
             row = Report(
@@ -125,6 +130,7 @@ def save_report(
                 report_type=report_type,
                 content=content or "",
                 metadata_json=metadata_json,
+                analysis_run_id=analysis_run_id,
             )
             db.add(row)
             action = "inserted"

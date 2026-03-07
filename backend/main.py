@@ -763,7 +763,8 @@ async def start_analysis(
             return {"analysis_id": existing_id, "ticker": ticker, "date": analysis_date, "existing": True}
 
         run_id = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
-        if not token_service.deduct_for_analysis(current_user.id, ticker, run_id, db):
+        deduct_ok, analysis_run_id = token_service.deduct_for_analysis(current_user.id, ticker, run_id, db)
+        if not deduct_ok:
             raise HTTPException(
                 status_code=402,
                 detail="Insufficient token balance. Need 200 tokens to create a report.",
@@ -816,6 +817,7 @@ async def start_analysis(
             progress_callback=progress_callback,
             initiator_email=initiator_email,
             run_id=run_id,
+            analysis_run_id=analysis_run_id,
         )
         if existing:
             token_service.refund_for_analysis(current_user.id, ticker, run_id, db)

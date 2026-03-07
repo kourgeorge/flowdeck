@@ -28,6 +28,7 @@ class Report(Base):
     __tablename__ = "reports"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    analysis_run_id = Column(Integer, ForeignKey("analysis_runs.id", ondelete="CASCADE"), nullable=True, index=True)
     ticker = Column(String(32), nullable=False, index=True)
     run_id = Column(String(64), nullable=False)  # YYYY-MM-DD or YYYY-MM-DD_HH-MM-SS
     report_type = Column(String(64), nullable=False)  # market_report, news_report, etc.
@@ -64,6 +65,7 @@ class ReportView(Base):
     __tablename__ = "report_views"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    analysis_run_id = Column(Integer, ForeignKey("analysis_runs.id", ondelete="CASCADE"), nullable=True, index=True)
     ticker = Column(String(32), nullable=False, index=True)
     run_id = Column(String(64), nullable=False, index=True)
     viewer_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)

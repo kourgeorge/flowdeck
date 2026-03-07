@@ -171,6 +171,7 @@ class AnalysisService:
         progress_callback: Optional[Callable] = None,
         initiator_email: Optional[str] = None,
         run_id: Optional[str] = None,
+        analysis_run_id: Optional[int] = None,
     ) -> tuple[str, bool]:
         """Start a new analysis and return (analysis_id, existing). existing=True if already running for (ticker, date)."""
         ticker = ticker.upper()
@@ -281,6 +282,7 @@ class AnalysisService:
                 "ticker": ticker.upper(),
                 "date": analysis_date,
                 "run_id": run_id,
+                "analysis_run_id": analysis_run_id,
                 "status": "running",
                 "graph": graph,
                 "results_dir": results_dir,
@@ -392,6 +394,7 @@ class AnalysisService:
                         report_type=key,
                         content=data.get("content", ""),
                         metadata=meta,
+                        analysis_run_id=analysis_info.get("analysis_run_id"),
                     )
                     logger.info(
                         "Report saved analysis_id=%s ticker=%s run_id=%s report_type=%s",
@@ -511,6 +514,7 @@ class AnalysisService:
                         report_type="investment_plan",
                         content=content,
                         metadata={**inner, "bull_viewpoint": bull, "bear_viewpoint": bear},
+                        analysis_run_id=analysis_info.get("analysis_run_id"),
                     )
                     if write_reports_to_results:
                         _write_report_to_filesystem("investment_plan", content, analysis_info["report_dir"])
@@ -573,6 +577,7 @@ class AnalysisService:
                         report_type="final_trade_decision",
                         content=content,
                         metadata={**inner, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral},
+                        analysis_run_id=analysis_info.get("analysis_run_id"),
                     )
                     if write_reports_to_results:
                         _write_report_to_filesystem("final_trade_decision", content, analysis_info["report_dir"])

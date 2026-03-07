@@ -1,6 +1,7 @@
 """Token economy: balance, cost per analysis, rewards per unique view, cap and window."""
 
 from datetime import datetime, timezone, timedelta
+from typing import Optional, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -54,20 +55,34 @@ def get_balance(user_id: int, db: Session) -> int:
     return balance
 
 
-def deduct_for_analysis(user_id: int, ticker: str, run_id: str, db: Session) -> bool:
+def get_analysis_run_id(ticker: str, run_id: str, db: Session) -> Optional[int]:
+    """Return analysis_runs.id for (ticker, run_id), or None if not found."""
+    run = (
+        db.query(AnalysisRun)
+        .filter(
+            AnalysisRun.ticker == ticker.upper(),
+            AnalysisRun.run_id == run_id,
+        )
+        .first()
+    )
+    return run.id if run else None
+
+
+def deduct_for_analysis(user_id: int, ticker: str, run_id: str, db: Session) -> Tuple[bool, Optional[int]]:
     """
-    Deduct COST_PER_ANALYSIS from user and create AnalysisRun. Returns False if insufficient balance.
+    Deduct COST_PER_ANALYSIS from user and create AnalysisRun.
+    Returns (True, run.id) on success, (False, None) if insufficient balance.
     """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        return False
+        return (False, None)
     balance = getattr(user, "token_balance", None)
     if balance is None:
         user.token_balance = INITIAL_BALANCE
         db.flush()
         balance = user.token_balance
     if balance < COST_PER_ANALYSIS:
-        return False
+        return (False, None)
     try:
         user.token_balance -= COST_PER_ANALYSIS
         run = AnalysisRun(
@@ -78,16 +93,18 @@ def deduct_for_analysis(user_id: int, ticker: str, run_id: str, db: Session) -> 
         )
         db.add(run)
         db.commit()
-        return True
+        db.refresh(run)
+        return (True, run.id)
     except Exception:
         db.rollback()
-        return False
+        return (False, None)
 
 
-def record_analysis_run(creator_id: int, ticker: str, run_id: str, db: Session) -> None:
+def record_analysis_run(creator_id: int, ticker: str, run_id: str, db: Session) -> Optional[int]:
     """
     Record an analysis run without deducting tokens (e.g. admin/mission-control runs).
-    Idempotent: if (ticker, run_id) already exists, does nothing.
+    Idempotent: if (ticker, run_id) already exists, returns existing id.
+    Returns the AnalysisRun.id (existing or newly created).
     """
     ticker_upper = ticker.upper()
     existing = (
@@ -99,7 +116,7 @@ def record_analysis_run(creator_id: int, ticker: str, run_id: str, db: Session) 
         .first()
     )
     if existing:
-        return
+        return existing.id
     run = AnalysisRun(
         ticker=ticker_upper,
         run_id=run_id,
@@ -108,6 +125,8 @@ def record_analysis_run(creator_id: int, ticker: str, run_id: str, db: Session) 
     )
     db.add(run)
     db.commit()
+    db.refresh(run)
+    return run.id
 
 
 def record_view(ticker: str, run_id: str, viewer_id: int, db: Session) -> bool:
@@ -142,6 +161,7 @@ def record_view(ticker: str, run_id: str, viewer_id: int, db: Session) -> bool:
         ticker=ticker_upper,
         run_id=run_id,
         viewer_id=viewer_id,
+        analysis_run_id=run.id if run else None,
     )
     db.add(view)
 
@@ -174,6 +194,22 @@ def record_view(ticker: str, run_id: str, viewer_id: int, db: Session) -> bool:
         run.earned_tokens += 1
     db.commit()
     return True
+
+
+def delete_analysis_run(creator_id: int, ticker: str, run_id: str, db: Session) -> None:
+    """Remove AnalysisRun without refunding (e.g. admin race when start_analysis returned existing=True)."""
+    run = (
+        db.query(AnalysisRun)
+        .filter(
+            AnalysisRun.ticker == ticker.upper(),
+            AnalysisRun.run_id == run_id,
+            AnalysisRun.creator_id == creator_id,
+        )
+        .first()
+    )
+    if run:
+        db.delete(run)
+        db.commit()
 
 
 def refund_for_analysis(user_id: int, ticker: str, run_id: str, db: Session) -> None:

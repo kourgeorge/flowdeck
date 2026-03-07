@@ -56,6 +56,8 @@ def run_analyses_for_tickers(
     if creator_id is None:
         creator_id = token_service.get_system_user_id(db)
     for ticker in tickers:
+        run_id = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+        analysis_run_id = token_service.record_analysis_run(creator_id, ticker, run_id, db)
         analysis_id, existing = analysis_service.start_analysis(
             ticker=ticker,
             analysis_date=analysis_date,
@@ -63,11 +65,11 @@ def run_analyses_for_tickers(
             research_depth=research_depth,
             llm_provider=llm_provider,
             progress_callback=None,
+            run_id=run_id,
+            analysis_run_id=analysis_run_id,
         )
-        if not existing:
-            info = analysis_service.running_analyses.get(analysis_id)
-            if info and info.get("run_id"):
-                token_service.record_analysis_run(creator_id, ticker, info["run_id"], db)
+        if existing:
+            token_service.delete_analysis_run(creator_id, ticker, run_id, db)
         if wait_for_completion:
             _wait_for_analysis(
                 analysis_service,

@@ -796,6 +796,8 @@ def run_mission_control(
             continue
 
         try:
+            run_id = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+            analysis_run_id = token_service.record_analysis_run(_user.id, ticker, run_id, db)
             analysis_id, existing = _MISSION_ANALYSIS_SERVICE.start_analysis(
                 ticker=ticker,
                 analysis_date=date_str,
@@ -803,16 +805,14 @@ def run_mission_control(
                 research_depth=5,
                 llm_provider="azure",
                 progress_callback=None,
+                run_id=run_id,
+                analysis_run_id=analysis_run_id,
             )
             if existing:
+                # Race: another run started; remove the AnalysisRun we just created so it is not counted
+                token_service.delete_analysis_run(_user.id, ticker, run_id, db)
                 already_running.append(MissionControlRunItem(ticker=ticker, analysis_id=analysis_id))
             else:
-                # Record in analysis_runs so home-page "AI Analyses Generated" counter updates
-                info = _MISSION_ANALYSIS_SERVICE.running_analyses.get(analysis_id)
-                if info:
-                    run_id = info.get("run_id")
-                    if run_id:
-                        token_service.record_analysis_run(_user.id, ticker, run_id, db)
                 triggered.append(MissionControlRunItem(ticker=ticker, analysis_id=analysis_id))
         except Exception as e:
             failed.append(MissionControlRunErrorItem(ticker=ticker, error=str(e)))
