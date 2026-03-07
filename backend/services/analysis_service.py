@@ -35,16 +35,35 @@ from ai_engine.tradingagents.default_config import DEFAULT_CONFIG
 from ai_engine.llm_provider import get_config_from_env
 
 
-def _is_us_company_with_sec(ticker: str) -> bool:
-    """Return True only for US-listed companies that have SEC EDGAR filings (excludes crypto, forex, indices)."""
+def _has_sec_data(ticker: str) -> bool:
+    """Return True only if the ticker has SEC EDGAR data (10-K/10-Q filings). Run SEC analyst only then."""
+    try:
+        from services.edgar_service import get_edgar_service
+        result = get_edgar_service().get_filings(ticker)
+        if result.get("error"):
+            return False
+        filings = result.get("filings") or []
+        return len(filings) > 0
+    except Exception:
+        return False
+
+
+# Keys that indicate real company fundamental data (from get_fundamentals_core / yfinance info)
+_FUNDAMENTALS_MEANINGFUL_KEYS = frozenset({
+    "MarketCapitalization", "TrailingPE", "ForwardPE", "RevenueTTM", "Sector",
+    "EnterpriseValue", "PriceToBookRatio", "EBITDA", "ProfitMargin", "BookValue",
+})
+
+
+def _has_fundamental_data(ticker: str) -> bool:
+    """Return True only if the ticker has fetchable company fundamental data (run fundamentals analyst only then)."""
     try:
         from services.info_fetcher import get_info_fetcher
-        info = get_info_fetcher().get_company_info(ticker)
-        country = (info.get("country") or "N/A").strip()
-        quote_type = (str(info.get("quoteType") or "").strip().upper())
-        if quote_type in ("CRYPTOCURRENCY", "CURRENCY", "INDEX"):
+        result = get_info_fetcher().get_fundamentals(ticker)
+        fundamentals = result.get("fundamentals") or {}
+        if not isinstance(fundamentals, dict) or not fundamentals:
             return False
-        return country in ("United States", "USA")
+        return bool(_FUNDAMENTALS_MEANINGFUL_KEYS & set(fundamentals.keys()))
     except Exception:
         return False
 
@@ -175,10 +194,15 @@ class AnalysisService:
             # Default analysts if not provided
             if analysts is None:
                 analysts = ["market", "news", "fundamentals", "technical", "sec"]
-            # Exclude SEC analyst for non-US tickers (crypto, forex, non-US stocks, indices)
-            if "sec" in analysts and not _is_us_company_with_sec(ticker):
+            # Exclude SEC analyst when no SEC EDGAR data exists for this ticker
+            if "sec" in analysts and not _has_sec_data(ticker):
                 analysts = [a for a in analysts if a != "sec"]
-                logger.info("SEC analyst excluded for non-US ticker ticker=%s", ticker)
+                logger.info("SEC analyst excluded (no SEC EDGAR data) ticker=%s", ticker)
+
+            # Exclude fundamentals analyst when no fundamental data exists for this ticker
+            if "fundamentals" in analysts and not _has_fundamental_data(ticker):
+                analysts = [a for a in analysts if a != "fundamentals"]
+                logger.info("Fundamentals analyst excluded (no fundamental data) ticker=%s", ticker)
 
             # Create config
             config = DEFAULT_CONFIG.copy()
