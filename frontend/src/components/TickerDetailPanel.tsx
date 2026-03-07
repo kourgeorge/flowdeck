@@ -648,11 +648,13 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const analystPriceValues = [analystPriceLow, analystPriceCurrent, analystPriceAverage, analystPriceHigh]
     .filter((n) => Number.isFinite(n));
   const analystHasAnyTargets = analystPriceValues.length > 0;
+  const analystBreakdownHasCounts = (analystRecommendations?.breakdown && typeof analystRecommendations.breakdown === 'object')
+    ? Object.values(analystRecommendations.breakdown).some((v) => Number(v) > 0)
+    : false;
   const analystHasData = Boolean(
-    analystRecommendations?.recommendation ||
+    (analystRecommendations?.recommendation && String(analystRecommendations.recommendation).trim() !== '') ||
     Number(analystRecommendations?.total_analysts ?? 0) > 0 ||
-    (analystRecommendations?.breakdown && Object.keys(analystRecommendations.breakdown).length > 0) ||
-    analystRecommendations?.target_price != null ||
+    analystBreakdownHasCounts ||
     analystTrendRowsSorted.length > 0 ||
     analystPriceValues.length > 0,
   );
