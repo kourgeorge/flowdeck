@@ -646,79 +646,157 @@ class InfoFetcher:
         on-demand when needed.
         """
         data_file = Path(__file__).parent.parent / "data" / "major_stocks_sectors.json"
-        
+        self._major_tickers = []
+
         if not data_file.exists():
-            # File doesn't exist yet - will fetch on-demand
             return
-        
+
         try:
             with open(data_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            
-            # Load into cache
+
             with self._sector_cache_lock:
                 for ticker, info in data.items():
-                    # Only cache if we have valid data (no error field)
                     if not info.get("error"):
                         self._sector_cache[ticker] = info
-            
-            # Store list of major tickers for similar ticker lookups
+
             self._major_tickers = list(data.keys())
-            
         except Exception as e:
-            # If loading fails, log but don't crash - will fetch on-demand
             print(f"Warning: Could not load major_stocks_sectors.json: {e}")
-            self._major_tickers = []
     
-    def _get_or_fetch_sector_info(self, ticker: str) -> Optional[Dict[str, Any]]:
-        """Get sector/industry info from cache or fetch from Yahoo Finance.
+    def _fetch_sector_info_batch_yahooquery(
+        self, symbols: List[str]
+    ) -> Dict[str, Dict[str, Any]]:
+        """Fetch sector/industry and related info for multiple tickers in one batch via yahooquery.
         
-        This builds up an in-memory cache on-demand to speed up subsequent requests.
+        Uses get_modules() so a single HTTP request fetches all needed data (price, summaryProfile,
+        summaryDetail, financialData, defaultKeyStatistics). Returns a dict symbol -> sector_info.
+        Does not modify cache; caller should merge into _sector_cache.
         """
-        import yfinance as yf
+        if not symbols:
+            return {}
+        symbols = [s.upper() for s in symbols]
+        try:
+            from yahooquery import Ticker as YahooQueryTicker
+        except Exception:
+            return {}
+
+        try:
+            ticker_obj = YahooQueryTicker(symbols)
+        except Exception:
+            return {}
+
+        # Single request for all modules (avoids 5 round-trips and reduces UI delay).
+        modules = "price summaryProfile summaryDetail financialData defaultKeyStatistics"
+        try:
+            raw = ticker_obj.get_modules(modules)
+        except Exception:
+            raw = {}
+
+        if not isinstance(raw, dict):
+            return {}
+
+        result: Dict[str, Dict[str, Any]] = {}
+        for symbol in symbols:
+            per_symbol = raw.get(symbol) or raw.get(symbol.upper()) or raw.get(symbol.lower())
+            if not isinstance(per_symbol, dict):
+                continue
+            price = per_symbol.get("price") if isinstance(per_symbol.get("price"), dict) else {}
+            profile = per_symbol.get("summaryProfile") if isinstance(per_symbol.get("summaryProfile"), dict) else {}
+            detail = per_symbol.get("summaryDetail") if isinstance(per_symbol.get("summaryDetail"), dict) else {}
+            financial = per_symbol.get("financialData") if isinstance(per_symbol.get("financialData"), dict) else {}
+            key_stats = per_symbol.get("defaultKeyStatistics") if isinstance(per_symbol.get("defaultKeyStatistics"), dict) else {}
+
+            if not profile and not price:
+                continue
+
+            name = (price or {}).get("longName") or (price or {}).get("shortName") or (profile or {}).get("longName") or (profile or {}).get("shortName") or symbol
+
+            sector_info = {
+                "name": name,
+                "sector": (profile or {}).get("sector"),
+                "industry": (profile or {}).get("industry"),
+                "market_cap": self._coerce_float((detail or price or {}).get("marketCap") or (price or {}).get("marketCap")),
+                "quote_type": (price or {}).get("quoteType"),
+                "trailing_pe": self._coerce_float((detail or {}).get("trailingPE")),
+                "forward_pe": self._coerce_float((detail or {}).get("forwardPE")),
+                "trailing_eps": self._coerce_float((key_stats or {}).get("trailingEps")),
+                "forward_eps": self._coerce_float((key_stats or {}).get("forwardEps")),
+                "ebitda": self._coerce_float((financial or {}).get("ebitda")),
+                "revenue": self._coerce_float((financial or {}).get("totalRevenue")),
+                "profit_margin": self._coerce_float((financial or {}).get("profitMargins")),
+                "gross_margin": self._coerce_float((financial or {}).get("grossMargins")),
+                "operating_margin": self._coerce_float((financial or {}).get("operatingMargins")),
+                "ebitda_margin": self._coerce_float((financial or {}).get("ebitdaMargins")),
+                "beta": self._coerce_float((detail or key_stats or {}).get("beta")),
+                "dividend_yield": self._coerce_float((detail or {}).get("dividendYield")),
+                "fifty_two_week_high": self._coerce_float((detail or price or {}).get("fiftyTwoWeekHigh")),
+                "fifty_two_week_low": self._coerce_float((detail or price or {}).get("fiftyTwoWeekLow")),
+                "target_mean_price": self._coerce_float((financial or {}).get("targetMeanPrice")),
+                "recommendation_key": (financial or {}).get("recommendationKey"),
+            }
+            result[symbol] = sector_info
+
+        return result
+
+    def _fetch_sector_info_yfinance(self, ticker: str) -> Optional[Dict[str, Any]]:
+        """Fallback: fetch sector/industry info from yfinance when yahooquery fails or returns no data."""
+        try:
+            import yfinance as yf
+        except Exception:
+            return None
+        try:
+            info = yf.Ticker(ticker).info
+        except Exception:
+            return None
+        if not info:
+            return None
+        sector_info = {
+            "name": info.get("longName") or info.get("shortName") or ticker,
+            "sector": info.get("sector"),
+            "industry": info.get("industry"),
+            "market_cap": self._coerce_float(info.get("marketCap")),
+            "quote_type": info.get("quoteType"),
+            "trailing_pe": self._coerce_float(info.get("trailingPE")),
+            "forward_pe": self._coerce_float(info.get("forwardPE")),
+            "trailing_eps": self._coerce_float(info.get("trailingEps")),
+            "forward_eps": self._coerce_float(info.get("forwardEps")),
+            "ebitda": self._coerce_float(info.get("ebitda")),
+            "revenue": self._coerce_float(info.get("totalRevenue")),
+            "profit_margin": self._coerce_float(info.get("profitMargins")),
+            "gross_margin": self._coerce_float(info.get("grossMargins")),
+            "operating_margin": self._coerce_float(info.get("operatingMargins")),
+            "ebitda_margin": self._coerce_float(info.get("ebitdaMargins")),
+            "beta": self._coerce_float(info.get("beta")),
+            "dividend_yield": self._coerce_float(info.get("dividendYield")),
+            "fifty_two_week_high": self._coerce_float(info.get("fiftyTwoWeekHigh")),
+            "fifty_two_week_low": self._coerce_float(info.get("fiftyTwoWeekLow")),
+            "target_mean_price": self._coerce_float(info.get("targetMeanPrice")),
+            "recommendation_key": info.get("recommendationKey"),
+        }
+        return sector_info
+
+    def _get_or_fetch_sector_info(self, ticker: str) -> Optional[Dict[str, Any]]:
+        """Get sector/industry info from cache or fetch via yahooquery (single or batch).
         
+        Falls back to yfinance when yahooquery fails or returns no data.
+        """
         ticker = ticker.upper()
-        
-        # Check cache first
+
         with self._sector_cache_lock:
             if ticker in self._sector_cache:
                 return self._sector_cache[ticker]
-        
-        # Fetch from Yahoo Finance
-        try:
-            info = yf.Ticker(ticker).info
-            sector_info = {
-                "name": info.get("longName") or info.get("shortName") or ticker,
-                "sector": info.get("sector"),
-                "industry": info.get("industry"),
-                "market_cap": info.get("marketCap"),
-                "quote_type": info.get("quoteType"),
-                "trailing_pe": info.get("trailingPE"),
-                "forward_pe": info.get("forwardPE"),
-                "trailing_eps": info.get("trailingEps"),
-                "forward_eps": info.get("forwardEps"),
-                "ebitda": info.get("ebitda"),
-                "revenue": info.get("totalRevenue"),
-                "profit_margin": info.get("profitMargins"),
-                "gross_margin": info.get("grossMargins"),
-                "operating_margin": info.get("operatingMargins"),
-                "ebitda_margin": info.get("ebitdaMargins"),
-                "beta": info.get("beta"),
-                "dividend_yield": info.get("dividendYield"),
-                "fifty_two_week_high": info.get("fiftyTwoWeekHigh"),
-                "fifty_two_week_low": info.get("fiftyTwoWeekLow"),
-                "target_mean_price": info.get("targetMeanPrice"),
-                "recommendation_key": info.get("recommendationKey"),
-            }
-            
-            # Cache it
+
+        batch = self._fetch_sector_info_batch_yahooquery([ticker])
+        sector_info = batch.get(ticker)
+        if sector_info is None:
+            sector_info = self._fetch_sector_info_yfinance(ticker)
+        if sector_info is not None:
             with self._sector_cache_lock:
                 self._sector_cache[ticker] = sector_info
-            
             return sector_info
-        except Exception:
-            return None
-    
+        return None
+
     def get_similar_tickers(
         self,
         ticker: str,
@@ -817,17 +895,25 @@ class InfoFetcher:
     ) -> Dict[str, Any]:
         """Get similar tickers using prefetched sector/industry data for fast matching.
         
-        Uses the cached sector/industry data from self._sector_cache which is populated
-        by the background prefetch process on first use.
+        Uses the cached sector/industry data from self._sector_cache. Missing entries
+        are fetched in one batch via yahooquery to avoid per-ticker rate limits.
         """
-        # Use instance variable for major tickers list
         major_tickers = [t for t in self._major_tickers if t != ticker]
-        
+
+        # Batch-fetch sector info for all candidates not yet in cache (one yahooquery request).
+        with self._sector_cache_lock:
+            missing = [t for t in major_tickers if t not in self._sector_cache]
+        if missing:
+            batch_result = self._fetch_sector_info_batch_yahooquery(missing)
+            if batch_result:
+                with self._sector_cache_lock:
+                    for sym, info in batch_result.items():
+                        self._sector_cache[sym] = info
+
         exact_matches: List[Dict[str, Any]] = []
         sector_only_matches: List[Dict[str, Any]] = []
-        
+
         for candidate_ticker in major_tickers:
-            # Get from cache (should be prefetched by now, but will fetch if not)
             candidate_info = self._get_or_fetch_sector_info(candidate_ticker)
             if not candidate_info:
                 continue
@@ -993,7 +1079,7 @@ class InfoFetcher:
         return {}
 
     def _enrich_similar_tickers_with_batch_quotes(self, similar_tickers: List[Dict[str, Any]]) -> None:
-        """Populate price and fundamentals fields using batched yahooquery requests."""
+        """Populate price and fundamentals using one yahooquery get_modules() call to reduce UI delay."""
         if not similar_tickers:
             return
 
@@ -1011,48 +1097,26 @@ class InfoFetcher:
         except Exception:
             return
 
-        batch_price: Dict[str, Any] = {}
-        batch_summary_detail: Dict[str, Any] = {}
-        batch_financial_data: Dict[str, Any] = {}
-        batch_key_stats: Dict[str, Any] = {}
-
         try:
-            resp = ticker_obj.price
-            if isinstance(resp, dict):
-                batch_price = resp
+            raw = ticker_obj.get_modules("price summaryDetail financialData defaultKeyStatistics")
         except Exception:
-            pass
+            raw = {}
 
-        try:
-            resp = ticker_obj.summary_detail
-            if isinstance(resp, dict):
-                batch_summary_detail = resp
-        except Exception:
-            pass
-
-        try:
-            resp = ticker_obj.financial_data
-            if isinstance(resp, dict):
-                batch_financial_data = resp
-        except Exception:
-            pass
-
-        try:
-            resp = ticker_obj.key_stats
-            if isinstance(resp, dict):
-                batch_key_stats = resp
-        except Exception:
-            pass
+        if not isinstance(raw, dict):
+            return
 
         for ticker in similar_tickers:
             symbol = ticker.get("ticker")
             if not symbol:
                 continue
 
-            symbol_price = self._get_symbol_payload(batch_price, symbol)
-            symbol_summary_detail = self._get_symbol_payload(batch_summary_detail, symbol)
-            symbol_financial_data = self._get_symbol_payload(batch_financial_data, symbol)
-            symbol_key_stats = self._get_symbol_payload(batch_key_stats, symbol)
+            per_symbol = raw.get(symbol) or raw.get((symbol or "").upper()) or raw.get((symbol or "").lower())
+            if not isinstance(per_symbol, dict):
+                continue
+            symbol_price = per_symbol.get("price") if isinstance(per_symbol.get("price"), dict) else {}
+            symbol_summary_detail = per_symbol.get("summaryDetail") if isinstance(per_symbol.get("summaryDetail"), dict) else {}
+            symbol_financial_data = per_symbol.get("financialData") if isinstance(per_symbol.get("financialData"), dict) else {}
+            symbol_key_stats = per_symbol.get("defaultKeyStatistics") if isinstance(per_symbol.get("defaultKeyStatistics"), dict) else {}
 
             market_price = self._coerce_float(symbol_price.get("regularMarketPrice"))
             if market_price is not None:
