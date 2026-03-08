@@ -39,6 +39,7 @@ class ChatResponse(BaseModel):
     reply: str
     tokens_used: int
     balance: int
+    follow_up_questions: Optional[List[str]] = None
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -80,6 +81,7 @@ async def chat(
 
     reply = result.get("reply", "")
     tokens_used = result.get("tokens_used", 1)
+    follow_up_questions = result.get("follow_up_questions")
 
     # Deduct tokens (best-effort; don't fail the response if deduction fails)
     try:
@@ -89,7 +91,7 @@ async def chat(
 
     new_balance = token_service.get_balance(current_user.id, db)
 
-    return ChatResponse(reply=reply, tokens_used=tokens_used, balance=new_balance)
+    return ChatResponse(reply=reply, tokens_used=tokens_used, balance=new_balance, follow_up_questions=follow_up_questions)
 
 
 @router.post("/chat/stream")
@@ -154,9 +156,11 @@ async def chat_stream(
                             token_service.deduct_for_chat(user_id, tokens_used, db)
                         except Exception as deduct_err:
                             logger.warning("Failed to deduct tokens for user_id=%s: %s", user_id, deduct_err)
-                        # Send the updated (post-deduction) balance to the client
+                        # Send the updated (post-deduction) balance to the client; forward follow_up_questions
                         new_balance = token_service.get_balance(user_id, db)
                         payload["balance"] = new_balance
+                        if "follow_up_questions" not in payload:
+                            payload["follow_up_questions"] = []
                         yield f"data: {json.dumps(payload)}\n\n"
                         tokens_used = 0  # mark as already deducted
                         continue

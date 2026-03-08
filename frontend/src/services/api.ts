@@ -626,6 +626,7 @@ export interface ChatResponse {
   reply: string;
   tokens_used: number;
   balance: number;
+  follow_up_questions?: string[];
 }
 
 export interface ToolCallEvent {
@@ -666,6 +667,7 @@ export interface ChatStreamEvent {
   tokens_used?: number;
   tools_called?: number;
   balance?: number;
+  follow_up_questions?: string[];
   // tool_call fields
   name?: string;
   input?: string;
@@ -709,7 +711,7 @@ export const chatApi = {
   streamMessage: (
     messages: ChatMessage[],
     onToken: (chunk: string) => void,
-    onDone: (tokensUsed: number, balance: number, toolsCalled: number) => void,
+    onDone: (tokensUsed: number, balance: number, toolsCalled: number, followUpQuestions?: string[]) => void,
     onError: (message: string) => void,
     onThinking?: (status: string) => void,
     onToolCall?: (toolCall: ToolCallEvent) => void,
@@ -788,7 +790,7 @@ export const chatApi = {
                 onSkillActivation?.(pendingSkill);
                 pendingSkill = null;
               } else if (event.type === 'done') {
-                onDone(event.tokens_used ?? 1, event.balance ?? 0, event.tools_called ?? 0);
+                onDone(event.tokens_used ?? 1, event.balance ?? 0, event.tools_called ?? 0, event.follow_up_questions);
               } else if (event.type === 'error') {
                 onError(event.content ?? 'Unknown error');
               }
