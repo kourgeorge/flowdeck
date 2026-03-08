@@ -22,11 +22,13 @@ google-auth-httplib2
 # LangChain / LLM
 langchain-openai
 langchain-anthropic
+langchain-cerebras
 langchain-google-genai
 langchain-perplexity
 langchain-experimental
 langgraph
 chromadb
+sentence-transformers
 
 # Data & markets
 pandas

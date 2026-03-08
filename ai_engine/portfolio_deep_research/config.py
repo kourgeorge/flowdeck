@@ -14,7 +14,7 @@ class PortfolioDeepResearchConfig(BaseModel):
     """Runtime config for portfolio deep research graph."""
 
     # LLM: use with llm_provider.get_llm(role, self.llm_config())
-    llm_provider: str = Field(default="openai", description="openai | anthropic | azure | ollama | openrouter | google | perplexity")
+    llm_provider: str = Field(default="openai", description="openai | anthropic | azure | ollama | openrouter | google | perplexity | cerebras")
     deep_think_llm: str = Field(default="gpt-4o", description="Model for deep nodes")
     quick_think_llm: str = Field(default="gpt-4o-mini", description="Model for fast nodes")
 

@@ -11,6 +11,7 @@ class FinancialSituationMemory:
         else:
             self.embedding = "text-embedding-3-small"
         
+        self._local_embedder = None  # Set to a SentenceTransformer when no API key (e.g. Cerebras-only)
         # Handle Azure OpenAI specially
         if config.get("llm_provider", "").lower() == "azure":
             azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
@@ -46,7 +47,25 @@ class FinancialSituationMemory:
                     self.embedding = "text-embedding-ada-002-2"
                 # If custom model, keep as is (user should set AZURE_EMBEDDING_DEPLOYMENT)
         else:
-            self.client = OpenAI(base_url=config["backend_url"], timeout=120.0)
+            openai_key = (os.environ.get("OPENAI_API_KEY") or "").strip()
+            if openai_key:
+                self.client = OpenAI(
+                    base_url=config["backend_url"],
+                    api_key=openai_key,
+                    timeout=120.0,
+                )
+                self._local_embedder = None
+            else:
+                # No OpenAI key (e.g. Cerebras-only): use local embeddings so analysis can run
+                try:
+                    from sentence_transformers import SentenceTransformer
+                    self._local_embedder = SentenceTransformer("all-MiniLM-L6-v2")
+                    self.client = None
+                except ImportError:
+                    raise ValueError(
+                        "OPENAI_API_KEY is not set and sentence-transformers is not installed. "
+                        "Set OPENAI_API_KEY for embeddings, or install: pip install sentence-transformers"
+                    )
         
         self.chroma_client = chromadb.Client(Settings(allow_reset=True))
         # Handle collection creation/getting - use get_or_create pattern
@@ -63,8 +82,9 @@ class FinancialSituationMemory:
                 self.situation_collection = self.chroma_client.get_collection(name=name)
 
     def get_embedding(self, text):
-        """Get OpenAI embedding for a text"""
-        
+        """Get embedding for a text (OpenAI/Azure API or local sentence-transformers)."""
+        if self._local_embedder is not None:
+            return self._local_embedder.encode(text, convert_to_numpy=True).tolist()
         response = self.client.embeddings.create(
             model=self.embedding, input=text
         )

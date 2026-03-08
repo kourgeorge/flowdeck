@@ -763,7 +763,8 @@ async def start_analysis(
         analysis_date = body.get("analysis_date") or datetime.now().strftime("%Y-%m-%d")
         analysts = body.get("analysts", ["market", "news", "fundamentals", "technical", "sec"])
         research_depth = body.get("research_depth", 2)
-        llm_provider = body.get("llm_provider", "azure")  # Default to Azure
+        # Use request body if set, else env LLM_PROVIDER, else default Azure
+        llm_provider = (body.get("llm_provider") or os.environ.get("LLM_PROVIDER") or "azure").strip().lower()
         backend_url = body.get("backend_url")
         shallow_thinker = body.get("shallow_thinker")
         deep_thinker = body.get("deep_thinker")

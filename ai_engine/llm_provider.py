@@ -2,7 +2,7 @@
 Model provider for LLM-based workflows.
 
 Supports deep-thinking and quick-thinking roles (and optional custom models)
-across multiple backends: OpenAI, Ollama, OpenRouter, Anthropic, Google, Perplexity, Azure.
+across multiple backends: OpenAI, Ollama, OpenRouter, Anthropic, Google, Perplexity, Azure, Cerebras.
 Use in the trading graph, watchlist report, analysis service, or any other AI feature
 that needs a consistent way to obtain chat models.
 """
@@ -62,6 +62,21 @@ def get_config_from_env(overrides: Optional[Dict[str, Any]] = None) -> Dict[str,
             or os.environ.get("PORTFOLIO_QUICK_MODEL")
             or os.environ.get("WATCHLIST_REPORT_LLM_MODEL")
             or "gpt-4o-mini"
+        )
+    elif provider == "cerebras":
+        cfg["llm_provider"] = "cerebras"
+        cfg["deep_think_llm"] = (
+            overrides.get("deep_think_llm")
+            or os.environ.get("CEREBRAS_DEEP_THINK_MODEL")
+            or os.environ.get("PORTFOLIO_DEEP_MODEL")
+            or "gpt-oss-120b"
+        )
+        cfg["quick_think_llm"] = (
+            overrides.get("quick_think_llm")
+            or os.environ.get("CEREBRAS_QUICK_THINK_MODEL")
+            or os.environ.get("PORTFOLIO_QUICK_MODEL")
+            or os.environ.get("WATCHLIST_REPORT_LLM_MODEL")
+            or "gpt-oss-120b"
         )
     else:
         cfg["llm_provider"] = provider or "openai"
@@ -136,7 +151,7 @@ def get_llm(
     model = model_name or _model_for_role(role, config)
     base_url = config.get(CONFIG_BACKEND_URL) or config.get("backend_url")
     timeout = request_timeout if request_timeout is not None else 120
-    temp = temperature if temperature is not None else (0.0 if role == "deep" else 0.3)
+    temp = temperature if temperature is not None else (0.0 if role == "deep" else 0.0)
     # Skip temperature if model doesn't support it, or config explicitly disables it
     use_temp = (
         config.get("use_temperature", True)
@@ -181,6 +196,25 @@ def get_llm(
         if use_temp:
             kwargs["temperature"] = temp
         return AzureChatOpenAI(**kwargs)
+    if provider == "cerebras":
+        from langchain_cerebras import ChatCerebras
+        api_key = (os.environ.get("CEREBRAS_API_KEY") or "").strip()
+        if not api_key:
+            raise ValueError(
+                "CEREBRAS_API_KEY must be set for Cerebras provider. Set it in environment or backend/.env"
+            )
+        kwargs = dict(
+            model=model,
+            api_key=api_key,
+            timeout=timeout,
+            max_tokens=config.get("max_tokens") or 32768,
+        )
+        if use_temp:
+            kwargs["temperature"] = temp
+        if model and "gpt-oss-120b" in model.lower():
+            reasoning = config.get("reasoning_effort") or os.environ.get("CEREBRAS_REASONING_EFFORT") or "medium"
+            kwargs["reasoning_effort"] = reasoning
+        return ChatCerebras(**kwargs)
     raise ValueError(f"Unsupported LLM provider: {config.get(CONFIG_LLM_PROVIDER)}")
 
 
