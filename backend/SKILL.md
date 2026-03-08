@@ -283,18 +283,21 @@ Returns Server-Sent Events (SSE) stream with:
 
 Access previously generated AI analysis reports without starting a new analysis. These endpoints provide read-only access to the report database.
 
-### Get reports for single ticker
+**Run identifiers:** Each analysis run is stored in the `analysis_runs` table. The canonical run identifier is **`analysis_run_id`** (integer, `analysis_runs.id`). Reports and report views are keyed by `analysis_run_id`; there is no separate string `run_id`. Use `analysis_run_id` in paths and when opening a specific historical run.
+
+### Get reports for single ticker (latest run)
 
 ```bash
 GET /api/data/reports/{ticker}
 Authorization: Bearer YOUR_ACCESS_TOKEN
 ```
 
-Returns the latest reports for a ticker with scores, recommendations, and key takeaways.
+Returns the latest reports for a ticker with scores, recommendations, and key takeaways. The response includes **`report_run_id`** (integer), which is the `analysis_run_id` for that run; use it to fetch that exact run via the historical-run endpoint below.
 
 Response:
 ```json
 {
+  "report_run_id": 42,
   "report_date": "2026-03-04_10-30-00",
   "reports": {
     "final_recommendation": {
@@ -341,10 +344,24 @@ Response:
 If no reports exist for the ticker, returns:
 ```json
 {
+  "report_run_id": null,
   "report_date": null,
   "reports": {}
 }
 ```
+
+### Get reports for a specific historical run
+
+To retrieve reports for a given run (e.g. from `historical_analyses` on the ticker page or from a previous `report_run_id`):
+
+```bash
+GET /api/tickers/{ticker}/reports/{analysis_run_id}
+Authorization: Bearer YOUR_ACCESS_TOKEN  # optional; auth records view for creator rewards
+```
+
+**Path:** `analysis_run_id` is an **integer** (the canonical run id, `analysis_runs.id`). Example: `GET /api/tickers/AAPL/reports/42`.
+
+Returns the same report shape as the latest-run response (scores, recommendations, key takeaways) for that run.
 
 ### Get reports for multiple tickers (batch)
 
@@ -365,6 +382,7 @@ Response:
 {
   "tickers": {
     "AAPL": {
+      "report_run_id": 42,
       "report_date": "2026-03-04_10-30-00",
       "reports": {
         "final_recommendation": {...},
@@ -372,10 +390,12 @@ Response:
       }
     },
     "MSFT": {
+      "report_run_id": 41,
       "report_date": "2026-03-04_09-15-00",
       "reports": {...}
     },
     "GOOGL": {
+      "report_run_id": null,
       "report_date": null,
       "reports": {}
     }
@@ -557,7 +577,7 @@ curl -X POST https://flowdeck.biz/api/data/reports/batch \
 ## Token economy
 
 - **Registration:** New users get **1000 tokens**.
-- **Start analysis:** **200 tokens** are deducted per run. If the same analysis (ticker + date) is already running, you get its `analysis_id` and tokens are not deducted again.
+- **Start analysis:** **200 tokens** are deducted per run. If the same analysis (ticker + date) is already running, you get its `analysis_id` (UUID for polling) and tokens are not deducted again. When the run completes, it is identified by **`analysis_run_id`** (integer) in report URLs and in `report_run_id` in API responses.
 - **Chat:** Variable cost based on agent trajectory (tool calls + LLM steps). Minimum **1 token** per message. Typical range: 1-20 tokens per chat turn depending on complexity.
 - **Insufficient balance:** Returns **402** with message about insufficient tokens.
 - **Top-up:** Admin-only endpoint (e.g. `POST /api/tokens/top-up` with `{"amount": N}`). Agents typically rely on initial balance or human top-up.
@@ -573,7 +593,7 @@ Check balance via `GET /api/me` → `token_balance`.
 | GET | `/`, `/health` | No | Health and root |
 | GET | `/api/tickers/widgets` | No | Widget data (tickers, optional date) |
 | GET | `/api/tickers/{ticker}` | Optional | Ticker page (auth records view) |
-| GET | `/api/tickers/{ticker}/reports/{run_id}` | Optional | Reports for a specific historical run |
+| GET | `/api/tickers/{ticker}/reports/{analysis_run_id}` | Optional | Reports for a specific historical run (integer path param) |
 | GET | `/api/data/*` | Mixed | Quote, company, news, fundamentals, historical, ticker-data, similar tickers, EDGAR, etc. |
 | GET | `/api/data/similar-tickers/{ticker}` | No | Similar tickers (sector/industry matching, supports `limit` and `offset`) |
 | GET | `/api/data/edgar-filing-content/{ticker}` | Yes | Extract SEC sections from latest filings |
@@ -608,8 +628,9 @@ Check balance via `GET /api/me` → `token_balance`.
 | **Register / login** | `POST /api/auth/register` or `/api/auth/login` |
 | **Create API key** | `POST /api/api-keys` (for programmatic access) |
 | **Get market data** | `GET /api/data/quote/{ticker}`, `/company`, `/news`, `/fundamentals`, `/historical`, `/ticker-data/{ticker}`, `/similar-tickers/{ticker}`, etc. |
-| **Get existing reports** | `GET /api/data/reports/{ticker}` or `POST /api/data/reports/batch` (no token cost) |
-| **Get ticker page** | `GET /api/tickers/{ticker}` (optional auth for view tracking) |
+| **Get existing reports** | `GET /api/data/reports/{ticker}` or `POST /api/data/reports/batch` (no token cost); response includes `report_run_id` (integer) |
+| **Get reports for a historical run** | `GET /api/tickers/{ticker}/reports/{analysis_run_id}` (integer; use `report_run_id` or `historical_analyses[].analysis_run_id` from ticker page) |
+| **Get ticker page** | `GET /api/tickers/{ticker}` (optional auth for view tracking); includes `report_run_id`, `historical_analyses` with `analysis_run_id` per run |
 | **Check token balance** | `GET /api/me` → `token_balance` |
 | **Chat with AI analyst** | `POST /api/chat` or `/api/chat/stream` (variable tokens) |
 | **Start AI analysis** | `POST /api/analyses/start` (200 tokens); poll `GET /api/analyses/{analysis_id}/status` |
@@ -657,7 +678,7 @@ done
 
 - Use **public data endpoints** (`/api/data/*`) for all market research; use authenticated endpoints for identity, subscriptions, chat, and starting analyses.
 - **Check `token_balance`** before starting an analysis or chat to avoid 402.
-- **Reuse `analysis_id`**: if you get `existing: true`, poll that same `analysis_id` instead of starting a new run.
+- **Reuse `analysis_id`**: if you get `existing: true`, poll that same `analysis_id` (UUID) instead of starting a new run. After completion, use **`analysis_run_id`** (integer) or **`report_run_id`** from responses to fetch that run’s reports via `GET /api/tickers/{ticker}/reports/{analysis_run_id}`.
 - **Use streaming chat** (`/api/chat/stream`) for real-time responses and tool visibility.
 - **Create API keys** for long-running agents instead of managing JWT refresh.
 - **Provide context** in chat requests (e.g. `{"tickers": ["AAPL"]}`) for better responses.
