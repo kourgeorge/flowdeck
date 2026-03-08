@@ -6,6 +6,7 @@ from .local import get_YFin_data, get_finnhub_news, get_finnhub_company_insider_
 from .y_finance import get_YFin_data_online, get_stock_stats_indicators_window, get_balance_sheet as get_yfinance_balance_sheet, get_cashflow as get_yfinance_cashflow, get_income_statement as get_yfinance_income_statement, get_insider_transactions as get_yfinance_insider_transactions, get_fundamentals as get_yfinance_fundamentals, get_yfinance_news
 from .google import get_google_news, get_global_news_google
 from .openai import get_stock_news_openai, get_global_news_openai, get_fundamentals_openai
+from .serpapi_news import get_global_news_serpapi
 from .alpha_vantage import (
     get_stock as get_alpha_vantage_stock,
     get_indicator as get_alpha_vantage_indicator,
@@ -114,6 +115,7 @@ VENDOR_METHODS = {
         "reddit_online": get_reddit_company_news_online,
     },
     "get_global_news": {
+        "serpapi": get_global_news_serpapi,
         "openai": get_global_news_openai,
         "google": get_global_news_google,
         "local": get_reddit_global_news,
@@ -260,6 +262,16 @@ def route_to_vendor(method: str, *args, **kwargs):
 
         # Add this vendor's results
         if vendor_results:
+            # For string-returning news methods, treat empty/whitespace as no result and try next vendor
+            if method in ("get_global_news", "get_news") and len(vendor_results) == 1:
+                single = vendor_results[0]
+                if isinstance(single, str) and not single.strip():
+                    logger.info(
+                        "Vendor '%s' returned empty for %s, trying next vendor",
+                        vendor,
+                        method,
+                    )
+                    continue
             results.extend(vendor_results)
             successful_vendor = vendor
             result_summary = f"Got {len(vendor_results)} result(s)"
@@ -276,6 +288,18 @@ def route_to_vendor(method: str, *args, **kwargs):
     # Final result summary
     if not results:
         logger.error("FAILURE: All %s vendor attempts failed for method '%s'", vendor_attempt_count, method)
+        # For news methods, return a clear message instead of raising so the UI/LLM get something
+        if method == "get_global_news":
+            return (
+                "No global news could be retrieved from the configured sources (Google, OpenAI, or Reddit). "
+                "Possible causes: Google News scrape returned no results, OpenAI Responses API not in use or returned empty, "
+                "or Reddit not configured. Check backend logs for which vendor was tried and any errors."
+            )
+        if method == "get_news":
+            return (
+                "No company news could be retrieved for the given ticker and date range. "
+                "Check that the configured news vendor (OpenAI, Google, etc.) is set up and returning data."
+            )
         error_details = "\n".join(f"  - {err}" for err in vendor_errors) if vendor_errors else "  (No detailed error information available)"
         error_message = (
             f"All vendor implementations failed for method '{method}'. "

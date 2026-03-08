@@ -1,5 +1,5 @@
 from langchain_core.tools import tool
-from typing import Annotated
+from typing import Annotated, Optional
 
 from ...dataflows.interface import route_to_vendor
 
@@ -40,6 +40,7 @@ def get_global_news(
     curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],
     look_back_days: Annotated[int, "Number of days to look back"] = 7,
     limit: Annotated[int, "Maximum number of articles to return"] = 5,
+    query: Annotated[Optional[str], "Optional search focus (e.g. key risks, inflation)"] = None,
 ) -> str:
     """
     Retrieve global news data.
@@ -48,10 +49,11 @@ def get_global_news(
         curr_date (str): Current date in yyyy-mm-dd format
         look_back_days (int): Number of days to look back (default 7)
         limit (int): Maximum number of articles to return (default 5)
+        query (Optional[str]): Optional focus for the search; vendors may use it to narrow results
     Returns:
         str: A formatted string containing global news data
     """
-    return route_to_vendor("get_global_news", curr_date, look_back_days, limit)
+    return route_to_vendor("get_global_news", curr_date, look_back_days, limit, query=query)
 
 @tool
 def get_insider_sentiment(

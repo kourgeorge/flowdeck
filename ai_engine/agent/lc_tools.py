@@ -211,13 +211,14 @@ def get_news(ticker: str, config: _InjectedConfig = None) -> str:
 
 
 @tool
-def get_global_news(query: str = "stock market", config: _InjectedConfig = None) -> str:
+def get_global_news(query: str = "", config: _InjectedConfig = None) -> str:
     """Get macro/market-wide news and trends: Fed decisions, economic data releases,
     sector rotations, geopolitical events, and broad market sentiment.
-    Use for macro context, market-wide trends, or when the user asks about the overall market."""
+    Use for macro context, market-wide trends, or when the user asks about the overall market.
+    Pass a query (e.g. 'key risks 2026') to focus the search when the user asks something specific."""
     from ai_engine.agent.tools.news import GlobalNewsTool
     ctx = _ctx_from_config(config)
-    return GlobalNewsTool().execute(ctx, query=query).to_str()
+    return GlobalNewsTool().execute(ctx, query=query or None).to_str()
 
 
 # ---------------------------------------------------------------------------

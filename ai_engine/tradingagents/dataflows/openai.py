@@ -37,10 +37,16 @@ def get_stock_news_openai(query, start_date, end_date):
     return response.output[1].content[0].text
 
 
-def get_global_news_openai(curr_date, look_back_days=7, limit=5):
+def get_global_news_openai(curr_date, look_back_days=7, limit=5, query=None):
     config = get_config()
     client = OpenAI(base_url=config["backend_url"])
 
+    focus = f" Focus the search on: {query.strip()}." if query and query.strip() else ""
+    prompt = (
+        f"Can you search global or macroeconomics news from {look_back_days} days before {curr_date} to {curr_date} "
+        f"that would be informative for trading purposes?{focus} Make sure you only get the data posted during "
+        f"that period. Limit the results to {limit} articles."
+    )
     response = client.responses.create(
         model=config["quick_think_llm"],
         input=[
@@ -49,7 +55,7 @@ def get_global_news_openai(curr_date, look_back_days=7, limit=5):
                 "content": [
                     {
                         "type": "input_text",
-                        "text": f"Can you search global or macroeconomics news from {look_back_days} days before {curr_date} to {curr_date} that would be informative for trading purposes? Make sure you only get the data posted during that period. Limit the results to {limit} articles.",
+                        "text": prompt,
                     }
                 ],
             }

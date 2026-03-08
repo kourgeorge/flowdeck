@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Optional
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from .googlenews_utils import getNewsData
@@ -31,6 +31,7 @@ def get_global_news_google(
     curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],
     look_back_days: Annotated[int, "Number of days to look back"] = 7,
     limit: Annotated[int, "Maximum number of articles to return"] = 5,
+    query: Annotated[Optional[str], "Optional search focus"] = None,
 ) -> str:
     """Get global/macroeconomic news from Google News for trading purposes."""
     # Calculate start_date from curr_date and look_back_days
@@ -38,10 +39,13 @@ def get_global_news_google(
     start_date_dt = curr_date_dt - relativedelta(days=look_back_days)
     start_date = start_date_dt.strftime("%Y-%m-%d")
     
-    # Use a general query for global/macroeconomic news
-    query = "global economics OR macroeconomics OR financial markets OR trading news"
+    # Use user query if provided, else general macro query
+    search_query = (
+        query.strip().replace(" ", "+") if query and query.strip()
+        else "global+economics+OR+macroeconomics+OR+financial+markets+OR+trading+news"
+    )
     
-    news_results = getNewsData(query, start_date, curr_date)
+    news_results = getNewsData(search_query, start_date, curr_date)
     
     # Limit results to the specified number
     news_results = news_results[:limit]

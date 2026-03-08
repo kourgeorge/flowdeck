@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Optional
 import pandas as pd
 import os
 from .config import DATA_DIR
@@ -375,6 +375,7 @@ def get_reddit_global_news(
     curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],
     look_back_days: Annotated[int, "Number of days to look back"] = 7,
     limit: Annotated[int, "Maximum number of articles to return"] = 5,
+    query: Annotated[Optional[str], "Optional search focus (unused for Reddit)"] = None,
 ) -> str:
     """
     Retrieve the latest top reddit news
@@ -485,6 +486,7 @@ def get_reddit_global_news_online(
     curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],
     look_back_days: Annotated[int, "Number of days to look back"] = 7,
     limit: Annotated[int, "Maximum number of articles to return"] = 5,
+    query: Annotated[Optional[str], "Optional search focus (unused for Reddit)"] = None,
 ) -> str:
     """
     Retrieve the latest top reddit news from online Reddit API.
