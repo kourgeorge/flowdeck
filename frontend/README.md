@@ -192,8 +192,8 @@ RESULTS_DIR = "results"  # Resolved to repo root (TradingAgents/results)
 
 **Analysis API:**
 - `POST /api/analyses/start` - Start new analysis
-- `GET /api/analyses/{analysis_id}/status` - Get analysis status
-- `WS /ws/analyses/{analysis_id}` - WebSocket for real-time updates
+- `GET /api/analyses/{analysis_run_id}/status` - Get analysis status (integer path)
+- `WS /ws/analyses/{analysis_run_id}` - WebSocket for real-time updates
 
 **Sync API:**
 - `POST /api/sync/major-stocks` - Ensure each major stock has a report for today (or optional `analysis_date` in body). Returns immediately with `triggered` / `skipped`; analyses run in background.

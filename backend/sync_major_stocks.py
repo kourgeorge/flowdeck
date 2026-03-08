@@ -57,7 +57,7 @@ def run_analyses_for_tickers(
         creator_id = token_service.get_system_user_id(db)
     for ticker in tickers:
         analysis_run_id = token_service.record_analysis_run(creator_id, ticker, db)
-        analysis_id, existing = analysis_service.start_analysis(
+        returned_run_id, existing = analysis_service.start_analysis(
             ticker=ticker,
             analysis_date=analysis_date,
             analysts=analysts,
@@ -71,7 +71,7 @@ def run_analyses_for_tickers(
         if wait_for_completion:
             _wait_for_analysis(
                 analysis_service,
-                analysis_id,
+                returned_run_id,
                 poll_interval_seconds=poll_interval_seconds,
                 timeout_seconds=completion_timeout_seconds,
             )
@@ -127,14 +127,14 @@ def run_sync(
 
 def _wait_for_analysis(
     analysis_service: AnalysisService,
-    analysis_id: str,
+    analysis_run_id: int,
     poll_interval_seconds: float = 10.0,
     timeout_seconds: float = 3600.0,
 ) -> None:
     """Poll analysis status until completed, error, or timeout."""
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
-        status_info = analysis_service.get_analysis_status(analysis_id)
+        status_info = analysis_service.get_analysis_status(analysis_run_id)
         if status_info is None:
             return
         st = status_info.get("status")

@@ -314,8 +314,7 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
     # instead of switching from the previous run (e.g. 5 reports) to the new run (1 report).
     # Check filesystem for running analyses (works reliably across all workers)
     is_generating = False
-    generation_analysis_id = None
-    generating_analysis_run_id = None
+    generation_analysis_run_id = None
 
     try:
         ticker_dir = analysis_service.results_dir / ticker.upper()
@@ -330,8 +329,7 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
                         status_data = json.load(f)
                         if status_data.get("status") == "running" and status_data.get("ticker") == ticker.upper():
                             is_generating = True
-                            generation_analysis_id = status_data.get("analysis_id")
-                            generating_analysis_run_id = status_data.get("analysis_run_id")
+                            generation_analysis_run_id = status_data.get("analysis_run_id")
                             break
     except Exception as e:
         # Log but don't fail the request
@@ -339,8 +337,8 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
         logging.getLogger(__name__).warning(f"Error checking filesystem for running analysis: {e}")
 
     latest_run = report_service.get_latest_analysis_run(ticker)
-    if is_generating and generating_analysis_run_id is not None:
-        latest_analysis_run_id = generating_analysis_run_id
+    if is_generating and generation_analysis_run_id is not None:
+        latest_analysis_run_id = generation_analysis_run_id
         latest_date = latest_run[1] if latest_run else None  # use date_display from latest if available
         if latest_date is None:
             latest_date = "Generating..."
@@ -435,7 +433,7 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
         historical_analyses=historical_analyses,
         has_reports=latest_analysis_run_id is not None,
         is_generating=is_generating,
-        generation_analysis_id=generation_analysis_id,
+        generation_analysis_run_id=generation_analysis_run_id,
         expected_return_pct=expected_return_pct,
         bear_case_return_pct=bear_case_return_pct,
         bull_case_return_pct=bull_case_return_pct,
@@ -771,9 +769,9 @@ async def start_analysis(
         deep_thinker = body.get("deep_thinker")
         initiator_email = (current_user.email or "").strip() or None
 
-        existing_id = analysis_service.get_running_analysis_id(ticker, analysis_date)
-        if existing_id is not None:
-            return {"analysis_id": existing_id, "ticker": ticker, "date": analysis_date, "existing": True}
+        existing_run_id = analysis_service.get_running_analysis_run_id(ticker, analysis_date)
+        if existing_run_id is not None:
+            return {"analysis_run_id": existing_run_id, "ticker": ticker, "date": analysis_date, "existing": True}
 
         deduct_ok, analysis_run_id = token_service.deduct_for_analysis(current_user.id, ticker, db)
         if not deduct_ok:
@@ -784,14 +782,10 @@ async def start_analysis(
         
         def progress_callback(chunk, analysis_info):
             """Send progress updates via WebSocket."""
-            analysis_id = None
-            for aid, info in analysis_service.running_analyses.items():
-                if info is analysis_info:
-                    analysis_id = aid
-                    break
-            
-            if analysis_id and analysis_id in active_connections:
-                ws = active_connections[analysis_id]
+            run_id = analysis_info.get("analysis_run_id")
+            run_id_key = str(run_id) if run_id is not None else None
+            if run_id_key and run_id_key in active_connections:
+                ws = active_connections[run_id_key]
                 try:
                     message = {
                         "type": "progress",
@@ -817,7 +811,7 @@ async def start_analysis(
                 except Exception as e:
                     print(f"Error sending WebSocket message: {e}")
         
-        analysis_id, existing = analysis_service.start_analysis(
+        returned_run_id, existing = analysis_service.start_analysis(
             ticker=ticker,
             analysis_date=analysis_date,
             analysts=analysts,
@@ -833,7 +827,7 @@ async def start_analysis(
         if existing:
             token_service.refund_for_analysis(current_user.id, analysis_run_id, db)
         
-        return {"analysis_id": analysis_id, "ticker": ticker, "date": analysis_date, "existing": existing}
+        return {"analysis_run_id": returned_run_id, "ticker": ticker, "date": analysis_date, "existing": existing}
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON in request body")
     except Exception as e:
@@ -843,20 +837,20 @@ async def start_analysis(
         raise HTTPException(status_code=500, detail=f"Failed to start analysis: {str(e)}")
 
 
-@app.get("/api/analyses/{analysis_id}/status")
+@app.get("/api/analyses/{analysis_run_id}/status")
 async def get_analysis_status(
-    analysis_id: str,
+    analysis_run_id: int,
     _current_user=Depends(get_current_user),
 ):
     """Get status of a running analysis. Requires authentication."""
-    status = analysis_service.get_analysis_status(analysis_id)
+    status = analysis_service.get_analysis_status(analysis_run_id)
     if not status:
         raise HTTPException(status_code=404, detail="Analysis not found")
     return status
 
 
-@app.websocket("/ws/analyses/{analysis_id}")
-async def websocket_endpoint(websocket: WebSocket, analysis_id: str, token: Optional[str] = Query(None)):
+@app.websocket("/ws/analyses/{analysis_run_id}")
+async def websocket_endpoint(websocket: WebSocket, analysis_run_id: str, token: Optional[str] = Query(None)):
     """WebSocket endpoint for real-time analysis updates. Requires a valid Bearer token via ?token= query param."""
     from auth import decode_token
     from database import SessionLocal
@@ -887,11 +881,12 @@ async def websocket_endpoint(websocket: WebSocket, analysis_id: str, token: Opti
         db.close()
 
     await websocket.accept()
-    active_connections[analysis_id] = websocket
+    active_connections[analysis_run_id] = websocket
     
     try:
-        # Send initial status
-        status = analysis_service.get_analysis_status(analysis_id)
+        # Send initial status (path param is string; look up by int)
+        run_id_int = int(analysis_run_id)
+        status = analysis_service.get_analysis_status(run_id_int)
         if status:
             await websocket.send_json({
                 "type": "status",
@@ -911,7 +906,7 @@ async def websocket_endpoint(websocket: WebSocket, analysis_id: str, token: Opti
                     await websocket.send_json({"type": "pong"})
                 elif data == "get_status":
                     # Handle status request (for reconnection)
-                    status = analysis_service.get_analysis_status(analysis_id)
+                    status = analysis_service.get_analysis_status(run_id_int)
                     if status:
                         await websocket.send_json({
                             "type": "status",
@@ -933,8 +928,8 @@ async def websocket_endpoint(websocket: WebSocket, analysis_id: str, token: Opti
     except Exception:
         pass
     finally:
-        if analysis_id in active_connections:
-            del active_connections[analysis_id]
+        if analysis_run_id in active_connections:
+            del active_connections[analysis_run_id]
 
 
 def _run_sync_major_tickers_background(analysis_date: str) -> None:

@@ -181,7 +181,7 @@ class TickerPageData(BaseModel):
     historical_analyses: List[HistoricalAnalysis] = []
     has_reports: bool = False
     is_generating: bool = False
-    generation_analysis_id: Optional[str] = None
+    generation_analysis_run_id: Optional[int] = None  # AnalysisRun.id for WebSocket/status
     # Agent return expectations (from Research Manager / investment_plan)
     expected_return_pct: Optional[float] = None
     bear_case_return_pct: Optional[float] = None

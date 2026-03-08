@@ -96,7 +96,7 @@ export interface TickerPageData {
   historical_analyses: HistoricalAnalysis[];
   has_reports: boolean;
   is_generating: boolean;
-  generation_analysis_id: string | null;
+  generation_analysis_run_id: number | null;
   /** Agent return expectations (base / bear / bull) from Research Manager */
   expected_return_pct?: number | null;
   bear_case_return_pct?: number | null;

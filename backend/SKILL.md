@@ -463,12 +463,12 @@ Content-Type: application/json
 | research_depth | No | Default 2 |
 | llm_provider | No | Default "azure" |
 
-If an analysis for that ticker+date is already running, the API returns its `analysis_id` and `"existing": true` (no extra token charge).
+If an analysis for that ticker+date is already running, the API returns its `analysis_run_id` and `"existing": true` (no extra token charge).
 
 Response (201):
 ```json
 {
-  "analysis_id": "uuid",
+  "analysis_run_id": 123,
   "ticker": "AAPL",
   "date": "2025-02-14",
   "existing": false
@@ -484,7 +484,7 @@ The **initiator** (the user whose token is used) is notified by **email** when t
 ### Get analysis status
 
 ```bash
-GET /api/analyses/{analysis_id}/status
+GET /api/analyses/{analysis_run_id}/status
 ```
 
 Requires authentication. Returns current status (e.g. running, completed, failed) and progress info.
@@ -496,7 +496,7 @@ Poll this until the analysis is complete, then the user can open the ticker page
 For real-time progress during a run:
 
 ```
-WS /ws/analyses/{analysis_id}
+WS /ws/analyses/{analysis_run_id}
 ```
 
 Connect after starting the analysis to receive progress updates.
@@ -577,7 +577,7 @@ curl -X POST https://flowdeck.biz/api/data/reports/batch \
 ## Token economy
 
 - **Registration:** New users get **1000 tokens**.
-- **Start analysis:** **200 tokens** are deducted per run. If the same analysis (ticker + date) is already running, you get its `analysis_id` (UUID for polling) and tokens are not deducted again. When the run completes, it is identified by **`analysis_run_id`** (integer) in report URLs and in `report_run_id` in API responses.
+- **Start analysis:** **200 tokens** are deducted per run. If the same analysis (ticker + date) is already running, you get its `analysis_run_id` and tokens are not deducted again. The run is identified by **`analysis_run_id`** (integer, AnalysisRun.id) everywhere: start response, status API, WebSocket path, and report URLs / `report_run_id`.
 - **Chat:** Variable cost based on agent trajectory (tool calls + LLM steps). Minimum **1 token** per message. Typical range: 1-20 tokens per chat turn depending on complexity.
 - **Insufficient balance:** Returns **402** with message about insufficient tokens.
 - **Top-up:** Admin-only endpoint (e.g. `POST /api/tokens/top-up` with `{"amount": N}`). Agents typically rely on initial balance or human top-up.
@@ -617,7 +617,7 @@ Check balance via `GET /api/me` → `token_balance`.
 | PATCH | `/api/api-keys/{key_id}/activate` | Yes | Activate API key |
 | DELETE | `/api/api-keys/{key_id}` | Yes | Revoke API key |
 | POST | `/api/analyses/start` | Yes | Start AI analysis (200 tokens) |
-| GET | `/api/analyses/{analysis_id}/status` | Yes | Analysis status |
+| GET | `/api/analyses/{analysis_run_id}/status` | Yes | Analysis status (integer path) |
 
 ---
 
@@ -633,7 +633,7 @@ Check balance via `GET /api/me` → `token_balance`.
 | **Get ticker page** | `GET /api/tickers/{ticker}` (optional auth for view tracking); includes `report_run_id`, `historical_analyses` with `analysis_run_id` per run |
 | **Check token balance** | `GET /api/me` → `token_balance` |
 | **Chat with AI analyst** | `POST /api/chat` or `/api/chat/stream` (variable tokens) |
-| **Start AI analysis** | `POST /api/analyses/start` (200 tokens); poll `GET /api/analyses/{analysis_id}/status` |
+| **Start AI analysis** | `POST /api/analyses/start` (200 tokens); poll `GET /api/analyses/{analysis_run_id}/status` |
 | **Manage watchlist** | `GET/POST/DELETE /api/subscriptions` |
 | **Update profile** | `PATCH /api/me` (name, password) |
 | **Manage API keys** | `GET/POST/DELETE /api/api-keys` |
@@ -661,7 +661,7 @@ RESULT=$(curl -s -X POST https://flowdeck.biz/api/analyses/start \
   -H "Content-Type: application/json" \
   -d '{"ticker":"AAPL"}')
 echo $RESULT
-ANALYSIS_ID=$(echo $RESULT | jq -r '.analysis_id')
+ANALYSIS_RUN_ID=$(echo $RESULT | jq -r '.analysis_run_id')
 
 # 5. Poll status until done
 while true; do
@@ -678,7 +678,7 @@ done
 
 - Use **public data endpoints** (`/api/data/*`) for all market research; use authenticated endpoints for identity, subscriptions, chat, and starting analyses.
 - **Check `token_balance`** before starting an analysis or chat to avoid 402.
-- **Reuse `analysis_id`**: if you get `existing: true`, poll that same `analysis_id` (UUID) instead of starting a new run. After completion, use **`analysis_run_id`** (integer) or **`report_run_id`** from responses to fetch that run’s reports via `GET /api/tickers/{ticker}/reports/{analysis_run_id}`.
+- **Reuse `analysis_run_id`**: if you get `existing: true`, use that same `analysis_run_id` for status and WebSocket. After completion, use **`analysis_run_id`** (integer) or **`report_run_id`** from responses to fetch that run’s reports via `GET /api/tickers/{ticker}/reports/{analysis_run_id}`.
 - **Use streaming chat** (`/api/chat/stream`) for real-time responses and tool visibility.
 - **Create API keys** for long-running agents instead of managing JWT refresh.
 - **Provide context** in chat requests (e.g. `{"tickers": ["AAPL"]}`) for better responses.

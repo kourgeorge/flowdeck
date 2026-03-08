@@ -4,7 +4,6 @@ import asyncio
 import logging
 import os
 import sys
-import uuid
 import datetime
 import threading
 import json
@@ -102,13 +101,13 @@ class AnalysisService:
             backend_dir = Path(__file__).parent.parent
             self.results_dir = backend_dir.parent / self.results_dir  # repo root
         # Keep minimal in-memory state for active analysis context (callbacks, graph objects)
-        # Status queries read from filesystem only
-        self.running_analyses: Dict[str, Dict] = {}
+        # Status queries read from filesystem only. Key = analysis_run_id (AnalysisRun.id).
+        self.running_analyses: Dict[int, Dict] = {}
         self._lock = threading.Lock()  # Lock to prevent race conditions
     
-    def _write_status_file(self, analysis_id: str) -> None:
+    def _write_status_file(self, analysis_run_id: int) -> None:
         """Write current status to file in results folder."""
-        analysis_info = self.running_analyses.get(analysis_id)
+        analysis_info = self.running_analyses.get(analysis_run_id)
         if not analysis_info:
             return
         
@@ -119,10 +118,9 @@ class AnalysisService:
         try:
             status_file = Path(results_dir) / "status.json"
             status_data = {
-                "analysis_id": analysis_id,
+                "analysis_run_id": analysis_run_id,
                 "ticker": analysis_info["ticker"],
                 "date": analysis_info["date"],
-                "analysis_run_id": analysis_info["analysis_run_id"],
                 "status": analysis_info["status"],
                 "agent_statuses": analysis_info.get("agent_statuses", {}),
                 "current_agent": analysis_info.get("current_agent"),
@@ -131,11 +129,11 @@ class AnalysisService:
             with open(status_file, 'w') as f:
                 json.dump(status_data, f, indent=2)
         except Exception as e:
-            logger.warning(f"Failed to write status file for {analysis_id}: {e}")
+            logger.warning(f"Failed to write status file for analysis_run_id={analysis_run_id}: {e}")
     
-    def _delete_status_file(self, analysis_id: str) -> None:
+    def _delete_status_file(self, analysis_run_id: int) -> None:
         """Delete status file when analysis completes."""
-        analysis_info = self.running_analyses.get(analysis_id)
+        analysis_info = self.running_analyses.get(analysis_run_id)
         if not analysis_info:
             return
         
@@ -148,14 +146,14 @@ class AnalysisService:
             if status_file.exists():
                 status_file.unlink()
         except Exception as e:
-            logger.warning(f"Failed to delete status file for {analysis_id}: {e}")
+            logger.warning(f"Failed to delete status file for analysis_run_id={analysis_run_id}: {e}")
     
-    def get_running_analysis_id(self, ticker: str, analysis_date: str) -> Optional[str]:
-        """Return analysis_id if an analysis is already running for this (ticker, date)."""
+    def get_running_analysis_run_id(self, ticker: str, analysis_date: str) -> Optional[int]:
+        """Return analysis_run_id if an analysis is already running for this (ticker, date)."""
         ticker_upper = ticker.upper()
-        for aid, info in self.running_analyses.items():
+        for run_id, info in self.running_analyses.items():
             if info.get("status") == "running" and info.get("ticker") == ticker_upper and info.get("date") == analysis_date:
-                return aid
+                return run_id
         return None
     
     def start_analysis(
@@ -171,24 +169,23 @@ class AnalysisService:
         deep_thinker: Optional[str] = None,
         progress_callback: Optional[Callable] = None,
         initiator_email: Optional[str] = None,
-    ) -> tuple[str, bool]:
-        """Start a new analysis and return (analysis_id, existing). existing=True if already running for (ticker, date)."""
+    ) -> tuple[int, bool]:
+        """Start a new analysis and return (analysis_run_id, existing). existing=True if already running for (ticker, date)."""
         ticker = ticker.upper()
         
         # Use lock to prevent race condition when checking and starting analysis
         with self._lock:
-            existing_id = self.get_running_analysis_id(ticker, analysis_date)
-            if existing_id is not None:
+            existing_run_id = self.get_running_analysis_run_id(ticker, analysis_date)
+            if existing_run_id is not None:
                 logger.info(
-                    "Analysis already running analysis_id=%s ticker=%s date=%s",
-                    existing_id, ticker, analysis_date,
+                    "Analysis already running analysis_run_id=%s ticker=%s date=%s",
+                    existing_run_id, ticker, analysis_date,
                 )
-                return (existing_id, True)
+                return (existing_run_id, True)
             
-            analysis_id = str(uuid.uuid4())
             logger.info(
-                "Starting analysis analysis_id=%s ticker=%s date=%s analysts=%s",
-                analysis_id, ticker, analysis_date, analysts,
+                "Starting analysis analysis_run_id=%s ticker=%s date=%s analysts=%s",
+                analysis_run_id, ticker, analysis_date, analysts,
             )
 
             # Default analysts if not provided
@@ -274,7 +271,7 @@ class AnalysisService:
             
             # Store analysis info immediately to prevent race condition
             # This must be done within the lock before starting the background thread
-            self.running_analyses[analysis_id] = {
+            self.running_analyses[analysis_run_id] = {
                 "ticker": ticker.upper(),
                 "date": analysis_date,
                 "analysis_run_id": analysis_run_id,
@@ -294,7 +291,7 @@ class AnalysisService:
             }
             
             # Write initial status to file
-            self._write_status_file(analysis_id)
+            self._write_status_file(analysis_run_id)
         
         # Start analysis in background
         # Create a new event loop in a thread to run the async analysis
@@ -303,14 +300,14 @@ class AnalysisService:
             try:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-                loop.run_until_complete(self._run_analysis(analysis_id, graph, ticker, analysis_date, analysts))
+                loop.run_until_complete(self._run_analysis(analysis_run_id, graph, ticker, analysis_date, analysts))
             except Exception as e:
                 import traceback
                 logger.exception(
-                    "Analysis failed analysis_id=%s ticker=%s date=%s error=%s",
-                    analysis_id, ticker, analysis_date, e,
+                    "Analysis failed analysis_run_id=%s ticker=%s date=%s error=%s",
+                    analysis_run_id, ticker, analysis_date, e,
                 )
-                analysis_info = self.running_analyses.get(analysis_id)
+                analysis_info = self.running_analyses.get(analysis_run_id)
                 if analysis_info:
                     analysis_info["status"] = "error"
                     analysis_info["error"] = str(e)
@@ -321,20 +318,20 @@ class AnalysisService:
         thread = threading.Thread(target=run_async_analysis, daemon=True)
         thread.start()
         
-        return (analysis_id, False)
+        return (analysis_run_id, False)
     
-    async def _run_analysis(self, analysis_id: str, graph: TradingAgentsGraph, ticker: str, analysis_date: str, analysts: list):
+    async def _run_analysis(self, analysis_run_id: int, graph: TradingAgentsGraph, ticker: str, analysis_date: str, analysts: list):
         """Run the analysis and update status."""
-        analysis_info = self.running_analyses.get(analysis_id)
+        analysis_info = self.running_analyses.get(analysis_run_id)
         if not analysis_info:
-            logger.warning("Analysis info not found for analysis_id=%s", analysis_id)
+            logger.warning("Analysis info not found for analysis_run_id=%s", analysis_run_id)
             return
 
         log_file = analysis_info["log_file"]
         ar_id = analysis_info["analysis_run_id"]
         logger.info(
-            "Analysis run started analysis_id=%s ticker=%s analysis_run_id=%s models=%s",
-            analysis_id, ticker, ar_id,
+            "Analysis run started analysis_run_id=%s ticker=%s models=%s",
+            ar_id, ticker,
             {"deep": graph.config.get("deep_think_llm"), "quick": graph.config.get("quick_think_llm")},
         )
 
@@ -369,13 +366,13 @@ class AnalysisService:
                     report_file = report_dir / f"{safe_key}.md"
                     report_file.write_text(content or "", encoding="utf-8")
                     logger.debug(
-                        "Report written to filesystem analysis_id=%s report_type=%s path=%s",
-                        analysis_id, key, report_file,
+                        "Report written to filesystem analysis_run_id=%s report_type=%s path=%s",
+                        analysis_run_id, key, report_file,
                     )
                 except Exception as e:
                     logger.warning(
-                        "Failed to write report to filesystem analysis_id=%s report_type=%s error=%s",
-                        analysis_id, key, e,
+                        "Failed to write report to filesystem analysis_run_id=%s report_type=%s error=%s",
+                        analysis_run_id, key, e,
                     )
 
             def _write_report(key, content, score, label, **extra):
@@ -391,15 +388,15 @@ class AnalysisService:
                         analysis_run_id=analysis_info["analysis_run_id"],
                     )
                     logger.info(
-                        "Report saved analysis_id=%s ticker=%s analysis_run_id=%s report_type=%s",
-                        analysis_id, analysis_info["ticker"], analysis_info["analysis_run_id"], key,
+                        "Report saved analysis_run_id=%s ticker=%s report_type=%s",
+                        analysis_run_id, analysis_info["ticker"], key,
                     )
                     if write_reports_to_results:
                         _write_report_to_filesystem(key, data.get("content", ""), analysis_info["report_dir"])
                 except Exception as e:
                     logger.exception(
-                        "Failed to save report analysis_id=%s report_type=%s error=%s",
-                        analysis_id, key, e,
+                        "Failed to save report analysis_run_id=%s report_type=%s error=%s",
+                        analysis_run_id, key, e,
                     )
                     raise
 
@@ -420,7 +417,7 @@ class AnalysisService:
                     break
 
             # Stream the analysis
-            _progress_log(f"Analysis started analysis_id={analysis_id} ticker={ticker} analysis_run_id={ar_id}")
+            _progress_log(f"Analysis started analysis_run_id={ar_id} ticker={ticker}")
             last_chunk = None
             for chunk in graph.graph.stream(init_agent_state, **args):
                 last_chunk = chunk
@@ -469,14 +466,14 @@ class AnalysisService:
                         c = chunk[chunk_key]
                         analysis_info["reports"][key] = c
                         analysis_info["agent_statuses"][agent] = "completed"
-                        self._write_status_file(analysis_id)
+                        self._write_status_file(analysis_run_id)
                         _write_report(key, c, chunk.get(score_key), label)
                         _progress_log(f"{agent} completed → {key} saved")
                         if last_analyst_report_key and key == last_analyst_report_key:
                             analysis_info["agent_statuses"]["Bull Researcher"] = "in_progress"
                             analysis_info["agent_statuses"]["Bear Researcher"] = "in_progress"
                             analysis_info["agent_statuses"]["Research Manager"] = "in_progress"
-                            self._write_status_file(analysis_id)
+                            self._write_status_file(analysis_run_id)
                             _progress_log("Bull/Bear researchers & Research Manager started")
 
                 if "investment_debate_state" in chunk and chunk["investment_debate_state"]:
@@ -488,7 +485,7 @@ class AnalysisService:
                         analysis_info["agent_statuses"]["Bear Researcher"] = "completed"
                         analysis_info["agent_statuses"]["Research Manager"] = "completed"
                         analysis_info["agent_statuses"]["Trader"] = "in_progress"
-                        self._write_status_file(analysis_id)
+                        self._write_status_file(analysis_run_id)
                         _progress_log("Bull/Bear/Research Manager completed → Trader started")
                 
                 if "investment_plan" in chunk and chunk["investment_plan"]:
@@ -531,7 +528,7 @@ class AnalysisService:
                     analysis_info["agent_statuses"]["Risky Analyst"] = "in_progress"
                     analysis_info["agent_statuses"]["Safe Analyst"] = "in_progress"
                     analysis_info["agent_statuses"]["Neutral Analyst"] = "in_progress"
-                    self._write_status_file(analysis_id)
+                    self._write_status_file(analysis_run_id)
                     _progress_log("Trader completed → Risk debate (Risky/Safe/Neutral) started")
                 
                 if "risk_debate_state" in chunk and chunk["risk_debate_state"]:
@@ -543,12 +540,12 @@ class AnalysisService:
                         analysis_info["agent_statuses"]["Safe Analyst"] = "completed"
                         analysis_info["agent_statuses"]["Neutral Analyst"] = "completed"
                         analysis_info["agent_statuses"]["Portfolio Manager"] = "in_progress"
-                        self._write_status_file(analysis_id)
+                        self._write_status_file(analysis_run_id)
                         _progress_log("Risk analysts completed → Portfolio Manager started")
                 
                 if "final_trade_decision" in chunk and chunk["final_trade_decision"]:
                     analysis_info["agent_statuses"]["Portfolio Manager"] = "completed"
-                    self._write_status_file(analysis_id)
+                    self._write_status_file(analysis_run_id)
                     content = chunk["final_trade_decision"]
                     risky = chunk.get("risky_summary") or []
                     safe = chunk.get("safe_summary") or []
@@ -607,19 +604,19 @@ class AnalysisService:
             
             # Mark as completed
             analysis_info["status"] = "completed"
-            self._write_status_file(analysis_id)
+            self._write_status_file(analysis_run_id)
             logger.info(
-                "Analysis completed analysis_id=%s ticker=%s analysis_run_id=%s reports=%s",
-                analysis_id, ticker, ar_id, list(analysis_info.get("reports", {}).keys()),
+                "Analysis completed analysis_run_id=%s ticker=%s reports=%s",
+                ar_id, ticker, list(analysis_info.get("reports", {}).keys()),
             )
             print(
-                f"[ANALYSIS COMPLETED] analysis_id={analysis_id} ticker={ticker} analysis_run_id={ar_id} reports={list(analysis_info.get('reports', {}).keys())}",
+                f"[ANALYSIS COMPLETED] analysis_run_id={ar_id} ticker={ticker} reports={list(analysis_info.get('reports', {}).keys())}",
                 file=sys.stderr,
                 flush=True,
             )
             
             # Delete status file after completion (analysis is done)
-            self._delete_status_file(analysis_id)
+            self._delete_status_file(analysis_run_id)
 
             # Notify subscribed users and initiator by email (best-effort; do not fail analysis)
             try:
@@ -643,43 +640,44 @@ class AnalysisService:
         except Exception as e:
             ar_id_safe = analysis_info.get("analysis_run_id", "?") if analysis_info else "?"
             print(
-                f"\n[ANALYSIS STOPPED - EXCEPTION] analysis_id={analysis_id} ticker={ticker} analysis_run_id={ar_id_safe}\n  {type(e).__name__}: {e}\n",
+                f"\n[ANALYSIS STOPPED - EXCEPTION] analysis_run_id={ar_id_safe} ticker={ticker}\n  {type(e).__name__}: {e}\n",
                 file=sys.stderr,
                 flush=True,
             )
             logger.exception(
-                "Analysis error analysis_id=%s ticker=%s analysis_run_id=%s error=%s",
-                analysis_id, ticker, ar_id_safe, e,
+                "Analysis error analysis_run_id=%s ticker=%s error=%s",
+                ar_id_safe, ticker, e,
             )
-            analysis_info = self.running_analyses.get(analysis_id)
+            analysis_info = self.running_analyses.get(analysis_run_id)
             if analysis_info:
                 analysis_info["status"] = "error"
                 analysis_info["error"] = str(e)
-                self._write_status_file(analysis_id)
+                self._write_status_file(analysis_run_id)
                 if analysis_info["progress_callback"]:
                     try:
                         analysis_info["progress_callback"]({"type": "error", "error": str(e)}, analysis_info)
                     except Exception:
                         pass
                 # Delete status file after error (analysis is done)
-                self._delete_status_file(analysis_id)
+                self._delete_status_file(analysis_run_id)
     
-    def get_analysis_status(self, analysis_id: str) -> Optional[Dict]:
+    def get_analysis_status(self, analysis_run_id: int) -> Optional[Dict]:
         """Get current status of a running analysis from filesystem only (works across workers)."""
         try:
+            run_id_str = str(analysis_run_id)
             for ticker_dir in self.results_dir.glob("*"):
                 if not ticker_dir.is_dir():
                     continue
-                for run_dir in ticker_dir.glob("*"):
-                    if not run_dir.is_dir():
-                        continue
-                    status_file = run_dir / "status.json"
-                    if status_file.exists():
-                        with open(status_file, 'r') as f:
-                            data = json.load(f)
-                            if data.get("analysis_id") == analysis_id:
-                                return data
+                run_dir = ticker_dir / run_id_str
+                if not run_dir.is_dir():
+                    continue
+                status_file = run_dir / "status.json"
+                if status_file.exists():
+                    with open(status_file, 'r') as f:
+                        data = json.load(f)
+                        if data.get("analysis_run_id") == analysis_run_id:
+                            return data
         except Exception as e:
-            logger.warning(f"Error searching for status file {analysis_id}: {e}")
+            logger.warning(f"Error reading status for analysis_run_id={analysis_run_id}: {e}")
         
         return None

@@ -158,9 +158,9 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       const reports = Object.keys(data.reports);
       setSelectedReport(reports.includes('final_trade_decision') ? 'final_trade_decision' : reports[0]);
     }
-    if (data.is_generating && data.generation_analysis_id) {
+    if (data.is_generating && data.generation_analysis_run_id != null) {
       setAnalysisProgress(null);
-      const client = new WebSocketClient(data.generation_analysis_id);
+      const client = new WebSocketClient(data.generation_analysis_run_id);
       client.on('status', (msg: any) => { const s = msg?.data?.agent_statuses; if (s) setAnalysisProgress({ agent_statuses: s, current_agent: null }); });
       client.on('progress', (msg: any) => {
         const s = msg?.data?.agent_statuses;
@@ -383,7 +383,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       }).catch(() => {});
     }, pollInterval);
     return () => clearInterval(interval);
-  }, [ticker, stockData?.is_generating, stockData?.generation_analysis_id]);
+  }, [ticker, stockData?.is_generating, stockData?.generation_analysis_run_id]);
 
   useEffect(() => {
     if (activeTab !== 'fundamentals' || !ticker || financialStatements) return;

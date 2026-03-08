@@ -9,14 +9,14 @@ export class WebSocketClient {
   private manuallyClosed = false;
   private listeners: Map<string, Set<(data: any) => void>> = new Map();
 
-  constructor(analysisId: string) {
+  constructor(analysisRunId: number) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     // In dev, use current host so Vite proxy forwards /ws to backend; otherwise use VITE_WS_URL or 8002
     const host = import.meta.env.VITE_WS_URL
       || (import.meta.env.DEV ? window.location.host : window.location.host.replace('3003', '8002'));
     const token = getStoredToken();
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
-    this.url = `${protocol}//${host}/ws/analyses/${analysisId}${tokenParam}`;
+    this.url = `${protocol}//${host}/ws/analyses/${analysisRunId}${tokenParam}`;
   }
 
   connect(): void {

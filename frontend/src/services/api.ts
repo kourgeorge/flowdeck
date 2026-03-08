@@ -398,7 +398,7 @@ export const tickerApi = {
   },
 
   // Start analysis (requires signed-in user; initiator is emailed when report is done)
-  startAnalysis: async (ticker: string, analysisDate?: string): Promise<{ analysis_id: string; ticker: string; date: string; existing?: boolean }> => {
+  startAnalysis: async (ticker: string, analysisDate?: string): Promise<{ analysis_run_id: number; ticker: string; date: string; existing?: boolean }> => {
     const token = getStoredToken();
     const user = getStoredUser();
     const response = await api.post(
@@ -418,9 +418,9 @@ export const tickerApi = {
   },
 
   // Get analysis status (requires auth)
-  getAnalysisStatus: async (analysisId: string): Promise<any> => {
+  getAnalysisStatus: async (analysisRunId: number): Promise<any> => {
     const token = getStoredToken();
-    const response = await api.get(`/api/analyses/${analysisId}/status`, {
+    const response = await api.get(`/api/analyses/${analysisRunId}/status`, {
       headers: {
         ...(token && { Authorization: `Bearer ${token}` }),
       },

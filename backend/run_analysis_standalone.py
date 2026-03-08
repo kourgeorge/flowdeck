@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 Standalone analysis runner for Node backend. Invoked as:
-  python backend/run_analysis_standalone.py --ticker AAPL --analysis-date 2025-02-08 --analysis-id <uuid> --info-service-url http://127.0.0.1:8002 ...
+  python backend/run_analysis_standalone.py --ticker AAPL --analysis-date 2025-02-08 --info-service-url http://127.0.0.1:8002 ...
 
+Creates an AnalysisRun (analysis_run_id) via token_service, uses that id for the results directory and reports.
 Streams NDJSON progress to stdout. Writes reports to DB via save_report. Logs go to stderr.
 """
 
@@ -81,7 +82,6 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run TradingAgents analysis (standalone for Node backend)")
     parser.add_argument("--ticker", required=True, help="Ticker symbol")
     parser.add_argument("--analysis-date", required=True, help="Analysis date YYYY-MM-DD")
-    parser.add_argument("--analysis-id", required=True, help="Analysis UUID from Node")
     parser.add_argument("--analysts", default="market,news,fundamentals,technical", help="Comma-separated analysts")
     parser.add_argument("--research-depth", type=int, default=2, help="Max debate rounds")
     parser.add_argument("--llm-provider", default="azure", help="LLM provider")
@@ -136,8 +136,8 @@ def main() -> None:
             config["deep_think_llm"] = os.getenv("AZURE_DEEP_THINK_MODEL", "gpt-4o-2024-08-06")
 
     logger.info(
-        "Standalone analysis starting analysis_id=%s ticker=%s date=%s analysis_run_id=%s models=%s",
-        args.analysis_id, ticker, analysis_date, analysis_run_id,
+        "Standalone analysis starting analysis_run_id=%s ticker=%s date=%s models=%s",
+        analysis_run_id, ticker, analysis_date,
         {"deep": config.get("deep_think_llm"), "quick": config.get("quick_think_llm")},
     )
     graph = TradingAgentsGraph(selected_analysts=analysts, config=config, debug=True)

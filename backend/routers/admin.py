@@ -274,7 +274,7 @@ class MissionControlTickerItem(BaseModel):
     sector: Optional[str]
     industry: Optional[str]
     is_running: bool
-    running_analysis_id: Optional[str]
+    running_analysis_id: Optional[int]  # AnalysisRun.id when running
 
 
 class MissionControlResponse(BaseModel):
@@ -288,7 +288,7 @@ class MissionControlRunBody(BaseModel):
 
 class MissionControlRunItem(BaseModel):
     ticker: str
-    analysis_id: str
+    analysis_run_id: int  # AnalysisRun.id
 
 
 class MissionControlRunErrorItem(BaseModel):
@@ -751,7 +751,7 @@ def get_mission_control(
                 sector=entry.get("sector"),
                 industry=entry.get("industry"),
                 is_running=running is not None,
-                running_analysis_id=(str(running.get("analysis_id")) if running else None),
+                running_analysis_id=running.get("analysis_run_id") if running else None,
             )
         )
 
@@ -787,9 +787,9 @@ def run_mission_control(
     for ticker in requested:
         running = running_by_ticker.get(ticker)
         if running is not None and str(running.get("date") or "") == date_str:
-            analysis_id = str(running.get("analysis_id") or "")
-            if analysis_id:
-                already_running.append(MissionControlRunItem(ticker=ticker, analysis_id=analysis_id))
+            run_id = running.get("analysis_run_id")
+            if run_id is not None:
+                already_running.append(MissionControlRunItem(ticker=ticker, analysis_run_id=run_id))
                 continue
 
         if not body.force and ticker in has_report_today:
@@ -798,7 +798,7 @@ def run_mission_control(
 
         try:
             analysis_run_id = token_service.record_analysis_run(_user.id, ticker, db)
-            analysis_id, existing = _MISSION_ANALYSIS_SERVICE.start_analysis(
+            returned_run_id, existing = _MISSION_ANALYSIS_SERVICE.start_analysis(
                 ticker=ticker,
                 analysis_date=date_str,
                 analysts=["market", "news", "fundamentals", "technical", "sec"],
@@ -810,9 +810,9 @@ def run_mission_control(
             if existing:
                 # Race: another run started; remove the AnalysisRun we just created so it is not counted
                 token_service.delete_analysis_run(analysis_run_id, db)
-                already_running.append(MissionControlRunItem(ticker=ticker, analysis_id=analysis_id))
+                already_running.append(MissionControlRunItem(ticker=ticker, analysis_run_id=returned_run_id))
             else:
-                triggered.append(MissionControlRunItem(ticker=ticker, analysis_id=analysis_id))
+                triggered.append(MissionControlRunItem(ticker=ticker, analysis_run_id=returned_run_id))
         except Exception as e:
             failed.append(MissionControlRunErrorItem(ticker=ticker, error=str(e)))
 

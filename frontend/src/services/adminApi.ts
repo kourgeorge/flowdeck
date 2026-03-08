@@ -96,7 +96,7 @@ export interface MissionControlTickerItem {
   sector: string | null;
   industry: string | null;
   is_running: boolean;
-  running_analysis_id: string | null;
+  running_analysis_id: number | null;
 }
 
 export interface MissionControlResponse {
@@ -105,7 +105,7 @@ export interface MissionControlResponse {
 
 export interface MissionControlRunItem {
   ticker: string;
-  analysis_id: string;
+  analysis_run_id: number;
 }
 
 export interface MissionControlRunErrorItem {
