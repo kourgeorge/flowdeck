@@ -237,10 +237,11 @@ def _get_ticker_widgets_sync(
         report_scores = None
 
         try:
-            latest_date = report_service.get_latest_report_date(ticker)
+            latest_run = report_service.get_latest_analysis_run(ticker)
 
-            if latest_date:
-                scores_raw = report_service.get_reports_with_scores(ticker, latest_date)
+            if latest_run:
+                latest_ar_id, latest_date = latest_run
+                scores_raw = report_service.get_reports_with_scores(ticker, latest_ar_id)
                 if scores_raw:
                     report_scores = {
                         k: ReportScoreSummary(score=v.get("score"), score_label=v.get("score_label"))
@@ -309,13 +310,13 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
             detail=f"Ticker '{ticker}' not found. Check the symbol and try again.",
         )
 
-    # When analysis is generating, use the in-progress run_id so reports count increments 1→2→…→7
+    # When analysis is generating, use the in-progress analysis_run_id so reports count increments 1→2→…→7
     # instead of switching from the previous run (e.g. 5 reports) to the new run (1 report).
     # Check filesystem for running analyses (works reliably across all workers)
     is_generating = False
     generation_analysis_id = None
-    generating_run_id = None
-    
+    generating_analysis_run_id = None
+
     try:
         ticker_dir = analysis_service.results_dir / ticker.upper()
         if ticker_dir.exists():
@@ -330,23 +331,33 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
                         if status_data.get("status") == "running" and status_data.get("ticker") == ticker.upper():
                             is_generating = True
                             generation_analysis_id = status_data.get("analysis_id")
-                            generating_run_id = status_data.get("run_id")
+                            generating_analysis_run_id = status_data.get("analysis_run_id")
                             break
     except Exception as e:
         # Log but don't fail the request
         import logging
         logging.getLogger(__name__).warning(f"Error checking filesystem for running analysis: {e}")
 
-    latest_date = generating_run_id if is_generating and generating_run_id else report_service.get_latest_report_date(ticker)
+    latest_run = report_service.get_latest_analysis_run(ticker)
+    if is_generating and generating_analysis_run_id is not None:
+        latest_analysis_run_id = generating_analysis_run_id
+        latest_date = latest_run[1] if latest_run else None  # use date_display from latest if available
+        if latest_date is None:
+            latest_date = "Generating..."
+    elif latest_run:
+        latest_analysis_run_id, latest_date = latest_run
+    else:
+        latest_analysis_run_id = None
+        latest_date = None
     latest_reports = {}
     latest_reports_with_scores = {}
     latest_reports_with_scores_raw = {}
     latest_recommendation = None
 
     report_days_ago = None
-    if latest_date:
-        latest_reports = report_service.get_reports_for_date(ticker, latest_date)
-        latest_reports_with_scores_raw = report_service.get_reports_with_scores(ticker, latest_date)
+    if latest_analysis_run_id is not None:
+        latest_reports = report_service.get_reports_for_run(ticker, latest_analysis_run_id)
+        latest_reports_with_scores_raw = report_service.get_reports_with_scores(ticker, latest_analysis_run_id)
 
         latest_reports_with_scores = {
             k: ReportData(
@@ -378,7 +389,7 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
                 recommendation=tip_meta["recommendation"],
                 confidence=confidence,
                 source="trader_investment_plan",
-                date=latest_date
+                date=latest_date or ""
             )
         elif final_meta.get("recommendation"):
             # Legacy fallback for older runs that predate structured trader recommendation.
@@ -386,13 +397,13 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
                 recommendation=final_meta["recommendation"],
                 confidence=confidence,
                 source="final_trade_decision",
-                date=latest_date
+                date=latest_date or ""
             )
 
     historical = report_service.get_historical_analyses(ticker)
     historical_analyses = []
     for h in historical:
-        reports_with_scores = report_service.get_reports_with_scores(ticker, h["date"])
+        reports_with_scores = report_service.get_reports_with_scores(ticker, h["analysis_run_id"])
         rec = None
         if (reports_with_scores.get("trader_investment_plan") or {}).get("recommendation"):
             rec = reports_with_scores["trader_investment_plan"]["recommendation"]
@@ -401,6 +412,7 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
             rec = reports_with_scores["final_trade_decision"]["recommendation"]
 
         historical_analyses.append(HistoricalAnalysis(
+            analysis_run_id=h["analysis_run_id"],
             date=h["date"],
             available_reports=h["available_reports"],
             recommendation=rec
@@ -415,12 +427,13 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
         ticker=ticker,
         quote=quote,
         recommendation=latest_recommendation,
+        report_run_id=latest_analysis_run_id,
         report_date=latest_date,
         report_days_ago=report_days_ago,
         reports=latest_reports,
         reports_with_scores=latest_reports_with_scores,
         historical_analyses=historical_analyses,
-        has_reports=latest_date is not None,
+        has_reports=latest_analysis_run_id is not None,
         is_generating=is_generating,
         generation_analysis_id=generation_analysis_id,
         expected_return_pct=expected_return_pct,
@@ -645,18 +658,18 @@ async def get_ticker_widgets(
         raise HTTPException(status_code=500, detail=f"Failed to load widget data: {str(e)}")
 
 
-@app.get("/api/tickers/{ticker}/reports/{run_id}")
+@app.get("/api/tickers/{ticker}/reports/{analysis_run_id}")
 async def get_ticker_reports_for_run(
     ticker: str,
-    run_id: str,
+    analysis_run_id: int,
     current_user=Depends(get_current_user_optional),
 ):
-    """Get reports_with_scores for a specific historical run_id. Experimental."""
+    """Get reports_with_scores for a specific historical run by analysis_run_id. Experimental."""
     from models.schemas import ReportData
     ticker = ticker.upper()
 
     def _fetch():
-        scores_raw = report_service.get_reports_with_scores(ticker, run_id)
+        scores_raw = report_service.get_reports_with_scores(ticker, analysis_run_id)
         if not scores_raw:
             return None
         return {
@@ -703,17 +716,17 @@ async def get_ticker_page(
     ticker = ticker.upper()
     try:
         result = await asyncio.to_thread(_get_ticker_page_sync, ticker)
-        if result.report_date and current_user is not None:
+        if result.report_run_id is not None and current_user is not None:
             try:
-                token_service.record_view(ticker, result.report_date, current_user.id, db)
+                token_service.record_view(result.report_run_id, current_user.id, db)
             except Exception:
                 pass  # Don't fail the response if view recording fails
-        if result.report_date and current_user is not None:
+        if result.report_run_id is not None and current_user is not None:
             try:
                 result = result.model_copy(
                     update={
-                        "report_view_count": token_service.get_view_count(ticker, result.report_date, db),
-                        "report_earned_tokens": token_service.get_run_earned_tokens(ticker, result.report_date, db),
+                        "report_view_count": token_service.get_view_count(result.report_run_id, db),
+                        "report_earned_tokens": token_service.get_run_earned_tokens(result.report_run_id, db),
                     }
                 )
             except Exception:
@@ -762,8 +775,7 @@ async def start_analysis(
         if existing_id is not None:
             return {"analysis_id": existing_id, "ticker": ticker, "date": analysis_date, "existing": True}
 
-        run_id = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
-        deduct_ok, analysis_run_id = token_service.deduct_for_analysis(current_user.id, ticker, run_id, db)
+        deduct_ok, analysis_run_id = token_service.deduct_for_analysis(current_user.id, ticker, db)
         if not deduct_ok:
             raise HTTPException(
                 status_code=402,
@@ -816,11 +828,10 @@ async def start_analysis(
             deep_thinker=deep_thinker,
             progress_callback=progress_callback,
             initiator_email=initiator_email,
-            run_id=run_id,
             analysis_run_id=analysis_run_id,
         )
         if existing:
-            token_service.refund_for_analysis(current_user.id, ticker, run_id, db)
+            token_service.refund_for_analysis(current_user.id, analysis_run_id, db)
         
         return {"analysis_id": analysis_id, "ticker": ticker, "date": analysis_date, "existing": existing}
     except json.JSONDecodeError:

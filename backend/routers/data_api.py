@@ -231,11 +231,12 @@ async def data_reports_ticker(
     """Get latest reports for one ticker. Requires authentication. Returns report_date and reports dict (report_type -> content, score, key_takeaways, etc.)."""
     await _ensure_ticker_exists(ticker)
     svc = _get_report_service()
-    report_date = await asyncio.to_thread(svc.get_latest_report_date, ticker.upper())
-    if not report_date:
-        return {"report_date": None, "reports": {}}
-    reports = await asyncio.to_thread(svc.get_reports_with_scores, ticker.upper(), report_date)
-    return {"report_date": report_date, "reports": reports}
+    latest = await asyncio.to_thread(svc.get_latest_analysis_run, ticker.upper())
+    if not latest:
+        return {"report_run_id": None, "report_date": None, "reports": {}}
+    ar_id, date_display = latest
+    reports = await asyncio.to_thread(svc.get_reports_with_scores, ticker.upper(), ar_id)
+    return {"report_run_id": ar_id, "report_date": date_display, "reports": reports}
 
 
 @router.post("/reports/batch")
@@ -250,10 +251,11 @@ async def data_reports_batch(
     svc = _get_report_service()
     result = {}
     for t in tickers:
-        report_date = await asyncio.to_thread(svc.get_latest_report_date, t)
-        if not report_date:
-            result[t] = {"report_date": None, "reports": {}}
+        latest = await asyncio.to_thread(svc.get_latest_analysis_run, t)
+        if not latest:
+            result[t] = {"report_run_id": None, "report_date": None, "reports": {}}
         else:
-            reports = await asyncio.to_thread(svc.get_reports_with_scores, t, report_date)
-            result[t] = {"report_date": report_date, "reports": reports}
+            ar_id, date_display = latest
+            reports = await asyncio.to_thread(svc.get_reports_with_scores, t, ar_id)
+            result[t] = {"report_run_id": ar_id, "report_date": date_display, "reports": reports}
     return {"tickers": result}

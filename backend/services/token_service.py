@@ -55,20 +55,7 @@ def get_balance(user_id: int, db: Session) -> int:
     return balance
 
 
-def get_analysis_run_id(ticker: str, run_id: str, db: Session) -> Optional[int]:
-    """Return analysis_runs.id for (ticker, run_id), or None if not found."""
-    run = (
-        db.query(AnalysisRun)
-        .filter(
-            AnalysisRun.ticker == ticker.upper(),
-            AnalysisRun.run_id == run_id,
-        )
-        .first()
-    )
-    return run.id if run else None
-
-
-def deduct_for_analysis(user_id: int, ticker: str, run_id: str, db: Session) -> Tuple[bool, Optional[int]]:
+def deduct_for_analysis(user_id: int, ticker: str, db: Session) -> Tuple[bool, Optional[int]]:
     """
     Deduct COST_PER_ANALYSIS from user and create AnalysisRun.
     Returns (True, run.id) on success, (False, None) if insufficient balance.
@@ -87,7 +74,6 @@ def deduct_for_analysis(user_id: int, ticker: str, run_id: str, db: Session) -> 
         user.token_balance -= COST_PER_ANALYSIS
         run = AnalysisRun(
             ticker=ticker.upper(),
-            run_id=run_id,
             creator_id=user_id,
             earned_tokens=0,
         )
@@ -100,26 +86,13 @@ def deduct_for_analysis(user_id: int, ticker: str, run_id: str, db: Session) -> 
         return (False, None)
 
 
-def record_analysis_run(creator_id: int, ticker: str, run_id: str, db: Session) -> Optional[int]:
+def record_analysis_run(creator_id: int, ticker: str, db: Session) -> Optional[int]:
     """
     Record an analysis run without deducting tokens (e.g. admin/mission-control runs).
-    Idempotent: if (ticker, run_id) already exists, returns existing id.
-    Returns the AnalysisRun.id (existing or newly created).
+    Creates a new AnalysisRun and returns its id.
     """
-    ticker_upper = ticker.upper()
-    existing = (
-        db.query(AnalysisRun)
-        .filter(
-            AnalysisRun.ticker == ticker_upper,
-            AnalysisRun.run_id == run_id,
-        )
-        .first()
-    )
-    if existing:
-        return existing.id
     run = AnalysisRun(
-        ticker=ticker_upper,
-        run_id=run_id,
+        ticker=ticker.upper(),
         creator_id=creator_id,
         earned_tokens=0,
     )
@@ -129,26 +102,15 @@ def record_analysis_run(creator_id: int, ticker: str, run_id: str, db: Session) 
     return run.id
 
 
-def record_view(ticker: str, run_id: str, viewer_id: int, db: Session) -> bool:
+def record_view(analysis_run_id: int, viewer_id: int, db: Session) -> bool:
     """
     Record a unique view. If new and eligible, credit creator 1 token.
     Returns True if a new view was recorded (and possibly credited).
     Rules: no self-views, earned_tokens < MAX_REWARD_PER_REPORT, optional 14-day window.
     """
-    ticker_upper = ticker.upper()
-    run = (
-        db.query(AnalysisRun)
-        .filter(
-            AnalysisRun.ticker == ticker_upper,
-            AnalysisRun.run_id == run_id,
-        )
-        .first()
-    )
+    run = db.query(AnalysisRun).filter(AnalysisRun.id == analysis_run_id).first()
     if not run:
-        view = ReportView(viewer_id=viewer_id, analysis_run_id=None)
-        db.add(view)
-        db.commit()
-        return True
+        return False
 
     existing = (
         db.query(ReportView)
@@ -198,29 +160,20 @@ def record_view(ticker: str, run_id: str, viewer_id: int, db: Session) -> bool:
     return True
 
 
-def delete_analysis_run(creator_id: int, ticker: str, run_id: str, db: Session) -> None:
+def delete_analysis_run(analysis_run_id: int, db: Session) -> None:
     """Remove AnalysisRun without refunding (e.g. admin race when start_analysis returned existing=True)."""
-    run = (
-        db.query(AnalysisRun)
-        .filter(
-            AnalysisRun.ticker == ticker.upper(),
-            AnalysisRun.run_id == run_id,
-            AnalysisRun.creator_id == creator_id,
-        )
-        .first()
-    )
+    run = db.query(AnalysisRun).filter(AnalysisRun.id == analysis_run_id).first()
     if run:
         db.delete(run)
         db.commit()
 
 
-def refund_for_analysis(user_id: int, ticker: str, run_id: str, db: Session) -> None:
+def refund_for_analysis(user_id: int, analysis_run_id: int, db: Session) -> None:
     """Refund COST_PER_ANALYSIS and remove AnalysisRun (e.g. when analysis was already running)."""
     run = (
         db.query(AnalysisRun)
         .filter(
-            AnalysisRun.ticker == ticker.upper(),
-            AnalysisRun.run_id == run_id,
+            AnalysisRun.id == analysis_run_id,
             AnalysisRun.creator_id == user_id,
         )
         .first()
@@ -271,11 +224,8 @@ def top_up(user_id: int, amount: int, db: Session) -> None:
     db.commit()
 
 
-def get_view_count(ticker: str, run_id: str, db: Session) -> int:
+def get_view_count(analysis_run_id: int, db: Session) -> int:
     """Return number of unique views for this run."""
-    analysis_run_id = get_analysis_run_id(ticker, run_id, db)
-    if analysis_run_id is None:
-        return 0
     return (
         db.query(ReportView)
         .filter(ReportView.analysis_run_id == analysis_run_id)
@@ -283,14 +233,7 @@ def get_view_count(ticker: str, run_id: str, db: Session) -> int:
     )
 
 
-def get_run_earned_tokens(ticker: str, run_id: str, db: Session) -> int:
+def get_run_earned_tokens(analysis_run_id: int, db: Session) -> int:
     """Return earned_tokens for this run (0 if no AnalysisRun)."""
-    run = (
-        db.query(AnalysisRun)
-        .filter(
-            AnalysisRun.ticker == ticker.upper(),
-            AnalysisRun.run_id == run_id,
-        )
-        .first()
-    )
+    run = db.query(AnalysisRun).filter(AnalysisRun.id == analysis_run_id).first()
     return run.earned_tokens if run else 0

@@ -56,7 +56,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const [isLoading, setIsLoading] = useState(!prefetchedData);
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
   // EXPERIMENTAL: historical run selector — remove this block + related JSX to disable
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
   const [historicalReportsData, setHistoricalReportsData] = useState<Record<string, any> | null>(null);
   const [isLoadingHistoricalRun, setIsLoadingHistoricalRun] = useState(false);
   const [runSelectorOpen, setRunSelectorOpen] = useState(false);
@@ -465,8 +465,8 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   }, [ticker]);
 
   // EXPERIMENTAL: load reports for a historical run
-  const handleSelectHistoricalRun = useCallback(async (runId: string | null) => {
-    if (!runId) {
+  const handleSelectHistoricalRun = useCallback(async (analysisRunId: number | null) => {
+    if (analysisRunId == null) {
       setSelectedRunId(null);
       setHistoricalReportsData(null);
       // Reset to latest report tab
@@ -476,10 +476,10 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       }
       return;
     }
-    setSelectedRunId(runId);
+    setSelectedRunId(analysisRunId);
     setIsLoadingHistoricalRun(true);
     try {
-      const data = await tickerApi.getHistoricalReports(ticker, runId);
+      const data = await tickerApi.getHistoricalReports(ticker, analysisRunId);
       setHistoricalReportsData(data);
       const keys = Object.keys(data).sort((a, b) => {
         const ia = REPORT_PROCESS_ORDER.indexOf(a), ib = REPORT_PROCESS_ORDER.indexOf(b);
@@ -1278,11 +1278,13 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                       </button>
                     </div>
                   )}
-                  {stockData.has_reports && (stockData.report_date || selectedRunId) && (() => {
-                    const activeDate = selectedRunId ?? stockData.report_date ?? null;
+                  {stockData.has_reports && (stockData.report_date || selectedRunId != null) && (() => {
+                    const activeDate = selectedRunId != null
+                      ? stockData.historical_analyses.find((x) => x.analysis_run_id === selectedRunId)?.date ?? stockData.report_date ?? null
+                      : stockData.report_date ?? null;
                     const summaryScoreEntries = getAnalysisScoreEntries(activeReportsSource ?? null);
-                    const activeRecommendation = selectedRunId
-                      ? stockData.historical_analyses.find((x) => x.date === selectedRunId)?.recommendation ?? null
+                    const activeRecommendation = selectedRunId != null
+                      ? stockData.historical_analyses.find((x) => x.analysis_run_id === selectedRunId)?.recommendation ?? null
                       : stockData.recommendation?.recommendation ?? null;
                     const activeConfidence = selectedRunId ? null : stockData.recommendation?.confidence ?? null;
                     const planReport = activeReportsSource?.investment_plan;
@@ -1412,12 +1414,12 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                                         </button>
                                       </li>
                                       {stockData.historical_analyses.slice(1).map((h) => (
-                                        <li key={h.date}>
+                                        <li key={h.analysis_run_id}>
                                           <button
                                             type="button"
-                                            onClick={() => { handleSelectHistoricalRun(h.date); setRunSelectorOpen(false); }}
+                                            onClick={() => { handleSelectHistoricalRun(h.analysis_run_id); setRunSelectorOpen(false); }}
                                             className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between gap-2 transition-colors ${
-                                              selectedRunId === h.date ? 'bg-blue-900/50 text-blue-200' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                                              selectedRunId === h.analysis_run_id ? 'bg-blue-900/50 text-blue-200' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                                             }`}
                                           >
                                             <span>{h.date}</span>

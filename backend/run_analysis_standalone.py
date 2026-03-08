@@ -100,12 +100,21 @@ def main() -> None:
 
     os.environ["INFO_SERVICE_URL"] = args.info_service_url.strip().rstrip("/")
 
-    run_id = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+    init_db()  # Ensure SQLite tables exist
+    from services import token_service
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        creator_id = token_service.get_system_user_id(db)
+        analysis_run_id = token_service.record_analysis_run(creator_id, ticker, db)
+    finally:
+        db.close()
+
     results_dir = Path(args.results_dir)
     if not results_dir.is_absolute():
         results_dir = REPO_ROOT / results_dir
-    # Include time in run id so multiple runs per day don't overwrite
-    log_file = results_dir / ticker / run_id / "message_tool.log"
+    run_dir_name = str(analysis_run_id)
+    log_file = results_dir / ticker / run_dir_name / "message_tool.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
     log_file.touch(exist_ok=True)
 
@@ -126,10 +135,9 @@ def main() -> None:
         else:
             config["deep_think_llm"] = os.getenv("AZURE_DEEP_THINK_MODEL", "gpt-4o-2024-08-06")
 
-    init_db()  # Ensure SQLite tables exist
     logger.info(
-        "Standalone analysis starting analysis_id=%s ticker=%s date=%s run_id=%s models=%s",
-        args.analysis_id, ticker, analysis_date, run_id,
+        "Standalone analysis starting analysis_id=%s ticker=%s date=%s analysis_run_id=%s models=%s",
+        args.analysis_id, ticker, analysis_date, analysis_run_id,
         {"deep": config.get("deep_think_llm"), "quick": config.get("quick_think_llm")},
     )
     graph = TradingAgentsGraph(selected_analysts=analysts, config=config, debug=True)
@@ -197,12 +205,12 @@ def main() -> None:
             meta.update({k: v for k, v in data.items() if k not in ("metadata", "content")})
             save_report(
                 ticker=ticker,
-                run_id=run_id,
                 report_type=key,
+                analysis_run_id=analysis_run_id,
                 content=data.get("content", ""),
                 metadata=meta,
             )
-            logger.info("Report saved ticker=%s run_id=%s report_type=%s", ticker, run_id, key)
+            logger.info("Report saved ticker=%s analysis_run_id=%s report_type=%s", ticker, analysis_run_id, key)
         except Exception as e:
             logger.exception("Failed to save report ticker=%s report_type=%s error=%s", ticker, key, e)
             raise
@@ -296,8 +304,8 @@ def main() -> None:
                     )
                     save_report(
                         ticker=ticker,
-                        run_id=run_id,
                         report_type="investment_plan",
+                        analysis_run_id=analysis_run_id,
                         content=content,
                         metadata={**meta, "bull_viewpoint": bull, "bear_viewpoint": bear},
                     )
@@ -344,8 +352,8 @@ def main() -> None:
                     )
                     save_report(
                         ticker=ticker,
-                        run_id=run_id,
                         report_type="final_trade_decision",
+                        analysis_run_id=analysis_run_id,
                         content=content,
                         metadata={**meta, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral},
                     )
@@ -362,12 +370,12 @@ def main() -> None:
                     },
                 })
 
-            logger.info("Standalone analysis completed ticker=%s run_id=%s reports=%s", ticker, run_id, list(reports.keys()))
-            print(f"[ANALYSIS COMPLETED] ticker={ticker} run_id={run_id} reports={list(reports.keys())}", file=sys.stderr, flush=True)
+            logger.info("Standalone analysis completed ticker=%s analysis_run_id=%s reports=%s", ticker, analysis_run_id, list(reports.keys()))
+            print(f"[ANALYSIS COMPLETED] ticker={ticker} analysis_run_id={analysis_run_id} reports={list(reports.keys())}", file=sys.stderr, flush=True)
             try:
                 notify_subscribers_new_report(
                     ticker=ticker,
-                    run_id=run_id,
+                    analysis_run_id=analysis_run_id,
                     recommendation=final_recommendation,
                     confidence=final_confidence,
                     initiator_email=initiator_email,
@@ -376,8 +384,8 @@ def main() -> None:
                 logger.warning("Failed to send report notification emails: %s", e)
             emit({"type": "completed"})
         except Exception as e:
-            print(f"\n[ANALYSIS STOPPED - EXCEPTION] ticker={ticker} run_id={run_id}\n  {type(e).__name__}: {e}\n", file=sys.stderr, flush=True)
-            logger.exception("Standalone analysis failed ticker=%s run_id=%s error=%s", ticker, run_id, e)
+            print(f"\n[ANALYSIS STOPPED - EXCEPTION] ticker={ticker} analysis_run_id={analysis_run_id}\n  {type(e).__name__}: {e}\n", file=sys.stderr, flush=True)
+            logger.exception("Standalone analysis failed ticker=%s analysis_run_id=%s error=%s", ticker, analysis_run_id, e)
             emit({"type": "error", "error": str(e)})
             raise
         finally:

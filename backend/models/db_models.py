@@ -43,19 +43,17 @@ class Report(Base):
 
 
 class AnalysisRun(Base):
-    """Links a report run (ticker, run_id) to its creator for the token economy."""
+    """One analysis run per row; id is the canonical run identifier (used for paths, API, FKs)."""
     __tablename__ = "analysis_runs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     ticker = Column(String(32), nullable=False, index=True)
-    run_id = Column(String(64), nullable=False, index=True)
     creator_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     earned_tokens = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     __table_args__ = (
-        UniqueConstraint("ticker", "run_id", name="uq_analysis_run_ticker_run"),
-        Index("idx_analysis_runs_ticker_run", "ticker", "run_id"),
+        Index("idx_analysis_runs_ticker", "ticker"),
     )
 
 

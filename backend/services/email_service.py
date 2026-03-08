@@ -161,7 +161,6 @@ def get_subscriber_emails_for_ticker(ticker: str) -> List[str]:
 
 def _build_report_email_bodies(
     ticker: str,
-    run_id: str,
     recommendation: Optional[str] = None,
     confidence: Optional[float] = None,
     scores: Optional[dict] = None,
@@ -355,7 +354,6 @@ def _send_via_api(
 def send_report_notification(
     to_emails: List[str],
     ticker: str,
-    run_id: str,
     recommendation: Optional[str] = None,
     confidence: Optional[float] = None,
     scores: Optional[dict] = None,
@@ -370,7 +368,6 @@ def send_report_notification(
         return True
     subject, text_body, html_body = _build_report_email_bodies(
         ticker=ticker,
-        run_id=run_id,
         recommendation=recommendation,
         confidence=confidence,
         scores=scores,
@@ -538,7 +535,7 @@ def send_subscription_confirmation(user_email: str, ticker: str) -> bool:
 
 def notify_subscribers_new_report(
     ticker: str,
-    run_id: str,
+    analysis_run_id: int,
     recommendation: Optional[str] = None,
     confidence: Optional[float] = None,
     initiator_email: Optional[str] = None,
@@ -561,14 +558,13 @@ def notify_subscribers_new_report(
     report_service = ReportService()
     scores = None
     try:
-        scores = report_service.get_reports_with_scores(ticker, run_id)
+        scores = report_service.get_reports_with_scores(ticker, analysis_run_id)
     except Exception:
         pass  # Continue without scores if fetch fails
     
     send_report_notification(
         to_emails=emails,
         ticker=ticker,
-        run_id=run_id,
         recommendation=recommendation,
         confidence=confidence,
         scores=scores,

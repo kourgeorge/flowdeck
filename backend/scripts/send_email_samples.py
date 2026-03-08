@@ -115,8 +115,6 @@ def main() -> None:
     if not ticker:
         raise SystemExit("Invalid --ticker")
 
-    run_id = "sample-emails-" + datetime.now(UTC).strftime("%Y%m%d%H%M%S")
-
     print(f"Sending sample emails to: {to_email}")
     print(f"Ticker: {ticker}, Recommendation: {args.recommendation}, Confidence: {args.confidence:.1f}")
 
@@ -127,7 +125,6 @@ def main() -> None:
     results["report_notification_email"] = es.send_report_notification(
         to_emails=[to_email],
         ticker=ticker,
-        run_id=run_id,
         recommendation=args.recommendation,
         confidence=args.confidence,
         scores=_sample_scores(),
@@ -152,7 +149,6 @@ def main() -> None:
         print(f"  [{status}] {key}")
         all_ok = all_ok and value
 
-    print(f"\nReport run_id: {run_id}")
     if not all_ok:
         raise SystemExit("One or more sample emails failed to send")
 

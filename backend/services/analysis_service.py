@@ -122,7 +122,7 @@ class AnalysisService:
                 "analysis_id": analysis_id,
                 "ticker": analysis_info["ticker"],
                 "date": analysis_info["date"],
-                "run_id": analysis_info["run_id"],
+                "analysis_run_id": analysis_info["analysis_run_id"],
                 "status": analysis_info["status"],
                 "agent_statuses": analysis_info.get("agent_statuses", {}),
                 "current_agent": analysis_info.get("current_agent"),
@@ -162,6 +162,7 @@ class AnalysisService:
         self,
         ticker: str,
         analysis_date: str,
+        analysis_run_id: int,
         analysts: list = None,
         research_depth: int = 5,
         llm_provider: str = "azure",
@@ -170,8 +171,6 @@ class AnalysisService:
         deep_thinker: Optional[str] = None,
         progress_callback: Optional[Callable] = None,
         initiator_email: Optional[str] = None,
-        run_id: Optional[str] = None,
-        analysis_run_id: Optional[int] = None,
     ) -> tuple[str, bool]:
         """Start a new analysis and return (analysis_id, existing). existing=True if already running for (ticker, date)."""
         ticker = ticker.upper()
@@ -235,10 +234,7 @@ class AnalysisService:
                 debug=True
             )
             
-            # Include time in run id so multiple runs per day don't overwrite (or use provided run_id from API)
-            if run_id is None:
-                run_id = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
-            results_dir = self.results_dir / ticker.upper() / run_id
+            results_dir = self.results_dir / ticker.upper() / str(analysis_run_id)
             results_dir.mkdir(parents=True, exist_ok=True)
             report_dir = results_dir / "reports"
             report_dir.mkdir(parents=True, exist_ok=True)
@@ -281,7 +277,6 @@ class AnalysisService:
             self.running_analyses[analysis_id] = {
                 "ticker": ticker.upper(),
                 "date": analysis_date,
-                "run_id": run_id,
                 "analysis_run_id": analysis_run_id,
                 "status": "running",
                 "graph": graph,
@@ -336,10 +331,10 @@ class AnalysisService:
             return
 
         log_file = analysis_info["log_file"]
-        run_id = analysis_info["run_id"]
+        ar_id = analysis_info["analysis_run_id"]
         logger.info(
-            "Analysis run started analysis_id=%s ticker=%s run_id=%s models=%s",
-            analysis_id, ticker, run_id,
+            "Analysis run started analysis_id=%s ticker=%s analysis_run_id=%s models=%s",
+            analysis_id, ticker, ar_id,
             {"deep": graph.config.get("deep_think_llm"), "quick": graph.config.get("quick_think_llm")},
         )
 
@@ -390,15 +385,14 @@ class AnalysisService:
                     meta.update({k: v for k, v in data.items() if k not in ("metadata", "content")})
                     save_report(
                         ticker=analysis_info["ticker"],
-                        run_id=analysis_info["run_id"],
                         report_type=key,
                         content=data.get("content", ""),
                         metadata=meta,
-                        analysis_run_id=analysis_info.get("analysis_run_id"),
+                        analysis_run_id=analysis_info["analysis_run_id"],
                     )
                     logger.info(
-                        "Report saved analysis_id=%s ticker=%s run_id=%s report_type=%s",
-                        analysis_id, analysis_info["ticker"], analysis_info["run_id"], key,
+                        "Report saved analysis_id=%s ticker=%s analysis_run_id=%s report_type=%s",
+                        analysis_id, analysis_info["ticker"], analysis_info["analysis_run_id"], key,
                     )
                     if write_reports_to_results:
                         _write_report_to_filesystem(key, data.get("content", ""), analysis_info["report_dir"])
@@ -426,7 +420,7 @@ class AnalysisService:
                     break
 
             # Stream the analysis
-            _progress_log(f"Analysis started analysis_id={analysis_id} ticker={ticker} run_id={run_id}")
+            _progress_log(f"Analysis started analysis_id={analysis_id} ticker={ticker} analysis_run_id={ar_id}")
             last_chunk = None
             for chunk in graph.graph.stream(init_agent_state, **args):
                 last_chunk = chunk
@@ -510,11 +504,10 @@ class AnalysisService:
                     inner = meta.get("metadata", meta)
                     save_report(
                         ticker=analysis_info["ticker"],
-                        run_id=analysis_info["run_id"],
                         report_type="investment_plan",
                         content=content,
                         metadata={**inner, "bull_viewpoint": bull, "bear_viewpoint": bear},
-                        analysis_run_id=analysis_info.get("analysis_run_id"),
+                        analysis_run_id=analysis_info["analysis_run_id"],
                     )
                     if write_reports_to_results:
                         _write_report_to_filesystem("investment_plan", content, analysis_info["report_dir"])
@@ -573,11 +566,10 @@ class AnalysisService:
                     inner = meta.get("metadata", meta)
                     save_report(
                         ticker=analysis_info["ticker"],
-                        run_id=analysis_info["run_id"],
                         report_type="final_trade_decision",
                         content=content,
                         metadata={**inner, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral},
-                        analysis_run_id=analysis_info.get("analysis_run_id"),
+                        analysis_run_id=analysis_info["analysis_run_id"],
                     )
                     if write_reports_to_results:
                         _write_report_to_filesystem("final_trade_decision", content, analysis_info["report_dir"])
@@ -617,11 +609,11 @@ class AnalysisService:
             analysis_info["status"] = "completed"
             self._write_status_file(analysis_id)
             logger.info(
-                "Analysis completed analysis_id=%s ticker=%s run_id=%s reports=%s",
-                analysis_id, ticker, run_id, list(analysis_info.get("reports", {}).keys()),
+                "Analysis completed analysis_id=%s ticker=%s analysis_run_id=%s reports=%s",
+                analysis_id, ticker, ar_id, list(analysis_info.get("reports", {}).keys()),
             )
             print(
-                f"[ANALYSIS COMPLETED] analysis_id={analysis_id} ticker={ticker} run_id={run_id} reports={list(analysis_info.get('reports', {}).keys())}",
+                f"[ANALYSIS COMPLETED] analysis_id={analysis_id} ticker={ticker} analysis_run_id={ar_id} reports={list(analysis_info.get('reports', {}).keys())}",
                 file=sys.stderr,
                 flush=True,
             )
@@ -633,7 +625,7 @@ class AnalysisService:
             try:
                 notify_subscribers_new_report(
                     ticker=analysis_info["ticker"],
-                    run_id=analysis_info["run_id"],
+                    analysis_run_id=analysis_info["analysis_run_id"],
                     recommendation=analysis_info.get("recommendation"),
                     confidence=analysis_info.get("confidence"),
                     initiator_email=analysis_info.get("initiator_email"),
@@ -649,14 +641,15 @@ class AnalysisService:
                     pass
 
         except Exception as e:
+            ar_id_safe = analysis_info.get("analysis_run_id", "?") if analysis_info else "?"
             print(
-                f"\n[ANALYSIS STOPPED - EXCEPTION] analysis_id={analysis_id} ticker={ticker} run_id={run_id}\n  {type(e).__name__}: {e}\n",
+                f"\n[ANALYSIS STOPPED - EXCEPTION] analysis_id={analysis_id} ticker={ticker} analysis_run_id={ar_id_safe}\n  {type(e).__name__}: {e}\n",
                 file=sys.stderr,
                 flush=True,
             )
             logger.exception(
-                "Analysis error analysis_id=%s ticker=%s run_id=%s error=%s",
-                analysis_id, ticker, run_id, e,
+                "Analysis error analysis_id=%s ticker=%s analysis_run_id=%s error=%s",
+                analysis_id, ticker, ar_id_safe, e,
             )
             analysis_info = self.running_analyses.get(analysis_id)
             if analysis_info:

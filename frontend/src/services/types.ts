@@ -54,6 +54,7 @@ export interface Recommendation {
 }
 
 export interface HistoricalAnalysis {
+  analysis_run_id: number;
   date: string;
   available_reports: string[];
   recommendation: string | null;
@@ -87,6 +88,7 @@ export interface TickerPageData {
   ticker: string;
   quote: TickerQuote | null;
   recommendation: Recommendation | null;
+  report_run_id: number | null;
   report_date: string | null;
   report_days_ago?: number | null;
   reports: Record<string, string | null>;

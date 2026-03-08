@@ -95,20 +95,16 @@ _EMPTY = {
 
 def save_report(
     ticker: str,
-    run_id: str,
     report_type: str,
+    analysis_run_id: int,
     content: str = "",
     metadata: Optional[Dict[str, Any]] = None,
-    analysis_run_id: Optional[int] = None,
 ) -> None:
-    """Save or upsert a report into the database. When analysis_run_id is None, looks up by (ticker, run_id) if an AnalysisRun exists."""
+    """Save or upsert a report into the database. Requires analysis_run_id."""
     meta = metadata or {}
     metadata_json = json.dumps(meta) if meta else None
     db = SessionLocal()
     try:
-        if analysis_run_id is None:
-            from services import token_service
-            analysis_run_id = token_service.get_analysis_run_id(ticker, run_id, db)
         row = (
             db.query(Report)
             .filter(
@@ -120,7 +116,6 @@ def save_report(
         if row:
             row.content = content or ""
             row.metadata_json = metadata_json
-            row.analysis_run_id = analysis_run_id
             row.ticker = ticker.upper()
             action = "updated"
         else:
@@ -135,13 +130,13 @@ def save_report(
             action = "inserted"
         db.commit()
         logger.debug(
-            "Report %s ticker=%s run_id=%s report_type=%s",
-            action, ticker.upper(), run_id, report_type,
+            "Report %s ticker=%s analysis_run_id=%s report_type=%s",
+            action, ticker.upper(), analysis_run_id, report_type,
         )
     except Exception as e:
         logger.exception(
-            "Failed to save report ticker=%s run_id=%s report_type=%s error=%s",
-            ticker, run_id, report_type, e,
+            "Failed to save report ticker=%s analysis_run_id=%s report_type=%s error=%s",
+            ticker, analysis_run_id, report_type, e,
         )
         raise
     finally:
@@ -154,48 +149,53 @@ class ReportService:
     def __init__(self) -> None:
         pass
 
-    def get_latest_report_date(self, ticker: str) -> Optional[str]:
+    def get_latest_analysis_run(self, ticker: str) -> Optional[tuple[int, str]]:
+        """Return (analysis_run_id, date_display) for the most recent run, or None."""
         db = SessionLocal()
         try:
             row = (
-                db.query(AnalysisRun.run_id)
+                db.query(AnalysisRun.id, AnalysisRun.created_at)
                 .join(Report, Report.analysis_run_id == AnalysisRun.id)
                 .filter(Report.ticker == ticker.upper())
-                .order_by(AnalysisRun.run_id.desc())
+                .order_by(AnalysisRun.id.desc())
                 .first()
             )
-            return row.run_id if row else None
+            if not row:
+                return None
+            ar_id, created = row
+            date_display = created.strftime("%Y-%m-%d") if created else str(ar_id)
+            return (ar_id, date_display)
         finally:
             db.close()
 
     def has_report_for_date(self, ticker: str, date: str) -> bool:
-        """date can be YYYY-MM-DD (match any run that day) or full run id YYYY-MM-DD_HH-MM-SS (exact)."""
+        """date is YYYY-MM-DD; matches any run where date(created_at) = date."""
         db = SessionLocal()
         try:
+            from sqlalchemy import func
             ticker_upper = ticker.upper()
-            q = (
+            return (
                 db.query(Report)
                 .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
-                .filter(Report.ticker == ticker_upper)
-            )
-            if "_" in date:
-                q = q.filter(AnalysisRun.run_id == date)
-            else:
-                q = q.filter(AnalysisRun.run_id.like(f"{date}%"))
-            return q.limit(1).count() > 0
+                .filter(Report.ticker == ticker_upper, func.date(AnalysisRun.created_at) == date)
+                .limit(1)
+                .count()
+            ) > 0
         finally:
             db.close()
 
     def get_tickers_with_reports_for_date(self, date: str) -> List[str]:
-        """date can be YYYY-MM-DD (tickers with any run that day) or full run id (exact)."""
+        """date is YYYY-MM-DD; returns tickers with any run that day."""
         db = SessionLocal()
         try:
-            q = db.query(Report.ticker).join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
-            if "_" in date:
-                q = q.filter(AnalysisRun.run_id == date)
-            else:
-                q = q.filter(AnalysisRun.run_id.like(f"{date}%"))
-            rows = q.distinct().all()
+            from sqlalchemy import func
+            rows = (
+                db.query(Report.ticker)
+                .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
+                .filter(func.date(AnalysisRun.created_at) == date)
+                .distinct()
+                .all()
+            )
             return [r.ticker for r in rows]
         finally:
             db.close()
@@ -206,21 +206,12 @@ class ReportService:
         """Tickers with reports for date, ordered by recency (newest first). Returns (ticker_list, total_count)."""
         db = SessionLocal()
         try:
-            if "_" in date:
-                rows = (
-                    db.query(Report.ticker)
-                    .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
-                    .filter(AnalysisRun.run_id == date)
-                    .distinct()
-                    .all()
-                )
-                tickers = [r.ticker for r in rows]
-                return (tickers[offset : offset + limit], len(tickers))
+            from sqlalchemy import func
             rows = (
-                db.query(Report.ticker, AnalysisRun.run_id)
+                db.query(Report.ticker, AnalysisRun.id)
                 .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
-                .filter(AnalysisRun.run_id.like(f"{date}%"))
-                .order_by(AnalysisRun.run_id.desc())
+                .filter(func.date(AnalysisRun.created_at) == date)
+                .order_by(AnalysisRun.id.desc())
                 .all()
             )
             seen: set[str] = set()
@@ -237,7 +228,7 @@ class ReportService:
             db.close()
 
     def _recent_date_window_bounds(self, end_date: str, days: int) -> Optional[tuple[str, str]]:
-        """Return [start, end) bounds over run_id prefixes for the N-day window ending on end_date."""
+        """Return [start, end) date bounds for the N-day window ending on end_date."""
         date_part = _date_part(end_date) or end_date
         try:
             end_day = datetime.strptime(date_part, "%Y-%m-%d").date()
@@ -260,11 +251,15 @@ class ReportService:
         start_bound, end_exclusive = bounds
         db = SessionLocal()
         try:
+            from sqlalchemy import func
             rows = (
-                db.query(Report.ticker, AnalysisRun.run_id)
+                db.query(Report.ticker, AnalysisRun.id)
                 .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
-                .filter(AnalysisRun.run_id >= start_bound, AnalysisRun.run_id < end_exclusive)
-                .order_by(AnalysisRun.run_id.desc())
+                .filter(
+                    func.date(AnalysisRun.created_at) >= start_bound,
+                    func.date(AnalysisRun.created_at) < end_exclusive,
+                )
+                .order_by(AnalysisRun.id.desc())
                 .all()
             )
             seen: set[str] = set()
@@ -292,11 +287,15 @@ class ReportService:
         start_bound, end_exclusive = bounds
         db = SessionLocal()
         try:
+            from sqlalchemy import func
             rows = (
-                db.query(Report.ticker, AnalysisRun.run_id)
+                db.query(Report.ticker, AnalysisRun.id)
                 .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
-                .filter(AnalysisRun.run_id >= start_bound, AnalysisRun.run_id < end_exclusive)
-                .order_by(AnalysisRun.run_id.desc())
+                .filter(
+                    func.date(AnalysisRun.created_at) >= start_bound,
+                    func.date(AnalysisRun.created_at) < end_exclusive,
+                )
+                .order_by(AnalysisRun.id.desc())
                 .all()
             )
             seen: set[str] = set()
@@ -312,65 +311,90 @@ class ReportService:
         finally:
             db.close()
 
-    def get_reports_with_scores(self, ticker: str, date: str) -> Dict[str, Dict[str, Any]]:
-        """date can be YYYY-MM-DD or full run id. Returns report_type -> dict with content, score, etc."""
+    def get_reports_with_scores(self, ticker: str, analysis_run_id: int) -> Dict[str, Dict[str, Any]]:
+        """Returns report_type -> dict with content, score, etc. for the given analysis run."""
         db = SessionLocal()
         try:
             ticker_upper = ticker.upper()
-            run_id = date
-            if "_" not in date:
-                # Find latest run_id that starts with this date
-                latest = (
-                    db.query(AnalysisRun.run_id)
-                    .join(Report, Report.analysis_run_id == AnalysisRun.id)
-                    .filter(Report.ticker == ticker_upper, AnalysisRun.run_id.like(f"{date}%"))
-                    .order_by(AnalysisRun.run_id.desc())
-                    .first()
-                )
-                run_id = latest.run_id if latest else date
             rows = (
                 db.query(Report)
                 .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
-                .filter(Report.ticker == ticker_upper, AnalysisRun.run_id == run_id)
+                .filter(Report.ticker == ticker_upper, Report.analysis_run_id == analysis_run_id)
                 .all()
             )
+            date_str = None
+            if rows:
+                ar = db.query(AnalysisRun).filter(AnalysisRun.id == analysis_run_id).first()
+                date_str = ar.created_at.strftime("%Y-%m-%d") if ar and ar.created_at else str(analysis_run_id)
             result = {}
             for row in rows:
-                result[row.report_type] = _report_row_to_dict(row, run_id)
+                result[row.report_type] = _report_row_to_dict(row, date_str or str(analysis_run_id))
             return result
         finally:
             db.close()
 
-    def get_reports_for_date(self, ticker: str, date: str) -> Dict[str, Optional[str]]:
-        scores = self.get_reports_with_scores(ticker, date)
+    def get_reports_for_run(self, ticker: str, analysis_run_id: int) -> Dict[str, Optional[str]]:
+        scores = self.get_reports_with_scores(ticker, analysis_run_id)
         return {k: (v.get("content") or "") for k, v in scores.items()}
 
     def get_latest_reports(self, ticker: str) -> Dict[str, Optional[str]]:
-        d = self.get_latest_report_date(ticker)
-        return self.get_reports_for_date(ticker, d) if d else {}
+        latest = self.get_latest_analysis_run(ticker)
+        return self.get_reports_for_run(ticker, latest[0]) if latest else {}
 
     def get_historical_analyses(self, ticker: str) -> List[Dict]:
+        """Returns list of {analysis_run_id, date, available_reports} for each run, newest first."""
         db = SessionLocal()
         try:
             rows = (
-                db.query(AnalysisRun.run_id, Report.report_type)
+                db.query(AnalysisRun.id, AnalysisRun.created_at, Report.report_type)
                 .join(Report, Report.analysis_run_id == AnalysisRun.id)
                 .filter(Report.ticker == ticker.upper())
                 .all()
             )
-            by_run: Dict[str, List[str]] = {}
-            for run_id, report_type in rows:
-                if run_id not in by_run:
-                    by_run[run_id] = []
-                by_run[run_id].append(report_type)
+            by_run: Dict[int, tuple[str, List[str]]] = {}
+            for ar_id, created, report_type in rows:
+                if ar_id not in by_run:
+                    date_str = created.strftime("%Y-%m-%d") if created else str(ar_id)
+                    by_run[ar_id] = (date_str, [])
+                by_run[ar_id][1].append(report_type)
             analyses = [
-                {"date": run_id, "available_reports": sorted(report_types)}
-                for run_id, report_types in by_run.items()
+                {"analysis_run_id": ar_id, "date": date_str, "available_reports": sorted(report_types)}
+                for ar_id, (date_str, report_types) in by_run.items()
             ]
-            analyses.sort(key=lambda x: x["date"], reverse=True)
+            analyses.sort(key=lambda x: x["analysis_run_id"], reverse=True)
             return analyses
         finally:
             db.close()
 
     def has_reports(self, ticker: str) -> bool:
-        return self.get_latest_report_date(ticker) is not None
+        return self.get_latest_analysis_run(ticker) is not None
+
+    def list_report_dates(self, ticker: str) -> List[str]:
+        """Return list of date strings (YYYY-MM-DD) for runs that have reports, newest first."""
+        hist = self.get_historical_analyses(ticker)
+        return [h["date"] for h in hist]
+
+    def get_analysis_run_for_date(self, ticker: str, date_str: str) -> Optional[tuple[int, str]]:
+        """Resolve date (YYYY-MM-DD or analysis_run_id as string) to (analysis_run_id, date_display)."""
+        hist = self.get_historical_analyses(ticker)
+        if not hist:
+            return None
+        # Exact analysis_run_id match (user passed numeric id as string)
+        try:
+            ar_id = int(date_str)
+            for h in hist:
+                if h["analysis_run_id"] == ar_id:
+                    return (ar_id, h["date"])
+            return None
+        except ValueError:
+            pass
+        # Date match: YYYY-MM-DD exact or prefix (hist is newest first)
+        for h in hist:
+            if h["date"] == date_str or h["date"].startswith(date_str):
+                return (h["analysis_run_id"], h["date"])
+        return None
+
+    def get_report_content(self, ticker: str, analysis_run_id: int, report_type: str) -> Optional[str]:
+        """Return raw content for one report type, or None if not found."""
+        reports = self.get_reports_for_run(ticker, analysis_run_id)
+        return reports.get(report_type) or None

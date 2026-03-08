@@ -98,7 +98,7 @@ _PLATFORM_REPORTS_SPEC = ToolSpec(
                 "type": "string",
                 "description": (
                     "Optional. Fetch reports from a specific historical analysis date instead of the latest. "
-                    "Accepts YYYY-MM-DD (e.g. '2025-01-15') or a full run_id (e.g. '2025-01-15_10-30-00'). "
+                    "Accepts YYYY-MM-DD (e.g. '2025-01-15') or analysis_run_id as string. "
                     "Use get_historical_report_dates first to discover available dates for a ticker. "
                     "Omit or leave null to fetch the most recent reports."
                 ),
@@ -156,52 +156,46 @@ def _fetch_platform_reports(
                 f"Also accepted aliases: {', '.join(sorted(_REPORT_ALIASES.keys()))}."
             )
 
-    # Resolve date / run_id
-    run_id: str | None = None
+    # Resolve date to analysis_run_id
+    analysis_run_id: int | None = None
+    date_display: str = ""
     if date:
         date = date.strip()
-        all_dates = svc.list_report_dates(ticker)
-        if not all_dates:
-            return f"No reports found for {ticker}."
-        # Exact run_id match
-        if date in all_dates:
-            run_id = date
-        else:
-            # Prefix match on YYYY-MM-DD
-            matches = [d for d in all_dates if d.startswith(date)]
-            if not matches:
-                return (
-                    f"No reports found for {ticker} on date '{date}'. "
-                    f"Available dates: {', '.join(all_dates[:10])}."
-                )
-            run_id = matches[0]  # most recent match
+        resolved = svc.get_analysis_run_for_date(ticker, date)
+        if not resolved:
+            all_dates = svc.list_report_dates(ticker)
+            return (
+                f"No reports found for {ticker} on date '{date}'. "
+                f"Available dates: {', '.join(all_dates[:10])}."
+            )
+        analysis_run_id, date_display = resolved
 
-    # Fetch latest date if no run_id specified
-    if run_id is None:
-        run_id = svc.get_latest_report_date(ticker)
-        if run_id is None:
+    if analysis_run_id is None:
+        latest = svc.get_latest_analysis_run(ticker)
+        if not latest:
             return (
                 f"No AI analysis reports found for **{ticker}** on FlowDeck. "
                 f"Reports are generated when a full analysis is run for this ticker."
             )
+        analysis_run_id, date_display = latest
 
     # --- Fetch specific report ---
     if canonical_type:
-        content = svc.get_report_content(ticker, run_id, canonical_type)
+        content = svc.get_report_content(ticker, analysis_run_id, canonical_type)
         if not content:
             return (
                 f"The '{_REPORT_LABELS.get(canonical_type, canonical_type)}' report "
-                f"is not available for {ticker} (run: {run_id})."
+                f"is not available for {ticker} (run: {date_display})."
             )
         label = _REPORT_LABELS.get(canonical_type, canonical_type)
-        return f"# FlowDeck {label} for {ticker}\n*(Analysis date: {run_id})*\n\n{content}"
+        return f"# FlowDeck {label} for {ticker}\n*(Analysis date: {date_display})*\n\n{content}"
 
     # --- Fetch all reports summary ---
-    reports = svc.get_reports_with_scores(ticker, run_id)
+    reports = svc.get_reports_with_scores(ticker, analysis_run_id)
     if not reports:
-        return f"No report data found for {ticker} (run: {run_id})."
+        return f"No report data found for {ticker} (run: {date_display})."
 
-    lines = [f"# FlowDeck AI Analysis Summary for {ticker}", f"*(Analysis date: {run_id})*", ""]
+    lines = [f"# FlowDeck AI Analysis Summary for {ticker}", f"*(Analysis date: {date_display})*", ""]
 
     # Final trade decision first
     ftd = reports.get("final_trade_decision") or {}
@@ -320,8 +314,8 @@ def _fetch_historical_dates(ticker: str) -> str:
         f"Found {len(dates)} analysis run(s) — newest first:",
         "",
     ]
-    for i, run_id in enumerate(dates[:20], 1):
-        lines.append(f"{i}. `{run_id}`")
+    for i, d in enumerate(dates[:20], 1):
+        lines.append(f"{i}. `{d}`")
 
     if len(dates) > 20:
         lines.append(f"... and {len(dates) - 20} more.")
@@ -329,7 +323,7 @@ def _fetch_historical_dates(ticker: str) -> str:
     lines.append("")
     lines.append(
         "To fetch reports from a specific date, call get_platform_reports with "
-        "the date parameter set to one of the run IDs above."
+        "the date parameter set to one of the dates above (YYYY-MM-DD)."
     )
     return "\n".join(lines)
 

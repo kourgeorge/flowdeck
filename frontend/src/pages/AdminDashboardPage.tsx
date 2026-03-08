@@ -28,7 +28,7 @@ import {
 type AdminTab = 'overview' | 'mission-control';
 type MissionSortKey = 'ticker' | 'company' | 'type' | 'market_cap' | 'sector' | 'industry' | 'last_completed' | 'status';
 type MissionSortDirection = 'asc' | 'desc';
-type ViewRunsSortKey = 'ticker' | 'run_id' | 'unique_views' | 'viewed';
+type ViewRunsSortKey = 'ticker' | 'analysis_run_id' | 'unique_views' | 'viewed';
 type ViewRunsSortDirection = 'asc' | 'desc';
 
 function formatDate(s?: string | null, use24Hour = false): string {
@@ -155,7 +155,7 @@ export default function AdminDashboardPage() {
     key: ViewRunsSortKey;
     direction: ViewRunsSortDirection;
   }>({
-    key: 'run_id',
+    key: 'analysis_run_id',
     direction: 'desc',
   });
   const [dailyAnalyses, setDailyAnalyses] = useState<AnalysisDailyCount[]>([]);
@@ -238,8 +238,8 @@ export default function AdminDashboardPage() {
           case 'ticker':
             cmp = a.ticker.localeCompare(b.ticker, undefined, { sensitivity: 'base' });
             break;
-          case 'run_id':
-            cmp = a.run_id.localeCompare(b.run_id, undefined, { sensitivity: 'base' });
+          case 'analysis_run_id':
+            cmp = a.analysis_run_id - b.analysis_run_id;
             break;
           case 'unique_views':
             cmp = a.unique_views - b.unique_views;
@@ -256,7 +256,7 @@ export default function AdminDashboardPage() {
         if (viewRunsSort.direction === 'desc') cmp *= -1;
         if (cmp !== 0) return cmp;
 
-        const byRunIdDesc = b.run_id.localeCompare(a.run_id, undefined, { sensitivity: 'base' });
+        const byRunIdDesc = b.analysis_run_id - a.analysis_run_id;
         if (byRunIdDesc !== 0) return byRunIdDesc;
         return a.ticker.localeCompare(b.ticker, undefined, { sensitivity: 'base' });
       }),
@@ -288,7 +288,7 @@ export default function AdminDashboardPage() {
         return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
       }
       const defaultDirection: ViewRunsSortDirection =
-        key === 'unique_views' || key === 'viewed' || key === 'run_id' ? 'desc' : 'asc';
+        key === 'unique_views' || key === 'viewed' || key === 'analysis_run_id' ? 'desc' : 'asc';
       return { key, direction: defaultDirection };
     });
   };
@@ -308,7 +308,7 @@ export default function AdminDashboardPage() {
     return sorted;
   };
 
-  const loadViewsForRun = async (ticker: string, runId: string, runKey: string) => {
+  const loadViewsForRun = async (analysisRunId: number, runKey: string) => {
     if (viewsByRun[runKey] || loadingRunViewKeys.has(runKey)) {
       return;
     }
@@ -318,7 +318,7 @@ export default function AdminDashboardPage() {
       return next;
     });
     try {
-      const res = await adminApi.getViewsForRun(ticker, runId, 5000, 0);
+      const res = await adminApi.getViewsForRun(analysisRunId, 5000, 0);
       setViewsByRun((prev) => ({ ...prev, [runKey]: res.views }));
     } catch {
       setViewsByRun((prev) => ({ ...prev, [runKey]: [] }));
@@ -331,11 +331,11 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const toggleRunExpanded = (ticker: string, runId: string) => {
-    const runKey = `${ticker}::${runId}`;
+  const toggleRunExpanded = (ticker: string, analysisRunId: number) => {
+    const runKey = `${ticker}::${analysisRunId}`;
     const isExpanded = expandedViewRunKeys.has(runKey);
     if (!isExpanded && !viewsByRun[runKey]) {
-      void loadViewsForRun(ticker, runId, runKey);
+      void loadViewsForRun(analysisRunId, runKey);
     }
     setExpandedViewRunKeys((prev) => {
       const next = new Set(prev);
@@ -932,7 +932,7 @@ export default function AdminDashboardPage() {
                             {a.ticker}
                           </Link>
                         </td>
-                        <td className="px-4 py-3 text-gray-300 font-mono text-xs">{a.run_id}</td>
+                        <td className="px-4 py-3 text-gray-300 font-mono text-xs">{a.id}</td>
                         <td className="px-4 py-3 text-gray-300">{a.creator_email}</td>
                         <td className="px-4 py-3 text-white">{a.earned_tokens}</td>
                         <td className="px-4 py-3 text-gray-400">{formatDate(a.created_at)}</td>
@@ -963,10 +963,10 @@ export default function AdminDashboardPage() {
                       <th className="px-4 py-3 text-gray-400 font-medium">
                         <button
                           type="button"
-                          onClick={() => toggleViewRunsSort('run_id')}
+                          onClick={() => toggleViewRunsSort('analysis_run_id')}
                           className="inline-flex items-center gap-1 hover:text-white transition-colors"
                         >
-                          Run ID <span className="text-xs">{viewRunsSortIndicator('run_id')}</span>
+                          Run ID <span className="text-xs">{viewRunsSortIndicator('analysis_run_id')}</span>
                         </button>
                       </th>
                       <th className="px-4 py-3 text-gray-400 font-medium">
@@ -992,7 +992,7 @@ export default function AdminDashboardPage() {
                   </thead>
                   <tbody>
                     {sortedViewRuns.map((run) => {
-                      const runKey = `${run.ticker}::${run.run_id}`;
+                      const runKey = `${run.ticker}::${run.analysis_run_id}`;
                       const runViews = viewsByRun[runKey] ?? [];
                       const sortedRunViews = getSortedRunViews(runViews);
                       const isExpanded = expandedViewRunKeys.has(runKey);
@@ -1004,10 +1004,10 @@ export default function AdminDashboardPage() {
                             <td className="px-4 py-3">
                               <button
                                 type="button"
-                                onClick={() => toggleRunExpanded(run.ticker, run.run_id)}
+                                onClick={() => toggleRunExpanded(run.ticker, run.analysis_run_id)}
                                 className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 font-medium"
                                 aria-expanded={isExpanded}
-                                aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${run.ticker} ${run.run_id}`}
+                                aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${run.ticker} ${run.analysis_run_id}`}
                               >
                                 <span className={`inline-block transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
                                   ▶
@@ -1015,7 +1015,7 @@ export default function AdminDashboardPage() {
                                 <span>{run.ticker}</span>
                               </button>
                             </td>
-                            <td className="px-4 py-3 text-gray-300 font-mono text-xs">{run.run_id}</td>
+                            <td className="px-4 py-3 text-gray-300 font-mono text-xs">{run.analysis_run_id}</td>
                             <td className="px-4 py-3 text-white">{run.unique_views.toLocaleString()}</td>
                             <td className="px-4 py-3 text-gray-500">
                               {isExpanded
@@ -1031,7 +1031,7 @@ export default function AdminDashboardPage() {
                             sortedRunViews.map((view) => (
                               <tr key={view.id} className="border-b border-gray-700/30 bg-gray-900/40">
                                 <td className="px-4 py-2 text-gray-500">↳</td>
-                                <td className="px-4 py-2 text-gray-600 font-mono text-xs">{view.run_id}</td>
+                                <td className="px-4 py-2 text-gray-600 font-mono text-xs">{view.analysis_run_id}</td>
                                 <td className="px-4 py-2 text-gray-600">-</td>
                                 <td className="px-4 py-2 text-gray-300">{view.viewer_email}</td>
                                 <td className="px-4 py-2 text-gray-400">{formatDate(view.viewed_at)}</td>
@@ -1040,7 +1040,7 @@ export default function AdminDashboardPage() {
                           {isExpanded && !isLoadingRunViews && runViews.length === 0 && (
                             <tr className="border-b border-gray-700/30 bg-gray-900/40">
                               <td className="px-4 py-2 text-gray-500">↳</td>
-                              <td className="px-4 py-2 text-gray-600 font-mono text-xs">{run.run_id}</td>
+                              <td className="px-4 py-2 text-gray-600 font-mono text-xs">{run.analysis_run_id}</td>
                               <td className="px-4 py-2 text-gray-600">-</td>
                               <td className="px-4 py-2 text-gray-500" colSpan={2}>
                                 No viewer rows found for this run.
@@ -1111,7 +1111,7 @@ export default function AdminDashboardPage() {
                               {r.ticker}
                             </Link>
                           </td>
-                          <td className="px-4 py-3 text-gray-300 font-mono text-xs">{r.run_id}</td>
+                          <td className="px-4 py-3 text-gray-300 font-mono text-xs">{r.analysis_run_id}</td>
                           <td className="px-4 py-3 text-gray-300">{r.report_type}</td>
                           <td className="px-4 py-3 text-gray-400">{formatDate(r.created_at)}</td>
                         </tr>

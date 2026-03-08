@@ -15,7 +15,8 @@ sys.path.insert(0, str(BACKEND))
 sys.path.insert(0, str(REPO_ROOT))
 
 from services.report_service import save_report
-from database import init_db
+from services import token_service
+from database import init_db, SessionLocal
 
 RESULTS_DIR = REPO_ROOT / "results"
 
@@ -25,6 +26,12 @@ def main() -> None:
     if not RESULTS_DIR.exists():
         print(f"Results dir not found: {RESULTS_DIR}")
         return
+    db = SessionLocal()
+    try:
+        creator_id = token_service.get_system_user_id(db)
+    finally:
+        db.close()
+
     count = 0
     for ticker_dir in sorted(RESULTS_DIR.iterdir()):
         if not ticker_dir.is_dir():
@@ -33,10 +40,15 @@ def main() -> None:
         for run_dir in ticker_dir.iterdir():
             if not run_dir.is_dir():
                 continue
-            run_id = run_dir.name
             reports_dir = run_dir / "reports"
             if not reports_dir.exists() or not reports_dir.is_dir():
                 continue
+            db = SessionLocal()
+            try:
+                analysis_run_id = token_service.record_analysis_run(creator_id, ticker, db)
+            finally:
+                db.close()
+
             for f in reports_dir.glob("*.json"):
                 try:
                     with open(f, "r", encoding="utf-8") as fp:
@@ -52,8 +64,8 @@ def main() -> None:
                         meta[key] = data[key]
                 save_report(
                     ticker=ticker,
-                    run_id=run_id,
                     report_type=f.stem,
+                    analysis_run_id=analysis_run_id,
                     content=content,
                     metadata=meta,
                 )

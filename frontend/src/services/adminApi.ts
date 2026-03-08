@@ -37,7 +37,7 @@ export interface AdminUserItem {
 export interface AdminReportItem {
   id: number;
   ticker: string;
-  run_id: string;
+  analysis_run_id: number;
   report_type: string;
   created_at: string;
 }
@@ -45,7 +45,6 @@ export interface AdminReportItem {
 export interface AdminAnalysisItem {
   id: number;
   ticker: string;
-  run_id: string;
   creator_id: number;
   creator_email: string;
   earned_tokens: number;
@@ -73,7 +72,7 @@ export interface ViewsDailyCount {
 
 export interface AdminReportViewRunItem {
   ticker: string;
-  run_id: string;
+  analysis_run_id: number;
   unique_views: number;
   last_viewed_at: string;
 }
@@ -81,7 +80,7 @@ export interface AdminReportViewRunItem {
 export interface AdminReportViewItem {
   id: number;
   ticker: string;
-  run_id: string;
+  analysis_run_id: number;
   viewer_id: number;
   viewer_email: string;
   viewer_name: string | null;
@@ -233,14 +232,13 @@ export const adminApi = {
   },
 
   getViewsForRun: async (
-    ticker: string,
-    runId: string,
+    analysisRunId: number,
     limit = 5000,
     offset = 0,
   ): Promise<{ views: AdminReportViewItem[]; total: number }> => {
     const res = await api.get<{ views: AdminReportViewItem[]; total: number }>(
       '/api/admin/views/run',
-      { params: { ticker, run_id: runId, limit, offset }, headers: authHeaders() },
+      { params: { analysis_run_id: analysisRunId, limit, offset }, headers: authHeaders() },
     );
     return res.data;
   },

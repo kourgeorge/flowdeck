@@ -571,7 +571,7 @@ export const tickerApi = {
   },
 
   // Get reports for a specific historical run (experimental)
-  getHistoricalReports: async (ticker: string, runId: string): Promise<Record<string, {
+  getHistoricalReports: async (ticker: string, analysisRunId: number): Promise<Record<string, {
     content: string | null;
     score: number | null;
     score_label: string | null;
@@ -591,7 +591,7 @@ export const tickerApi = {
     bull_case_return_pct?: number | null;
   }>> => {
     const token = getStoredToken();
-    const response = await api.get(`/api/tickers/${ticker}/reports/${encodeURIComponent(runId)}`, {
+    const response = await api.get(`/api/tickers/${ticker}/reports/${analysisRunId}`, {
       headers: {
         ...(token && { Authorization: `Bearer ${token}` }),
       },

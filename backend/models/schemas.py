@@ -128,7 +128,8 @@ class WidgetsResponse(BaseModel):
 
 class HistoricalAnalysis(BaseModel):
     """Historical analysis data."""
-    date: str
+    analysis_run_id: int
+    date: str  # display string (e.g. YYYY-MM-DD)
     available_reports: List[str]
     recommendation: Optional[str] = None
 
@@ -172,7 +173,8 @@ class TickerPageData(BaseModel):
     ticker: str
     quote: Optional[TickerQuote] = None
     recommendation: Optional[Recommendation] = None
-    report_date: Optional[str] = None
+    report_run_id: Optional[int] = None  # analysis_runs.id for API calls
+    report_date: Optional[str] = None  # display string (e.g. YYYY-MM-DD)
     report_days_ago: Optional[int] = None  # staleness: days since report for "Report from X days ago"
     reports: Dict[str, Optional[str]] = {}
     reports_with_scores: Dict[str, ReportData] = {}  # ReportData includes insights (takeaways, dates)

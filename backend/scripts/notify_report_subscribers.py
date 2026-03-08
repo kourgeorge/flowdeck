@@ -30,12 +30,12 @@ def main() -> None:
     from services.email_service import get_subscriber_emails_for_ticker, notify_subscribers_new_report
 
     report_service = ReportService()
-    latest_date = report_service.get_latest_report_date(ticker)
-    if not latest_date:
+    latest = report_service.get_latest_analysis_run(ticker)
+    if not latest:
         print(f"No report found for {ticker}. Run an analysis first.")
         sys.exit(1)
-
-    scores = report_service.get_reports_with_scores(ticker, latest_date)
+    analysis_run_id, latest_date = latest
+    scores = report_service.get_reports_with_scores(ticker, analysis_run_id)
     # Prefer final_trade_decision, then trader_investment_plan for recommendation/confidence
     final_meta = scores.get("final_trade_decision") or {}
     if not final_meta.get("recommendation"):
@@ -68,7 +68,7 @@ def main() -> None:
                 print(display)
     notify_subscribers_new_report(
         ticker=ticker,
-        run_id=latest_date,
+        analysis_run_id=analysis_run_id,
         recommendation=recommendation,
         confidence=confidence,
     )
