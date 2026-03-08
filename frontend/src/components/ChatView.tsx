@@ -20,6 +20,14 @@ function detectRTL(text: string): boolean {
   return rtlRegex.test(text);
 }
 
+/** Normalize inline bullet characters (•) into markdown list lines so they render as separate list items. */
+function normalizeBulletsForMarkdown(content: string): string {
+  if (!content) return content;
+  return content
+    .replace(/ • /g, '\n- ')
+    .replace(/^\s*• /gm, '- ');
+}
+
 // ── Friendly display names for tool names ──────────────────────────────────
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
   get_ticker_quote: 'Ticker Quote',
@@ -221,6 +229,7 @@ export type ChatMessageWithMeta = ChatMessage & {
   tool_call_events?: ToolCallEvent[];
   skill_activation_events?: SkillActivationEvent[];
   charts?: ChartSpec[];
+  follow_up_questions?: string[];
 };
 
 // ── Copy helpers ───────────────────────────────────────────────────────────
@@ -511,9 +520,11 @@ function renderUserMessage(content: string) {
 export function MessageBubble({
   message,
   isStreaming = false,
+  onFollowUpClick,
 }: {
   message: ChatMessageWithMeta;
   isStreaming?: boolean;
+  onFollowUpClick?: (text: string) => void;
 }) {
   const isUser = message.role === 'user';
   const [copied, triggerCopy] = useCopyText(message.content);
@@ -586,7 +597,7 @@ export function MessageBubble({
                   td: ({ node, ...props }) => <td className="px-2 py-1.5 text-slate-300" {...props} />,
                 }}
               >
-                {message.content}
+                {normalizeBulletsForMarkdown(message.content)}
               </ReactMarkdown>
               {isStreaming && <StreamingCursor />}
             </div>
@@ -623,6 +634,25 @@ export function MessageBubble({
             </div>
           )}
         </div>
+        {/* Follow-up suggestions — clickable chips */}
+        {!isStreaming && message.follow_up_questions && message.follow_up_questions.length > 0 && (
+          <div className="mt-2 space-y-1.5">
+            <p className="text-xs text-slate-500 mb-1">Suggestions</p>
+            <div className="flex flex-wrap gap-1.5">
+              {message.follow_up_questions.map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => onFollowUpClick?.(q)}
+                  className="text-left text-[13px] text-slate-300 bg-slate-700/50 hover:bg-slate-700 border border-slate-600/60 hover:border-slate-500 rounded-xl px-3 py-2 transition-all"
+                >
+                  <span className="text-blue-400 mr-1.5">→</span>
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -714,7 +744,7 @@ export function useChatState(onBalanceUpdate?: (balance: number) => void, contex
           return updated;
         });
       },
-      (tokensUsed, balance, toolsCalled) => {
+      (tokensUsed, balance, toolsCalled, followUpQuestions) => {
         setIsStreaming(false);
         setIsLoading(false);
         setThinkingStatus(null);
@@ -729,6 +759,7 @@ export function useChatState(onBalanceUpdate?: (balance: number) => void, contex
               ...updated[assistantIndex],
               tokens_used: tokensUsed,
               tools_called: toolsCalled,
+              follow_up_questions: followUpQuestions ?? undefined,
             };
           }
           return updated;
@@ -952,6 +983,7 @@ export default function ChatView({
             key={i}
             message={msg}
             isStreaming={isStreaming && i === messages.length - 1 && msg.role === 'assistant'}
+            onFollowUpClick={sendMessage}
           />
         ))}
 
