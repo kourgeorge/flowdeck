@@ -163,7 +163,7 @@ class ReportService:
             if not row:
                 return None
             ar_id, created = row
-            date_display = created.strftime("%Y-%m-%d") if created else str(ar_id)
+            date_display = created.strftime("%Y-%m-%d %H:%M") if created else str(ar_id)
             return (ar_id, date_display)
         finally:
             db.close()
@@ -354,7 +354,7 @@ class ReportService:
             by_run: Dict[int, tuple[str, List[str]]] = {}
             for ar_id, created, report_type in rows:
                 if ar_id not in by_run:
-                    date_str = created.strftime("%Y-%m-%d") if created else str(ar_id)
+                    date_str = created.strftime("%Y-%m-%d %H:%M") if created else str(ar_id)
                     by_run[ar_id] = (date_str, [])
                 by_run[ar_id][1].append(report_type)
             analyses = [

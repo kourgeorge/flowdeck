@@ -129,7 +129,7 @@ class WidgetsResponse(BaseModel):
 class HistoricalAnalysis(BaseModel):
     """Historical analysis data."""
     analysis_run_id: int
-    date: str  # display string (e.g. YYYY-MM-DD)
+    date: str  # display string (e.g. YYYY-MM-DD HH:MM)
     available_reports: List[str]
     recommendation: Optional[str] = None
 
