@@ -65,6 +65,33 @@ def _extract_chart_specs(text: str) -> tuple[list[dict], str]:
     return charts, cleaned
 
 
+def _extract_follow_ups(text: str) -> tuple[list[str], str]:
+    """
+    Scan text for a line with FOLLOW_UP_JSON: and extract the list of follow-up questions.
+
+    Returns:
+        (follow_ups, cleaned_text) where follow_ups is a list of strings (max 4)
+        and cleaned_text has the FOLLOW_UP_JSON line and extra blank lines removed.
+    """
+    follow_ups: list[str] = []
+    pattern = re.compile(r"(?m)^[ \t]*FOLLOW_UP_JSON:(.+)$")
+
+    def _replace(m: re.Match) -> str:
+        payload = m.group(1).strip()
+        try:
+            parsed = json.loads(payload)
+            if isinstance(parsed, list):
+                items = [str(x).strip() for x in parsed if x][:4]
+                follow_ups.extend(items)
+            return ""
+        except Exception:
+            return m.group(0)
+
+    cleaned = pattern.sub(_replace, text)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return follow_ups[:4], cleaned
+
+
 # ---------------------------------------------------------------------------
 # LLM factory
 # ---------------------------------------------------------------------------
@@ -109,7 +136,7 @@ The user is currently viewing the Vibe Trading page with the following tickers i
     return f"""You are FlowDeck's Stock Market Analyst AI — an expert in equity analysis, trading strategy, and financial markets. Today is {today}.
 
 ## Your Role
-You help users understand stocks, markets, and investment opportunities using real-time data and FlowDeck's proprietary AI analysis. You are knowledgeable, precise, and data-driven.
+You are a **researcher** as well as an analyst. You help users understand stocks, markets, and investment opportunities by **gathering real-time data and news from tools**, then synthesizing the best answer. You do not rely on memory for current events or market conditions — you use tools to look things up, often with multiple searches and tool calls, then compile what you find into a clear, accurate reply.
 
 ## ⚠️ CRITICAL: NEVER Simulate or Estimate Data
 **You MUST NEVER fabricate, simulate, estimate, or hallucinate financial data.**
@@ -118,6 +145,13 @@ You help users understand stocks, markets, and investment opportunities using re
 - Do NOT provide percentage returns, price changes, or rankings without first calling a data tool.
 - If a tool call fails or returns no data, say so clearly — do NOT substitute with made-up numbers.
 - **Every number you present must come from a tool call result, not from your training data.**
+
+## ⚠️ CRITICAL: Use Research Tools for Current-Market / Macro / Research Questions
+**For any question that requires current or recent information about markets, macro, or broad themes, you MUST call research tools first — do NOT answer from general knowledge.**
+- Questions about **current market risks**, **key risks**, **geopolitical risks**, **emerging market concerns**, **market volatility**, **sector trends**, **Fed policy**, **macro outlook**, or **what's moving the market** require live data. Call **`get_global_news`** and/or **`web_search`** with focused queries.
+- **Act as a researcher:** do **multiple** tool calls when it improves the answer. For example: call `get_global_news` with one query (e.g. "key risks"), then `web_search` with a related or narrower query (e.g. "geopolitical risks markets 2026") to get more angles; or call the same tool again with a **different** query to cover different aspects. Synthesize only after you have gathered enough from tools.
+- For "deep dive" or "explore" follow-ups (e.g. "Deep dive into geopolitical risks"), run **follow-up searches** with that focus — e.g. `get_global_news` with "geopolitical" and `web_search` with "US Iran Middle East markets" — then compile the best answer from all results.
+- Only after you have tool results may you summarize and add context. If a tool returns little or no data, try another query or the other research tool before concluding.
 
 ## Ticker Symbol Convention
 Always use **Yahoo Finance ticker symbols** when calling any tool that accepts a ticker (e.g. `AAPL`, `MSFT`, `BRK-B`, `BTC-USD`, `^GSPC`). If the user provides a company name or an alternative symbol, resolve it to the correct Yahoo Finance ticker before making tool calls.
@@ -142,15 +176,17 @@ Always use **Yahoo Finance ticker symbols** when calling any tool that accepts a
 11. Call `get_historical_prices` to fetch real daily OHLCV price data for a **single ticker** over a custom date range (up to 5 years). Use this — NOT simulation — whenever the user asks about year-to-date performance, 1-year returns, multi-year price history, historical volatility, or any analysis requiring more than 30 days of price data for one ticker. Always fetch real data first, then pass the CSV to `execute_python` for calculations.
 12. **Call `get_multi_historical_prices`** to fetch real closing prices for **multiple tickers at once** — use this whenever the user asks about: comparing two or more markets/stocks over a period (e.g. US vs Israeli market), top gainers/losers in a portfolio, normalized performance charts, or any multi-ticker return calculation. This is far more efficient than calling `get_historical_prices` repeatedly. After fetching, pass the JSON to `execute_python` for calculations and chart generation.
 13. Call `execute_python` to run calculations, financial modelling, statistical analysis, or data transformations where code gives a more precise answer than reasoning alone. Always use print() to output results. When working with price data from `get_historical_prices`, parse the CSV using the `csv` or `io` module (pandas is also available). When working with data from `get_multi_historical_prices`, parse the JSON using the `json` module.
-14. You may call multiple tools in sequence to build a comprehensive answer.{user_ctx_section}{watchlist_section}
+14. **Research thoroughly:** call multiple tools in sequence (and, for research questions, multiple searches with different queries) to build the best possible answer. Prefer doing several tool rounds over answering from a single result when the topic warrants it.{user_ctx_section}{watchlist_section}
 
-## Avoid Redundant Tool Calls
-**Before calling ANY tool, check the conversation history first:**
-- If the exact same tool was already called with the same parameters in this conversation, DO NOT call it again — use the existing tool output from the message history instead.
-- Tool outputs remain valid throughout the conversation. A ToolMessage in the history contains data you can still use.
-- Only call a tool if: (1) it hasn't been called yet in this conversation, OR (2) you need different parameters, date ranges, or tickers.
-- When the user asks for a different analysis of the same data (e.g., "show normalized" after fetching prices), use the existing data — don't re-fetch it.
-- Example: If `get_multi_historical_prices` was already called for [MSFT, AAPL, NVDA] from 2026-02-04 to 2026-03-04, and the user asks "compare their performance" or "show in a chart", use that existing data. Do NOT call the tool again.
+## When to Reuse vs When to Call Again
+**Reuse existing tool output (do not call again):**
+- The exact same tool was already called with the **same** parameters in this conversation — use the ToolMessage from history.
+- The user is asking for a different view of data you already have (e.g. "show normalized" after fetching prices); use the existing data.
+- Example: `get_multi_historical_prices` was already called for [MSFT, AAPL, NVDA]; user says "compare their performance" — use that data, don't re-fetch.
+**Call tools again (different params or follow-up research):**
+- You need **different** parameters: another ticker, date range, or a **different search query**. Doing `get_global_news` with "key risks" then with "geopolitical" is encouraged.
+- The user asks for a **deep dive** or **explore** on a subtopic — run new searches focused on that subtopic.
+- You want to **cross-check or broaden** the answer: e.g. after `get_global_news`, call `web_search` with a related query to add more sources before synthesizing.
 
 ## Producing Charts
 When the user asks for a chart, graph, or visual, include a chart spec **directly in your reply** on its own line using this exact format (one line, no line breaks inside the JSON, no code fences around it):
@@ -187,16 +223,19 @@ CHART_JSON:{{"title":"Portfolio Returns (%)","type":"bar","xKey":"ticker","yKeys
 ## Execution Style
 - **Execute tool calls IMMEDIATELY without announcing your intent first.**
 - Do NOT say "I'll fetch...", "Let me get...", "I'll retrieve...", or "One moment while I..." before calling tools.
-- Call the necessary tools directly, then present the results.
+- Call the necessary tools directly. For research-style questions, **perform multiple tool calls in sequence** (e.g. get_global_news then web_search, or several searches with different queries) to gather information, then present a synthesized answer.
 - Provide context and explanations AFTER you have the data, not before.
-- Exception: If a task requires multiple complex steps (5+), you may briefly outline the approach, but still execute the first step immediately.
+- Exception: If a task requires many distinct steps (5+), you may give a one-line outline, but then execute the first step immediately and keep going.
 
 ## Response Style
 - Be concise and data-driven. Lead with the most important insight.
 - Format numbers clearly: prices as $182.50, changes as +2.3%, large numbers as $2.1B or $450M.
-- Use markdown formatting: **bold** for key metrics, bullet points for lists.
+- Use markdown formatting: **bold** for key metrics. For bullet lists, put each item on its own line with a leading hyphen and space, e.g. `- First point` then a newline then `- Second point`. Do not put multiple bullets on the same line.
 - When citing FlowDeck reports, reference the report type (e.g., "According to FlowDeck's Technical Analysis...").
 - If data is unavailable, say so clearly and offer what you can provide.
+
+## Follow-up suggestions
+When your answer invites a next step, you may offer follow-ups in your reply (e.g. "Would you like a deeper analysis, a sector overview, or recent news?"). **In addition**, when you do that, output the same options on a **new line by itself** (after your main reply) in this exact format so they appear as clickable suggestions (this line is stripped from the visible message): FOLLOW_UP_JSON:["question 1", "question 2", "question 3"] — valid JSON array of 2–4 strings. The FOLLOW_UP_JSON line must be the only content on that line (no other text before or after it). Example: end your reply with a newline, then on the next line add FOLLOW_UP_JSON:["Deeper analysis on these risks", "Sector-specific risk overview", "Explore recent news articles"]. If you have no relevant follow-ups, omit the FOLLOW_UP_JSON line.
 
 ## Disclaimer
 This is for informational and educational purposes only. Not personalized investment advice. Always do your own research."""
@@ -267,11 +306,12 @@ class ChatService:
             return {
                 "reply": "Hello! I'm your FlowDeck Stock Market Analyst. Ask me anything about stocks, markets, or financial data.",
                 "tokens_used": 1,
+                "follow_up_questions": [],
             }
 
         last_user_msg = _last_user_message(messages)
         if not last_user_msg:
-            return {"reply": "Please send a message.", "tokens_used": 1}
+            return {"reply": "Please send a message.", "tokens_used": 1, "follow_up_questions": []}
 
         logger.info(
             "chat() started | user_id=%s | history_len=%d | query=%r",
@@ -288,10 +328,13 @@ class ChatService:
             system_prompt=system_prompt,
             max_tool_calls=15,
         )
+        raw_reply = result.get("reply", "")
+        follow_ups, cleaned_reply = _extract_follow_ups(raw_reply)
         return {
-            "reply": result.get("reply", ""),
+            "reply": cleaned_reply.strip(),
             "tokens_used": result.get("tokens_used", 1),
             "tools_called": result.get("tools_called", 0),
+            "follow_up_questions": follow_ups,
         }
 
     def chat_stream(
@@ -313,16 +356,33 @@ class ChatService:
         """
         if not messages:
             yield 'data: {"type":"token","content":"Hello! I\'m your FlowDeck Stock Market Analyst. Ask me anything about stocks, markets, or financial data."}\n\n'
-            yield 'data: {"type":"done","tokens_used":1,"tools_called":0}\n\n'
+            yield 'data: {"type":"done","tokens_used":1,"tools_called":0,"follow_up_questions":[]}\n\n'
             return
 
         last_user_msg = _last_user_message(messages)
         if not last_user_msg:
             yield 'data: {"type":"token","content":"Please send a message."}\n\n'
-            yield 'data: {"type":"done","tokens_used":1,"tools_called":0}\n\n'
+            yield 'data: {"type":"done","tokens_used":1,"tools_called":0,"follow_up_questions":[]}\n\n'
             return
 
         system_prompt = _build_system_prompt(user_id, db, context)
+        reply_buffer = ""
+        follow_ups_list: List[str] = []
+
+        def drain_reply_buffer() -> Generator[str, None, None]:
+            nonlocal reply_buffer, follow_ups_list
+            while "\n" in reply_buffer:
+                line, reply_buffer = reply_buffer.split("\n", 1)
+                line_with_newline = line + "\n"
+                fu, _ = _extract_follow_ups(line_with_newline)
+                if fu:
+                    follow_ups_list = fu
+                    continue
+                chart_specs, cleaned = _extract_chart_specs(line_with_newline)
+                for spec in chart_specs:
+                    yield f"data: {json.dumps({'type': 'chart', 'spec': spec})}\n\n"
+                if cleaned.strip():
+                    yield f"data: {json.dumps({'type': 'token', 'content': cleaned})}\n\n"
 
         try:
             for event in self._get_agent().stream(
@@ -332,17 +392,14 @@ class ChatService:
                 system_prompt=system_prompt,
                 max_tool_calls=15,
             ):
-                # For token events, extract any CHART_JSON lines the LLM embedded
+                # For token events, line-buffer and extract FOLLOW_UP_JSON / CHART_JSON
                 if '"type":"token"' in event or '"type": "token"' in event:
                     try:
                         payload = json.loads(event.removeprefix("data: ").strip())
                         raw_content = payload.get("content", "")
-                        chart_specs, cleaned = _extract_chart_specs(raw_content)
-                        for spec in chart_specs:
-                            yield f"data: {json.dumps({'type': 'chart', 'spec': spec})}\n\n"
-                        cleaned = cleaned.strip()
-                        if cleaned:
-                            yield f"data: {json.dumps({'type': 'token', 'content': cleaned})}\n\n"
+                        reply_buffer += raw_content
+                        for chunk in drain_reply_buffer():
+                            yield chunk
                     except Exception:
                         yield event  # fallback: yield as-is
                 elif '"type":"tool_call"' in event or '"type": "tool_call"' in event:
@@ -364,7 +421,21 @@ class ChatService:
                     except Exception:
                         yield event
                 else:
-                    yield event
+                    # Flush reply buffer and inject follow_up_questions into done event
+                    if '"type":"done"' in event or '"type": "done"' in event:
+                        try:
+                            fu_remainder, cleaned_remainder = _extract_follow_ups(reply_buffer)
+                            if fu_remainder:
+                                follow_ups_list = fu_remainder
+                            if cleaned_remainder.strip():
+                                yield f"data: {json.dumps({'type': 'token', 'content': cleaned_remainder.strip()})}\n\n"
+                            payload = json.loads(event.removeprefix("data: ").strip())
+                            payload["follow_up_questions"] = follow_ups_list
+                            yield f"data: {json.dumps(payload)}\n\n"
+                        except Exception:
+                            yield event
+                    else:
+                        yield event
         except Exception as e:
             logger.exception("chat_stream() error | user_id=%s | %s", user_id, e)
             yield f"data: {json.dumps({'type': 'error', 'content': f'I encountered an error: {str(e)}. Please try again.'})}\n\n"
