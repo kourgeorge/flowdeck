@@ -370,6 +370,7 @@ class ChatService:
         follow_ups_list: List[str] = []
 
         def drain_reply_buffer() -> Generator[str, None, None]:
+            """Emit chart and follow_up events from complete lines. Does not re-emit token content (already streamed)."""
             nonlocal reply_buffer, follow_ups_list
             while "\n" in reply_buffer:
                 line, reply_buffer = reply_buffer.split("\n", 1)
@@ -378,11 +379,9 @@ class ChatService:
                 if fu:
                     follow_ups_list = fu
                     continue
-                chart_specs, cleaned = _extract_chart_specs(line_with_newline)
+                chart_specs, _ = _extract_chart_specs(line_with_newline)
                 for spec in chart_specs:
                     yield f"data: {json.dumps({'type': 'chart', 'spec': spec})}\n\n"
-                if cleaned.strip():
-                    yield f"data: {json.dumps({'type': 'token', 'content': cleaned})}\n\n"
 
         try:
             for event in self._get_agent().stream(
@@ -392,11 +391,12 @@ class ChatService:
                 system_prompt=system_prompt,
                 max_tool_calls=15,
             ):
-                # For token events, line-buffer and extract FOLLOW_UP_JSON / CHART_JSON
+                # For token events: forward to client immediately so UI streams, then line-buffer for chart/follow_up extraction
                 if '"type":"token"' in event or '"type": "token"' in event:
                     try:
                         payload = json.loads(event.removeprefix("data: ").strip())
                         raw_content = payload.get("content", "")
+                        yield event
                         reply_buffer += raw_content
                         for chunk in drain_reply_buffer():
                             yield chunk

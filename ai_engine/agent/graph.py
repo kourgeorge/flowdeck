@@ -42,9 +42,11 @@ from __future__ import annotations
 
 import json
 import logging
+import queue
+import threading
 from typing import Any, Dict, Generator, List, Literal, Optional
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
@@ -672,7 +674,8 @@ def llm_synthesize_node(state: AgentState, config: RunnableConfig) -> Dict[str, 
     Appends a HumanMessage reminding the LLM of the user's original question
     so it answers specifically rather than just summarizing the skill data.
     """
-    llm = config.get("configurable", {}).get("llm")
+    cfg = config.get("configurable", {})
+    llm = cfg.get("llm")
     if llm is None:
         raise RuntimeError("llm_synthesize_node: 'llm' not found in RunnableConfig configurable")
 
@@ -696,7 +699,8 @@ def llm_synthesize_node(state: AgentState, config: RunnableConfig) -> Dict[str, 
             )
         ]
 
-    response = llm.invoke(messages)
+    token_queue = cfg.get("token_queue")
+    response = _invoke_llm_with_streaming(llm, messages, [], token_queue=token_queue)
     return {"messages": [response]}
 
 
@@ -773,11 +777,103 @@ def build_graph(tools: list) -> Any:
 # ReAct loop nodes
 # ---------------------------------------------------------------------------
 
+def _stream_chunk_delta(chunk: Any) -> str:
+    """Extract a single text delta from a stream chunk for token streaming."""
+    raw = getattr(chunk, "content", None)
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, list):
+        parts = []
+        for block in raw:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and "text" in block:
+                parts.append(block["text"])
+        return "".join(parts) if parts else ""
+    if raw is not None:
+        return str(raw)
+    kwargs = getattr(chunk, "additional_kwargs", None) or {}
+    for key in ("content", "text", "reasoning", "delta"):
+        if key in kwargs and isinstance(kwargs[key], str):
+            return kwargs[key]
+    return ""
+
+
+def _invoke_llm_with_streaming(
+    llm: Any,
+    messages: List[Any],
+    tools: List[Any],
+    token_queue: Optional[queue.Queue] = None,
+) -> AIMessage:
+    """
+    Invoke the LLM; if token_queue is set, stream tokens into it and accumulate the full response.
+    Returns the final AIMessage for graph state.
+    """
+    invoke_messages = list(messages)
+    if token_queue is not None:
+        try:
+            llm_to_stream = llm.bind_tools(tools) if tools else llm
+        except NotImplementedError:
+            llm_to_stream = llm
+        try:
+            content_parts: List[str] = []
+            merged = AIMessageChunk(content="")
+            for chunk in llm_to_stream.stream(invoke_messages):
+                delta = _stream_chunk_delta(chunk)
+                if delta:
+                    token_queue.put(("token", delta))
+                    content_parts.append(delta)
+                try:
+                    merged = merged + chunk
+                except Exception:
+                    # Chunk merge can fail (e.g. metadata); keep streaming, we'll build AIMessage from content_parts
+                    pass
+            if content_parts:
+                content_str = "".join(content_parts)
+            else:
+                mc = getattr(merged, "content", None)
+                if isinstance(mc, list):
+                    content_str = "".join(
+                        (x.get("text", "") if isinstance(x, dict) else str(x)) for x in mc
+                    )
+                else:
+                    content_str = str(mc or "")
+            tool_calls = getattr(merged, "tool_calls", None) or []
+            return AIMessage(
+                content=content_str,
+                tool_calls=tool_calls,
+                additional_kwargs=getattr(merged, "additional_kwargs", {}),
+            )
+        except Exception as exc:
+            logger.warning("LLM stream failed, using invoke fallback: %s", exc)
+            if tools:
+                try:
+                    response = llm.bind_tools(tools).invoke(invoke_messages)
+                except NotImplementedError:
+                    response = llm.invoke(invoke_messages)
+            else:
+                response = llm.invoke(invoke_messages)
+            if token_queue:
+                content = response.content if isinstance(response.content, str) else str(response.content or "")
+                if content and not getattr(response, "tool_calls", None):
+                    token_queue.put(("token", content))
+            return response
+
+    # Non-streaming path
+    if tools:
+        try:
+            return llm.bind_tools(tools).invoke(invoke_messages)
+        except NotImplementedError:
+            return llm.invoke(invoke_messages)
+    return llm.invoke(invoke_messages)
+
+
 def _call_model_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
     """Call the LLM with the current message history (with tools bound if supported)."""
     cfg = (config or {}).get("configurable", {})
     llm = cfg.get("llm")
     tools = cfg.get("tools", [])
+    token_queue = cfg.get("token_queue")
 
     if llm is None:
         raise RuntimeError("_call_model_node: 'llm' not found in RunnableConfig configurable")
@@ -790,15 +886,9 @@ def _call_model_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any
 
     if tool_calls_made >= max_tool_calls:
         logger.warning("_call_model_node | max_tool_calls=%d reached, forcing final answer", max_tool_calls)
-        response = llm.invoke(messages)
-    elif tools:
-        try:
-            llm_with_tools = llm.bind_tools(tools)
-            response = llm_with_tools.invoke(messages)
-        except NotImplementedError:
-            response = llm.invoke(messages)
+        response = _invoke_llm_with_streaming(llm, messages, [], token_queue=token_queue)
     else:
-        response = llm.invoke(messages)
+        response = _invoke_llm_with_streaming(llm, messages, tools or [], token_queue=token_queue)
 
     return {"messages": [response]}
 
@@ -986,12 +1076,17 @@ class FlowDeckAgent:
         """
         Run a full agent turn and yield SSE events.
 
+        Uses the LLM's streaming API so token events are emitted incrementally
+        (many small chunks) rather than one chunk per LLM turn. The graph runs
+        in a background thread; call_model and llm_synthesize push token deltas
+        to a queue so the generator can yield them in order with other events.
+
         Yields SSE-formatted strings compatible with the existing frontend protocol:
           - data: {"type":"thinking","content":"..."}
           - data: {"type":"skill_start","name":"..."}
           - data: {"type":"skill_done","name":"...","steps":N}
           - data: {"type":"tool_call","name":"...","input":"...","output":"..."}
-          - data: {"type":"token","content":"..."}
+          - data: {"type":"token","content":"..."}  (many small chunks)
           - data: {"type":"done","tokens_used":N,"tools_called":M,"skill_used":"..."}
           - data: {"type":"error","content":"..."}
         """
@@ -1001,97 +1096,123 @@ class FlowDeckAgent:
         config = self._make_config(tools, user_id, db, system_prompt, max_tool_calls)
         initial_state = self._make_initial_state(messages, user_id, db, system_prompt, max_tool_calls)
 
+        event_queue: queue.Queue = queue.Queue()
+        config["configurable"]["token_queue"] = event_queue
+
         tools_called = 0
         skill_used = None
         pending_tool_inputs: Dict[str, str] = {}
+        got_error = False
+
+        def run_graph() -> None:
+            try:
+                for chunk in graph.stream(
+                    initial_state,
+                    config=config,
+                    stream_mode="updates",
+                ):
+                    for node_name, event_data in chunk.items():
+                        event_queue.put(("node_update", (node_name, event_data)))
+                event_queue.put(("end", None))
+            except Exception as exc:
+                logger.exception("FlowDeckAgent.stream | graph thread error | user_id=%s | %s", user_id, exc)
+                event_queue.put(("error", str(exc)))
+                event_queue.put(("end", None))
+
+        thread = threading.Thread(target=run_graph, daemon=True)
+        thread.start()
 
         try:
-            for chunk in graph.stream(
-                initial_state,
-                config=config,
-                stream_mode="updates",
-            ):
-                for node_name, event_data in chunk.items():
+            while True:
+                try:
+                    kind, payload = event_queue.get(timeout=300.0)
+                except queue.Empty:
+                    if not thread.is_alive():
+                        break
+                    continue
+                if kind == "token":
+                    yield f"data: {json.dumps({'type': 'token', 'content': payload})}\n\n"
+                    continue
+                if kind == "error":
+                    got_error = True
+                    yield f"data: {json.dumps({'type': 'error', 'content': payload})}\n\n"
+                    break
+                if kind == "end":
+                    break
+                if kind != "node_update":
+                    continue
+                node_name, event_data = payload
 
-                    # planning node analyzed task
-                    if node_name == "planning":
-                        task_type = event_data.get("task_type")
-                        if task_type == "long-horizon":
-                            yield f"data: {json.dumps({'type': 'thinking', 'content': 'Analyzing task complexity...'})}\n\n"
-                            todo_list = event_data.get("todo_list", [])
-                            if todo_list:
-                                yield f"data: {json.dumps({'type': 'plan_created', 'todos': todo_list, 'task_type': task_type})}\n\n"
-                        elif task_type in ["simple", "complex"]:
-                            yield f"data: {json.dumps({'type': 'thinking', 'content': f'Task classified as {task_type}, proceeding...'})}\n\n"
-                    
-                    # plan_approval node presented plan
-                    elif node_name == "plan_approval":
-                        planning_phase = event_data.get("planning_phase")
-                        if planning_phase == "awaiting_approval":
-                            yield f"data: {json.dumps({'type': 'awaiting_approval', 'content': 'Plan ready for your review'})}\n\n"
+                # planning node analyzed task
+                if node_name == "planning":
+                    task_type = event_data.get("task_type")
+                    if task_type == "long-horizon":
+                        yield f"data: {json.dumps({'type': 'thinking', 'content': 'Analyzing task complexity...'})}\n\n"
+                        todo_list = event_data.get("todo_list", [])
+                        if todo_list:
+                            yield f"data: {json.dumps({'type': 'plan_created', 'todos': todo_list, 'task_type': task_type})}\n\n"
+                    elif task_type in ["simple", "complex"]:
+                        yield f"data: {json.dumps({'type': 'thinking', 'content': f'Task classified as {task_type}, proceeding...'})}\n\n"
 
-                    # skill_router fired
-                    elif node_name == "skill_router":
-                        matched = event_data.get("skill_used")
-                        if matched:
-                            skill_used = matched
-                            yield f"data: {json.dumps({'type': 'skill_start', 'name': matched})}\n\n"
-                            yield f"data: {json.dumps({'type': 'thinking', 'content': f'Running {matched} workflow...'})}\n\n"
+                # plan_approval node presented plan
+                elif node_name == "plan_approval":
+                    planning_phase = event_data.get("planning_phase")
+                    if planning_phase == "awaiting_approval":
+                        yield f"data: {json.dumps({'type': 'awaiting_approval', 'content': 'Plan ready for your review'})}\n\n"
 
-                    # skill_node completed
-                    elif node_name == "skill_node":
-                        # skill_node only sets skill_used=None in the failure path.
-                        # On success it returns {"messages": [...], "skill_steps": [...]}.
-                        # So we check for the explicit failure sentinel, not absence of the key.
-                        skill_failed = "skill_used" in event_data and event_data["skill_used"] is None
-                        if skill_failed:
-                            skill_used = None
-                        if skill_used:
-                            # Emit each tool step the skill executed
-                            skill_steps = event_data.get("skill_steps", [])
-                            for step in skill_steps:
-                                # Count tools executed within skills
-                                tools_called += 1
-                                yield f"data: {json.dumps({'type': 'skill_step', 'skill': skill_used, 'tool': step.get('tool', ''), 'input': step.get('input', ''), 'output': step.get('output', ''), 'ok': step.get('ok', True)})}\n\n"
-                            yield f"data: {json.dumps({'type': 'skill_done', 'name': skill_used, 'steps': len(skill_steps)})}\n\n"
+                # skill_router fired
+                elif node_name == "skill_router":
+                    matched = event_data.get("skill_used")
+                    if matched:
+                        skill_used = matched
+                        yield f"data: {json.dumps({'type': 'skill_start', 'name': matched})}\n\n"
+                        yield f"data: {json.dumps({'type': 'thinking', 'content': f'Running {matched} workflow...'})}\n\n"
 
-                    # tool_node executed tools
-                    elif node_name == "tool_node":
-                        new_messages = event_data.get("messages", [])
-                        for msg in new_messages:
-                            if isinstance(msg, ToolMessage):
-                                tools_called += 1
-                                tool_name = msg.name or "tool"
-                                output = msg.content if isinstance(msg.content, str) else str(msg.content)
-                                tool_input = pending_tool_inputs.pop(
-                                    getattr(msg, "tool_call_id", ""), ""
-                                )
-                                yield f"data: {json.dumps({'type': 'tool_call', 'name': tool_name, 'input': tool_input, 'output': output})}\n\n"
+                # skill_node completed
+                elif node_name == "skill_node":
+                    skill_failed = "skill_used" in event_data and event_data["skill_used"] is None
+                    if skill_failed:
+                        skill_used = None
+                    if skill_used:
+                        skill_steps = event_data.get("skill_steps", [])
+                        for step in skill_steps:
+                            tools_called += 1
+                            yield f"data: {json.dumps({'type': 'skill_step', 'skill': skill_used, 'tool': step.get('tool', ''), 'input': step.get('input', ''), 'output': step.get('output', ''), 'ok': step.get('ok', True)})}\n\n"
+                        yield f"data: {json.dumps({'type': 'skill_done', 'name': skill_used, 'steps': len(skill_steps)})}\n\n"
 
-                    # call_model or llm_synthesize produced a response
-                    elif node_name in ("call_model", "llm_synthesize"):
-                        new_messages = event_data.get("messages", [])
-                        for msg in new_messages:
-                            if isinstance(msg, AIMessage):
-                                for tc in (getattr(msg, "tool_calls", None) or []):
-                                    tc_id = tc.get("id", "")
-                                    tc_args = tc.get("args", {})
-                                    if tc_id:
-                                        try:
-                                            pending_tool_inputs[tc_id] = json.dumps(tc_args)
-                                        except Exception:
-                                            pending_tool_inputs[tc_id] = str(tc_args)
+                # tool_node executed tools
+                elif node_name == "tool_node":
+                    new_messages = event_data.get("messages", [])
+                    for msg in new_messages:
+                        if isinstance(msg, ToolMessage):
+                            tools_called += 1
+                            tool_name = msg.name or "tool"
+                            output = msg.content if isinstance(msg.content, str) else str(msg.content)
+                            tool_input = pending_tool_inputs.pop(
+                                getattr(msg, "tool_call_id", ""), ""
+                            )
+                            yield f"data: {json.dumps({'type': 'tool_call', 'name': tool_name, 'input': tool_input, 'output': output})}\n\n"
 
-                                if msg.content:
-                                    if not getattr(msg, "tool_calls", None):
-                                        content = msg.content if isinstance(msg.content, str) else str(msg.content)
-                                        yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
-                                    else:
-                                        tool_names = [tc.get("name", "?") for tc in (msg.tool_calls or [])]
-                                        names_str = ", ".join(tool_names)
-                                        yield f"data: {json.dumps({'type': 'thinking', 'content': f'Calling {names_str}...'})}\n\n"
+                # call_model or llm_synthesize: tokens were already streamed via queue; only emit thinking for tool_calls
+                elif node_name in ("call_model", "llm_synthesize"):
+                    new_messages = event_data.get("messages", [])
+                    for msg in new_messages:
+                        if isinstance(msg, AIMessage):
+                            for tc in (getattr(msg, "tool_calls", None) or []):
+                                tc_id = tc.get("id", "")
+                                tc_args = tc.get("args", {})
+                                if tc_id:
+                                    try:
+                                        pending_tool_inputs[tc_id] = json.dumps(tc_args)
+                                    except Exception:
+                                        pending_tool_inputs[tc_id] = str(tc_args)
+                            if getattr(msg, "tool_calls", None):
+                                tool_names = [tc.get("name", "?") for tc in (msg.tool_calls or [])]
+                                names_str = ", ".join(tool_names)
+                                yield f"data: {json.dumps({'type': 'thinking', 'content': f'Calling {names_str}...'})}\n\n"
 
-            yield f"data: {json.dumps({'type': 'done', 'tokens_used': max(1, 1 + tools_called), 'tools_called': tools_called, 'skill_used': skill_used})}\n\n"
+            if not got_error:
+                yield f"data: {json.dumps({'type': 'done', 'tokens_used': max(1, 1 + tools_called), 'tools_called': tools_called, 'skill_used': skill_used})}\n\n"
 
         except Exception as exc:
             logger.exception("FlowDeckAgent.stream | error | user_id=%s | %s", user_id, exc)

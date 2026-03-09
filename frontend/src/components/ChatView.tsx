@@ -28,6 +28,17 @@ function normalizeBulletsForMarkdown(content: string): string {
     .replace(/^\s*• /gm, '- ');
 }
 
+/** Remove the FOLLOW_UP_JSON:... line from content so it is not shown in the bubble (options appear below). */
+function stripFollowUpJsonLine(content: string): string {
+  if (!content) return content;
+  return content
+    .split('\n')
+    .filter((line) => !/^\s*FOLLOW_UP_JSON:/.test(line))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 // ── Friendly display names for tool names ──────────────────────────────────
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
   get_ticker_quote: 'Ticker Quote',
@@ -527,7 +538,7 @@ export function MessageBubble({
   onFollowUpClick?: (text: string) => void;
 }) {
   const isUser = message.role === 'user';
-  const [copied, triggerCopy] = useCopyText(message.content);
+  const [copied, triggerCopy] = useCopyText(stripFollowUpJsonLine(message.content));
   
   // Detect if message contains RTL text
   const isRTL = detectRTL(message.content);
@@ -597,7 +608,7 @@ export function MessageBubble({
                   td: ({ node, ...props }) => <td className="px-2 py-1.5 text-slate-300" {...props} />,
                 }}
               >
-                {normalizeBulletsForMarkdown(message.content)}
+                {normalizeBulletsForMarkdown(stripFollowUpJsonLine(message.content))}
               </ReactMarkdown>
               {isStreaming && <StreamingCursor />}
             </div>
@@ -614,7 +625,7 @@ export function MessageBubble({
         {/* Copy button + token/tool metadata row */}
         <div className="flex items-center gap-2.5 mt-1 ml-1">
           {/* Copy text button — always visible once message is complete */}
-          {!isStreaming && message.content && (
+          {!isStreaming && stripFollowUpJsonLine(message.content) && (
             <CopyButton onClick={triggerCopy} copied={copied} title="Copy message" />
           )}
           {(message.tokens_used != null || (message.tools_called != null && message.tools_called > 0)) && (

@@ -13,6 +13,17 @@ function detectRTL(text: string): boolean {
   return rtlRegex.test(text);
 }
 
+/** Remove the FOLLOW_UP_JSON:... line so it is not shown in the bubble (options appear below). */
+function stripFollowUpJsonLine(content: string): string {
+  if (!content) return content;
+  return content
+    .split('\n')
+    .filter((line) => !/^\s*FOLLOW_UP_JSON:/.test(line))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 // Blinking cursor shown while streaming
 function StreamingCursor() {
   return <span className="inline-block w-0.5 h-3.5 bg-blue-400 ml-0.5 align-middle animate-pulse" />;
@@ -130,7 +141,7 @@ function MessageBubble({
                 td: ({ node, ...props }) => <td className="px-2 py-1.5 text-slate-300" {...props} />,
               }}
             >
-              {message.content}
+              {stripFollowUpJsonLine(message.content)}
             </ReactMarkdown>
             {isStreaming && <StreamingCursor />}
           </div>
