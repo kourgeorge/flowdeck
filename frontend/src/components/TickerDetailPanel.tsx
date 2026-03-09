@@ -1243,7 +1243,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                           type="button"
                           onClick={() => setSimilarStocksPage(Math.max(1, currentSimilarStocksPage - 1))}
                           disabled={!canGoToPreviousSimilarStocksPage || isLoadingSimilarTickers}
-                          className="px-3 py-1 text-xs rounded border border-gray-600 text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
+                          className="px-3 py-1 text-xs rounded border border-gray-600 text-gray-300 disabled:opacity-40 disabled:cursor-default hover:bg-gray-700 transition-colors"
                         >
                           Previous
                         </button>
@@ -1257,7 +1257,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                           type="button"
                           onClick={() => { void handleNextSimilarStocksPage(); }}
                           disabled={!canGoToNextSimilarStocksPage || isLoadingSimilarTickers}
-                          className="px-3 py-1 text-xs rounded border border-gray-600 text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
+                          className="px-3 py-1 text-xs rounded border border-gray-600 text-gray-300 disabled:opacity-40 disabled:cursor-default hover:bg-gray-700 transition-colors"
                         >
                           {isLoadingSimilarTickers ? 'Loading...' : 'Next'}
                         </button>
@@ -1385,7 +1385,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                               type="button"
                               onClick={() => handleGenerateReport('fresh')}
                               disabled={isStartingAnalysis || stockData.is_generating}
-                              className={`flex items-center gap-2 px-4 py-2 text-white font-medium transition-colors ${isStartingAnalysis || stockData.is_generating ? 'bg-blue-500/60 cursor-not-allowed opacity-80' : ''} ${(stockData.historical_analyses?.length ?? 0) > 1 ? 'pr-2 rounded-l-lg' : 'rounded-lg'}`}
+                              className={`flex items-center gap-2 px-4 py-2 text-white font-medium transition-colors ${isStartingAnalysis || stockData.is_generating ? 'bg-blue-500/60 cursor-default opacity-80' : ''} ${(stockData.historical_analyses?.length ?? 0) > 1 ? 'pr-2 rounded-l-lg' : 'rounded-lg'}`}
                             >
                               {isStartingAnalysis ? (
                                 <svg className="w-4 h-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
@@ -1510,7 +1510,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                           onClick={() => handleGenerateReport('generate')}
                           disabled={isStartingAnalysis}
                           className={`px-6 py-3 text-white font-semibold rounded-lg transition-colors ${
-                            isStartingAnalysis ? 'bg-blue-500/60 cursor-not-allowed opacity-80' : 'bg-blue-600 hover:bg-blue-700'
+                            isStartingAnalysis ? 'bg-blue-500/60 cursor-default opacity-80' : 'bg-blue-600 hover:bg-blue-700'
                           }`}
                         >
                           {isStartingAnalysis ? 'Starting Analysis...' : 'Generate Analysis Report →'}

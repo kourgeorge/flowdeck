@@ -494,7 +494,7 @@ const FundamentalPanes: React.FC<FundamentalPanesProps> = ({
                     type="button"
                     onClick={() => setOfficersPage((prevPage) => Math.max(1, prevPage - 1))}
                     disabled={officersPage === 1}
-                    className="px-3 py-1 text-xs rounded border border-gray-600 text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
+                    className="px-3 py-1 text-xs rounded border border-gray-600 text-gray-300 disabled:opacity-40 disabled:cursor-default hover:bg-gray-700 transition-colors"
                   >
                     Previous
                   </button>
@@ -505,7 +505,7 @@ const FundamentalPanes: React.FC<FundamentalPanesProps> = ({
                     type="button"
                     onClick={() => setOfficersPage((prevPage) => Math.min(totalOfficerPages, prevPage + 1))}
                     disabled={officersPage === totalOfficerPages}
-                    className="px-3 py-1 text-xs rounded border border-gray-600 text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
+                    className="px-3 py-1 text-xs rounded border border-gray-600 text-gray-300 disabled:opacity-40 disabled:cursor-default hover:bg-gray-700 transition-colors"
                   >
                     Next
                   </button>

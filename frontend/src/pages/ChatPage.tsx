@@ -71,7 +71,7 @@ export default function ChatPage() {
               type="button"
               onClick={chat.clearChat}
               disabled={chat.messages.length === 0 && !chat.error}
-              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-700 border border-gray-600 hover:border-gray-500 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-700 border border-gray-600 hover:border-gray-500 disabled:opacity-40 disabled:cursor-default"
               title="Start a new chat"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

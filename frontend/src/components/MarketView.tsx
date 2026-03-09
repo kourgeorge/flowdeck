@@ -151,7 +151,7 @@ function OverviewSection({
             type="button"
             onClick={onPrev}
             disabled={!canPrev || paginationLoading}
-            className="p-1 rounded text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+            className="p-1 rounded border border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700 hover:border-gray-500 disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:border-gray-600 transition-colors"
             aria-label="Previous page"
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -165,7 +165,7 @@ function OverviewSection({
             type="button"
             onClick={onNext}
             disabled={!canNext || paginationLoading}
-            className="p-1 rounded text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+            className="p-1 rounded border border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700 hover:border-gray-500 disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:border-gray-600 transition-colors"
             aria-label="Next page"
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -223,7 +223,7 @@ function MoversTable({
               type="button"
               onClick={onPrev}
               disabled={!canPrev}
-              className="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+              className="p-1.5 rounded-md border border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700 hover:border-gray-500 disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:border-gray-600 transition-colors"
               aria-label="Previous page"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -237,7 +237,7 @@ function MoversTable({
               type="button"
               onClick={onNext}
               disabled={!canNext}
-              className="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+              className="p-1.5 rounded-md border border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700 hover:border-gray-500 disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:border-gray-600 transition-colors"
               aria-label="Next page"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -441,8 +441,7 @@ function RunningHeadlinesStrip({
           width: overlayState.width,
         }}
       >
-        <p className="font-medium text-gray-200 text-xs leading-tight mb-2">{overlayState.title}</p>
-        <p className="text-gray-400 text-xs leading-relaxed whitespace-pre-wrap">{overlayState.summary}</p>
+        <p className="text-gray-300 text-xs leading-relaxed whitespace-pre-wrap">{overlayState.summary}</p>
       </div>,
       document.body
     );

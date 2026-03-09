@@ -462,7 +462,7 @@ export default function ProfilePage() {
               <button
                 type="submit"
                 disabled={deleteLoading || deleteConfirmText !== DELETE_CONFIRM_TEXT || (profile?.has_password && !deletePassword.trim())}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-default text-white rounded-lg text-sm font-medium transition-colors"
               >
                 {deleteLoading ? 'Deleting…' : 'Delete my account'}
               </button>

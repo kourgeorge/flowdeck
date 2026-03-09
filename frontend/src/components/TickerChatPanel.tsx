@@ -298,7 +298,7 @@ export default function TickerChatPanel({ onClose, initialBalance }: TickerChatP
               type="button"
               onClick={() => sendMessage(input)}
               disabled={!input.trim() || isLoading}
-              className="shrink-0 w-8 h-8 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+              className="shrink-0 w-8 h-8 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-default flex items-center justify-center transition-colors"
               aria-label="Send message"
             >
               <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
