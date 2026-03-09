@@ -455,7 +455,10 @@ function RunningHeadlinesStrip({
         >
           <div
             className="flex items-center gap-3 py-2 pl-2 pr-4 animate-tiles-scroll group-hover/headlines:[animation-play-state:paused]"
-            style={{ animationDuration: `${Math.max(30, articles.length * 4)}s` }}
+            style={{
+              animationDuration: `${Math.max(30, articles.length * 4)}s`,
+              animationPlayState: overlayState ? 'paused' : undefined,
+            }}
           >
             {itemNodes}
           </div>
