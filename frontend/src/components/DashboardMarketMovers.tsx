@@ -45,11 +45,18 @@ function MoversTable({
 }: {
   rows: MarketMoverRow[];
   title: string;
-  changeColor: 'gainers' | 'losers' | 'neutral';
+  changeColor: 'gainers' | 'losers' | 'neutral' | 'dynamic';
   onSelectTicker?: (ticker: string) => void;
 }) {
-  const changeClass =
-    changeColor === 'gainers' ? 'text-green-400' : changeColor === 'losers' ? 'text-red-400' : 'text-gray-300';
+  const getChangeClass = (row: MarketMoverRow) => {
+    if (changeColor === 'dynamic') {
+      const pct = row.regularMarketChangePercent;
+      if (pct != null && pct > 0) return 'text-green-400';
+      if (pct != null && pct < 0) return 'text-red-400';
+      return 'text-gray-300';
+    }
+    return changeColor === 'gainers' ? 'text-green-400' : changeColor === 'losers' ? 'text-red-400' : 'text-gray-300';
+  };
   return (
     <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-700 bg-gray-800/80">
@@ -61,10 +68,10 @@ function MoversTable({
             <tr className="border-b border-gray-700 text-gray-400">
               <th className="py-2 px-3 font-medium">Symbol</th>
               <th className="py-2 px-3 font-medium min-w-0 truncate max-w-[140px]">Name</th>
-              <th className="py-2 px-3 font-medium">Sector</th>
-              <th className="py-2 px-3 font-medium text-right">Price</th>
               <th className="py-2 px-3 font-medium text-right">Change %</th>
+              <th className="py-2 px-3 font-medium text-right">Price</th>
               <th className="py-2 px-3 font-medium text-right">Volume</th>
+              <th className="py-2 px-3 font-medium">Sector</th>
             </tr>
           </thead>
           <tbody>
@@ -81,14 +88,14 @@ function MoversTable({
                   <td className="py-2.5 px-3 text-gray-300 truncate max-w-[140px]" title={row.shortName ?? undefined}>
                     {row.shortName || '—'}
                   </td>
+                  <td className={`py-2.5 px-3 text-right font-medium tabular-nums ${getChangeClass(row)}`}>
+                    {formatPct(row.regularMarketChangePercent)}
+                  </td>
+                  <td className="py-2.5 px-3 text-right text-gray-200 tabular-nums">{formatPrice(row.regularMarketPrice)}</td>
+                  <td className="py-2.5 px-3 text-right text-gray-400 tabular-nums">{formatVolume(row.regularMarketVolume)}</td>
                   <td className="py-2.5 px-3 text-gray-400 truncate max-w-[120px]" title={row.industry ?? undefined}>
                     {row.sector || '—'}
                   </td>
-                  <td className="py-2.5 px-3 text-right text-gray-200 tabular-nums">{formatPrice(row.regularMarketPrice)}</td>
-                  <td className={`py-2.5 px-3 text-right font-medium tabular-nums ${changeClass}`}>
-                    {formatPct(row.regularMarketChangePercent)}
-                  </td>
-                  <td className="py-2.5 px-3 text-right text-gray-400 tabular-nums">{formatVolume(row.regularMarketVolume)}</td>
                 </tr>
               );
             })}
@@ -174,7 +181,7 @@ export default function DashboardMarketMovers({ count = 25, onSelectTicker }: Da
       <MoversTable
         rows={mostActive}
         title="Most active"
-        changeColor="neutral"
+        changeColor="dynamic"
         onSelectTicker={onSelectTicker}
       />
     </div>
