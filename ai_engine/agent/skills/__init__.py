@@ -33,12 +33,14 @@ from ai_engine.agent.skills.stock_deep_dive import StockDeepDiveSkill
 from ai_engine.agent.skills.portfolio_health import PortfolioHealthSkill
 from ai_engine.agent.skills.compare_stocks import CompareStocksSkill
 from ai_engine.agent.skills.portfolio_performance import PortfolioPerformanceSkill
+from ai_engine.agent.skills.chart_creation import CreateChartSkill
 
 ALL_SKILLS = [
     StockDeepDiveSkill(),
     PortfolioHealthSkill(),
     PortfolioPerformanceSkill(),
     CompareStocksSkill(),
+    CreateChartSkill(),
 ]
 
 # ---------------------------------------------------------------------------
@@ -52,6 +54,7 @@ SKILL_MD_DIRS: dict[str, pathlib.Path] = {
     "stock_deep_dive":       _SKILLS_DIR / "stock-deep-dive",
     "portfolio_health":      _SKILLS_DIR / "portfolio-health",
     "portfolio_performance": _SKILLS_DIR / "portfolio-performance",
+    "chart_creation":        _SKILLS_DIR / "chart-creation",
 }
 
 
@@ -127,6 +130,7 @@ __all__ = [
     "PortfolioHealthSkill",
     "PortfolioPerformanceSkill",
     "CompareStocksSkill",
+    "CreateChartSkill",
     "ALL_SKILLS",
     "SKILL_MD_DIRS",
     "SKILL_DESCRIPTIONS",
