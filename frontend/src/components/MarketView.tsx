@@ -73,21 +73,23 @@ function OverviewCard({
     <div
       role={clickable ? 'button' : undefined}
       onClick={() => clickable && onSelectTicker(item.ticker)}
-      className={`min-h-[4.5rem] rounded-lg border border-gray-600 bg-gray-800 px-4 py-3 flex flex-col justify-center transition-colors ${
+      className={`min-h-[4.5rem] min-w-0 rounded-lg border border-gray-600 bg-gray-800 px-4 py-3 flex flex-col justify-center overflow-hidden transition-colors ${
         clickable ? 'cursor-pointer hover:border-gray-500 hover:bg-gray-700/80' : ''
       }`}
     >
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-gray-300 text-sm font-medium truncate" title={item.name}>
+      <div className="flex items-baseline justify-between gap-2 min-w-0">
+        <span className="text-gray-300 text-sm font-medium truncate min-w-0" title={item.name}>
           {item.name}
         </span>
         {item.ticker && (
           <span className="text-gray-500 text-xs shrink-0 tabular-nums">{item.ticker}</span>
         )}
       </div>
-      <div className="mt-1.5 flex items-baseline justify-between gap-2">
-        <span className="text-white font-semibold tabular-nums">{formatPrice(item.price)}</span>
-        <span className={`text-sm font-medium tabular-nums ${changeClass}`}>
+      <div className="mt-1.5 flex items-baseline justify-between gap-2 min-w-0">
+        <span className="text-white font-semibold tabular-nums min-w-0 truncate" title={formatPrice(item.price)}>
+          {formatPrice(item.price)}
+        </span>
+        <span className={`text-sm font-medium tabular-nums shrink-0 ${changeClass}`}>
           {formatPct(item.changePercent)}
         </span>
       </div>
