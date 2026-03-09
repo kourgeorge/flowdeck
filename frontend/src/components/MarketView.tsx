@@ -602,9 +602,7 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
       {/* Running headlines */}
       <RunningHeadlinesStrip articles={headlines} isLoading={headlinesLoading} tickerChangeMap={tickerChangeMap} />
 
-      {/* Market overview */}
       <section className="space-y-6">
-        <h2 className="text-lg font-semibold text-white border-b border-gray-700 pb-2">Market overview</h2>
         {overview && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <OverviewSection
@@ -641,9 +639,7 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
         )}
       </section>
 
-      {/* Top gainers & losers */}
       <section className="space-y-6">
-        <h2 className="text-lg font-semibold text-white border-b border-gray-700 pb-2">Top gainers & losers</h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <MoversTable
             rows={gainers}
