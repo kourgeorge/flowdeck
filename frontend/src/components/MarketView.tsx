@@ -117,8 +117,8 @@ function OverviewCard({
 }
 
 const TILES_PER_PAGE = 6;
-const MOVERS_PAGE_SIZE = 10;
-const MOVERS_LOAD_COUNT = 20;
+const MOVERS_PAGE_SIZE = 8;
+const MOVERS_LOAD_COUNT = 24;
 
 function OverviewSection({
   title,
@@ -292,7 +292,7 @@ function MoversTable({
 }
 
 const HEADLINES_STRIP_HEIGHT = 56;
-const HEADLINES_REFRESH_MS = 120000;
+const HEADLINES_REFRESH_MS = 300000; // 5 minutes (was 2 min)
 
 function RunningHeadlinesStrip({
   articles,
