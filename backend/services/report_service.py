@@ -342,7 +342,7 @@ class ReportService:
         return self.get_reports_for_run(ticker, latest[0]) if latest else {}
 
     def get_historical_analyses(self, ticker: str) -> List[Dict]:
-        """Returns list of {analysis_run_id, date, available_reports} for each run, newest first."""
+        """Returns list of {analysis_run_id, date, available_reports} for each run, ordered by analysis_runs.created_at newest first. Display date is from the same source."""
         db = SessionLocal()
         try:
             rows = (
@@ -351,17 +351,22 @@ class ReportService:
                 .filter(Report.ticker == ticker.upper())
                 .all()
             )
-            by_run: Dict[int, tuple[str, List[str]]] = {}
+            # by_run: ar_id -> (created_at, date_str, report_types); created_at is the single source for display and sort
+            by_run: Dict[int, tuple[Optional[datetime], str, List[str]]] = {}
             for ar_id, created, report_type in rows:
                 if ar_id not in by_run:
                     date_str = created.strftime("%Y-%m-%d %H:%M") if created else str(ar_id)
-                    by_run[ar_id] = (date_str, [])
-                by_run[ar_id][1].append(report_type)
+                    by_run[ar_id] = (created, date_str, [])
+                by_run[ar_id][2].append(report_type)
             analyses = [
                 {"analysis_run_id": ar_id, "date": date_str, "available_reports": sorted(report_types)}
-                for ar_id, (date_str, report_types) in by_run.items()
+                for ar_id, (_created, date_str, report_types) in by_run.items()
             ]
-            analyses.sort(key=lambda x: x["analysis_run_id"], reverse=True)
+            # Sort by analysis_runs.created_at descending so order matches displayed dates
+            analyses.sort(
+                key=lambda x: by_run[x["analysis_run_id"]][0] or datetime.min,
+                reverse=True,
+            )
             return analyses
         finally:
             db.close()
