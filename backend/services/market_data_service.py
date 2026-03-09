@@ -165,7 +165,13 @@ class MarketDataService:
 
     @staticmethod
     def get_multiple_quotes_batch(tickers: List[str]) -> Dict[str, Optional[TickerQuote]]:
-        """Fetch quotes for multiple tickers in one batch request via yf.download."""
+        """Fetch quotes for multiple tickers in one batch request via yf.download.
+
+        daily_change_percent is (last close - previous close) / previous close * 100.
+        - Market open: last close is today's bar (updated by Yahoo); previous close is prior session. Valid.
+        - Market closed: last = session close, previous = prior session close. Valid.
+        - Continuous (crypto): daily bars still give last vs previous day close. Valid.
+        """
         if not tickers:
             return {}
         tickers = [t.upper() for t in tickers]
@@ -200,37 +206,42 @@ class MarketDataService:
                     high_series = data["High"] if "High" in data.columns else None
                     low_series = data["Low"] if "Low" in data.columns else None
 
-                if close_series is not None and len(close_series) >= 2:
-                    current = _safe_float(close_series.iloc[-1])
-                    if current is None or not _is_valid_price(current):
+                if close_series is not None and len(close_series) >= 1:
+                    # Use only valid closes so we get a real previous close when the raw series has NaNs (e.g. multi-ticker date alignment)
+                    valid_closes = close_series.dropna()
+                    if len(valid_closes) < 1:
                         pass
                     else:
-                        prev = _safe_float(close_series.iloc[-2])
-                        if prev is None or not _is_valid_price(prev):
-                            # If previous close is invalid, use current as both (0% change)
-                            prev = current
-                        daily_change = current - prev
-                        daily_change_percent = (daily_change / prev * 100) if prev and prev > 0 else 0.0
-                        results[t] = TickerQuote(
-                            ticker=t,
-                            current_price=round(current, 2),
-                            daily_change=round(daily_change, 2),
-                            daily_change_percent=round(daily_change_percent, 2),
-                            bid_price=None,
-                            ask_price=None,
-                            bid_size=None,
-                            ask_size=None,
-                            volume=_safe_int(volume_series.iloc[-1]) if volume_series is not None else None,
-                            previous_close=round(prev, 2) if prev is not None else None,
-                            day_high=_safe_float(high_series.iloc[-1]) if high_series is not None else None,
-                            day_low=_safe_float(low_series.iloc[-1]) if low_series is not None else None,
-                            fifty_two_week_high=None,
-                            fifty_two_week_low=None,
-                            market_status="UNKNOWN",
-                            last_update_time=datetime.now(),
-                        )
+                        current = _safe_float(valid_closes.iloc[-1])
+                        if current is None or not _is_valid_price(current):
+                            pass
+                        else:
+                            prev = _safe_float(valid_closes.iloc[-2]) if len(valid_closes) >= 2 else None
+                            if prev is None or not _is_valid_price(prev):
+                                prev = current
+                            daily_change = current - prev
+                            daily_change_percent = (daily_change / prev * 100) if prev and prev > 0 else 0.0
+                            results[t] = TickerQuote(
+                                ticker=t,
+                                current_price=round(current, 2),
+                                daily_change=round(daily_change, 2),
+                                daily_change_percent=round(daily_change_percent, 2),
+                                bid_price=None,
+                                ask_price=None,
+                                bid_size=None,
+                                ask_size=None,
+                                volume=_safe_int(volume_series.iloc[-1]) if volume_series is not None else None,
+                                previous_close=round(prev, 2) if prev is not None else None,
+                                day_high=_safe_float(high_series.iloc[-1]) if high_series is not None else None,
+                                day_low=_safe_float(low_series.iloc[-1]) if low_series is not None else None,
+                                fifty_two_week_high=None,
+                                fifty_two_week_low=None,
+                                market_status="UNKNOWN",
+                                last_update_time=datetime.now(),
+                            )
                 elif close_series is not None and len(close_series) == 1:
-                    current = _safe_float(close_series.iloc[-1])
+                    valid_closes = close_series.dropna()
+                    current = _safe_float(valid_closes.iloc[-1]) if len(valid_closes) >= 1 else None
                     if current is not None and _is_valid_price(current):
                         results[t] = TickerQuote(
                             ticker=t,
@@ -261,13 +272,14 @@ class MarketDataService:
                         if close_col is None:
                             continue
                         close_series = close_col if hasattr(close_col, "iloc") else close_col
-                        if len(close_series) < 1:
+                        valid_closes = close_series.dropna()
+                        if len(valid_closes) < 1:
                             continue
-                        current = _safe_float(close_series.iloc[-1])
+                        current = _safe_float(valid_closes.iloc[-1])
                         if current is None or not _is_valid_price(current):
                             continue
-                        if len(close_series) >= 2:
-                            prev = _safe_float(close_series.iloc[-2])
+                        if len(valid_closes) >= 2:
+                            prev = _safe_float(valid_closes.iloc[-2])
                             if prev is None or not _is_valid_price(prev):
                                 prev = current
                         else:
