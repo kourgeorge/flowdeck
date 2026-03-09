@@ -98,6 +98,8 @@ function OverviewCard({
 }
 
 const TILES_PER_PAGE = 6;
+const MOVERS_PAGE_SIZE = 10;
+const MOVERS_LOAD_COUNT = 20;
 
 function OverviewSection({
   title,
@@ -169,17 +171,61 @@ function MoversTable({
   title,
   isGainers,
   onSelectTicker,
+  currentPage = 0,
+  totalPages = 1,
+  onPrev,
+  onNext,
+  pageSize = MOVERS_PAGE_SIZE,
 }: {
   rows: MarketMoverRow[];
   title: string;
   isGainers: boolean;
   onSelectTicker?: (ticker: string) => void;
+  currentPage?: number;
+  totalPages?: number;
+  onPrev?: () => void;
+  onNext?: () => void;
+  pageSize?: number;
 }) {
   const changeClass = isGainers ? 'text-green-400' : 'text-red-400';
+  const canPrev = totalPages > 1 && currentPage > 0;
+  const canNext = totalPages > 1 && currentPage < totalPages - 1;
+  const pageRows = totalPages > 1
+    ? rows.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
+    : rows;
   return (
     <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-      <div className="px-4 py-2 border-b border-gray-700 bg-gray-800/80">
+      <div className="px-4 py-2 border-b border-gray-700 bg-gray-800/80 flex items-center justify-between gap-2">
         <h3 className="text-white font-semibold text-xs">{title}</h3>
+        {totalPages > 1 && onPrev != null && onNext != null && (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onPrev}
+              disabled={!canPrev}
+              className="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+              aria-label="Previous page"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <span className="text-xs text-gray-500 tabular-nums min-w-[4rem] text-center">
+              {currentPage + 1} / {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={onNext}
+              disabled={!canNext}
+              className="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+              aria-label="Next page"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
@@ -194,7 +240,7 @@ function MoversTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, i) => {
+            {pageRows.map((row, i) => {
               const sym = row.symbol ?? '';
               const clickable = onSelectTicker && sym;
               return (
@@ -325,6 +371,8 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
   const [pages, setPages] = useState({ indices: 0, sectors: 0, regions: 0 });
   const [gainers, setGainers] = useState<MarketMoverRow[]>([]);
   const [losers, setLosers] = useState<MarketMoverRow[]>([]);
+  const [moversPageGainers, setMoversPageGainers] = useState(0);
+  const [moversPageLosers, setMoversPageLosers] = useState(0);
   const [headlines, setHeadlines] = useState<HeadlineArticle[]>([]);
   const [headlinesLoading, setHeadlinesLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -450,7 +498,7 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
           limit_regions: TILES_PER_PAGE,
           offset_regions: 0,
         }),
-        tickerApi.getMarketMovers(moversCount),
+        tickerApi.getMarketMovers(MOVERS_LOAD_COUNT),
       ]);
       const gainersList = moversData.gainers ?? [];
       const losersList = moversData.losers ?? [];
@@ -483,6 +531,8 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
       setPages({ indices: 0, sectors: 0, regions: 0 });
       setGainers(gainersList);
       setLosers(losersList);
+      setMoversPageGainers(0);
+      setMoversPageLosers(0);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load market data');
       setOverview(null);
@@ -492,7 +542,7 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
     } finally {
       setIsLoading(false);
     }
-  }, [moversCount]);
+  }, []);
 
   const totalPagesIndices = Math.max(1, Math.ceil(totals.totalIndices / TILES_PER_PAGE));
   const totalPagesSectors = Math.max(1, Math.ceil(totals.totalSectors / TILES_PER_PAGE));
@@ -563,6 +613,21 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
       setPaginationSection(null);
     }
   }, [paginationSection, pages, totalPagesRegions, fetchOverview]);
+
+  const totalPagesGainers = Math.max(1, Math.ceil(gainers.length / MOVERS_PAGE_SIZE));
+  const totalPagesLosers = Math.max(1, Math.ceil(losers.length / MOVERS_PAGE_SIZE));
+  const handlePrevGainers = useCallback(() => {
+    setMoversPageGainers((p) => Math.max(0, p - 1));
+  }, []);
+  const handleNextGainers = useCallback(() => {
+    setMoversPageGainers((p) => Math.min(totalPagesGainers - 1, p + 1));
+  }, [totalPagesGainers]);
+  const handlePrevLosers = useCallback(() => {
+    setMoversPageLosers((p) => Math.max(0, p - 1));
+  }, []);
+  const handleNextLosers = useCallback(() => {
+    setMoversPageLosers((p) => Math.min(totalPagesLosers - 1, p + 1));
+  }, [totalPagesLosers]);
 
   useEffect(() => {
     fetchAll();
@@ -646,12 +711,22 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
             title="Top gainers"
             isGainers={true}
             onSelectTicker={onSelectTicker}
+            currentPage={moversPageGainers}
+            totalPages={totalPagesGainers}
+            onPrev={handlePrevGainers}
+            onNext={handleNextGainers}
+            pageSize={MOVERS_PAGE_SIZE}
           />
           <MoversTable
             rows={losers}
             title="Top losers"
             isGainers={false}
             onSelectTicker={onSelectTicker}
+            currentPage={moversPageLosers}
+            totalPages={totalPagesLosers}
+            onPrev={handlePrevLosers}
+            onNext={handleNextLosers}
+            pageSize={MOVERS_PAGE_SIZE}
           />
         </div>
       </section>
