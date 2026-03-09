@@ -253,16 +253,25 @@ function MoversTable({
             <tr className="border-b border-gray-700 text-gray-400">
               <th className="py-1.5 px-3 font-medium text-xs">Symbol</th>
               <th className="py-1.5 px-3 font-medium text-xs min-w-0 truncate max-w-[140px]">Name</th>
-              <th className="py-1.5 px-3 font-medium text-xs w-0 max-w-[90px]">Sector</th>
               <th className="py-1.5 px-3 font-medium text-xs text-right">Price</th>
               <th className="py-1.5 px-3 font-medium text-xs text-right">Change</th>
               <th className="py-1.5 px-3 font-medium text-xs text-right">Volume</th>
+              <th className="py-1.5 px-3 font-medium text-xs w-0 max-w-[90px]">Sector</th>
             </tr>
           </thead>
           <tbody>
             {pageRows.map((row, i) => {
               const sym = row.symbol ?? '';
               const clickable = onSelectTicker && sym;
+              const pct = row.regularMarketChangePercent ?? null;
+              const rowChangeClass =
+                changeColor === 'neutral'
+                  ? pct != null && pct > 0
+                    ? 'text-green-400'
+                    : pct != null && pct < 0
+                      ? 'text-red-400'
+                      : 'text-gray-400'
+                  : changeClass;
               return (
                 <tr
                   key={sym || i}
@@ -273,14 +282,14 @@ function MoversTable({
                   <td className="py-2 px-3 text-gray-300 truncate max-w-[140px]" title={row.shortName ?? undefined}>
                     {row.shortName || '—'}
                   </td>
-                  <td className="py-2 px-3 text-gray-400 truncate max-w-[90px]" title={row.industry ?? undefined}>
-                    {row.sector || '—'}
-                  </td>
                   <td className="py-2 px-3 text-right text-gray-200 tabular-nums">{formatPrice(row.regularMarketPrice)}</td>
-                  <td className={`py-2 px-3 text-right font-medium tabular-nums ${changeClass}`}>
+                  <td className={`py-2 px-3 text-right font-medium tabular-nums ${rowChangeClass}`}>
                     {formatPct(row.regularMarketChangePercent)}
                   </td>
                   <td className="py-2 px-3 text-right text-gray-400 tabular-nums">{formatVolume(row.regularMarketVolume)}</td>
+                  <td className="py-2 px-3 text-gray-400 truncate max-w-[90px]" title={row.industry ?? undefined}>
+                    {row.sector || '—'}
+                  </td>
                 </tr>
               );
             })}
