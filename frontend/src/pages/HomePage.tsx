@@ -137,11 +137,6 @@ export default function HomePage() {
             </Link>
           </div>
 
-          {/* Social Proof */}
-          <p className="text-gray-500 text-center text-sm mb-6">
-            Transparent AI analysis for independent investors who want to understand the <em>why</em>.
-          </p>
-
           {/* Stats Bar */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-4xl mx-auto">
             <div className="bg-blue-900/30 border border-blue-700/50 rounded-lg p-6 text-center">
@@ -163,6 +158,26 @@ export default function HomePage() {
               <div className="text-emerald-400/80 text-sm">Stocks Analyzed</div>
             </div>
           </div>
+
+          {/* Sign-in CTA — only when not signed in */}
+          {!user && (
+            <div className="max-w-2xl mx-auto mt-6 rounded-xl border-2 border-blue-500/60 bg-gradient-to-r from-blue-900/50 to-indigo-900/50 px-6 py-5 shadow-lg shadow-blue-900/20">
+              <p className="text-center text-lg sm:text-xl font-semibold text-white mb-2">
+                Sign in or sign up free
+              </p>
+              <p className="text-center text-gray-300 text-base mb-4">
+                Unlock access to <strong className="text-white">all company reports</strong>, full AI recommendations, and analysis — no credit card required.
+              </p>
+              <div className="flex justify-center">
+                <button
+                  onClick={() => setShowAuthModal(true)}
+                  className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg transition-colors shadow-md"
+                >
+                  Get started free →
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -482,10 +497,11 @@ export default function HomePage() {
                 <span className="text-emerald-400">Into Your Trading Systems</span>
               </h2>
               <p className="text-gray-400 text-base leading-relaxed mb-6">
-                Access FlowDeck's AI-powered analysis programmatically with our REST API. Perfect for algorithmic trading systems, portfolio management tools, and custom integrations.
+                Access FlowDeck's AI-powered analysis programmatically with our REST API. Perfect for algorithmic trading systems, portfolio management tools, and custom integrations. The system is <strong className="text-emerald-300">autonomous-agent ready</strong> — AI agents can interact with FlowDeck, get market data and analyses, and act on recommendations without human intervention.
               </p>
               <ul className="space-y-3 mb-8">
                 {[
+                  { icon: '🤖', text: 'Autonomous-agent ready — let AI agents register, fetch data, chat with the analyst, and start analyses via API' },
                   { icon: '🔑', text: 'Secure API keys with optional expiration — never expire by default' },
                   { icon: '📊', text: 'Access all AI reports, recommendations, and TPS trade plans via REST endpoints' },
                   { icon: '💬', text: 'Chat with the AI analyst programmatically — get answers to any trading question' },
@@ -520,6 +536,17 @@ export default function HomePage() {
                   </svg>
                   Create API Key
                 </Link>
+                <a
+                  href="https://flowdeck.biz/api/SKILL.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-purple-700 hover:bg-purple-600 text-white rounded-lg font-semibold transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  SKILL.md — Agent Integration
+                </a>
               </div>
             </div>
           </div>
@@ -586,7 +613,7 @@ export default function HomePage() {
                 <Link to="/api-docs" className="hover:text-emerald-300 transition-colors">REST API — Programmatic Access</Link>
               </h4>
               <p className="text-gray-400 text-sm">
-                Integrate FlowDeck into your trading systems with our <strong className="text-white">REST API</strong>. Create secure API keys, access all AI reports and recommendations programmatically, chat with the AI analyst via API, and fetch real-time market data. Perfect for algorithmic trading, portfolio management tools, and custom integrations.
+                Integrate FlowDeck into your trading systems with our <strong className="text-white">REST API</strong>. The system is <strong className="text-white">autonomous-agent ready</strong>: agents can register, fetch market data, chat with the AI analyst, and start analyses without human intervention. Create secure API keys, access all AI reports and recommendations programmatically, and fetch real-time market data. Perfect for algorithmic trading, portfolio tools, and custom integrations. <a href="https://flowdeck.biz/api/SKILL.md" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:text-emerald-300 underline">View SKILL.md →</a>
               </p>
             </div>
             <div className="bg-purple-900/20 border border-purple-700/50 rounded-xl p-6">
