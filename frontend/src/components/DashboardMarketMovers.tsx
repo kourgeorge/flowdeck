@@ -40,15 +40,16 @@ function formatVolume(n: number | null): string {
 function MoversTable({
   rows,
   title,
-  isGainers,
+  changeColor,
   onSelectTicker,
 }: {
   rows: MarketMoverRow[];
   title: string;
-  isGainers: boolean;
+  changeColor: 'gainers' | 'losers' | 'neutral';
   onSelectTicker?: (ticker: string) => void;
 }) {
-  const changeClass = isGainers ? 'text-green-400' : 'text-red-400';
+  const changeClass =
+    changeColor === 'gainers' ? 'text-green-400' : changeColor === 'losers' ? 'text-red-400' : 'text-gray-300';
   return (
     <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-700 bg-gray-800/80">
@@ -101,6 +102,7 @@ function MoversTable({
 export default function DashboardMarketMovers({ count = 25, onSelectTicker }: DashboardMarketMoversProps) {
   const [gainers, setGainers] = useState<MarketMoverRow[]>([]);
   const [losers, setLosers] = useState<MarketMoverRow[]>([]);
+  const [mostActive, setMostActive] = useState<MarketMoverRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -111,10 +113,12 @@ export default function DashboardMarketMovers({ count = 25, onSelectTicker }: Da
       const data = await tickerApi.getMarketMovers(count);
       setGainers(data.gainers ?? []);
       setLosers(data.losers ?? []);
+      setMostActive(data.most_active ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load market movers');
       setGainers([]);
       setLosers([]);
+      setMostActive([]);
     } finally {
       setIsLoading(false);
     }
@@ -132,7 +136,7 @@ export default function DashboardMarketMovers({ count = 25, onSelectTicker }: Da
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
-          <span>Loading top gainers & losers…</span>
+          <span>Loading gainers, losers & most active…</span>
         </div>
       </div>
     );
@@ -154,17 +158,23 @@ export default function DashboardMarketMovers({ count = 25, onSelectTicker }: Da
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
       <MoversTable
         rows={gainers}
         title="Top gainers"
-        isGainers={true}
+        changeColor="gainers"
         onSelectTicker={onSelectTicker}
       />
       <MoversTable
         rows={losers}
         title="Top losers"
-        isGainers={false}
+        changeColor="losers"
+        onSelectTicker={onSelectTicker}
+      />
+      <MoversTable
+        rows={mostActive}
+        title="Most active"
+        changeColor="neutral"
         onSelectTicker={onSelectTicker}
       />
     </div>

@@ -56,9 +56,11 @@ def _parse_yf_article(raw: Dict[str, Any]) -> Dict[str, Any] | None:
                 first = resolutions[0] if resolutions else None
                 if isinstance(first, dict):
                     thumb_url = first.get("url")
+        summary = content.get("summary") or content.get("description") or ""
         return {
             "uuid": str(uuid),
             "title": title or "",
+            "summary": summary if isinstance(summary, str) else "",
             "publisher": publisher or "",
             "link": link or "",
             "published_time": published_time,
@@ -82,9 +84,11 @@ def _parse_yf_article(raw: Dict[str, Any]) -> Dict[str, Any] | None:
             thumb_url = first.get("url")
         elif isinstance(first, str):
             thumb_url = first
+    summary = raw.get("summary") or raw.get("description") or ""
     return {
         "uuid": raw.get("uuid", raw.get("id", "")),
         "title": raw.get("title", ""),
+        "summary": summary if isinstance(summary, str) else "",
         "publisher": raw.get("publisher", ""),
         "link": raw.get("link", ""),
         "published_time": pub_date,

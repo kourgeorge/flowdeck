@@ -479,6 +479,7 @@ export const tickerApi = {
     articles: Array<{
       uuid: string;
       title: string;
+      summary?: string | null;
       publisher: string;
       link: string;
       published_time: string | null;

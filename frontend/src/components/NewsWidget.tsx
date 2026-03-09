@@ -3,6 +3,7 @@ import React from 'react';
 interface NewsArticle {
   uuid: string;
   title: string;
+  summary?: string | null;
   publisher: string;
   link: string;
   published_time: string | null;

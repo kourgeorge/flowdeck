@@ -58,24 +58,8 @@ export default function DashboardPage() {
     );
   }
 
-  if (!isLoading && widgets.length === 0 && recentAnalyzedWidgets.length === 0) {
-    return (
-      <div className="min-h-[60vh] px-4 py-6 sm:p-6 lg:p-8">
-        <div className="max-w-layout mx-auto min-w-0 w-full">
-          <TickerSearch />
-          <div className="mt-6 bg-gray-800 rounded-lg border border-gray-700 p-12 text-center">
-            <p className="text-gray-400 mb-4">You haven't subscribed to any stocks yet.</p>
-            <p className="text-gray-500 text-sm mb-6">Add stocks from the search above or browse on Home to build your dashboard.</p>
-            <Link to="/" className="inline-block px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium">
-              Browse stocks
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   const subscribedTickers = widgets.map((w) => w.ticker);
+  const hasNoStocks = !isLoading && widgets.length === 0 && recentAnalyzedWidgets.length === 0;
   const subscribedTickerSet = new Set(subscribedTickers);
   const recentAnalyzedNonSubscribed = recentAnalyzedWidgets.filter(
     (w) => !subscribedTickerSet.has(w.ticker)
@@ -298,7 +282,16 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* Combined stock list widget — full width */}
+              {hasNoStocks ? (
+                <div className="bg-gray-800 rounded-lg border border-gray-700 p-12 text-center">
+                  <p className="text-gray-400 mb-4">You haven't subscribed to any stocks yet.</p>
+                  <p className="text-gray-500 text-sm mb-6">Add stocks from the search above or browse on Home to build your dashboard. Use the <strong className="text-gray-400">Market</strong> tab for indices, sectors, and top gainers/losers.</p>
+                  <Link to="/" className="inline-block px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium">
+                    Browse stocks
+                  </Link>
+                </div>
+              ) : (
+              /* Combined stock list widget — full width */
               <div>
                 {/* Tab header */}
                 <div className="flex items-center gap-0 mb-0 border-b border-gray-700">
@@ -376,6 +369,7 @@ export default function DashboardPage() {
                   )
                 )}
               </div>
+              )}
             </div>
           </div>
         </div>
