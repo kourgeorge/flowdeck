@@ -553,6 +553,26 @@ export const tickerApi = {
     return response.data;
   },
 
+  // Get market overview: indices, sectors, international (prices and daily change). Pagination per group.
+  getMarketOverview: async (params?: {
+    limit_indices?: number;
+    offset_indices?: number;
+    limit_sectors?: number;
+    offset_sectors?: number;
+    limit_regions?: number;
+    offset_regions?: number;
+  }): Promise<{
+    indices: Array<{ ticker: string; name: string; price: number | null; change: number | null; changePercent: number | null }>;
+    sectors: Array<{ ticker: string; name: string; price: number | null; change: number | null; changePercent: number | null }>;
+    international: Array<{ ticker: string; name: string; price: number | null; change: number | null; changePercent: number | null }>;
+    totalIndices: number;
+    totalSectors: number;
+    totalRegions: number;
+  }> => {
+    const response = await api.get(`/api/data/market-overview`, { params: params ?? {} });
+    return response.data;
+  },
+
   // Get daily top gainers and losers (US market, yahooquery Screener)
   getMarketMovers: async (count: number = 25): Promise<{
     gainers: Array<{

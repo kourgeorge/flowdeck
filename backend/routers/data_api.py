@@ -64,6 +64,28 @@ async def data_market_movers(
     return await asyncio.to_thread(_engine().get_daily_market_movers, count)
 
 
+@router.get("/market-overview")
+async def data_market_overview(
+    limit_indices: int = Query(6, ge=1, le=100),
+    offset_indices: int = Query(0, ge=0),
+    limit_sectors: int = Query(10, ge=1, le=100),
+    offset_sectors: int = Query(0, ge=0),
+    limit_regions: int = Query(8, ge=1, le=100),
+    offset_regions: int = Query(0, ge=0),
+):
+    """Get market overview: US indices, sectors, and regional ETFs with price and daily change. Pagination per group."""
+    engine = _engine()
+    return await asyncio.to_thread(
+        engine.get_market_overview,
+        limit_indices,
+        offset_indices,
+        limit_sectors,
+        offset_sectors,
+        limit_regions,
+        offset_regions,
+    )
+
+
 @router.get("/news")
 async def data_news(
     ticker: str = Query(..., description="Ticker symbol"),

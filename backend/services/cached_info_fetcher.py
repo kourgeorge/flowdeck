@@ -21,6 +21,7 @@ from config import (
     DATA_CACHE_TTL_HISTORICAL,
     DATA_CACHE_TTL_INSIDER_TRANSACTIONS,
     DATA_CACHE_TTL_MARKET_MOVERS,
+    DATA_CACHE_TTL_MARKET_OVERVIEW,
     DATA_CACHE_TTL_NEWS,
     DATA_CACHE_TTL_QUOTE,
     DATA_CACHE_TTL_SIMILAR_TICKERS,
@@ -215,6 +216,30 @@ class CachedInfoFetcher:
             key,
             DATA_CACHE_TTL_MARKET_MOVERS,
             lambda: self._fetcher.get_daily_market_movers(count),
+        )
+
+    def get_market_overview(
+        self,
+        limit_indices: int = 50,
+        offset_indices: int = 0,
+        limit_sectors: int = 50,
+        offset_sectors: int = 0,
+        limit_regions: int = 50,
+        offset_regions: int = 0,
+    ) -> Dict[str, Any]:
+        """Get market overview: indices, sectors, international (cached). Pagination via limit/offset per group."""
+        key = f"market_overview:{limit_indices}:{offset_indices}:{limit_sectors}:{offset_sectors}:{limit_regions}:{offset_regions}"
+        return get_cached(
+            key,
+            DATA_CACHE_TTL_MARKET_OVERVIEW,
+            lambda: self._fetcher.get_market_overview(
+                limit_indices=limit_indices,
+                offset_indices=offset_indices,
+                limit_sectors=limit_sectors,
+                offset_sectors=offset_sectors,
+                limit_regions=limit_regions,
+                offset_regions=offset_regions,
+            ),
         )
 
     def get_company_officers(self, ticker: str) -> Dict[str, Any]:

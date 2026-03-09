@@ -1301,6 +1301,105 @@ class InfoFetcher:
 
         return {"gainers": gainers, "losers": losers}
 
+    # Curated tickers for market overview: (group_key, ticker, display_name). At least 12 per section.
+    MARKET_OVERVIEW_TICKERS = [
+        # US indices (Yahoo symbols)
+        ("indices", "^GSPC", "S&P 500"),
+        ("indices", "^IXIC", "Nasdaq"),
+        ("indices", "^DJI", "Dow Jones"),
+        ("indices", "^NDX", "Nasdaq 100"),
+        ("indices", "^RUT", "Russell 2000"),
+        ("indices", "SPY", "S&P 500 ETF"),
+        ("indices", "QQQ", "Nasdaq 100 ETF"),
+        ("indices", "DIA", "Dow Jones ETF"),
+        ("indices", "IWM", "Russell 2000 ETF"),
+        ("indices", "MDY", "S&P MidCap 400"),
+        ("indices", "VOO", "S&P 500 (Vanguard)"),
+        ("indices", "VTI", "US Total Market"),
+        # Sectors (SPDRs / sector ETFs)
+        ("sectors", "XLK", "Technology"),
+        ("sectors", "XLF", "Financials"),
+        ("sectors", "XLE", "Energy"),
+        ("sectors", "XLV", "Healthcare"),
+        ("sectors", "XLI", "Industrials"),
+        ("sectors", "XLY", "Consumer Discretionary"),
+        ("sectors", "XLP", "Consumer Staples"),
+        ("sectors", "XLB", "Materials"),
+        ("sectors", "XLU", "Utilities"),
+        ("sectors", "XLC", "Communication"),
+        ("sectors", "VGT", "Technology (Vanguard)"),
+        ("sectors", "KRE", "Regional Banks"),
+        # International / regions (ETFs)
+        ("international", "EFA", "Developed ex-US"),
+        ("international", "EEM", "Emerging Markets"),
+        ("international", "VEA", "Developed Markets"),
+        ("international", "VWO", "Emerging Markets (Vanguard)"),
+        ("international", "EWJ", "Japan"),
+        ("international", "EWG", "Germany"),
+        ("international", "EWU", "UK"),
+        ("international", "EWZ", "Brazil"),
+        ("international", "EWC", "Canada"),
+        ("international", "EWA", "Australia"),
+        ("international", "FXI", "China"),
+        ("international", "INDA", "India"),
+    ]
+
+    def get_market_overview(
+        self,
+        limit_indices: int = 50,
+        offset_indices: int = 0,
+        limit_sectors: int = 50,
+        offset_sectors: int = 0,
+        limit_regions: int = 50,
+        offset_regions: int = 0,
+    ) -> Dict[str, Any]:
+        """Get high-level market overview: indices, sectors, and international with prices and daily change.
+        Within each section, items are ordered by absolute change (biggest movers first). Pagination via limit/offset."""
+        svc = self._get_market_data_service()
+        by_group: Dict[str, List[tuple]] = {"indices": [], "sectors": [], "international": []}
+        for group_key, ticker, name in self.MARKET_OVERVIEW_TICKERS:
+            by_group[group_key].append((ticker.upper(), name))
+        tickers = list({row[1].upper() for row in self.MARKET_OVERVIEW_TICKERS})
+        quotes = svc.get_multiple_quotes_batch(tickers)
+
+        def _build_and_sort(group_key: str) -> List[Dict[str, Any]]:
+            items: List[Dict[str, Any]] = []
+            for t, name in by_group[group_key]:
+                q = quotes.get(t)
+                if q is None:
+                    item = {
+                        "ticker": t,
+                        "name": name,
+                        "price": None,
+                        "change": None,
+                        "changePercent": None,
+                    }
+                else:
+                    item = {
+                        "ticker": t,
+                        "name": name,
+                        "price": round(float(q.current_price), 2),
+                        "change": round(float(q.daily_change), 2),
+                        "changePercent": round(float(q.daily_change_percent), 2),
+                    }
+                items.append(item)
+            # Sort by absolute change (desc): biggest movers first; None treated as 0 (end)
+            items.sort(key=lambda x: abs(x.get("changePercent") or 0), reverse=True)
+            return items
+
+        sorted_indices = _build_and_sort("indices")
+        sorted_sectors = _build_and_sort("sectors")
+        sorted_international = _build_and_sort("international")
+
+        return {
+            "indices": sorted_indices[offset_indices : offset_indices + limit_indices],
+            "sectors": sorted_sectors[offset_sectors : offset_sectors + limit_sectors],
+            "international": sorted_international[offset_regions : offset_regions + limit_regions],
+            "totalIndices": len(sorted_indices),
+            "totalSectors": len(sorted_sectors),
+            "totalRegions": len(sorted_international),
+        }
+
     def get_company_officers(self, ticker: str) -> Dict[str, Any]:
         """Get company officers/management team from Yahoo Finance."""
         import yfinance as yf
