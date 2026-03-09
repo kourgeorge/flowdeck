@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { tickerApi, configApi } from '../services/api';
 import { WebSocketClient } from '../services/websocket';
@@ -61,6 +62,8 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const [isLoadingHistoricalRun, setIsLoadingHistoricalRun] = useState(false);
   const [runSelectorOpen, setRunSelectorOpen] = useState(false);
   const runSelectorRef = useRef<HTMLDivElement>(null);
+  const runDropdownRef = useRef<HTMLDivElement>(null);
+  const [runDropdownPosition, setRunDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null);
   // END EXPERIMENTAL
   const [activeTab, setActiveTab] = useState('ai-analysis');
   const [fundamentalsData, setFundamentalsData] = useState<string | object | null>(null);
@@ -494,16 +497,42 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       setIsLoadingHistoricalRun(false);
     }
   }, [ticker, stockData]);
-  // EXPERIMENTAL: close run selector on outside click
+  // EXPERIMENTAL: close run selector on outside click (portal dropdown is in body, so check both refs)
   useEffect(() => {
     if (!runSelectorOpen) return;
     const handler = (e: MouseEvent) => {
-      if (runSelectorRef.current && !runSelectorRef.current.contains(e.target as Node)) {
-        setRunSelectorOpen(false);
-      }
+      const target = e.target as Node;
+      if (runSelectorRef.current?.contains(target) || runDropdownRef.current?.contains(target)) return;
+      setRunSelectorOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
+  }, [runSelectorOpen]);
+
+  // Position analysis-runs dropdown for portal (avoids clipping by scroll/tile below)
+  useLayoutEffect(() => {
+    if (!runSelectorOpen || !runSelectorRef.current) {
+      setRunDropdownPosition(null);
+      return;
+    }
+    const update = () => {
+      if (!runSelectorRef.current) return;
+      const rect = runSelectorRef.current.getBoundingClientRect();
+      const width = 200;
+      const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+      setRunDropdownPosition({
+        top: rect.bottom + 4,
+        left,
+        width,
+      });
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
   }, [runSelectorOpen]);
   // END EXPERIMENTAL
 
@@ -755,8 +784,8 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="p-4 sm:p-6 space-y-4">
 
-          {/* Header */}
-          <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+          {/* Header - overflow-visible so the analysis runs dropdown is not clipped by the tile below */}
+          <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-visible">
             <div className="px-4 sm:px-6 py-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <h2 className="text-lg sm:text-xl font-semibold text-white break-words">
@@ -1395,8 +1424,18 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                                     </svg>
                                   )}
                                 </button>
-                                {runSelectorOpen && (
-                                  <div className="absolute right-0 top-full mt-1 z-50 min-w-[200px] bg-gray-900 border border-gray-600 rounded-lg shadow-xl overflow-hidden">
+                                {runSelectorOpen && runDropdownPosition && createPortal(
+                                  <div
+                                    ref={runDropdownRef}
+                                    className="min-w-[200px] bg-gray-900 border border-gray-600 rounded-lg shadow-xl overflow-hidden"
+                                    style={{
+                                      position: 'fixed',
+                                      top: runDropdownPosition.top,
+                                      left: runDropdownPosition.left,
+                                      width: runDropdownPosition.width,
+                                      zIndex: 9999,
+                                    }}
+                                  >
                                     <div className="px-3 py-1.5 border-b border-gray-700">
                                       <span className="text-xs text-gray-400 font-medium uppercase tracking-wide">Analysis runs</span>
                                     </div>
@@ -1434,7 +1473,8 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                                         </li>
                                       ))}
                                     </ul>
-                                  </div>
+                                  </div>,
+                                  document.body
                                 )}
                               </>
                             )}
