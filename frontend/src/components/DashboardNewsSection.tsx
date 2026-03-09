@@ -4,13 +4,15 @@ import { tickerApi } from '../services/api';
 export interface NewsArticleWithTicker {
   uuid: string;
   title: string;
+  summary?: string | null;
   publisher: string;
   link: string;
   published_time: string | null;
   published_timestamp: number;
   type: string;
   thumbnail: string | null;
-  ticker: string;
+  /** Related tickers (deduplicated) */
+  tickers: string[];
 }
 
 interface DashboardNewsSectionProps {
@@ -50,18 +52,24 @@ export default function DashboardNewsSection({
       const results = await Promise.allSettled(
         tickers.map((t) => tickerApi.getNews(t))
       );
-      const merged: NewsArticleWithTicker[] = [];
+      const byKey = new Map<string, NewsArticleWithTicker>();
       results.forEach((result, i) => {
         if (result.status === 'fulfilled' && result.value?.articles?.length) {
           const ticker = tickers[i];
           result.value.articles.forEach((a) => {
-            merged.push({
-              ...a,
-              ticker,
-            });
+            const key = a.uuid || a.link;
+            const existing = byKey.get(key);
+            if (existing) {
+              if (!existing.tickers.includes(ticker)) {
+                existing.tickers.push(ticker);
+              }
+            } else {
+              byKey.set(key, { ...a, tickers: [ticker] });
+            }
           });
         }
       });
+      const merged = Array.from(byKey.values());
       merged.sort((a, b) => (b.published_timestamp ?? 0) - (a.published_timestamp ?? 0));
       setArticles(merged);
       setLastUpdated(new Date());
@@ -88,7 +96,7 @@ export default function DashboardNewsSection({
   }, [filterTicker]);
 
   const filtered = filterTicker
-    ? articles.filter((a) => a.ticker === filterTicker)
+    ? articles.filter((a) => a.tickers.includes(filterTicker))
     : articles;
   const displayList = filtered.slice(0, displayCount);
   const hasMore = displayList.length < filtered.length;
@@ -176,7 +184,7 @@ export default function DashboardNewsSection({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {displayList.map((article) => (
               <div
-                key={`${article.ticker}-${article.uuid}`}
+                key={article.uuid}
                 className="bg-gray-700/50 rounded-lg p-4 hover:border-gray-600 border border-transparent transition-colors"
               >
                 <div className="flex gap-4">
@@ -193,10 +201,15 @@ export default function DashboardNewsSection({
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="mb-1">
-                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-600 text-gray-200">
-                        {article.ticker}
-                      </span>
+                    <div className="mb-1 flex flex-wrap gap-1">
+                      {article.tickers.map((t) => (
+                        <span
+                          key={t}
+                          className="px-2 py-0.5 rounded text-xs font-medium bg-gray-600 text-gray-200"
+                        >
+                          {t}
+                        </span>
+                      ))}
                     </div>
                     <a
                       href={article.link}

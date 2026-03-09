@@ -1,16 +1,35 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { tickerApi } from '../services/api';
+
+function ChevronDownIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+function ChevronUpIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M18 15l-6-6-6 6" />
+    </svg>
+  );
+}
 
 export type HeadlineArticle = {
   uuid: string;
   title: string;
+  summary?: string | null;
   publisher?: string;
   link: string;
   published_time: string | null;
   published_timestamp: number;
   type?: string;
   thumbnail?: string | null;
-  ticker?: string;
+  /** Related tickers (deduplicated; multiple when same story appears for several tickers) */
+  tickers: string[];
 };
 
 export type MarketMoverRow = {
@@ -168,7 +187,7 @@ function OverviewSection({
 function MoversTable({
   rows,
   title,
-  isGainers,
+  changeColor,
   onSelectTicker,
   currentPage = 0,
   totalPages = 1,
@@ -178,7 +197,7 @@ function MoversTable({
 }: {
   rows: MarketMoverRow[];
   title: string;
-  isGainers: boolean;
+  changeColor: 'gainers' | 'losers' | 'neutral';
   onSelectTicker?: (ticker: string) => void;
   currentPage?: number;
   totalPages?: number;
@@ -186,7 +205,8 @@ function MoversTable({
   onNext?: () => void;
   pageSize?: number;
 }) {
-  const changeClass = isGainers ? 'text-green-400' : 'text-red-400';
+  const changeClass =
+    changeColor === 'gainers' ? 'text-green-400' : changeColor === 'losers' ? 'text-red-400' : 'text-gray-300';
   const canPrev = totalPages > 1 && currentPage > 0;
   const canNext = totalPages > 1 && currentPage < totalPages - 1;
   const pageRows = totalPages > 1
@@ -282,6 +302,41 @@ function RunningHeadlinesStrip({
   isLoading: boolean;
   tickerChangeMap?: Record<string, number | null>;
 }) {
+  // Track which specific widget instance is expanded (same article appears twice in the strip for scroll)
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const expandedWidgetRef = useRef<HTMLDivElement | null>(null);
+  const [overlayState, setOverlayState] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    title: string;
+    summary: string;
+  } | null>(null);
+
+  // Position overlay in a portal when a tile is expanded (so it's not clipped by strip overflow)
+  useEffect(() => {
+    if (!expandedKey) {
+      setOverlayState(null);
+      return;
+    }
+    const id = requestAnimationFrame(() => {
+      const el = expandedWidgetRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const uuid = expandedKey.replace(/-\d+$/, '');
+      const article = articles.find((a) => a.uuid === uuid);
+      if (!article || !(article.summary ?? '').trim()) return;
+      setOverlayState({
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: Math.min(Math.max(rect.width, 280), 360),
+        title: article.title,
+        summary: (article.summary ?? '').trim(),
+      });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [expandedKey, articles]);
+
   if (isLoading) {
     return (
       <div
@@ -309,54 +364,105 @@ function RunningHeadlinesStrip({
       </div>
     );
   }
-  const itemNodes = articles.map((a) => {
-    const changePercent = a.ticker != null ? tickerChangeMap[a.ticker] ?? tickerChangeMap[a.ticker.toUpperCase()] : null;
+
+  const renderTile = (a: HeadlineArticle, copyIndex: number) => {
+    const widgetKey = `${a.uuid}-${copyIndex}`;
+    const firstTicker = a.tickers?.[0];
+    const changePercent = firstTicker != null ? tickerChangeMap[firstTicker] ?? tickerChangeMap[firstTicker.toUpperCase()] : null;
     const tickerColorClass =
       changePercent != null && changePercent > 0
         ? 'text-green-400'
         : changePercent != null && changePercent < 0
           ? 'text-red-400'
           : 'text-gray-500';
+    const isExpanded = expandedKey === widgetKey;
+    const hasSummary = a.summary != null && a.summary.trim() !== '';
+    const tickersLabel = a.tickers?.length ? ` [${a.tickers.join(', ')}]` : '';
     return (
       <div
-        key={a.uuid}
-        className="shrink-0 border-r border-gray-600 pr-4 pl-4 first:pl-0 min-w-[240px] max-w-[320px] sm:max-w-[380px]"
+        key={widgetKey}
+        ref={isExpanded ? (el) => { expandedWidgetRef.current = el; } : undefined}
+        className="shrink-0 relative rounded-lg border border-gray-600 bg-gray-800/90 px-3 py-2 min-w-[260px] max-w-[320px] sm:max-w-[380px] h-[48px] flex items-center gap-2"
       >
-        {a.link ? (
-          <a
-            href={a.link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-gray-200 hover:text-white hover:underline text-xs leading-tight line-clamp-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 rounded"
+        <div className="flex-1 min-w-0">
+          {a.link ? (
+            <a
+              href={a.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-200 hover:text-white hover:underline text-xs leading-tight line-clamp-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 rounded"
+            >
+              {a.title}
+              {tickersLabel && <span className={`font-medium tabular-nums ${tickerColorClass}`}>{tickersLabel}</span>}
+            </a>
+          ) : (
+            <span className="text-gray-200 text-xs leading-tight line-clamp-2">
+              {a.title}
+              {tickersLabel && <span className={`font-medium tabular-nums ${tickerColorClass}`}>{tickersLabel}</span>}
+            </span>
+          )}
+        </div>
+        {hasSummary && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              setExpandedKey((prev) => (prev === widgetKey ? null : widgetKey));
+            }}
+            className="shrink-0 p-1 rounded text-gray-400 hover:text-gray-200 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800"
+            aria-expanded={isExpanded}
+            aria-label={isExpanded ? 'Hide summary' : 'Show summary'}
           >
-            {a.title}
-            {a.ticker && <span className={`font-medium tabular-nums ${tickerColorClass}`}> [{a.ticker}]</span>}
-          </a>
-        ) : (
-          <span className="text-gray-200 text-xs leading-tight line-clamp-2">
-            {a.title}
-            {a.ticker && <span className={`font-medium tabular-nums ${tickerColorClass}`}> [{a.ticker}]</span>}
-          </span>
+            {isExpanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
+          </button>
         )}
       </div>
     );
-  });
+  };
+
+  const itemNodes = (
+    <>
+      {articles.map((a) => renderTile(a, 0))}
+      {articles.map((a) => renderTile(a, 1))}
+    </>
+  );
+
+  const overlayPortal =
+    overlayState &&
+    createPortal(
+      <div
+        className="fixed z-[200] rounded-lg border border-gray-600 bg-gray-800 shadow-xl py-3 px-3"
+        role="dialog"
+        aria-label="Summary"
+        style={{
+          top: overlayState.top,
+          left: overlayState.left,
+          width: overlayState.width,
+        }}
+      >
+        <p className="font-medium text-gray-200 text-xs leading-tight mb-2">{overlayState.title}</p>
+        <p className="text-gray-400 text-xs leading-relaxed whitespace-pre-wrap">{overlayState.summary}</p>
+      </div>,
+      document.body
+    );
+
   return (
-    <div
-      className="rounded-lg border border-gray-700 bg-gray-800/80 overflow-hidden"
-      style={{ height: HEADLINES_STRIP_HEIGHT }}
-      aria-live="polite"
-    >
-      <div className="h-full flex items-center overflow-hidden">
+    <>
+      <div className="rounded-lg border border-gray-700 bg-gray-800/80 overflow-hidden group/headlines" aria-live="polite">
         <div
-          className="flex items-center gap-0 pr-4 animate-tiles-scroll"
-          style={{ animationDuration: `${Math.max(30, articles.length * 4)}s` }}
+          className="flex items-center overflow-hidden min-h-[56px]"
+          style={{ minHeight: HEADLINES_STRIP_HEIGHT }}
         >
-          {itemNodes}
-          {itemNodes}
+          <div
+            className="flex items-center gap-3 py-2 pl-2 pr-4 animate-tiles-scroll group-hover/headlines:[animation-play-state:paused]"
+            style={{ animationDuration: `${Math.max(30, articles.length * 4)}s` }}
+          >
+            {itemNodes}
+          </div>
         </div>
       </div>
-    </div>
+      {overlayPortal}
+    </>
   );
 }
 
@@ -371,8 +477,10 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
   const [pages, setPages] = useState({ indices: 0, sectors: 0, regions: 0, commodities: 0 });
   const [gainers, setGainers] = useState<MarketMoverRow[]>([]);
   const [losers, setLosers] = useState<MarketMoverRow[]>([]);
+  const [mostActive, setMostActive] = useState<MarketMoverRow[]>([]);
   const [moversPageGainers, setMoversPageGainers] = useState(0);
   const [moversPageLosers, setMoversPageLosers] = useState(0);
+  const [moversPageMostActive, setMoversPageMostActive] = useState(0);
   const [headlines, setHeadlines] = useState<HeadlineArticle[]>([]);
   const [headlinesLoading, setHeadlinesLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -415,15 +523,24 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
       const results = await Promise.allSettled(
         initialHeadlinesTickers.map((t) => tickerApi.getNews(t))
       );
-      const merged: HeadlineArticle[] = [];
+      const byKey = new Map<string, HeadlineArticle>();
       results.forEach((result, i) => {
         if (result.status === 'fulfilled' && result.value?.articles?.length) {
           const ticker = initialHeadlinesTickers[i];
           result.value.articles.forEach((a) => {
-            merged.push({ ...a, ticker });
+            const key = a.uuid || a.link;
+            const existing = byKey.get(key);
+            if (existing) {
+              if (!existing.tickers.includes(ticker)) {
+                existing.tickers.push(ticker);
+              }
+            } else {
+              byKey.set(key, { ...a, tickers: [ticker] });
+            }
           });
         }
       });
+      const merged = Array.from(byKey.values());
       merged.sort((a, b) => (b.published_timestamp ?? 0) - (a.published_timestamp ?? 0));
       setHeadlines(merged);
     } finally {
@@ -521,6 +638,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
       ]);
       const gainersList = moversData.gainers ?? [];
       const losersList = moversData.losers ?? [];
+      const mostActiveList = moversData.most_active ?? [];
       const indices = overviewData.indices ?? [];
       const sectors = overviewData.sectors ?? [];
       const international = overviewData.international ?? [];
@@ -531,6 +649,10 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
         if (s) raw.push(s);
       });
       losersList.forEach((r) => {
+        const s = r.symbol?.trim();
+        if (s) raw.push(s);
+      });
+      mostActiveList.forEach((r) => {
         const s = r.symbol?.trim();
         if (s) raw.push(s);
       });
@@ -553,13 +675,16 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
       setPages({ indices: 0, sectors: 0, regions: 0, commodities: 0 });
       setGainers(gainersList);
       setLosers(losersList);
+      setMostActive(mostActiveList);
       setMoversPageGainers(0);
       setMoversPageLosers(0);
+      setMoversPageMostActive(0);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load market data');
       setOverview(null);
       setGainers([]);
       setLosers([]);
+      setMostActive([]);
       setInitialHeadlinesTickers([]);
     } finally {
       setIsLoading(false);
@@ -661,6 +786,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
 
   const totalPagesGainers = Math.max(1, Math.ceil(gainers.length / MOVERS_PAGE_SIZE));
   const totalPagesLosers = Math.max(1, Math.ceil(losers.length / MOVERS_PAGE_SIZE));
+  const totalPagesMostActive = Math.max(1, Math.ceil(mostActive.length / MOVERS_PAGE_SIZE));
   const handlePrevGainers = useCallback(() => {
     setMoversPageGainers((p) => Math.max(0, p - 1));
   }, []);
@@ -673,6 +799,12 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
   const handleNextLosers = useCallback(() => {
     setMoversPageLosers((p) => Math.min(totalPagesLosers - 1, p + 1));
   }, [totalPagesLosers]);
+  const handlePrevMostActive = useCallback(() => {
+    setMoversPageMostActive((p) => Math.max(0, p - 1));
+  }, []);
+  const handleNextMostActive = useCallback(() => {
+    setMoversPageMostActive((p) => Math.min(totalPagesMostActive - 1, p + 1));
+  }, [totalPagesMostActive]);
 
   useEffect(() => {
     fetchAll();
@@ -760,11 +892,11 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
       </section>
 
       <section className="space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           <MoversTable
             rows={gainers}
             title="Top gainers"
-            isGainers={true}
+            changeColor="gainers"
             onSelectTicker={onSelectTicker}
             currentPage={moversPageGainers}
             totalPages={totalPagesGainers}
@@ -775,12 +907,23 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
           <MoversTable
             rows={losers}
             title="Top losers"
-            isGainers={false}
+            changeColor="losers"
             onSelectTicker={onSelectTicker}
             currentPage={moversPageLosers}
             totalPages={totalPagesLosers}
             onPrev={handlePrevLosers}
             onNext={handleNextLosers}
+            pageSize={MOVERS_PAGE_SIZE}
+          />
+          <MoversTable
+            rows={mostActive}
+            title="Most active"
+            changeColor="neutral"
+            onSelectTicker={onSelectTicker}
+            currentPage={moversPageMostActive}
+            totalPages={totalPagesMostActive}
+            onPrev={handlePrevMostActive}
+            onNext={handleNextMostActive}
             pageSize={MOVERS_PAGE_SIZE}
           />
         </div>
