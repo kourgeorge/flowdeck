@@ -6,6 +6,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { chatApi, type ChatMessage, type ToolCallEvent, type ChartSpec, type SkillActivationEvent } from '../services/api';
+import { convertAsciiTableToMarkdown } from '../utils/chatMarkdown';
 import TickerMentionInput from './TickerMentionInput';
 
 // ── RTL Detection Utility ──────────────────────────────────────────────────
@@ -37,6 +38,90 @@ function stripFollowUpJsonLine(content: string): string {
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+const CHART_JSON_PREFIX = 'CHART_JSON:';
+
+/** Extract chart specs from text that contains CHART_JSON:{...} (brace-matching). Used when backend did not emit chart events. */
+function extractChartSpecsFromContent(text: string): ChartSpec[] {
+  if (!text || !text.includes(CHART_JSON_PREFIX)) return [];
+  const specs: ChartSpec[] = [];
+  let i = 0;
+  while (i < text.length) {
+    const idx = text.indexOf(CHART_JSON_PREFIX, i);
+    if (idx === -1) break;
+    let start = idx + CHART_JSON_PREFIX.length;
+    while (start < text.length && (text[start] === ' ' || text[start] === '\t')) start += 1;
+    if (start >= text.length || text[start] !== '{') {
+      i = idx + 1;
+      continue;
+    }
+    let depth = 0;
+    let end = start;
+    for (let j = start; j < text.length; j++) {
+      const c = text[j];
+      if (c === '{') depth += 1;
+      else if (c === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          end = j + 1;
+          break;
+        }
+      }
+    }
+    if (depth !== 0) {
+      i = idx + 1;
+      continue;
+    }
+    const payload = text.slice(start, end);
+    try {
+      const spec = JSON.parse(payload) as ChartSpec;
+      if (spec?.title != null && spec?.type && spec?.xKey && Array.isArray(spec?.yKeys) && Array.isArray(spec?.data)) {
+        specs.push(spec);
+      }
+    } catch {
+      // skip malformed JSON
+    }
+    i = end;
+  }
+  return specs;
+}
+
+/** Remove CHART_JSON:{...} segments from content so they are not shown as raw JSON in the bubble. */
+function stripChartJsonFromContent(content: string): string {
+  if (!content || !content.includes(CHART_JSON_PREFIX)) return content;
+  let cleaned = content;
+  let i = 0;
+  while (i < cleaned.length) {
+    const idx = cleaned.indexOf(CHART_JSON_PREFIX, i);
+    if (idx === -1) break;
+    let start = idx + CHART_JSON_PREFIX.length;
+    while (start < cleaned.length && (cleaned[start] === ' ' || cleaned[start] === '\t')) start += 1;
+    if (start >= cleaned.length || cleaned[start] !== '{') {
+      i = idx + 1;
+      continue;
+    }
+    let depth = 0;
+    let end = start;
+    for (let j = start; j < cleaned.length; j++) {
+      const c = cleaned[j];
+      if (c === '{') depth += 1;
+      else if (c === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          end = j + 1;
+          break;
+        }
+      }
+    }
+    if (depth !== 0) {
+      i = idx + 1;
+      continue;
+    }
+    cleaned = cleaned.slice(0, idx) + cleaned.slice(end);
+    i = idx;
+  }
+  return cleaned.replace(/\n{3,}/g, '\n\n').trim();
 }
 
 // ── Friendly display names for tool names ──────────────────────────────────
@@ -538,7 +623,7 @@ export function MessageBubble({
   onFollowUpClick?: (text: string) => void;
 }) {
   const isUser = message.role === 'user';
-  const [copied, triggerCopy] = useCopyText(stripFollowUpJsonLine(message.content));
+  const [copied, triggerCopy] = useCopyText(stripChartJsonFromContent(stripFollowUpJsonLine(message.content ?? '')));
   
   // Detect if message contains RTL text
   const isRTL = detectRTL(message.content);
@@ -576,7 +661,7 @@ export function MessageBubble({
           </div>
         )}
         {/* Only render message bubble if there's content, streaming, or charts */}
-        {(message.content || isStreaming || (message.charts && message.charts.length > 0)) && (
+        {(message.content || isStreaming || (message.charts && message.charts.length > 0) || extractChartSpecsFromContent(message.content ?? '').length > 0) && (
           <div
             className="bg-slate-700/80 text-slate-100 rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed"
             dir={direction}
@@ -608,24 +693,28 @@ export function MessageBubble({
                   td: ({ node, ...props }) => <td className="px-2 py-1.5 text-slate-300" {...props} />,
                 }}
               >
-                {normalizeBulletsForMarkdown(stripFollowUpJsonLine(message.content))}
+                {normalizeBulletsForMarkdown(convertAsciiTableToMarkdown(stripChartJsonFromContent(stripFollowUpJsonLine(message.content ?? ''))))}
               </ReactMarkdown>
               {isStreaming && <StreamingCursor />}
             </div>
-            {/* Render any charts attached to this message */}
-            {message.charts && message.charts.length > 0 && (
-              <div className="space-y-2 -mx-1">
-                {message.charts.map((spec, i) => (
-                  <ChartBlock key={i} spec={spec} />
-                ))}
-              </div>
-            )}
+            {/* Render charts: from message.charts or extracted from content if backend didn't emit chart events */}
+            {(() => {
+              const chartsToShow = (message.charts?.length ?? 0) > 0 ? message.charts! : extractChartSpecsFromContent(message.content ?? '');
+              if (chartsToShow.length === 0) return null;
+              return (
+                <div className="space-y-2 -mx-1">
+                  {chartsToShow.map((spec, i) => (
+                    <ChartBlock key={i} spec={spec} />
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         )}
         {/* Copy button + token/tool metadata row */}
         <div className="flex items-center gap-2.5 mt-1 ml-1">
           {/* Copy text button — always visible once message is complete */}
-          {!isStreaming && stripFollowUpJsonLine(message.content) && (
+          {!isStreaming && stripChartJsonFromContent(stripFollowUpJsonLine(message.content ?? '')) && (
             <CopyButton onClick={triggerCopy} copied={copied} title="Copy message" />
           )}
           {(message.tokens_used != null || (message.tools_called != null && message.tools_called > 0)) && (

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { chatApi, type ChatMessage } from '../services/api';
+import { convertAsciiTableToMarkdown } from '../utils/chatMarkdown';
 
 // ── RTL Detection Utility ──────────────────────────────────────────────────
 /**
@@ -141,7 +142,7 @@ function MessageBubble({
                 td: ({ node, ...props }) => <td className="px-2 py-1.5 text-slate-300" {...props} />,
               }}
             >
-              {stripFollowUpJsonLine(message.content)}
+              {convertAsciiTableToMarkdown(stripFollowUpJsonLine(message.content))}
             </ReactMarkdown>
             {isStreaming && <StreamingCursor />}
           </div>
