@@ -150,14 +150,14 @@ class ReportService:
         pass
 
     def get_latest_analysis_run(self, ticker: str) -> Optional[tuple[int, str]]:
-        """Return (analysis_run_id, date_display) for the most recent run, or None."""
+        """Return (analysis_run_id, date_display) for the most recent run by analysis_runs.created_at, or None."""
         db = SessionLocal()
         try:
             row = (
                 db.query(AnalysisRun.id, AnalysisRun.created_at)
                 .join(Report, Report.analysis_run_id == AnalysisRun.id)
                 .filter(Report.ticker == ticker.upper())
-                .order_by(AnalysisRun.id.desc())
+                .order_by(AnalysisRun.created_at.desc())
                 .first()
             )
             if not row:
