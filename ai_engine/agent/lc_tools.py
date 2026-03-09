@@ -117,6 +117,17 @@ def get_specific_indicator(ticker: str, indicator: str, config: _InjectedConfig 
     return SpecificIndicatorTool().execute(ctx, ticker=ticker, indicator=indicator).to_str()
 
 
+@tool
+def get_daily_market_movers(count: int = 25, config: _InjectedConfig = None) -> str:
+    """Get today's top gainers and top losers in the US market. Returns two lists: biggest
+    percentage gainers and biggest percentage losers. Use when the user asks about top gainers,
+    top losers, best/worst performers today, or daily market movers. Pass count (default 25, max 100)
+    to limit how many symbols per list."""
+    from ai_engine.agent.tools.market_movers import MarketMoversTool
+    ctx = _ctx_from_config(config)
+    return MarketMoversTool().execute(ctx, count=count).to_str()
+
+
 # ---------------------------------------------------------------------------
 # Fundamental / financial statement tools
 # ---------------------------------------------------------------------------
@@ -341,6 +352,7 @@ ALL_LC_TOOLS = [
     get_multi_historical_prices,
     get_indicators,
     get_specific_indicator,
+    get_daily_market_movers,
     get_fundamentals,
     get_analysts_recommendation,
     get_income_statement,

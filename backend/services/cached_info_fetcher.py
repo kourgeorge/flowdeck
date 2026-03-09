@@ -20,6 +20,7 @@ from config import (
     DATA_CACHE_TTL_FUND_INFO,
     DATA_CACHE_TTL_HISTORICAL,
     DATA_CACHE_TTL_INSIDER_TRANSACTIONS,
+    DATA_CACHE_TTL_MARKET_MOVERS,
     DATA_CACHE_TTL_NEWS,
     DATA_CACHE_TTL_QUOTE,
     DATA_CACHE_TTL_SIMILAR_TICKERS,
@@ -205,6 +206,15 @@ class CachedInfoFetcher:
             key,
             DATA_CACHE_TTL_SIMILAR_TICKERS,
             lambda: self._fetcher.get_similar_tickers(ticker, limit, offset),
+        )
+
+    def get_daily_market_movers(self, count: int = 25) -> Dict[str, Any]:
+        """Get daily top gainers and losers (cached)."""
+        key = f"market_movers:{count}"
+        return get_cached(
+            key,
+            DATA_CACHE_TTL_MARKET_MOVERS,
+            lambda: self._fetcher.get_daily_market_movers(count),
         )
 
     def get_company_officers(self, ticker: str) -> Dict[str, Any]:

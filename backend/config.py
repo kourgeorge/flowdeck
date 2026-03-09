@@ -37,6 +37,7 @@ DATA_CACHE_TTL_ANALYST = 3600          # 1h
 DATA_CACHE_TTL_NEWS = 900              # 15min
 DATA_CACHE_TTL_SIMILAR_TICKERS = 86400  # 24h (sector/industry rarely changes)
 DATA_CACHE_TTL_INSIDER_TRANSACTIONS = 900  # 15min
+DATA_CACHE_TTL_MARKET_MOVERS = 120  # 2min (daily gainers/losers)
 
 # CORS: comma-separated origins (e.g. "https://app.example.com,https://example.com")
 # If empty, defaults to common local dev origins for backwards compatibility

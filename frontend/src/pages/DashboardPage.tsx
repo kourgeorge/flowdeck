@@ -6,12 +6,13 @@ import DashboardTickerSidebar from '../components/DashboardTickerSidebar';
 import StockDetailPanel from '../components/TickerDetailPanel';
 import TickerListView from '../components/StockListView';
 import DashboardNewsSection from '../components/DashboardNewsSection';
+import DashboardMarketMovers from '../components/DashboardMarketMovers';
 import DashboardPriceTrendsChart from '../components/DashboardPriceTrendsChart';
 import OverviewStatsPanel, { ByMarketSection, SubscribedChangeColumnsChart } from '../components/OverviewStatsPanel';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useAuth } from '../contexts/AuthContext';
 
-type DashboardTab = 'overview' | 'portfolio' | 'stock-view' | 'news';
+type DashboardTab = 'overview' | 'portfolio' | 'stock-view' | 'news' | 'market-movers';
 type StockListTab = 'subscribed' | 'recent';
 
 export default function DashboardPage() {
@@ -112,6 +113,7 @@ export default function DashboardPage() {
                 { id: 'overview', label: 'Overview' },
                 { id: 'portfolio', label: 'Portfolio' },
                 { id: 'stock-view', label: 'Stock View' },
+                { id: 'market-movers', label: 'Market Movers' },
                 { id: 'news', label: 'News' },
               ] as { id: DashboardTab; label: string }[]).map((tab) => (
               <button
@@ -422,6 +424,23 @@ export default function DashboardPage() {
                 </div>
               )}
 
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Market Movers Tab ── */}
+      {dashboardTab === 'market-movers' && (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="px-4 py-6 sm:p-6 lg:p-8">
+            <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
+              <DashboardMarketMovers
+                count={25}
+                onSelectTicker={(ticker) => {
+                  setSelectedTicker(ticker);
+                  setDashboardTab('stock-view');
+                }}
+              />
             </div>
           </div>
         </div>

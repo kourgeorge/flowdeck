@@ -216,6 +216,18 @@ def get_edgar_filing_content(
     return "\n".join(parts)
 
 
+def get_market_movers(count: int = 25, base_url: Optional[str] = None) -> Dict[str, Any]:
+    """Fetch daily top gainers and losers (US market) from info service.
+    Returns dict with 'gainers' and 'losers' lists of quote-like dicts."""
+    base_url = base_url or _get_info_service_base_url()
+    if not base_url:
+        raise ValueError("Info service URL not configured (set INFO_SERVICE_URL or config info_service_url)")
+    data = _get(None, base_url, "/api/data/market-movers", params={"count": count})
+    if isinstance(data, dict):
+        return data
+    return {"gainers": [], "losers": []}
+
+
 def is_configured() -> bool:
     """Return True if info service URL is set."""
     return _get_info_service_base_url() is not None

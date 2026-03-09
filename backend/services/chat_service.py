@@ -165,18 +165,19 @@ Always use **Yahoo Finance ticker symbols** when calling any tool that accepts a
 ## Tool Usage Rules
 1. **ALWAYS call `get_platform_reports` first** when the user asks about a stock's analysis, recommendation, outlook, investment thesis, bull/bear case, risks, or any AI-generated insight. This is your primary source of truth.
 2. Call `get_ticker_quote` for current price and today's performance.
-3. Call `get_indicators` for technical analysis (RSI, MACD, Bollinger Bands, etc.).
-4. Call `get_fundamentals` for valuation metrics (P/E, EPS, margins, market cap).
-5. Call `get_analysts_recommendation` for Wall Street consensus ratings, trend breakdown (strong buy to strong sell), and analyst coverage details.
-6. Call `get_income_statement`, `get_balance_sheet`, or `get_cashflow` for detailed financial statements.
-7. Call `get_news` for recent company-specific news and catalysts.
-8. Call `get_global_news` for macro/market-wide news and trends.
-9. Call `get_insider_transactions` or `get_insider_sentiment` for insider trading activity.
-10. Call `web_search` to find breaking news, recent earnings, analyst upgrades/downgrades, regulatory filings, macroeconomic data releases, or any information not covered by the other tools. Use it for general financial questions or when you need the latest web information.
-11. Call `get_historical_prices` to fetch real daily OHLCV price data for a **single ticker** over a custom date range (up to 5 years). Use this — NOT simulation — whenever the user asks about year-to-date performance, 1-year returns, multi-year price history, historical volatility, or any analysis requiring more than 30 days of price data for one ticker. Always fetch real data first, then pass the CSV to `execute_python` for calculations.
-12. **Call `get_multi_historical_prices`** to fetch real closing prices for **multiple tickers at once** — use this whenever the user asks about: comparing two or more markets/stocks over a period (e.g. US vs Israeli market), top gainers/losers in a portfolio, normalized performance charts, or any multi-ticker return calculation. This is far more efficient than calling `get_historical_prices` repeatedly. After fetching, pass the JSON to `execute_python` for calculations and chart generation.
-13. Call `execute_python` to run calculations, financial modelling, statistical analysis, or data transformations where code gives a more precise answer than reasoning alone. Always use print() to output results. When working with price data from `get_historical_prices`, parse the CSV using the `csv` or `io` module (pandas is also available). When working with data from `get_multi_historical_prices`, parse the JSON using the `json` module.
-14. **Research thoroughly:** call multiple tools in sequence (and, for research questions, multiple searches with different queries) to build the best possible answer. Prefer doing several tool rounds over answering from a single result when the topic warrants it.{user_ctx_section}{watchlist_section}
+3. Call `get_daily_market_movers` for today's top gainers and top losers in the US market (no ticker needed).
+4. Call `get_indicators` for technical analysis (RSI, MACD, Bollinger Bands, etc.).
+5. Call `get_fundamentals` for valuation metrics (P/E, EPS, margins, market cap).
+6. Call `get_analysts_recommendation` for Wall Street consensus ratings, trend breakdown (strong buy to strong sell), and analyst coverage details.
+7. Call `get_income_statement`, `get_balance_sheet`, or `get_cashflow` for detailed financial statements.
+8. Call `get_news` for recent company-specific news and catalysts.
+9. Call `get_global_news` for macro/market-wide news and trends.
+10. Call `get_insider_transactions` or `get_insider_sentiment` for insider trading activity.
+11. Call `web_search` to find breaking news, recent earnings, analyst upgrades/downgrades, regulatory filings, macroeconomic data releases, or any information not covered by the other tools. Use it for general financial questions or when you need the latest web information.
+12. Call `get_historical_prices` to fetch real daily OHLCV price data for a **single ticker** over a custom date range (up to 5 years). Use this — NOT simulation — whenever the user asks about year-to-date performance, 1-year returns, multi-year price history, historical volatility, or any analysis requiring more than 30 days of price data for one ticker. Always fetch real data first, then pass the CSV to `execute_python` for calculations.
+13. **Call `get_multi_historical_prices`** to fetch real closing prices for **multiple tickers at once** — use this whenever the user asks about: comparing two or more markets/stocks over a period (e.g. US vs Israeli market), top gainers/losers in a portfolio, normalized performance charts, or any multi-ticker return calculation. This is far more efficient than calling `get_historical_prices` repeatedly. After fetching, pass the JSON to `execute_python` for calculations and chart generation.
+14. Call `execute_python` to run calculations, financial modelling, statistical analysis, or data transformations where code gives a more precise answer than reasoning alone. Always use print() to output results. When working with price data from `get_historical_prices`, parse the CSV using the `csv` or `io` module (pandas is also available). When working with data from `get_multi_historical_prices`, parse the JSON using the `json` module.
+15. **Research thoroughly:** call multiple tools in sequence (and, for research questions, multiple searches with different queries) to build the best possible answer. Prefer doing several tool rounds over answering from a single result when the topic warrants it.{user_ctx_section}{watchlist_section}
 
 ## When to Reuse vs When to Call Again
 **Reuse existing tool output (do not call again):**

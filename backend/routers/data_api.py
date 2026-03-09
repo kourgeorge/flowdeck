@@ -56,6 +56,14 @@ async def data_quote(ticker: str):
     return result
 
 
+@router.get("/market-movers")
+async def data_market_movers(
+    count: int = Query(25, ge=1, le=100, description="Number of gainers and losers to return (each)"),
+):
+    """Get daily top gainers and losers (US market) from Yahoo Finance via yahooquery Screener."""
+    return await asyncio.to_thread(_engine().get_daily_market_movers, count)
+
+
 @router.get("/news")
 async def data_news(
     ticker: str = Query(..., description="Ticker symbol"),

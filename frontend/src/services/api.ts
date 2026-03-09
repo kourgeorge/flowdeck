@@ -553,6 +553,31 @@ export const tickerApi = {
     return response.data;
   },
 
+  // Get daily top gainers and losers (US market, yahooquery Screener)
+  getMarketMovers: async (count: number = 25): Promise<{
+    gainers: Array<{
+      symbol: string | null;
+      shortName: string | null;
+      regularMarketPrice: number | null;
+      regularMarketChange: number | null;
+      regularMarketChangePercent: number | null;
+      regularMarketPreviousClose: number | null;
+      regularMarketVolume: number | null;
+    }>;
+    losers: Array<{
+      symbol: string | null;
+      shortName: string | null;
+      regularMarketPrice: number | null;
+      regularMarketChange: number | null;
+      regularMarketChangePercent: number | null;
+      regularMarketPreviousClose: number | null;
+      regularMarketVolume: number | null;
+    }>;
+  }> => {
+    const response = await api.get(`/api/data/market-movers`, { params: { count } });
+    return response.data;
+  },
+
   // Get SEC EDGAR filings (10-K, 10-Q) for a ticker (US companies only)
   getEdgarFilings: async (ticker: string): Promise<{
     cik: string;

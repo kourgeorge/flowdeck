@@ -1254,6 +1254,42 @@ class InfoFetcher:
             if isinstance(recommendation_key, str) and recommendation_key.strip():
                 ticker["recommendation_key"] = recommendation_key.strip()
 
+    def get_daily_market_movers(self, count: int = 25) -> Dict[str, Any]:
+        """Get daily top gainers and losers from yahooquery Screener (US market)."""
+        from yahooquery import Screener
+
+        def _normalize_quote(q: Dict[str, Any]) -> Dict[str, Any]:
+            price = self._coerce_float(q.get("regularMarketPrice"))
+            change = self._coerce_float(q.get("regularMarketChange"))
+            change_pct = self._coerce_float(q.get("regularMarketChangePercent"))
+            # yahooquery screener may return change percent as percentage (61.21) or fractional; normalize to percentage
+            if change_pct is not None and abs(change_pct) <= 1.5 and change_pct != 0:
+                change_pct = change_pct * 100.0
+            return {
+                "symbol": (q.get("symbol") or "").strip() or None,
+                "shortName": (q.get("shortName") or q.get("longName") or "").strip() or None,
+                "regularMarketPrice": round(price, 2) if price is not None else None,
+                "regularMarketChange": round(change, 2) if change is not None else None,
+                "regularMarketChangePercent": round(change_pct, 2) if change_pct is not None else None,
+                "regularMarketPreviousClose": self._coerce_float(q.get("regularMarketPreviousClose")),
+                "regularMarketVolume": int(q["regularMarketVolume"]) if q.get("regularMarketVolume") is not None else None,
+            }
+
+        count = max(1, min(100, count))
+        screen_ids = ["day_gainers", "day_losers"]
+        raw = Screener().get_screeners(screen_ids, count=count)
+        if not isinstance(raw, dict):
+            return {"gainers": [], "losers": []}
+
+        gainers_data = raw.get("day_gainers")
+        losers_data = raw.get("day_losers")
+        quotes_g = gainers_data.get("quotes", []) if isinstance(gainers_data, dict) else []
+        quotes_l = losers_data.get("quotes", []) if isinstance(losers_data, dict) else []
+
+        gainers = [_normalize_quote(q) for q in quotes_g if isinstance(q, dict) and q.get("symbol")]
+        losers = [_normalize_quote(q) for q in quotes_l if isinstance(q, dict) and q.get("symbol")]
+        return {"gainers": gainers, "losers": losers}
+
     def get_company_officers(self, ticker: str) -> Dict[str, Any]:
         """Get company officers/management team from Yahoo Finance."""
         import yfinance as yf
