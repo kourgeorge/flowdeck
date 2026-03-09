@@ -97,18 +97,18 @@ function OverviewCard({
       }`}
     >
       <div className="flex items-baseline justify-between gap-1 min-w-0">
-        <span className="text-gray-300 text-[11px] font-medium truncate min-w-0" title={item.name}>
+        <span className="text-gray-300 text-xs font-medium truncate min-w-0" title={item.name}>
           {item.name}
         </span>
         {item.ticker && (
-          <span className="text-gray-500 text-[10px] shrink-0 tabular-nums">{item.ticker}</span>
+          <span className="text-gray-500 text-xs shrink-0 tabular-nums">{item.ticker}</span>
         )}
       </div>
       <div className="mt-0.5 flex items-baseline justify-between gap-1 min-w-0">
         <span className="text-white text-xs font-semibold tabular-nums min-w-0 truncate" title={formatPrice(item.price)}>
           {formatPrice(item.price)}
         </span>
-        <span className={`text-[11px] font-medium tabular-nums shrink-0 ${changeClass}`}>
+        <span className={`text-xs font-medium tabular-nums shrink-0 ${changeClass}`}>
           {formatPct(item.changePercent)}
         </span>
       </div>
@@ -145,7 +145,7 @@ function OverviewSection({
   return (
     <div className="rounded-lg border border-gray-700 bg-gray-800/60 overflow-hidden">
       <div className="px-2.5 py-1.5 border-b border-gray-700 bg-gray-800/80 flex items-center justify-between gap-1">
-        <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{title}</h3>
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{title}</h3>
         <div className="flex items-center gap-0.5">
           <button
             type="button"
@@ -158,7 +158,7 @@ function OverviewSection({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <span className="text-[10px] text-gray-500 tabular-nums min-w-[3rem] text-center">
+          <span className="text-xs text-gray-500 tabular-nums min-w-[3rem] text-center">
             {totalPages > 0 ? `${currentPage + 1}/${totalPages}` : '—'}
           </span>
           <button
@@ -214,48 +214,48 @@ function MoversTable({
     ? rows.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
     : rows;
   return (
-    <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-      <div className="px-4 py-2 border-b border-gray-700 bg-gray-800/80 flex items-center justify-between gap-2">
-        <h3 className="text-white font-semibold text-xs">{title}</h3>
+    <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden flex flex-col min-h-0">
+      <div className="px-2.5 py-1.5 border-b border-gray-700 bg-gray-800/80 flex items-center justify-between gap-1 shrink-0">
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{title}</h3>
         {totalPages > 1 && onPrev != null && onNext != null && (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
             <button
               type="button"
               onClick={onPrev}
               disabled={!canPrev}
-              className="p-1.5 rounded-md border border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700 hover:border-gray-500 disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:border-gray-600 transition-colors"
+              className="p-1 rounded border border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700 hover:border-gray-500 disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:border-gray-600 transition-colors"
               aria-label="Previous page"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
-            <span className="text-xs text-gray-500 tabular-nums min-w-[4rem] text-center">
+            <span className="text-xs text-gray-500 tabular-nums min-w-[3rem] text-center">
               {currentPage + 1} / {totalPages}
             </span>
             <button
               type="button"
               onClick={onNext}
               disabled={!canNext}
-              className="p-1.5 rounded-md border border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700 hover:border-gray-500 disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:border-gray-600 transition-colors"
+              className="p-1 rounded border border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700 hover:border-gray-500 disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:border-gray-600 transition-colors"
               aria-label="Next page"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
           </div>
         )}
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
+      <div className="overflow-x-auto flex-1 min-h-0">
+        <table className="w-full text-left text-xs">
           <thead>
             <tr className="border-b border-gray-700 text-gray-400">
               <th className="py-1.5 px-3 font-medium text-xs">Symbol</th>
               <th className="py-1.5 px-3 font-medium text-xs min-w-0 truncate max-w-[140px]">Name</th>
               <th className="py-1.5 px-3 font-medium text-xs w-0 max-w-[90px]">Sector</th>
               <th className="py-1.5 px-3 font-medium text-xs text-right">Price</th>
-              <th className="py-1.5 px-3 font-medium text-xs text-right">Change %</th>
+              <th className="py-1.5 px-3 font-medium text-xs text-right">Change</th>
               <th className="py-1.5 px-3 font-medium text-xs text-right">Volume</th>
             </tr>
           </thead>
@@ -816,7 +816,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
-        <div className="flex items-center gap-2 text-gray-400">
+        <div className="flex items-center gap-2 text-gray-400 text-xs">
           <svg className="w-5 h-5 text-blue-400 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
@@ -830,11 +830,11 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
   if (error) {
     return (
       <div className="bg-gray-800 rounded-xl border border-gray-700 p-8 text-center">
-        <p className="text-red-400 text-sm mb-2">{error}</p>
+        <p className="text-red-400 text-xs mb-2">{error}</p>
         <button
           type="button"
           onClick={fetchAll}
-          className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors"
+          className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded-lg transition-colors"
         >
           Retry
         </button>
