@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { tickerApi } from '../services/api';
+import TickerSearch from './TickerSearch';
 
 function ChevronDownIcon({ className }: { className?: string }) {
   return (
@@ -844,8 +845,15 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
 
   return (
     <div className="space-y-8">
-      {/* Running headlines */}
-      <RunningHeadlinesStrip articles={headlines} isLoading={headlinesLoading} tickerChangeMap={tickerChangeMap} />
+      <div className="space-y-3">
+        <div>
+          <TickerSearch compact />
+        </div>
+        <div className="border-b border-gray-700" />
+        <div>
+          <RunningHeadlinesStrip articles={headlines} isLoading={headlinesLoading} tickerChangeMap={tickerChangeMap} />
+        </div>
+      </div>
 
       <section className="space-y-4">
         {overview && (

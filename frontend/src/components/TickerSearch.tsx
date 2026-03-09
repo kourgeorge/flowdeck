@@ -169,7 +169,7 @@ export default function TickerSearch({ compact = false }: TickerSearchProps) {
               }}
               placeholder="Ticker search…"
               title="Use any Yahoo Finance symbol — even if it doesn't appear in the dropdown."
-              className={`w-full bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+              className={`w-full bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none ${
                 compact ? 'px-3 py-1.5 text-sm' : 'px-4 py-3'
               }`}
             />
