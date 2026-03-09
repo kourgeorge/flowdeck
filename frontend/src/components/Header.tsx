@@ -26,6 +26,12 @@ export default function Header() {
               Home
             </Link>
             <Link
+              to="/market"
+              className="text-gray-300 hover:text-white text-sm font-medium transition-colors"
+            >
+              Market
+            </Link>
+            <Link
               to="/how-it-works"
               className="text-gray-300 hover:text-white text-sm font-medium transition-colors"
             >
@@ -73,6 +79,13 @@ export default function Header() {
               onClick={() => setIsMenuOpen(false)}
             >
               Home
+            </Link>
+            <Link
+              to="/market"
+              className="text-gray-300 hover:text-white text-sm font-medium transition-colors"
+              onClick={() => setIsMenuOpen(false)}
+            >
+              Market
             </Link>
             <Link
               to="/how-it-works"

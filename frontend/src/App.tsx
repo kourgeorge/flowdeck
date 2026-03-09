@@ -8,6 +8,7 @@ import TermsOfUsePage from './pages/TermsOfUsePage';
 import ContactUsPage from './pages/ContactUsPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import DashboardPage from './pages/DashboardPage';
+import MarketPage from './pages/MarketPage';
 import PaymentSuccessPage from './pages/PaymentSuccessPage';
 import PaymentCancelPage from './pages/PaymentCancelPage';
 import ChatPage from './pages/ChatPage';
@@ -25,6 +26,7 @@ function App() {
           <Route path="tickers/:ticker" element={<TickerPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="market" element={<MarketPage />} />
           <Route path="chat" element={<ChatPage />} />
           <Route path="copilot" element={<CopilotPage />} />
           <Route path="subscriptions" element={<Navigate to="/dashboard" replace />} />
