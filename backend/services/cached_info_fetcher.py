@@ -226,9 +226,11 @@ class CachedInfoFetcher:
         offset_sectors: int = 0,
         limit_regions: int = 50,
         offset_regions: int = 0,
+        limit_commodities: int = 50,
+        offset_commodities: int = 0,
     ) -> Dict[str, Any]:
-        """Get market overview: indices, sectors, international (cached). Pagination via limit/offset per group."""
-        key = f"market_overview:{limit_indices}:{offset_indices}:{limit_sectors}:{offset_sectors}:{limit_regions}:{offset_regions}"
+        """Get market overview: indices, sectors, international, commodities (cached). Pagination via limit/offset per group."""
+        key = f"market_overview:{limit_indices}:{offset_indices}:{limit_sectors}:{offset_sectors}:{limit_regions}:{offset_regions}:{limit_commodities}:{offset_commodities}"
         return get_cached(
             key,
             DATA_CACHE_TTL_MARKET_OVERVIEW,
@@ -239,6 +241,8 @@ class CachedInfoFetcher:
                 offset_sectors=offset_sectors,
                 limit_regions=limit_regions,
                 offset_regions=offset_regions,
+                limit_commodities=limit_commodities,
+                offset_commodities=offset_commodities,
             ),
         )
 

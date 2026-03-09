@@ -1255,7 +1255,7 @@ class InfoFetcher:
                 ticker["recommendation_key"] = recommendation_key.strip()
 
     def get_daily_market_movers(self, count: int = 25) -> Dict[str, Any]:
-        """Get daily top gainers and losers from yahooquery Screener (US market)."""
+        """Get daily top gainers, losers, and most active from yahooquery Screener (US market)."""
         from yahooquery import Screener
 
         def _normalize_quote(q: Dict[str, Any]) -> Dict[str, Any]:
@@ -1276,30 +1276,33 @@ class InfoFetcher:
             }
 
         count = max(1, min(100, count))
-        screen_ids = ["day_gainers", "day_losers"]
+        screen_ids = ["day_gainers", "day_losers", "most_actives"]
         raw = Screener().get_screeners(screen_ids, count=count)
         if not isinstance(raw, dict):
-            return {"gainers": [], "losers": []}
+            return {"gainers": [], "losers": [], "most_active": []}
 
         gainers_data = raw.get("day_gainers")
         losers_data = raw.get("day_losers")
+        most_actives_data = raw.get("most_actives")
         quotes_g = gainers_data.get("quotes", []) if isinstance(gainers_data, dict) else []
         quotes_l = losers_data.get("quotes", []) if isinstance(losers_data, dict) else []
+        quotes_ma = most_actives_data.get("quotes", []) if isinstance(most_actives_data, dict) else []
 
         gainers = [_normalize_quote(q) for q in quotes_g if isinstance(q, dict) and q.get("symbol")]
         losers = [_normalize_quote(q) for q in quotes_l if isinstance(q, dict) and q.get("symbol")]
+        most_active = [_normalize_quote(q) for q in quotes_ma if isinstance(q, dict) and q.get("symbol")]
 
         # Enrich with sector/industry via one batch call (screener quotes don't include sector)
-        all_symbols = [r["symbol"] for r in gainers + losers if r.get("symbol")]
+        all_symbols = [r["symbol"] for r in gainers + losers + most_active if r.get("symbol")]
         sector_map = self._fetch_sector_info_batch_yahooquery(all_symbols) if all_symbols else {}
-        for row in gainers + losers:
+        for row in gainers + losers + most_active:
             sym = row.get("symbol")
             if sym and sym in sector_map:
                 info = sector_map[sym]
                 row["sector"] = info.get("sector")
                 row["industry"] = info.get("industry")
 
-        return {"gainers": gainers, "losers": losers}
+        return {"gainers": gainers, "losers": losers, "most_active": most_active}
 
     # Curated tickers for market overview: (group_key, ticker, display_name). At least 12 per section.
     MARKET_OVERVIEW_TICKERS = [
@@ -1342,6 +1345,19 @@ class InfoFetcher:
         ("international", "EWA", "Australia"),
         ("international", "FXI", "China"),
         ("international", "INDA", "India"),
+        # Commodities / materials (ETFs and common proxies)
+        ("commodities", "GLD", "Gold"),
+        ("commodities", "SLV", "Silver"),
+        ("commodities", "IAU", "Gold (iShares)"),
+        ("commodities", "USO", "Oil (WTI)"),
+        ("commodities", "UNG", "Natural Gas"),
+        ("commodities", "DBA", "Agriculture"),
+        ("commodities", "DBC", "Broad Commodities"),
+        ("commodities", "CPER", "Copper"),
+        ("commodities", "PALL", "Palladium"),
+        ("commodities", "PLTM", "Platinum"),
+        ("commodities", "WEAT", "Wheat"),
+        ("commodities", "CORN", "Corn"),
     ]
 
     def get_market_overview(
@@ -1352,11 +1368,13 @@ class InfoFetcher:
         offset_sectors: int = 0,
         limit_regions: int = 50,
         offset_regions: int = 0,
+        limit_commodities: int = 50,
+        offset_commodities: int = 0,
     ) -> Dict[str, Any]:
-        """Get high-level market overview: indices, sectors, and international with prices and daily change.
+        """Get high-level market overview: indices, sectors, international, commodities with prices and daily change.
         Within each section, items are ordered by absolute change (biggest movers first). Pagination via limit/offset."""
         svc = self._get_market_data_service()
-        by_group: Dict[str, List[tuple]] = {"indices": [], "sectors": [], "international": []}
+        by_group: Dict[str, List[tuple]] = {"indices": [], "sectors": [], "international": [], "commodities": []}
         for group_key, ticker, name in self.MARKET_OVERVIEW_TICKERS:
             by_group[group_key].append((ticker.upper(), name))
         tickers = list({row[1].upper() for row in self.MARKET_OVERVIEW_TICKERS})
@@ -1390,14 +1408,17 @@ class InfoFetcher:
         sorted_indices = _build_and_sort("indices")
         sorted_sectors = _build_and_sort("sectors")
         sorted_international = _build_and_sort("international")
+        sorted_commodities = _build_and_sort("commodities")
 
         return {
             "indices": sorted_indices[offset_indices : offset_indices + limit_indices],
             "sectors": sorted_sectors[offset_sectors : offset_sectors + limit_sectors],
             "international": sorted_international[offset_regions : offset_regions + limit_regions],
+            "commodities": sorted_commodities[offset_commodities : offset_commodities + limit_commodities],
             "totalIndices": len(sorted_indices),
             "totalSectors": len(sorted_sectors),
             "totalRegions": len(sorted_international),
+            "totalCommodities": len(sorted_commodities),
         }
 
     def get_company_officers(self, ticker: str) -> Dict[str, Any]:

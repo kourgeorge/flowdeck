@@ -72,8 +72,10 @@ async def data_market_overview(
     offset_sectors: int = Query(0, ge=0),
     limit_regions: int = Query(8, ge=1, le=100),
     offset_regions: int = Query(0, ge=0),
+    limit_commodities: int = Query(12, ge=1, le=100),
+    offset_commodities: int = Query(0, ge=0),
 ):
-    """Get market overview: US indices, sectors, and regional ETFs with price and daily change. Pagination per group."""
+    """Get market overview: US indices, sectors, regional ETFs, and commodities with price and daily change. Pagination per group."""
     engine = _engine()
     return await asyncio.to_thread(
         engine.get_market_overview,
@@ -83,6 +85,8 @@ async def data_market_overview(
         offset_sectors,
         limit_regions,
         offset_regions,
+        limit_commodities,
+        offset_commodities,
     )
 
 
