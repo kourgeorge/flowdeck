@@ -17,8 +17,9 @@ import requests
 from typing import Dict, Any
 
 # Configuration
-BASE_URL = os.environ.get("FLOWDECK_API_URL", "http://localhost:8002")
+BASE_URL = os.environ.get("FLOWDECK_API_URL", "https://flowdeck.biz")
 API_KEY = os.environ.get("FLOWDECK_API_KEY", "fd_live_NatyzYD7BEZC-aeRffc7GNJFEVNFASJ3B3DnGWLzk5M")  # Set your API key here or via env var
+API_KEY = os.environ.get("FLOWDECK_API_KEY", "fd_live_OxIEUmwK3eJHSAo-cRTuoJpZWz8emQaFrorQksWC8cA")  # Set your API key here or via env var
 
 # ANSI color codes for terminal output
 GREEN = "\033[92m"

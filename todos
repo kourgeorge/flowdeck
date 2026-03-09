@@ -1,28 +1,33 @@
-Insights for your own portfolio - build a portfolio and let the ai give you recommendation
-stability of the analysis
-protfolio management
-synopsys giving last report
+Non-functional
+────────────────
+- [ ] Run analysis on top 200 stocks
+- [ ] Make backend LLM configurable (allow switching provider/model)
 
-understanding makor stock events
-ask questions about stocks (GPT like)
-run analysis on the top 500 stocks
+AI reports & analysis
+─────────────────────
+- Trading agents: learn from mistakes — define mechanism
+- Analysis stability: consider memory (e.g. persist prior conclusions)
+- Polymarket integration
+- Multilayer analysis: let agents use sector-level and market-level analyses
+- Validate TPS plans: measure accuracy and usefulness
+- Analyze news article content (sentiment/relevance)
+- Evaluate merging Market and Technical agents
 
-add the token accounting in the db to track the earming nd usage and purchase/
+Portfolio
+─────────
+- Portfolio management
+- Recommendations (buy/sell/hold)
+- Portfolio insights: build portfolio view and get AI recommendations
+- Major stock events: explain/summarize for user
 
+Copilot / chat
+──────────────
+- Conversation history (persist and restore)
+- Agent behaviour: add guardrails — avoid out-of-scope answers, hedge predictions
+- Canvas (drawing/planning surface)
+- expose the api as an mcp
 
-make sure  the tps is clear.
-allow the agent to execute analysis code.
-make the insights clearer and comprehensive.
-
-tradignagents learning from mistakes - how?
-
-make sure the server is multithreaded and can handlke multiple requests [done]
-show graphs in the chat[done]
-
-
-Conversation history.
-adding skills to the deck
-the trading agents be able to access the do analysis on sector and the entire market condition
-
-The agent behaviour - add guardrails - not Out of scope and always hedge the response if asked to give predictions.
-canvas
+Data layer
+──────────
+- Use Yahoo Query recommendations
+- Token accounting in DB: track earnings, usage, purchases — No (skip)
