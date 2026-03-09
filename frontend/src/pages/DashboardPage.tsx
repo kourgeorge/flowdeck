@@ -435,7 +435,6 @@ export default function DashboardPage() {
           <div className="px-4 py-6 sm:p-6 lg:p-8">
             <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
               <MarketView
-                moversCount={25}
                 onSelectTicker={(ticker) => {
                   setSelectedTicker(ticker);
                   setDashboardTab('stock-view');

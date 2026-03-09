@@ -34,7 +34,6 @@ type OverviewItem = {
 };
 
 interface MarketViewProps {
-  moversCount?: number;
   onSelectTicker?: (ticker: string) => void;
 }
 
@@ -73,23 +72,23 @@ function OverviewCard({
     <div
       role={clickable ? 'button' : undefined}
       onClick={() => clickable && onSelectTicker(item.ticker)}
-      className={`min-h-[4.5rem] min-w-0 rounded-lg border border-gray-600 bg-gray-800 px-4 py-3 flex flex-col justify-center overflow-hidden transition-colors ${
+      className={`min-h-[3.5rem] min-w-0 rounded border border-gray-600 bg-gray-800 px-2.5 py-2 flex flex-col justify-center overflow-hidden transition-colors ${
         clickable ? 'cursor-pointer hover:border-gray-500 hover:bg-gray-700/80' : ''
       }`}
     >
-      <div className="flex items-baseline justify-between gap-2 min-w-0">
-        <span className="text-gray-300 text-sm font-medium truncate min-w-0" title={item.name}>
+      <div className="flex items-baseline justify-between gap-1 min-w-0">
+        <span className="text-gray-300 text-[11px] font-medium truncate min-w-0" title={item.name}>
           {item.name}
         </span>
         {item.ticker && (
-          <span className="text-gray-500 text-xs shrink-0 tabular-nums">{item.ticker}</span>
+          <span className="text-gray-500 text-[10px] shrink-0 tabular-nums">{item.ticker}</span>
         )}
       </div>
-      <div className="mt-1.5 flex items-baseline justify-between gap-2 min-w-0">
-        <span className="text-white font-semibold tabular-nums min-w-0 truncate" title={formatPrice(item.price)}>
+      <div className="mt-0.5 flex items-baseline justify-between gap-1 min-w-0">
+        <span className="text-white text-xs font-semibold tabular-nums min-w-0 truncate" title={formatPrice(item.price)}>
           {formatPrice(item.price)}
         </span>
-        <span className={`text-sm font-medium tabular-nums shrink-0 ${changeClass}`}>
+        <span className={`text-[11px] font-medium tabular-nums shrink-0 ${changeClass}`}>
           {formatPct(item.changePercent)}
         </span>
       </div>
@@ -124,39 +123,39 @@ function OverviewSection({
   const canNext = totalPages > 1 && currentPage < totalPages - 1;
   if (items.length === 0 && totalPages === 0) return null;
   return (
-    <div className="rounded-xl border border-gray-700 bg-gray-800/60 overflow-hidden">
-      <div className="px-4 py-2 border-b border-gray-700 bg-gray-800/80 flex items-center justify-between gap-2">
-        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{title}</h3>
-        <div className="flex items-center gap-1">
+    <div className="rounded-lg border border-gray-700 bg-gray-800/60 overflow-hidden">
+      <div className="px-2.5 py-1.5 border-b border-gray-700 bg-gray-800/80 flex items-center justify-between gap-1">
+        <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{title}</h3>
+        <div className="flex items-center gap-0.5">
           <button
             type="button"
             onClick={onPrev}
             disabled={!canPrev || paginationLoading}
-            className="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+            className="p-1 rounded text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
             aria-label="Previous page"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <span className="text-xs text-gray-500 tabular-nums min-w-[4rem] text-center">
-            {totalPages > 0 ? `${currentPage + 1} / ${totalPages}` : '—'}
+          <span className="text-[10px] text-gray-500 tabular-nums min-w-[3rem] text-center">
+            {totalPages > 0 ? `${currentPage + 1}/${totalPages}` : '—'}
           </span>
           <button
             type="button"
             onClick={onNext}
             disabled={!canNext || paginationLoading}
-            className="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+            className="p-1 rounded text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
             aria-label="Next page"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </button>
         </div>
       </div>
-      <div className="p-4">
-        <div className="grid grid-cols-2 gap-3">
+      <div className="p-2">
+        <div className="grid grid-cols-2 gap-1.5">
           {items.map((item) => (
             <OverviewCard key={item.ticker} item={item} onSelectTicker={onSelectTicker} />
           ))}
@@ -361,14 +360,15 @@ function RunningHeadlinesStrip({
   );
 }
 
-export default function MarketView({ moversCount = 25, onSelectTicker }: MarketViewProps) {
+export default function MarketView({ onSelectTicker }: MarketViewProps) {
   const [overview, setOverview] = useState<{
     indices: OverviewItem[];
     sectors: OverviewItem[];
     international: OverviewItem[];
+    commodities: OverviewItem[];
   } | null>(null);
-  const [totals, setTotals] = useState({ totalIndices: 0, totalSectors: 0, totalRegions: 0 });
-  const [pages, setPages] = useState({ indices: 0, sectors: 0, regions: 0 });
+  const [totals, setTotals] = useState({ totalIndices: 0, totalSectors: 0, totalRegions: 0, totalCommodities: 0 });
+  const [pages, setPages] = useState({ indices: 0, sectors: 0, regions: 0, commodities: 0 });
   const [gainers, setGainers] = useState<MarketMoverRow[]>([]);
   const [losers, setLosers] = useState<MarketMoverRow[]>([]);
   const [moversPageGainers, setMoversPageGainers] = useState(0);
@@ -377,7 +377,7 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
   const [headlinesLoading, setHeadlinesLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [paginationSection, setPaginationSection] = useState<'indices' | 'sectors' | 'regions' | null>(null);
+  const [paginationSection, setPaginationSection] = useState<'indices' | 'sectors' | 'regions' | 'commodities' | null>(null);
   // Ticker list for headlines: set only on initial load so news does not refresh when navigating sections
   const [initialHeadlinesTickers, setInitialHeadlinesTickers] = useState<string[]>([]);
 
@@ -399,6 +399,9 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
         if (i.ticker?.trim()) map[i.ticker.trim()] = i.changePercent ?? null;
       });
       overview.international.forEach((i) => {
+        if (i.ticker?.trim()) map[i.ticker.trim()] = i.changePercent ?? null;
+      });
+      overview.commodities.forEach((i) => {
         if (i.ticker?.trim()) map[i.ticker.trim()] = i.changePercent ?? null;
       });
     }
@@ -443,7 +446,8 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
       pageIndices: number,
       pageSectors: number,
       pageRegions: number,
-      updateOnlySection?: 'indices' | 'sectors' | 'regions'
+      pageCommodities: number,
+      updateOnlySection?: 'indices' | 'sectors' | 'regions' | 'commodities'
     ) => {
       const data = await tickerApi.getMarketOverview({
         limit_indices: TILES_PER_PAGE,
@@ -452,34 +456,47 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
         offset_sectors: pageSectors * TILES_PER_PAGE,
         limit_regions: TILES_PER_PAGE,
         offset_regions: pageRegions * TILES_PER_PAGE,
+        limit_commodities: TILES_PER_PAGE,
+        offset_commodities: pageCommodities * TILES_PER_PAGE,
       });
       if (updateOnlySection) {
         setOverview((prev) => {
-          if (!prev) return { indices: data.indices ?? [], sectors: data.sectors ?? [], international: data.international ?? [] };
+          if (!prev) {
+            return {
+              indices: data.indices ?? [],
+              sectors: data.sectors ?? [],
+              international: data.international ?? [],
+              commodities: data.commodities ?? [],
+            };
+          }
           return {
             indices: updateOnlySection === 'indices' ? (data.indices ?? []) : prev.indices,
             sectors: updateOnlySection === 'sectors' ? (data.sectors ?? []) : prev.sectors,
             international: updateOnlySection === 'regions' ? (data.international ?? []) : prev.international,
+            commodities: updateOnlySection === 'commodities' ? (data.commodities ?? []) : prev.commodities,
           };
         });
         setTotals((prev) => ({
           totalIndices: updateOnlySection === 'indices' ? (data.totalIndices ?? 0) : prev.totalIndices,
           totalSectors: updateOnlySection === 'sectors' ? (data.totalSectors ?? 0) : prev.totalSectors,
           totalRegions: updateOnlySection === 'regions' ? (data.totalRegions ?? 0) : prev.totalRegions,
+          totalCommodities: updateOnlySection === 'commodities' ? (data.totalCommodities ?? 0) : prev.totalCommodities,
         }));
       } else {
         setOverview({
           indices: data.indices ?? [],
           sectors: data.sectors ?? [],
           international: data.international ?? [],
+          commodities: data.commodities ?? [],
         });
         setTotals({
           totalIndices: data.totalIndices ?? 0,
           totalSectors: data.totalSectors ?? 0,
           totalRegions: data.totalRegions ?? 0,
+          totalCommodities: data.totalCommodities ?? 0,
         });
       }
-      setPages({ indices: pageIndices, sectors: pageSectors, regions: pageRegions });
+      setPages({ indices: pageIndices, sectors: pageSectors, regions: pageRegions, commodities: pageCommodities });
       return data;
     },
     []
@@ -497,6 +514,8 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
           offset_sectors: 0,
           limit_regions: TILES_PER_PAGE,
           offset_regions: 0,
+          limit_commodities: TILES_PER_PAGE,
+          offset_commodities: 0,
         }),
         tickerApi.getMarketMovers(MOVERS_LOAD_COUNT),
       ]);
@@ -505,6 +524,7 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
       const indices = overviewData.indices ?? [];
       const sectors = overviewData.sectors ?? [];
       const international = overviewData.international ?? [];
+      const commodities = overviewData.commodities ?? [];
       const raw: string[] = [];
       gainersList.forEach((r) => {
         const s = r.symbol?.trim();
@@ -514,7 +534,7 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
         const s = r.symbol?.trim();
         if (s) raw.push(s);
       });
-      [...indices, ...sectors, ...international].forEach((i) => {
+      [...indices, ...sectors, ...international, ...commodities].forEach((i) => {
         if (i.ticker?.trim()) raw.push(i.ticker.trim());
       });
       setInitialHeadlinesTickers([...new Set(raw)].slice(0, 50));
@@ -522,13 +542,15 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
         indices,
         sectors,
         international,
+        commodities,
       });
       setTotals({
         totalIndices: overviewData.totalIndices ?? 0,
         totalSectors: overviewData.totalSectors ?? 0,
         totalRegions: overviewData.totalRegions ?? 0,
+        totalCommodities: overviewData.totalCommodities ?? 0,
       });
-      setPages({ indices: 0, sectors: 0, regions: 0 });
+      setPages({ indices: 0, sectors: 0, regions: 0, commodities: 0 });
       setGainers(gainersList);
       setLosers(losersList);
       setMoversPageGainers(0);
@@ -547,13 +569,14 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
   const totalPagesIndices = Math.max(1, Math.ceil(totals.totalIndices / TILES_PER_PAGE));
   const totalPagesSectors = Math.max(1, Math.ceil(totals.totalSectors / TILES_PER_PAGE));
   const totalPagesRegions = Math.max(1, Math.ceil(totals.totalRegions / TILES_PER_PAGE));
+  const totalPagesCommodities = Math.max(1, Math.ceil(totals.totalCommodities / TILES_PER_PAGE));
 
   const handlePrevIndices = useCallback(async () => {
     if (paginationSection || pages.indices <= 0) return;
     const nextPage = pages.indices - 1;
     setPaginationSection('indices');
     try {
-      await fetchOverview(nextPage, pages.sectors, pages.regions, 'indices');
+      await fetchOverview(nextPage, pages.sectors, pages.regions, pages.commodities, 'indices');
     } finally {
       setPaginationSection(null);
     }
@@ -564,7 +587,7 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
     const nextPage = pages.indices + 1;
     setPaginationSection('indices');
     try {
-      await fetchOverview(nextPage, pages.sectors, pages.regions, 'indices');
+      await fetchOverview(nextPage, pages.sectors, pages.regions, pages.commodities, 'indices');
     } finally {
       setPaginationSection(null);
     }
@@ -575,7 +598,7 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
     const nextPage = pages.sectors - 1;
     setPaginationSection('sectors');
     try {
-      await fetchOverview(pages.indices, nextPage, pages.regions, 'sectors');
+      await fetchOverview(pages.indices, nextPage, pages.regions, pages.commodities, 'sectors');
     } finally {
       setPaginationSection(null);
     }
@@ -586,7 +609,7 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
     const nextPage = pages.sectors + 1;
     setPaginationSection('sectors');
     try {
-      await fetchOverview(pages.indices, nextPage, pages.regions, 'sectors');
+      await fetchOverview(pages.indices, nextPage, pages.regions, pages.commodities, 'sectors');
     } finally {
       setPaginationSection(null);
     }
@@ -597,7 +620,7 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
     const nextPage = pages.regions - 1;
     setPaginationSection('regions');
     try {
-      await fetchOverview(pages.indices, pages.sectors, nextPage, 'regions');
+      await fetchOverview(pages.indices, pages.sectors, nextPage, pages.commodities, 'regions');
     } finally {
       setPaginationSection(null);
     }
@@ -608,11 +631,33 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
     const nextPage = pages.regions + 1;
     setPaginationSection('regions');
     try {
-      await fetchOverview(pages.indices, pages.sectors, nextPage, 'regions');
+      await fetchOverview(pages.indices, pages.sectors, nextPage, pages.commodities, 'regions');
     } finally {
       setPaginationSection(null);
     }
   }, [paginationSection, pages, totalPagesRegions, fetchOverview]);
+
+  const handlePrevCommodities = useCallback(async () => {
+    if (paginationSection || pages.commodities <= 0) return;
+    const nextPage = pages.commodities - 1;
+    setPaginationSection('commodities');
+    try {
+      await fetchOverview(pages.indices, pages.sectors, pages.regions, nextPage, 'commodities');
+    } finally {
+      setPaginationSection(null);
+    }
+  }, [paginationSection, pages, fetchOverview]);
+
+  const handleNextCommodities = useCallback(async () => {
+    if (paginationSection || pages.commodities >= totalPagesCommodities - 1) return;
+    const nextPage = pages.commodities + 1;
+    setPaginationSection('commodities');
+    try {
+      await fetchOverview(pages.indices, pages.sectors, pages.regions, nextPage, 'commodities');
+    } finally {
+      setPaginationSection(null);
+    }
+  }, [paginationSection, pages, totalPagesCommodities, fetchOverview]);
 
   const totalPagesGainers = Math.max(1, Math.ceil(gainers.length / MOVERS_PAGE_SIZE));
   const totalPagesLosers = Math.max(1, Math.ceil(losers.length / MOVERS_PAGE_SIZE));
@@ -667,9 +712,9 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
       {/* Running headlines */}
       <RunningHeadlinesStrip articles={headlines} isLoading={headlinesLoading} tickerChangeMap={tickerChangeMap} />
 
-      <section className="space-y-6">
+      <section className="space-y-4">
         {overview && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             <OverviewSection
               title="Indices"
               items={overview.indices}
@@ -698,6 +743,16 @@ export default function MarketView({ moversCount = 25, onSelectTicker }: MarketV
               onPrev={handlePrevRegions}
               onNext={handleNextRegions}
               paginationLoading={paginationSection === 'regions'}
+              onSelectTicker={onSelectTicker}
+            />
+            <OverviewSection
+              title="Commodities"
+              items={overview.commodities}
+              currentPage={pages.commodities}
+              totalPages={totalPagesCommodities}
+              onPrev={handlePrevCommodities}
+              onNext={handleNextCommodities}
+              paginationLoading={paginationSection === 'commodities'}
               onSelectTicker={onSelectTicker}
             />
           </div>
