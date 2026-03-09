@@ -558,6 +558,8 @@ export const tickerApi = {
     gainers: Array<{
       symbol: string | null;
       shortName: string | null;
+      sector?: string | null;
+      industry?: string | null;
       regularMarketPrice: number | null;
       regularMarketChange: number | null;
       regularMarketChangePercent: number | null;
@@ -567,6 +569,8 @@ export const tickerApi = {
     losers: Array<{
       symbol: string | null;
       shortName: string | null;
+      sector?: string | null;
+      industry?: string | null;
       regularMarketPrice: number | null;
       regularMarketChange: number | null;
       regularMarketChangePercent: number | null;

@@ -1288,6 +1288,17 @@ class InfoFetcher:
 
         gainers = [_normalize_quote(q) for q in quotes_g if isinstance(q, dict) and q.get("symbol")]
         losers = [_normalize_quote(q) for q in quotes_l if isinstance(q, dict) and q.get("symbol")]
+
+        # Enrich with sector/industry via one batch call (screener quotes don't include sector)
+        all_symbols = [r["symbol"] for r in gainers + losers if r.get("symbol")]
+        sector_map = self._fetch_sector_info_batch_yahooquery(all_symbols) if all_symbols else {}
+        for row in gainers + losers:
+            sym = row.get("symbol")
+            if sym and sym in sector_map:
+                info = sector_map[sym]
+                row["sector"] = info.get("sector")
+                row["industry"] = info.get("industry")
+
         return {"gainers": gainers, "losers": losers}
 
     def get_company_officers(self, ticker: str) -> Dict[str, Any]:

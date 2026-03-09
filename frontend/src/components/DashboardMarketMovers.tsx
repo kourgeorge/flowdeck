@@ -4,6 +4,8 @@ import { tickerApi } from '../services/api';
 export type MarketMoverRow = {
   symbol: string | null;
   shortName: string | null;
+  sector?: string | null;
+  industry?: string | null;
   regularMarketPrice: number | null;
   regularMarketChange: number | null;
   regularMarketChangePercent: number | null;
@@ -58,6 +60,7 @@ function MoversTable({
             <tr className="border-b border-gray-700 text-gray-400">
               <th className="py-2 px-3 font-medium">Symbol</th>
               <th className="py-2 px-3 font-medium min-w-0 truncate max-w-[140px]">Name</th>
+              <th className="py-2 px-3 font-medium">Sector</th>
               <th className="py-2 px-3 font-medium text-right">Price</th>
               <th className="py-2 px-3 font-medium text-right">Change %</th>
               <th className="py-2 px-3 font-medium text-right">Volume</th>
@@ -76,6 +79,9 @@ function MoversTable({
                   <td className="py-2.5 px-3 font-medium text-white">{sym || '—'}</td>
                   <td className="py-2.5 px-3 text-gray-300 truncate max-w-[140px]" title={row.shortName ?? undefined}>
                     {row.shortName || '—'}
+                  </td>
+                  <td className="py-2.5 px-3 text-gray-400 truncate max-w-[120px]" title={row.industry ?? undefined}>
+                    {row.sector || '—'}
                   </td>
                   <td className="py-2.5 px-3 text-right text-gray-200 tabular-nums">{formatPrice(row.regularMarketPrice)}</td>
                   <td className={`py-2.5 px-3 text-right font-medium tabular-nums ${changeClass}`}>
