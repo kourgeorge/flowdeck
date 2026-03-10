@@ -6,6 +6,17 @@ import AuthModal from './AuthModal';
 import Footer from './Footer';
 
 // Menu Icons
+function FlowDeckIcon() {
+  return (
+    <img
+      src={LOGO_PATH}
+      alt=""
+      className="w-5 h-5 object-contain shrink-0 grayscale opacity-90 [.bg-blue-600_&]:opacity-100 [.bg-blue-600_&]:invert [.bg-blue-600_&]:brightness-0"
+      aria-hidden
+    />
+  );
+}
+
 function DashboardIcon() {
   return (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -63,6 +74,7 @@ function MarketIcon() {
 }
 
 const navItems: { to: string; label: string; icon: () => JSX.Element; authOnly?: boolean }[] = [
+  { to: '/', label: 'FlowDeck', icon: FlowDeckIcon },
   { to: '/dashboard', label: 'Dashboard', icon: DashboardIcon, authOnly: true },
   { to: '/market', label: 'Market', icon: MarketIcon },
   { to: '/copilot', label: 'Trading Copilot', icon: CopilotIcon, authOnly: true },
@@ -182,6 +194,7 @@ export default function Layout() {
                   <li key={to}>
                     <NavLink
                       to={to}
+                      end={to === '/'}
                       title={!sidebarExpanded ? label : undefined}
                       className={({ isActive }) =>
                         `flex items-center ${sidebarExpanded ? 'gap-3 px-4' : 'justify-center px-2'} py-2 rounded-lg text-sm font-medium transition-colors ${
