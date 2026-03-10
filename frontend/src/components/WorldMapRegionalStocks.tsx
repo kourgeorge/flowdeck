@@ -1,6 +1,12 @@
 import { useState, useRef, useCallback } from 'react';
 import { ComposableMap, Geographies, Geography, Marker } from 'react-simple-maps';
 
+/** GeoJSON-like feature used by Geographies render prop */
+type GeoFeature = {
+  rsmKey: string;
+  properties?: { name?: string; NAME?: string; [key: string]: unknown };
+};
+
 type OverviewItem = {
   ticker: string;
   name: string;
@@ -73,7 +79,7 @@ const REGION_COORDS: Record<string, [number, number]> = {
   '^NSEI': [77.21, 28.61],
   '^JKSE': [106.83, -6.21],
   '^KLSE': [101.69, 3.14],
-  '000001.SS': [121.47, 31.23],
+  '000001.SS': [121.47, 31.23],   // Shanghai (SSE)
   '^SET.BK': [100.5, 13.76],
   'PSEI.PS': [121.0, 14.6],
   VNM: [106.7, 10.78],
@@ -81,7 +87,7 @@ const REGION_COORDS: Record<string, [number, number]> = {
   '^NZ50': [174.78, -41.29],
   ENZL: [174.78, -41.29],
   EWJ: [139.69, 35.69],
-  FXI: [121.47, 31.23],
+  FXI: [104.2, 35.9],              // iShares China – central China
   INDA: [77.21, 28.61],
   EWM: [101.69, 3.14],
   EIDO: [106.83, -6.21],
@@ -250,8 +256,8 @@ export default function WorldMapRegionalStocks({ regionalItems, usIndices = [], 
           className="w-full h-full"
         >
           <Geographies geography="https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json">
-            {({ geographies }) =>
-              geographies.map((geo) => {
+            {({ geographies }: { geographies: GeoFeature[] }) =>
+              geographies.map((geo: GeoFeature) => {
                 const countryName = (geo.properties?.name ?? geo.properties?.NAME ?? '') as string;
                 return (
                   <Geography
