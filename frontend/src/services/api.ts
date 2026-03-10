@@ -554,7 +554,7 @@ export const tickerApi = {
     return response.data;
   },
 
-  // Get market overview: indices, sectors, international (prices and daily change). Pagination per group.
+  // Get market overview: indices, sectors, international (prices and change). Pagination per group. range: 1d, 1w, 1mo, 3mo, ytd.
   getMarketOverview: async (params?: {
     limit_indices?: number;
     offset_indices?: number;
@@ -564,6 +564,7 @@ export const tickerApi = {
     offset_regions?: number;
     limit_commodities?: number;
     offset_commodities?: number;
+    range?: '1d' | '1w' | '1mo' | '3mo' | 'ytd';
   }): Promise<{
     indices: Array<{ ticker: string; name: string; price: number | null; change: number | null; changePercent: number | null }>;
     sectors: Array<{ ticker: string; name: string; price: number | null; change: number | null; changePercent: number | null }>;

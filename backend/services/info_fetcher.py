@@ -1346,12 +1346,12 @@ class InfoFetcher:
         ("international", "UAE", "UAE (iShares)"),
         ("international", "QAT", "Qatar (iShares)"),
         ("international", "^QSI", "Qatar Stock Index"),
-        ("international", "^BAX", "Bahrain BAX"),
+        ("international", "BAX", "Baxter International Inc."),
         ("international", "KWT", "Kuwait (iShares)"),
-        ("international", "GAF", "Middle East & Africa (SPDR)"),
         ("international", "EGPT", "Egypt (VanEck)"),
         ("international", "^CASE30", "Egypt EGX 30"),
         ("international", "^MASI", "Morocco MASI"),
+        ("international", "^NQMA", "Morocco NQMA"),
         # Europe indices
         ("international", "^FTSE", "UK FTSE 100"),
         ("international", "^GDAXI", "Germany DAX"),
@@ -1364,7 +1364,19 @@ class InfoFetcher:
         ("international", "^AEX", "Netherlands AEX"),
         ("international", "^SSMI", "Switzerland SMI"),
         ("international", "^OMXSPI", "Sweden OMX"),
-        ("international", "^WIG20", "Poland WIG 20"),
+        ("international", "WIG20.WA", "Poland WIG 20"),
+        ("international", "^ATX", "Austria ATX"),
+        ("international", "^BFX", "Belgium BEL 20"),
+        ("international", "^OMXC20", "Denmark OMX Copenhagen"),
+        ("international", "^OMXH25", "Finland OMX Helsinki"),
+        ("international", "GD.AT", "Greece Athens General"),
+        ("international", "FPXAA.PR", "Portugal PSI"),
+        ("international", "EIRL", "Ireland (iShares)"),
+        ("international", "^OSEAX", "Norway Oslo OBX"),
+        ("international", "^OMXIPI", "Iceland OMX"),
+        ("international", "^BUX", "Hungary BUX"),
+        ("international", "^RTSI", "Russia RTS"),
+        ("international", "IMOEX.ME", "Russia MOEX"),
         # Asia-Pacific indices
         ("international", "^N225", "Japan Nikkei 225"),
         ("international", "^HSI", "Hong Kong Hang Seng"),
@@ -1378,9 +1390,11 @@ class InfoFetcher:
         ("international", "^KLSE", "Malaysia KLCI"),
         ("international", "000001.SS", "China Shanghai"),
         ("international", "^SET.BK", "Thailand SET"),
-        ("international", "^PSI", "Philippines PSEi"),
+        ("international", "PSEI.PS", "Philippines PSEi"),
         ("international", "VNM", "Vietnam (VanEck)"),
-        ("international", "^KSE100", "Pakistan KSE 100"),
+        ("international", "XBAK.DE", "Pakistan KSE 100"),
+        ("international", "^NZ50", "New Zealand NZX 50"),
+        ("international", "ENZL", "New Zealand (iShares)"),
         ("international", "EWJ", "Japan (iShares)"),
         ("international", "FXI", "China (iShares)"),
         ("international", "INDA", "India (iShares)"),
@@ -1395,14 +1409,21 @@ class InfoFetcher:
         ("international", "^MXX", "Mexico IPC"),
         ("international", "^IPSA", "Chile IPSA"),
         ("international", "^MERV", "Argentina Merval"),
-        ("international", "^COLCAP", "Colombia COLCAP"),
+        ("international", "ICOLCAP.CL", "Colombia COLCAP"),
+        ("international", "EPU", "Peru (iShares)"),
+        ("international", "IBC.CR", "Costa Rica IBC"),
         ("international", "EWC", "Canada (iShares)"),
         ("international", "EWZ", "Brazil (iShares)"),
         ("international", "EWA", "Australia (iShares)"),
         # Africa
+        ("international", "^SPAFREP", "Africa (S&P Pan Africa)"),
+        ("international", "AFK", "Pan-Africa ETF"),
         ("international", "^JN0U.JO", "South Africa Top 40"),
         ("international", "EZA", "South Africa (iShares)"),
         ("international", "NGE", "Nigeria (VanEck)"),
+        ("international", "NGXASI", "Nigeria NGX All-Share"),
+        ("international", "FNKEN2.L", "Kenya FNKEN2 (NSE 20)"),
+        ("international", "FM", "Frontier Markets"),
         # Commodities / materials (ETFs and common proxies)
         ("commodities", "GLD", "Gold"),
         ("commodities", "SLV", "Silver"),
@@ -1428,15 +1449,19 @@ class InfoFetcher:
         offset_regions: int = 0,
         limit_commodities: int = 50,
         offset_commodities: int = 0,
+        range_: str = "1d",
     ) -> Dict[str, Any]:
-        """Get high-level market overview: indices, sectors, international, commodities with prices and daily change.
+        """Get high-level market overview: indices, sectors, international, commodities with prices and change.
+        range_: 1d (daily), 1w (1 week), 1mo (1 month), 3mo, ytd.
         Within each section, items are ordered by absolute change (biggest movers first). Pagination via limit/offset."""
+        valid_ranges = ("1d", "1w", "1mo", "3mo", "ytd")
+        range_ = range_ if range_ in valid_ranges else "1d"
         svc = self._get_market_data_service()
         by_group: Dict[str, List[tuple]] = {"indices": [], "sectors": [], "international": [], "commodities": []}
         for group_key, ticker, name in self.MARKET_OVERVIEW_TICKERS:
             by_group[group_key].append((ticker.upper(), name))
         tickers = list({row[1].upper() for row in self.MARKET_OVERVIEW_TICKERS})
-        quotes = svc.get_multiple_quotes_batch(tickers)
+        quotes = svc.get_multiple_quotes_batch_with_range(tickers, range_)
 
         def _build_and_sort(group_key: str) -> List[Dict[str, Any]]:
             items: List[Dict[str, Any]] = []
@@ -1479,10 +1504,93 @@ class InfoFetcher:
             "totalCommodities": len(sorted_commodities),
         }
 
+    def get_market_overview_section(
+        self,
+        section: str,
+        limit: int = 50,
+        offset: int = 0,
+        range_: str = "1d",
+    ) -> Dict[str, Any]:
+        """
+        Get a single section of the market overview (indices, sectors, regions, commodities).
+
+        Returns a compact payload with just the requested section:
+        {
+          "section": "indices" | "sectors" | "regions" | "commodities",
+          "items": [...],
+          "total": int
+        }
+        """
+        valid_ranges = ("1d", "1w", "1mo", "3mo", "ytd")
+        range_ = range_ if range_ in valid_ranges else "1d"
+
+        normalized_section = section.lower()
+        section_map = {
+            "indices": "indices",
+            "sectors": "sectors",
+            "regions": "international",
+            "international": "international",
+            "commodities": "commodities",
+        }
+        if normalized_section not in section_map:
+            raise ValueError(
+                f"Invalid section '{section}'. Expected one of: indices, sectors, regions, commodities."
+            )
+
+        group_key = section_map[normalized_section]
+        svc = self._get_market_data_service()
+
+        # Collect tickers only for the requested group.
+        group_tickers: List[tuple] = []
+        for g_key, ticker, name in self.MARKET_OVERVIEW_TICKERS:
+            if g_key == group_key:
+                group_tickers.append((ticker.upper(), name))
+
+        if not group_tickers:
+            return {"section": normalized_section, "items": [], "total": 0}
+
+        unique_tickers = list({t for (t, _name) in group_tickers})
+        quotes = svc.get_multiple_quotes_batch_with_range(unique_tickers, range_)
+
+        items: List[Dict[str, Any]] = []
+        for t, name in group_tickers:
+            q = quotes.get(t)
+            if q is None:
+                item = {
+                    "ticker": t,
+                    "name": name,
+                    "price": None,
+                    "change": None,
+                    "changePercent": None,
+                }
+            else:
+                item = {
+                    "ticker": t,
+                    "name": name,
+                    "price": round(float(q.current_price), 2),
+                    "change": round(float(q.daily_change), 2),
+                    "changePercent": round(float(q.daily_change_percent), 2),
+                }
+            items.append(item)
+
+        # Sort by absolute change (desc): biggest movers first; None treated as 0 (end)
+        items.sort(key=lambda x: abs(x.get("changePercent") or 0), reverse=True)
+        total = len(items)
+        paged = items[offset : offset + limit]
+
+        # Normalize section name in response to external contract (regions instead of international).
+        response_section = (
+            "regions" if group_key == "international" else group_key
+        )
+        return {
+            "section": response_section,
+            "items": paged,
+            "total": total,
+        }
+
     def get_company_officers(self, ticker: str) -> Dict[str, Any]:
         """Get company officers/management team from Yahoo Finance."""
         import yfinance as yf
-        import pandas as pd
         
         ticker = ticker.upper()
         

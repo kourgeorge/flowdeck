@@ -228,9 +228,10 @@ class CachedInfoFetcher:
         offset_regions: int = 0,
         limit_commodities: int = 50,
         offset_commodities: int = 0,
+        range_: str = "1d",
     ) -> Dict[str, Any]:
-        """Get market overview: indices, sectors, international, commodities (cached). Pagination via limit/offset per group."""
-        key = f"market_overview:{limit_indices}:{offset_indices}:{limit_sectors}:{offset_sectors}:{limit_regions}:{offset_regions}:{limit_commodities}:{offset_commodities}"
+        """Get market overview: indices, sectors, international, commodities (cached). Pagination via limit/offset per group. range_: 1d, 1w, 1mo, 3mo, ytd."""
+        key = f"market_overview:{range_}:{limit_indices}:{offset_indices}:{limit_sectors}:{offset_sectors}:{limit_regions}:{offset_regions}:{limit_commodities}:{offset_commodities}"
         return get_cached(
             key,
             DATA_CACHE_TTL_MARKET_OVERVIEW,
@@ -243,6 +244,27 @@ class CachedInfoFetcher:
                 offset_regions=offset_regions,
                 limit_commodities=limit_commodities,
                 offset_commodities=offset_commodities,
+                range_=range_,
+            ),
+        )
+
+    def get_market_overview_section(
+        self,
+        section: str,
+        limit: int = 50,
+        offset: int = 0,
+        range_: str = "1d",
+    ) -> Dict[str, Any]:
+        """Get a single section of the market overview (cached)."""
+        key = f"market_overview_section:{section}:{range_}:{limit}:{offset}"
+        return get_cached(
+            key,
+            DATA_CACHE_TTL_MARKET_OVERVIEW,
+            lambda: self._fetcher.get_market_overview_section(
+                section=section,
+                limit=limit,
+                offset=offset,
+                range_=range_,
             ),
         )
 

@@ -74,8 +74,9 @@ async def data_market_overview(
     offset_regions: int = Query(0, ge=0),
     limit_commodities: int = Query(12, ge=1, le=100),
     offset_commodities: int = Query(0, ge=0),
+    range_: str = Query("1d", alias="range", description="1d, 1w, 1mo, 3mo, ytd"),
 ):
-    """Get market overview: US indices, sectors, regional ETFs, and commodities with price and daily change. Pagination per group."""
+    """Get market overview: US indices, sectors, regional ETFs, and commodities with price and change. Pagination per group. range: 1d, 1w, 1mo, 3mo, ytd."""
     engine = _engine()
     return await asyncio.to_thread(
         engine.get_market_overview,
@@ -87,6 +88,37 @@ async def data_market_overview(
         offset_regions,
         limit_commodities,
         offset_commodities,
+        range_,
+    )
+
+
+@router.get("/market-overview/section")
+async def data_market_overview_section(
+    section: str = Query(
+        ...,
+        description="Section to fetch: indices | sectors | regions | commodities",
+    ),
+    limit: int = Query(6, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    range_: str = Query("1d", alias="range", description="1d, 1w, 1mo, 3mo, ytd"),
+):
+    """
+    Get a single section of the market overview (indices, sectors, regions, commodities).
+
+    Returns a compact payload:
+    {
+      \"section\": \"indices\" | \"sectors\" | \"regions\" | \"commodities\",
+      \"items\": [...],
+      \"total\": int
+    }
+    """
+    engine = _engine()
+    return await asyncio.to_thread(
+        engine.get_market_overview_section,
+        section,
+        limit,
+        offset,
+        range_,
     )
 
 
