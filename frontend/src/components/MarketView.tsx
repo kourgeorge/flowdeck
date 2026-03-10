@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { tickerApi } from '../services/api';
 import TickerSearch from './TickerSearch';
+import WorldMapRegionalStocks from './WorldMapRegionalStocks';
 
 function ChevronDownIcon({ className }: { className?: string }) {
   return (
@@ -143,7 +144,7 @@ function OverviewSection({
   const canNext = totalPages > 1 && currentPage < totalPages - 1;
   if (items.length === 0 && totalPages === 0) return null;
   return (
-    <div className="rounded-lg border border-gray-700 bg-gray-800/60 overflow-hidden">
+    <div className="rounded-lg border border-gray-700 bg-gray-800/60 overflow-hidden relative">
       <div className="px-2.5 py-1.5 border-b border-gray-700 bg-gray-800/80 flex items-center justify-between gap-1">
         <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{title}</h3>
         <div className="flex items-center gap-0.5">
@@ -174,7 +175,19 @@ function OverviewSection({
           </button>
         </div>
       </div>
-      <div className="p-2">
+      <div className="p-2 relative min-h-[7.5rem]">
+        {paginationLoading && (
+          <div
+            className="absolute inset-0 z-10 flex items-center justify-center rounded bg-gray-900/70 backdrop-blur-[1px]"
+            aria-live="polite"
+            aria-busy="true"
+          >
+            <svg className="w-6 h-6 text-blue-400 animate-spin shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden>
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-1.5">
           {items.map((item) => (
             <OverviewCard key={item.ticker} item={item} onSelectTicker={onSelectTicker} />
@@ -495,6 +508,10 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
   const [moversPageMostActive, setMoversPageMostActive] = useState(0);
   const [headlines, setHeadlines] = useState<HeadlineArticle[]>([]);
   const [headlinesLoading, setHeadlinesLoading] = useState(false);
+  const [mapRegions, setMapRegions] = useState<OverviewItem[]>([]);
+  const [mapUsIndices, setMapUsIndices] = useState<OverviewItem[]>([]);
+  const [activeTab, setActiveTab] = useState<'overview' | 'regional'>('overview');
+  const [range, setRange] = useState<'1d' | '1w' | '1mo' | '3mo' | 'ytd'>('1d');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [paginationSection, setPaginationSection] = useState<'indices' | 'sectors' | 'regions' | 'commodities' | null>(null);
@@ -576,7 +593,8 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
       pageSectors: number,
       pageRegions: number,
       pageCommodities: number,
-      updateOnlySection?: 'indices' | 'sectors' | 'regions' | 'commodities'
+      updateOnlySection?: 'indices' | 'sectors' | 'regions' | 'commodities',
+      overviewRange?: '1d' | '1w' | '1mo' | '3mo' | 'ytd'
     ) => {
       const data = await tickerApi.getMarketOverview({
         limit_indices: TILES_PER_PAGE,
@@ -587,6 +605,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
         offset_regions: pageRegions * TILES_PER_PAGE,
         limit_commodities: TILES_PER_PAGE,
         offset_commodities: pageCommodities * TILES_PER_PAGE,
+        range: overviewRange ?? range,
       });
       if (updateOnlySection) {
         setOverview((prev) => {
@@ -628,14 +647,14 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
       setPages({ indices: pageIndices, sectors: pageSectors, regions: pageRegions, commodities: pageCommodities });
       return data;
     },
-    []
+    [range]
   );
 
   const fetchAll = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [overviewData, moversData] = await Promise.all([
+      const [overviewData, moversData, mapOverviewData] = await Promise.all([
         tickerApi.getMarketOverview({
           limit_indices: TILES_PER_PAGE,
           offset_indices: 0,
@@ -645,8 +664,20 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
           offset_regions: 0,
           limit_commodities: TILES_PER_PAGE,
           offset_commodities: 0,
+          range,
         }),
         tickerApi.getMarketMovers(MOVERS_LOAD_COUNT),
+        tickerApi.getMarketOverview({
+          limit_indices: 15,
+          offset_indices: 0,
+          limit_sectors: 1,
+          offset_sectors: 0,
+          limit_regions: 100,
+          offset_regions: 0,
+          limit_commodities: 1,
+          offset_commodities: 0,
+          range,
+        }),
       ]);
       const gainersList = moversData.gainers ?? [];
       const losersList = moversData.losers ?? [];
@@ -672,6 +703,8 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
         if (i.ticker?.trim()) raw.push(i.ticker.trim());
       });
       setInitialHeadlinesTickers([...new Set(raw)].slice(0, 50));
+      setMapRegions(mapOverviewData?.international ?? []);
+      setMapUsIndices(mapOverviewData?.indices ?? []);
       setOverview({
         indices,
         sectors,
@@ -694,6 +727,8 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load market data');
       setOverview(null);
+      setMapRegions([]);
+      setMapUsIndices([]);
       setGainers([]);
       setLosers([]);
       setMostActive([]);
@@ -701,7 +736,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [range]);
 
   const totalPagesIndices = Math.max(1, Math.ceil(totals.totalIndices / TILES_PER_PAGE));
   const totalPagesSectors = Math.max(1, Math.ceil(totals.totalSectors / TILES_PER_PAGE));
@@ -822,20 +857,6 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
     fetchAll();
   }, [fetchAll]);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <div className="flex items-center gap-3 text-gray-400 text-base">
-          <svg className="w-6 h-6 text-blue-400 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-          </svg>
-          <span>Loading market overview…</span>
-        </div>
-      </div>
-    );
-  }
-
   if (error) {
     return (
       <div className="bg-gray-800 rounded-xl border border-gray-700 p-8 text-center">
@@ -863,6 +884,95 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-700">
+        <div className="flex gap-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab('overview')}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'overview'
+                ? 'text-white border-b-2 border-blue-500 -mb-px'
+                : 'text-gray-400 hover:text-gray-300'
+            }`}
+          >
+            Overview
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('regional')}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'regional'
+                ? 'text-white border-b-2 border-blue-500 -mb-px'
+                : 'text-gray-400 hover:text-gray-300'
+            }`}
+          >
+            Regional Map
+          </button>
+        </div>
+        <div className="flex gap-0.5 pb-1" role="group" aria-label="Timeframe">
+          {(['1d', '1w', '1mo', '3mo', 'ytd'] as const).map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setRange(r)}
+              className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                range === r
+                  ? 'bg-gray-600 text-white'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'
+              }`}
+            >
+              {r === '1d' ? '1D' : r === '1w' ? '1W' : r === '1mo' ? '1M' : r === '3mo' ? '3M' : 'YTD'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {activeTab === 'overview' && (
+      <>
+      <div className="relative">
+      {isLoading ? (
+        <>
+          <div className="animate-pulse space-y-6 p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="rounded-lg border border-gray-700 bg-gray-800/60 overflow-hidden">
+                  <div className="h-8 bg-gray-700/80" />
+                  <div className="p-2 grid grid-cols-2 gap-1.5">
+                    {[1, 2, 3, 4, 5, 6].map((j) => (
+                      <div key={j} className="h-14 bg-gray-700 rounded" />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="rounded-xl border border-gray-700 bg-gray-800 overflow-hidden">
+                  <div className="h-8 bg-gray-700/80" />
+                  <div className="space-y-2 p-2">
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((j) => (
+                      <div key={j} className="h-10 bg-gray-700 rounded" />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="absolute top-0 left-0 right-0 z-10 border-b border-gray-700/80 bg-gray-800/98 backdrop-blur-sm px-4 py-3 shadow-lg">
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 text-blue-400 animate-spin shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden>
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-gray-200">Preparing Market View…</div>
+                <div className="mt-0.5 text-xs text-gray-400 animate-pulse">Loading indices, sectors, regions & movers…</div>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+      <>
       <section className="space-y-4">
         {overview && (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -910,7 +1020,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
         )}
       </section>
 
-      <section className="space-y-6">
+      <section className="mt-8 space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           <MoversTable
             rows={gainers}
@@ -947,6 +1057,45 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
           />
         </div>
       </section>
+      </>
+      )}
+      </div>
+      </>
+      )}
+
+      {activeTab === 'regional' && (
+        <div className="relative">
+        {isLoading ? (
+        <>
+          <div className="rounded-lg border border-gray-700 bg-gray-800/60 overflow-hidden m-4">
+            <div className="h-8 bg-gray-700/80 border-b border-gray-700" />
+            <div className="animate-pulse w-full rounded-b-lg" style={{ aspectRatio: '2 / 1' }}>
+              <div className="w-full h-full bg-gray-700/80" />
+            </div>
+          </div>
+          <div className="absolute top-0 left-0 right-0 z-10 border-b border-gray-700/80 bg-gray-800/98 backdrop-blur-sm px-4 py-3 shadow-lg">
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 text-blue-400 animate-spin shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden>
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-gray-200">Preparing Regional Map…</div>
+                <div className="mt-0.5 text-xs text-gray-400 animate-pulse">Loading regional indices & map…</div>
+              </div>
+            </div>
+          </div>
+        </>
+        ) : (mapRegions.length > 0 || mapUsIndices.length > 0) ? (
+        <WorldMapRegionalStocks
+          regionalItems={mapRegions}
+          usIndices={mapUsIndices}
+          onSelectTicker={onSelectTicker}
+        />
+        ) : null
+        }
+        </div>
+      )}
     </div>
   );
 }
