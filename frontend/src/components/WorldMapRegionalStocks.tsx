@@ -245,7 +245,8 @@ export default function WorldMapRegionalStocks({ regionalItems, usIndices = [], 
           </div>
         </div>
       </div>
-      <div ref={mapContainerRef} className="relative w-full" style={{ aspectRatio: '2 / 1' }}>
+      <div className="flex flex-col sm:flex-row gap-0 sm:gap-4 p-2 sm:p-4">
+        <div ref={mapContainerRef} className="relative flex-1 min-w-0" style={{ aspectRatio: '2 / 1' }}>
         <ComposableMap
           projection="geoMercator"
           projectionConfig={{
@@ -401,6 +402,55 @@ export default function WorldMapRegionalStocks({ regionalItems, usIndices = [], 
               large
             </span>
           </span>
+        </div>
+        </div>
+        {/* Tickers on map widget */}
+        <div className="mt-4 sm:mt-0 sm:w-56 shrink-0 max-h-[min(85vh,36rem)] rounded-lg border border-gray-700 bg-gray-800/80 overflow-hidden flex flex-col min-h-0">
+          <div className="px-2.5 py-1.5 border-b border-gray-700 shrink-0">
+            <h4 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">On map ({mappable.length})</h4>
+          </div>
+          <div className="overflow-y-auto flex-1 min-h-0 py-1 overscroll-contain">
+            {mappable.length === 0 ? (
+              <p className="px-2.5 py-2 text-gray-500 text-xs">No tickers match the current filter.</p>
+            ) : (
+              <ul className="space-y-0.5" role="list">
+                {mappable.map((item) => {
+                  const hasChange = item.changePercent != null;
+                  const positive = (item.changePercent ?? 0) >= 0;
+                  const changeClass = !hasChange ? 'text-gray-400' : positive ? 'text-green-400' : 'text-red-400';
+                  const isSelected = selectedItem?.ticker === item.ticker;
+                  return (
+                    <li key={item.ticker}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedItem((prev) => (prev?.ticker === item.ticker ? null : item))}
+                        className={`w-full text-left px-2.5 py-1.5 rounded text-xs transition-colors ${
+                          isSelected ? 'bg-gray-600/80' : 'hover:bg-gray-700/60'
+                        }`}
+                      >
+                        <div className="flex items-baseline justify-between gap-1 min-w-0">
+                          <span className="font-medium text-gray-200 truncate" title={item.name}>
+                            {item.ticker}
+                          </span>
+                          <span className={`shrink-0 tabular-nums ${changeClass}`}>
+                            {formatPct(item.changePercent)}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 truncate text-gray-500" title={item.name}>
+                          {item.name}
+                        </div>
+                        {item.price != null && (
+                          <div className="mt-0.5 text-gray-400 tabular-nums">
+                            {formatPrice(item.price)}
+                          </div>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
     </div>

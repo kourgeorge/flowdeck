@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { tickerApi } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import TickerSearch from './TickerSearch';
 import WorldMapRegionalStocks from './WorldMapRegionalStocks';
 
@@ -492,6 +493,7 @@ function RunningHeadlinesStrip({
 }
 
 export default function MarketView({ onSelectTicker }: MarketViewProps) {
+  const { user } = useAuth();
   const [overview, setOverview] = useState<{
     indices: OverviewItem[];
     sectors: OverviewItem[];
@@ -654,30 +656,36 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
     setIsLoading(true);
     setError(null);
     try {
+      const overviewPromise = tickerApi.getMarketOverview({
+        limit_indices: TILES_PER_PAGE,
+        offset_indices: 0,
+        limit_sectors: TILES_PER_PAGE,
+        offset_sectors: 0,
+        limit_regions: TILES_PER_PAGE,
+        offset_regions: 0,
+        limit_commodities: TILES_PER_PAGE,
+        offset_commodities: 0,
+        range,
+      });
+      const moversPromise = tickerApi.getMarketMovers(MOVERS_LOAD_COUNT);
+      const mapOverviewPromise = user
+        ? tickerApi.getMarketOverview({
+            limit_indices: 15,
+            offset_indices: 0,
+            limit_sectors: 1,
+            offset_sectors: 0,
+            limit_regions: 100,
+            offset_regions: 0,
+            limit_commodities: 1,
+            offset_commodities: 0,
+            range,
+          })
+        : Promise.resolve(null);
+
       const [overviewData, moversData, mapOverviewData] = await Promise.all([
-        tickerApi.getMarketOverview({
-          limit_indices: TILES_PER_PAGE,
-          offset_indices: 0,
-          limit_sectors: TILES_PER_PAGE,
-          offset_sectors: 0,
-          limit_regions: TILES_PER_PAGE,
-          offset_regions: 0,
-          limit_commodities: TILES_PER_PAGE,
-          offset_commodities: 0,
-          range,
-        }),
-        tickerApi.getMarketMovers(MOVERS_LOAD_COUNT),
-        tickerApi.getMarketOverview({
-          limit_indices: 15,
-          offset_indices: 0,
-          limit_sectors: 1,
-          offset_sectors: 0,
-          limit_regions: 100,
-          offset_regions: 0,
-          limit_commodities: 1,
-          offset_commodities: 0,
-          range,
-        }),
+        overviewPromise,
+        moversPromise,
+        mapOverviewPromise,
       ]);
       const gainersList = moversData.gainers ?? [];
       const losersList = moversData.losers ?? [];
@@ -703,8 +711,13 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
         if (i.ticker?.trim()) raw.push(i.ticker.trim());
       });
       setInitialHeadlinesTickers([...new Set(raw)].slice(0, 50));
-      setMapRegions(mapOverviewData?.international ?? []);
-      setMapUsIndices(mapOverviewData?.indices ?? []);
+      if (user && mapOverviewData) {
+        setMapRegions(mapOverviewData.international ?? []);
+        setMapUsIndices(mapOverviewData.indices ?? []);
+      } else {
+        setMapRegions([]);
+        setMapUsIndices([]);
+      }
       setOverview({
         indices,
         sectors,
@@ -736,7 +749,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [range]);
+  }, [range, user]);
 
   const totalPagesIndices = Math.max(1, Math.ceil(totals.totalIndices / TILES_PER_PAGE));
   const totalPagesSectors = Math.max(1, Math.ceil(totals.totalSectors / TILES_PER_PAGE));
@@ -1065,7 +1078,19 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
 
       {activeTab === 'regional' && (
         <div className="relative">
-        {isLoading ? (
+        {!user ? (
+        <>
+          <WorldMapRegionalStocks regionalItems={[]} usIndices={[]} />
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center rounded-lg bg-gray-900/75 backdrop-blur-[1px]"
+            role="status"
+            aria-live="polite"
+          >
+            <p className="text-gray-300 text-sm font-medium">Sign in to view the regional map</p>
+            <p className="mt-1 text-gray-500 text-xs">Market data for the map is only loaded for logged-in users.</p>
+          </div>
+        </>
+        ) : isLoading ? (
         <>
           <div className="rounded-lg border border-gray-700 bg-gray-800/60 overflow-hidden m-4">
             <div className="h-8 bg-gray-700/80 border-b border-gray-700" />
