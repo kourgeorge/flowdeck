@@ -3,6 +3,7 @@ Non-functional
 - [ ] Run analysis on top 200 stocks
 - [ ] Make backend LLM configurable (allow switching provider/model)
 
+
 AI reports & analysis
 ─────────────────────
 - Trading agents: learn from mistakes — define mechanism
@@ -12,6 +13,9 @@ AI reports & analysis
 - Validate TPS plans: measure accuracy and usefulness
 - Analyze news article content (sentiment/relevance)
 - Evaluate merging Market and Technical agents
+- the analysis should be adapted to the ticker type. it an index or etf, look for news in the web.
+- how to analyse entire industeries - using only indices and etf tickers?
+- on demand - write a personal narrarive about the stock and the market specific to the user on his watchlist.
 
 Portfolio
 ─────────
@@ -20,14 +24,18 @@ Portfolio
 - Portfolio insights: build portfolio view and get AI recommendations
 - Major stock events: explain/summarize for user
 
+
 Copilot / chat
 ──────────────
 - Conversation history (persist and restore)
 - Agent behaviour: add guardrails — avoid out-of-scope answers, hedge predictions
 - Canvas (drawing/planning surface)
 - expose the api as an mcp
+- give rag capabilities over the report knowledge base - helping 
+
 
 Data layer
 ──────────
 - Use Yahoo Query recommendations
 - Token accounting in DB: track earnings, usage, purchases — No (skip)
+- use gartner and other sources for analyst recommendations and to understand sectors and industries.
