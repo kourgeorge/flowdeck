@@ -281,6 +281,7 @@ def _get_ticker_widgets_sync(
                 market_status=quote.market_status,
                 report_scores=report_scores,
                 is_major=is_major,
+                currency=getattr(quote, "currency", None),
             )
         else:
             widget = TickerWidget(

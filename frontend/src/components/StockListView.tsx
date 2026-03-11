@@ -2,6 +2,7 @@ import type { RefObject } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { TickerWidget as TickerWidgetType } from '../services/types';
 import { parseReportDate } from '../utils/date';
+import { formatPrice } from '../utils/currency';
 import AspectSpiderChart, { getScoreColor, formatReportKey, getAnalysisScoreEntries } from './AspectSpiderChart';
 
 /** Min and max number of visible stock rows; table height is dynamic within these limits. */
@@ -114,7 +115,7 @@ export default function TickerListView({ widgets, tickerToName, scrollRef, onScr
                   {name}
                 </td>
                 <td className="py-3 px-2 text-right text-white font-mono whitespace-nowrap">
-                  {widget.current_price > 0 ? `$${widget.current_price.toFixed(2)}` : '—'}
+                  {widget.current_price > 0 ? formatPrice(widget.current_price, widget.currency) : '—'}
                 </td>
                 <td className={`py-3 px-2 text-right font-mono font-medium whitespace-nowrap ${changeColor}`}>
                   {widget.current_price > 0

@@ -58,6 +58,7 @@ class TickerQuote(BaseModel):
     fifty_two_week_low: Optional[float] = None
     market_status: str  # "OPEN", "CLOSED", "PRE_MARKET", "AFTER_HOURS"
     last_update_time: datetime
+    currency: Optional[str] = None  # e.g. "USD", "ILS", "ILA" for display
 
     @field_validator(
         'bid_price', 'ask_price', 'previous_close',
@@ -107,6 +108,7 @@ class TickerWidget(BaseModel):
     report_scores: Optional[Dict[str, ReportScoreSummary]] = None
     # True when ticker is in MAJOR_STOCKS (only set when widgets requested without explicit tickers)
     is_major: Optional[bool] = None
+    currency: Optional[str] = None  # e.g. "USD", "ILS" for price display
 
     @field_validator('confidence', mode='before')
     @classmethod

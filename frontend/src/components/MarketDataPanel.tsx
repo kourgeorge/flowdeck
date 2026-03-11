@@ -1,4 +1,5 @@
 import type { TickerQuote } from '../services/types';
+import { formatPrice } from '../utils/currency';
 
 interface MarketDataPanelProps {
   quote: TickerQuote;
@@ -9,6 +10,7 @@ export default function MarketDataPanel({ quote }: MarketDataPanelProps) {
   const changeBgColor = quote.daily_change_percent >= 0 
     ? 'bg-green-500/20 border-green-500' 
     : 'bg-red-500/20 border-red-500';
+  const fmt = (n: number) => formatPrice(n, quote.currency);
 
   const get52WeekPosition = () => {
     if (!quote.fifty_two_week_low || !quote.fifty_two_week_high) return 0;
@@ -36,7 +38,7 @@ export default function MarketDataPanel({ quote }: MarketDataPanelProps) {
         <div className={`${changeBgColor} border-2 rounded-lg p-6`}>
           <div className="text-sm text-gray-300 mb-2">Current Price</div>
           <div className="text-5xl font-bold text-white mb-2">
-            ${quote.current_price.toFixed(2)}
+            {fmt(quote.current_price)}
           </div>
           <div className={`text-2xl font-semibold ${changeColor}`}>
             {quote.daily_change >= 0 ? '+' : ''}{quote.daily_change.toFixed(2)} ({quote.daily_change_percent >= 0 ? '+' : ''}{quote.daily_change_percent.toFixed(2)}%)
@@ -52,13 +54,13 @@ export default function MarketDataPanel({ quote }: MarketDataPanelProps) {
             <div>
               <div className="text-sm text-gray-400">Bid</div>
               <div className="text-lg text-white">
-                ${quote.bid_price?.toFixed(2) || 'N/A'} {quote.bid_size ? `X${quote.bid_size}` : ''}
+                {quote.bid_price != null ? fmt(quote.bid_price) : 'N/A'} {quote.bid_size ? `X${quote.bid_size}` : ''}
               </div>
             </div>
             <div>
               <div className="text-sm text-gray-400">Ask</div>
               <div className="text-lg text-white">
-                ${quote.ask_price?.toFixed(2) || 'N/A'} {quote.ask_size ? `X${quote.ask_size}` : ''}
+                {quote.ask_price != null ? fmt(quote.ask_price) : 'N/A'} {quote.ask_size ? `X${quote.ask_size}` : ''}
               </div>
             </div>
             <div>
@@ -78,7 +80,7 @@ export default function MarketDataPanel({ quote }: MarketDataPanelProps) {
         <div className="mb-4">
           <div className="flex justify-between text-sm text-gray-400 mb-2">
             <span>52 Week Range</span>
-            <span>${quote.fifty_two_week_low.toFixed(2)} - ${quote.fifty_two_week_high.toFixed(2)}</span>
+            <span>{fmt(quote.fifty_two_week_low)} - {fmt(quote.fifty_two_week_high)}</span>
           </div>
           <div className="relative h-4 bg-gray-700 rounded-full overflow-hidden">
             <div className="absolute inset-0 flex">
@@ -104,7 +106,7 @@ export default function MarketDataPanel({ quote }: MarketDataPanelProps) {
         <div>
           <div className="flex justify-between text-sm text-gray-400 mb-2">
             <span>Today's Range</span>
-            <span>${quote.day_low.toFixed(2)} - ${quote.day_high.toFixed(2)}</span>
+            <span>{fmt(quote.day_low)} - {fmt(quote.day_high)}</span>
           </div>
           <div className="relative h-4 bg-gray-700 rounded-full overflow-hidden">
             <div className="absolute inset-0 flex">

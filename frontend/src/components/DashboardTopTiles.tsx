@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { tickerApi } from '../services/api';
 import type { TickerWidget as StockWidgetType } from '../services/types';
+import { formatPrice } from '../utils/currency';
 
 const SPARKLINE_WIDTH = 88;
 const SPARKLINE_HEIGHT = 20;
@@ -146,7 +147,7 @@ function DashboardTile({
       </div>
       <div className="flex items-baseline gap-1.5 flex-wrap">
         <span className="text-gray-200 text-sm tabular-nums font-medium">
-          {w.current_price > 0 ? `$${w.current_price.toFixed(2)}` : '—'}
+          {w.current_price > 0 ? formatPrice(w.current_price, w.currency) : '—'}
         </span>
         {showPercent && (
           <span className={`text-xs tabular-nums ${changeColor}`} title={periodChangePercent != null ? '1 month change' : "Today's change"}>

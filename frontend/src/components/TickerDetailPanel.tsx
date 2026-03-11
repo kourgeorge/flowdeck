@@ -19,6 +19,7 @@ import NewsWidget from './NewsWidget';
 import InsiderTransactionsWidget from './InsiderTransactionsWidget';
 import AIAnalysisLoadingView from './AIAnalysisLoadingView';
 import { parseReportDate } from '../utils/date';
+import { formatPrice } from '../utils/currency';
 import AspectSpiderChart, { getAnalysisScoreEntries } from './AspectSpiderChart';
 import ReturnScenarioBar from './ReturnScenarioBar';
 
@@ -812,11 +813,11 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                 <>
                   <div className="flex flex-wrap items-baseline gap-2 mt-2">
                     <div className={`inline-block px-2 py-0.5 rounded text-2xl sm:text-3xl font-bold text-white ${priceFlash ? 'animate-price-flash' : ''}`}>
-                      ${quote.current_price.toFixed(2)}
+                      {formatPrice(quote.current_price, quote.currency)}
                     </div>
                     <div className={`text-base sm:text-lg font-semibold flex items-center gap-1 ${quote.daily_change_percent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                       <span>{quote.daily_change_percent >= 0 ? '▲' : '▼'}</span>
-                      <span>({quote.daily_change_percent >= 0 ? '+' : ''}{quote.daily_change_percent.toFixed(2)}%) {quote.daily_change >= 0 ? '+' : ''}{quote.daily_change.toFixed(2)}</span>
+                      <span>({quote.daily_change_percent >= 0 ? '+' : ''}{quote.daily_change_percent.toFixed(2)}%) {quote.daily_change >= 0 ? '+' : ''}{formatPrice(quote.daily_change, quote.currency)}</span>
                     </div>
                   </div>
                   <div className="text-xs text-gray-400 mt-1">Price as of {lastUpdateTime}</div>
@@ -896,30 +897,33 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                   <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 h-full">
                     <h3 className="text-sm font-semibold text-white mb-3">Key Data Points</h3>
                     <div className="space-y-2">
-                      {quote && (<>
-                        <div className="flex justify-between"><span className="text-xs text-gray-400">Current Price</span><span className="text-xs font-semibold text-white">${quote.current_price.toFixed(2)}</span></div>
+                      {quote && (() => {
+                        const fmt = (n: number) => formatPrice(n, quote.currency);
+                        return (<>
+                        <div className="flex justify-between"><span className="text-xs text-gray-400">Current Price</span><span className="text-xs font-semibold text-white">{fmt(quote.current_price)}</span></div>
                         <div className="flex justify-between"><span className="text-xs text-gray-400">Daily Change</span>
                           <span className={`text-xs font-semibold ${quote.daily_change_percent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            ({quote.daily_change_percent >= 0 ? '+' : ''}{quote.daily_change_percent.toFixed(2)}%) {quote.daily_change >= 0 ? '+' : ''}${quote.daily_change.toFixed(2)}
+                            ({quote.daily_change_percent >= 0 ? '+' : ''}{quote.daily_change_percent.toFixed(2)}%) {quote.daily_change >= 0 ? '+' : ''}{fmt(quote.daily_change)}
                           </span>
                         </div>
-                        <div className="flex justify-between"><span className="text-xs text-gray-400">Day's Range</span><span className="text-xs font-semibold text-white">${quote.day_low?.toFixed(2) || 'N/A'} – ${quote.day_high?.toFixed(2) || 'N/A'}</span></div>
-                        <div className="flex justify-between"><span className="text-xs text-gray-400">Prev Close</span><span className="text-xs font-semibold text-white">${quote.previous_close?.toFixed(2) || 'N/A'}</span></div>
-                        <div className="flex justify-between"><span className="text-xs text-gray-400">Bid</span><span className="text-xs font-semibold text-white">{quote.bid_price != null ? `$${quote.bid_price.toFixed(2)}` : 'N/A'}{quote.bid_size != null ? ` ×${quote.bid_size}` : ''}</span></div>
-                        <div className="flex justify-between"><span className="text-xs text-gray-400">Ask</span><span className="text-xs font-semibold text-white">{quote.ask_price != null ? `$${quote.ask_price.toFixed(2)}` : 'N/A'}{quote.ask_size != null ? ` ×${quote.ask_size}` : ''}</span></div>
+                        <div className="flex justify-between"><span className="text-xs text-gray-400">Day's Range</span><span className="text-xs font-semibold text-white">{quote.day_low != null && quote.day_high != null ? `${fmt(quote.day_low)} – ${fmt(quote.day_high)}` : 'N/A'}</span></div>
+                        <div className="flex justify-between"><span className="text-xs text-gray-400">Prev Close</span><span className="text-xs font-semibold text-white">{quote.previous_close != null ? fmt(quote.previous_close) : 'N/A'}</span></div>
+                        <div className="flex justify-between"><span className="text-xs text-gray-400">Bid</span><span className="text-xs font-semibold text-white">{quote.bid_price != null ? fmt(quote.bid_price) : 'N/A'}{quote.bid_size != null ? ` ×${quote.bid_size}` : ''}</span></div>
+                        <div className="flex justify-between"><span className="text-xs text-gray-400">Ask</span><span className="text-xs font-semibold text-white">{quote.ask_price != null ? fmt(quote.ask_price) : 'N/A'}{quote.ask_size != null ? ` ×${quote.ask_size}` : ''}</span></div>
                         {hasFundamentals && <div className="flex justify-between"><span className="text-xs text-gray-400">Beta</span><span className="text-xs font-semibold text-white">{extendedInfo?.beta?.toFixed(2) || 'N/A'}</span></div>}
                         <div className="flex justify-between"><span className="text-xs text-gray-400">Volume</span><span className="text-xs font-semibold text-white">{quote.volume ? quote.volume.toLocaleString() : 'N/A'}</span></div>
                         <div className="flex justify-between"><span className="text-xs text-gray-400">Avg Volume</span><span className="text-xs font-semibold text-white">{extendedInfo?.average_volume ? extendedInfo.average_volume.toLocaleString() : 'N/A'}</span></div>
                         {hasFundamentals && <div className="flex justify-between"><span className="text-xs text-gray-400">Sector</span><span className="text-xs font-semibold text-white truncate max-w-[140px]">{companyInfo?.sector || 'N/A'}</span></div>}
                         {hasFundamentals && <div className="flex justify-between"><span className="text-xs text-gray-400">Market Cap</span><span className="text-xs font-semibold text-white">{formatNumber(extendedInfo?.market_cap)}</span></div>}
-                        <div className="flex justify-between"><span className="text-xs text-gray-400">52wk Range</span><span className="text-xs font-semibold text-white">{quote.fifty_two_week_low && quote.fifty_two_week_high ? `$${quote.fifty_two_week_low.toFixed(2)} – $${quote.fifty_two_week_high.toFixed(2)}` : 'N/A'}</span></div>
+                        <div className="flex justify-between"><span className="text-xs text-gray-400">52wk Range</span><span className="text-xs font-semibold text-white">{quote.fifty_two_week_low != null && quote.fifty_two_week_high != null ? `${fmt(quote.fifty_two_week_low)} – ${fmt(quote.fifty_two_week_high)}` : 'N/A'}</span></div>
                         {hasFundamentals && <>
                           <div className="flex justify-between"><span className="text-xs text-gray-400">Revenue</span><span className="text-xs font-semibold text-white">{formatNumber(extendedInfo?.revenue)}</span></div>
                           <div className="flex justify-between"><span className="text-xs text-gray-400">Gross Margin</span><span className="text-xs font-semibold text-white">{formatPercent(extendedInfo?.gross_margin)}</span></div>
                           <div className="flex justify-between"><span className="text-xs text-gray-400">Dividend Yield</span><span className="text-xs font-semibold text-white">{formatPercent(extendedInfo?.dividend_yield)}</span></div>
                           <div className="flex justify-between"><span className="text-xs text-gray-400">EPS</span><span className="text-xs font-semibold text-white">{extendedInfo?.trailing_eps?.toFixed(2) || 'N/A'}</span></div>
                         </>}
-                      </>)}
+                        </>);
+                      })()}
                     </div>
                   </div>
                 </div>

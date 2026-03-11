@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Fuse from 'fuse.js';
 import type { TickerWidget as TickerWidgetType } from '../services/types';
+import { formatPrice } from '../utils/currency';
 
 interface Ticker {
   ticker: string;
@@ -166,6 +167,7 @@ interface TickerSidebarItem {
   has_report: boolean;
   /** 'subscribed' | 'recent' | 'radar' */
   source: 'subscribed' | 'recent' | 'radar';
+  currency?: string | null;
 }
 
 interface DashboardTickerSidebarProps {
@@ -231,7 +233,7 @@ function SidebarRow({
         </div>
         <div className="shrink-0 text-right">
           <div className="text-sm font-mono text-white">
-            {item.current_price > 0 ? `$${item.current_price.toFixed(2)}` : '—'}
+            {item.current_price > 0 ? formatPrice(item.current_price, item.currency) : '—'}
           </div>
           {item.current_price > 0 && (
             <div className={`text-xs font-mono ${changeColor}`}>
@@ -276,6 +278,7 @@ export default function DashboardTickerSidebar({
     recommendation: w.recommendation,
     has_report: w.has_report,
     source,
+    currency: w.currency,
   });
 
   const subscribedItems = subscribedWidgets.map((w) => toItem(w, 'subscribed'));

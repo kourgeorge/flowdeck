@@ -168,9 +168,11 @@ class MarketDataService:
             fifty_two_week_high = info.get('fiftyTwoWeekHigh') or info.get('52WeekHigh')
             fifty_two_week_low = info.get('fiftyTwoWeekLow') or info.get('52WeekLow')
             
-            # Get market status
+            # Get market status and currency
             market_status = MarketDataService._get_market_status(info)
-            
+            currency_raw = info.get("currency") or fast_info.get("currency")
+            currency = currency_raw if isinstance(currency_raw, str) else None
+
             return TickerQuote(
                 ticker=ticker.upper(),
                 current_price=round(float(current_price), 2),
@@ -187,7 +189,8 @@ class MarketDataService:
                 fifty_two_week_high=round(float(fifty_two_week_high), 2) if fifty_two_week_high else None,
                 fifty_two_week_low=round(float(fifty_two_week_low), 2) if fifty_two_week_low else None,
                 market_status=market_status,
-                last_update_time=datetime.now()
+                last_update_time=datetime.now(),
+                currency=currency,
             )
         except Exception as e:
             print(f"Error fetching quote for {ticker}: {e}")
@@ -276,6 +279,7 @@ class MarketDataService:
                                 fifty_two_week_low=None,
                                 market_status="UNKNOWN",
                                 last_update_time=datetime.now(),
+                                currency=None,
                             )
                 elif close_series is not None and len(close_series) == 1:
                     valid_closes = close_series.dropna()
@@ -298,6 +302,7 @@ class MarketDataService:
                             fifty_two_week_low=None,
                             market_status="UNKNOWN",
                             last_update_time=datetime.now(),
+                            currency=None,
                         )
             else:
                 # Multi-ticker: columns are MultiIndex (ticker, OHLCV) or (Ticker, Price)
@@ -357,6 +362,7 @@ class MarketDataService:
                             fifty_two_week_low=None,
                             market_status="UNKNOWN",
                             last_update_time=datetime.now(),
+                            currency=None,
                         )
                     except Exception as e:
                         print(f"Warning: Failed to parse batch quote for {t}: {e}")
@@ -498,6 +504,7 @@ class MarketDataService:
                             fifty_two_week_low=None,
                             market_status="UNKNOWN",
                             last_update_time=datetime.now(),
+                            currency=None,
                         )
                     except Exception as e:
                         print(f"Warning: Failed to parse range quote for {t}: {e}")
@@ -575,6 +582,7 @@ class MarketDataService:
                     fifty_two_week_low=None,
                     market_status="UNKNOWN",
                     last_update_time=datetime.now(),
+                    currency=None,
                 )
             except FuturesTimeoutError:
                 pass  # skip this ticker, may get it via yahooquery fallback
@@ -656,6 +664,9 @@ class MarketDataService:
         else:
             daily_change = current_price - prev_close
             change_pct = (daily_change / prev_close * 100.0) if prev_close and prev_close > 0 else 0.0
+        currency = price.get("currency") or summary_detail.get("currency")
+        if not isinstance(currency, str):
+            currency = None
         return TickerQuote(
             ticker=ticker.upper(),
             current_price=round(current_price, 2),
@@ -677,6 +688,7 @@ class MarketDataService:
             ),
             market_status=MarketDataService._get_market_status_from_yq(price),
             last_update_time=datetime.now(),
+            currency=currency,
         )
 
     @staticmethod
@@ -733,6 +745,7 @@ class MarketDataService:
                 fifty_two_week_low=None,
                 market_status="UNKNOWN",
                 last_update_time=datetime.now(),
+                currency=None,
             )
         except Exception:
             return None
@@ -860,6 +873,7 @@ class MarketDataService:
                             fifty_two_week_low=None,
                             market_status="UNKNOWN",
                             last_update_time=datetime.now(),
+                            currency=None,
                         )
                 else:
                     if len(chunk) != 1:
@@ -910,6 +924,7 @@ class MarketDataService:
                         fifty_two_week_low=None,
                         market_status="UNKNOWN",
                         last_update_time=datetime.now(),
+                        currency=None,
                     )
             except Exception:
                 continue

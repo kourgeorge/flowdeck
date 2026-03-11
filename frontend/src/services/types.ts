@@ -19,6 +19,8 @@ export interface TickerWidget {
   report_scores?: Record<string, ReportScoreSummary> | null;
   /** True when ticker is in the major-stocks list (only set when widgets requested without explicit tickers) */
   is_major?: boolean | null;
+  /** e.g. "USD", "ILS" for price display */
+  currency?: string | null;
 }
 
 export interface WidgetsResponse {
@@ -44,6 +46,8 @@ export interface TickerQuote {
   fifty_two_week_low: number | null;
   market_status: string;
   last_update_time: string;
+  /** e.g. "USD", "ILS", "ILA" for display */
+  currency?: string | null;
 }
 
 export interface Recommendation {

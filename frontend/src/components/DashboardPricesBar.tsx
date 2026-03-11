@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import type { TickerWidget as StockWidgetType } from '../services/types';
+import { formatPrice } from '../utils/currency';
 
 interface DashboardPricesBarProps {
   widgets: StockWidgetType[];
@@ -25,7 +26,7 @@ export default function DashboardPricesBar({ widgets }: DashboardPricesBarProps)
             >
               <span className="font-semibold text-white">{w.ticker}</span>
               <span className="text-gray-300 tabular-nums">
-                ${w.current_price > 0 ? w.current_price.toFixed(2) : '—'}
+                {w.current_price > 0 ? formatPrice(w.current_price, w.currency) : '—'}
               </span>
               <span className={`text-sm font-medium tabular-nums ${changeColor}`}>
                 {w.current_price > 0

@@ -15,6 +15,7 @@ import {
 } from 'recharts';
 import { tickerApi } from '../services/api';
 import type { TickerWidget as StockWidgetType } from '../services/types';
+import { formatPrice } from '../utils/currency';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -561,7 +562,7 @@ function MarketGroupCard({ group, tickerToName }: { group: MarketGroup; tickerTo
               <span className="font-semibold text-white text-sm w-16 shrink-0 truncate">{w.ticker}</span>
               <span className="text-gray-400 text-xs flex-1 min-w-0 truncate">{name}</span>
               <span className="text-white text-sm tabular-nums font-mono shrink-0">
-                {w.current_price > 0 ? `$${w.current_price.toFixed(2)}` : '—'}
+                {w.current_price > 0 ? formatPrice(w.current_price, w.currency) : '—'}
               </span>
               {w.current_price > 0 && (
                 <span className="shrink-0"><ChangeChip pct={w.daily_change_percent} /></span>

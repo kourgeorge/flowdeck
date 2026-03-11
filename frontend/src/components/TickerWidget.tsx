@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import type { TickerWidget as TickerWidgetType } from '../services/types';
 import { parseReportDate } from '../utils/date';
+import { formatPrice } from '../utils/currency';
 
 const DASHBOARD_TILE_COLORS = [
   'bg-red-500/15 border-red-500/40',
@@ -102,10 +103,10 @@ export default function TickerWidget({ widget, variant = 'default', companyName 
         {widget.current_price > 0 ? (
           <>
             <div className={`font-bold text-white mb-1 ${isDashboard ? 'text-3xl' : 'text-4xl'}`}>
-              ${widget.current_price.toFixed(2)}
+              {formatPrice(widget.current_price, widget.currency)}
             </div>
             <div className={`font-semibold ${changeColor} ${isDashboard ? 'text-base' : 'text-lg'}`}>
-              {widget.daily_change >= 0 ? '+' : ''}{widget.daily_change.toFixed(2)} ({widget.daily_change_percent >= 0 ? '+' : ''}{widget.daily_change_percent.toFixed(2)}%) {changeIcon}
+              {widget.daily_change >= 0 ? '+' : ''}{formatPrice(widget.daily_change, widget.currency)} ({widget.daily_change_percent >= 0 ? '+' : ''}{widget.daily_change_percent.toFixed(2)}%) {changeIcon}
             </div>
           </>
         ) : (
