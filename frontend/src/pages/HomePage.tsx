@@ -138,20 +138,20 @@ export default function HomePage() {
           </div>
 
           {/* Stats Bar */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-4xl mx-auto">
-            <div className="bg-blue-900/30 border border-blue-700/50 rounded-lg p-6 text-center">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-3xl mx-auto">
+            <div className="bg-blue-900/30 border border-blue-700/50 rounded-lg p-4 text-center">
               <div className="text-2xl font-bold text-blue-300 mb-1">
                 {publicStats ? publicStats.total_analyses.toLocaleString() : '—'}
               </div>
               <div className="text-blue-400/80 text-sm">AI Analyses Generated</div>
             </div>
-            <div className="bg-violet-900/30 border border-violet-700/50 rounded-lg p-6 text-center">
+            <div className="bg-violet-900/30 border border-violet-700/50 rounded-lg p-4 text-center">
               <div className="text-2xl font-bold text-violet-300 mb-1">
                 {publicStats ? publicStats.total_reports.toLocaleString() : '—'}
               </div>
               <div className="text-violet-400/80 text-sm">Reports Created</div>
             </div>
-            <div className="bg-emerald-900/30 border border-emerald-700/50 rounded-lg p-6 text-center">
+            <div className="bg-emerald-900/30 border border-emerald-700/50 rounded-lg p-4 text-center">
               <div className="text-2xl font-bold text-emerald-300 mb-1">
                 {publicStats ? publicStats.unique_tickers_analyzed.toLocaleString() : '—'}
               </div>
