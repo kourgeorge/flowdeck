@@ -163,16 +163,11 @@ interface WorldMapRegionalStocksProps {
   regionalItems: OverviewItem[];
   usIndices?: OverviewItem[];
   onSelectTicker?: (ticker: string) => void;
-  /** When true, show a subtle loading indicator without hiding the map (e.g. while refetching for new range). */
-  loading?: boolean;
 }
-
-type ChangeFilter = 'all' | 'gainers' | 'losers';
 
 type CountryTooltip = { name: string; x: number; y: number };
 
-export default function WorldMapRegionalStocks({ regionalItems, usIndices = [], onSelectTicker, loading = false }: WorldMapRegionalStocksProps) {
-  const [changeFilter, setChangeFilter] = useState<ChangeFilter>('all');
+export default function WorldMapRegionalStocks({ regionalItems, usIndices = [], onSelectTicker }: WorldMapRegionalStocksProps) {
   const [selectedItem, setSelectedItem] = useState<OverviewItem | null>(null);
   const [countryTooltip, setCountryTooltip] = useState<CountryTooltip | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -199,12 +194,7 @@ export default function WorldMapRegionalStocks({ regionalItems, usIndices = [], 
     setCountryTooltip(null);
   }, []);
 
-  const combined = useMemo(() => {
-    let list = [...regionalItems, ...usIndices];
-    if (changeFilter === 'gainers') list = list.filter((i) => (i.changePercent ?? 0) > 0);
-    else if (changeFilter === 'losers') list = list.filter((i) => (i.changePercent ?? 0) < 0);
-    return list;
-  }, [regionalItems, usIndices, changeFilter]);
+  const combined = useMemo(() => [...regionalItems, ...usIndices], [regionalItems, usIndices]);
 
   const withCoords = useMemo(
     () => combined.filter((i) => getCoords(i) != null),
@@ -215,34 +205,8 @@ export default function WorldMapRegionalStocks({ regionalItems, usIndices = [], 
 
   return (
     <div className="rounded-lg border border-gray-700 bg-gray-800/60 overflow-hidden">
-      <div className="px-2.5 py-1.5 border-b border-gray-700 bg-gray-800/80 flex flex-wrap items-center justify-between gap-3">
+      <div className="px-2.5 py-1.5 border-b border-gray-700 bg-gray-800/80">
         <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Regional markets</h3>
-        <div className="flex flex-wrap items-center gap-4">
-          {loading && (
-            <span className="flex items-center gap-1.5 text-[10px] text-gray-400" aria-live="polite">
-              <svg className="w-3.5 h-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden>
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
-              Updating…
-            </span>
-          )}
-          <div className="flex items-center gap-1 text-[10px]">
-            <span className="font-medium text-gray-400">Filter</span>
-            {(['all', 'gainers', 'losers'] as const).map((f) => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => setChangeFilter(f)}
-                className={`px-2 py-0.5 rounded capitalize ${
-                  changeFilter === f ? 'bg-gray-600 text-white' : 'text-gray-400 hover:text-gray-300'
-                }`}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
       <div className="flex flex-col sm:flex-row gap-0 sm:gap-4 p-2 sm:p-4">
         <div ref={mapContainerRef} className="relative flex-1 min-w-0" style={{ aspectRatio: '2 / 1' }}>
@@ -410,7 +374,7 @@ export default function WorldMapRegionalStocks({ regionalItems, usIndices = [], 
           </div>
           <div className="overflow-y-auto flex-1 min-h-0 py-1 overscroll-contain">
             {mappable.length === 0 ? (
-              <p className="px-2.5 py-2 text-gray-500 text-xs">No tickers match the current filter.</p>
+              <p className="px-2.5 py-2 text-gray-500 text-xs">No tickers to show.</p>
             ) : (
               <ul className="space-y-0.5" role="list">
                 {mappable.map((item) => {

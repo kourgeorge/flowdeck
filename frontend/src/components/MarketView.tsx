@@ -1022,12 +1022,12 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-700">
-        <div className="flex gap-1">
+      <div className="flex flex-wrap items-center justify-between gap-1 border-b border-gray-700 py-0.5">
+        <div className="flex gap-0.5">
           <button
             type="button"
             onClick={() => setActiveTab('overview')}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${
+            className={`px-3 py-1.5 text-sm font-medium transition-colors ${
               activeTab === 'overview'
                 ? 'text-white border-b-2 border-blue-500 -mb-px'
                 : 'text-gray-400 hover:text-gray-300'
@@ -1038,7 +1038,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
           <button
             type="button"
             onClick={() => setActiveTab('regional')}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${
+            className={`px-3 py-1.5 text-sm font-medium transition-colors ${
               activeTab === 'regional'
                 ? 'text-white border-b-2 border-blue-500 -mb-px'
                 : 'text-gray-400 hover:text-gray-300'
@@ -1047,8 +1047,17 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
             Regional Map
           </button>
         </div>
-        <div className="flex gap-0.5 pb-1" role="group" aria-label="Timeframe">
+        <div className="flex gap-0.5 items-center" role="group" aria-label="Timeframe">
           {activeTab === 'overview' && overviewDataLoading && (
+            <span className="flex items-center gap-1.5 text-xs text-gray-400 mr-2" aria-live="polite">
+              <svg className="w-3.5 h-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden>
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              Updating…
+            </span>
+          )}
+          {activeTab === 'regional' && mapDataLoading && (
             <span className="flex items-center gap-1.5 text-xs text-gray-400 mr-2" aria-live="polite">
               <svg className="w-3.5 h-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden>
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -1247,7 +1256,6 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
           regionalItems={mapRegions}
           usIndices={mapUsIndices}
           onSelectTicker={onSelectTicker}
-          loading={mapDataLoading}
         />
         )
         }
