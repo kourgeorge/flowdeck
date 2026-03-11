@@ -653,27 +653,8 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
     [range]
   );
 
-  const fetchAll = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const overviewPromise = tickerApi.getMarketOverview({
-        limit_indices: TILES_PER_PAGE,
-        offset_indices: 0,
-        limit_sectors: TILES_PER_PAGE,
-        offset_sectors: 0,
-        limit_regions: TILES_PER_PAGE,
-        offset_regions: 0,
-        limit_commodities: TILES_PER_PAGE,
-        offset_commodities: 0,
-        range,
-      });
-      const moversPromise = tickerApi.getMarketMovers(MOVERS_LOAD_COUNT);
-
-      const [overviewData, moversData] = await Promise.all([
-        overviewPromise,
-        moversPromise,
-      ]);
+  const applyOverviewAndMoversData = useCallback(
+    (overviewData: Awaited<ReturnType<typeof tickerApi.getMarketOverview>>, moversData: { gainers?: MarketMoverRow[]; losers?: MarketMoverRow[]; most_active?: MarketMoverRow[] }) => {
       const gainersList = moversData.gainers ?? [];
       const losersList = moversData.losers ?? [];
       const mostActiveList = moversData.most_active ?? [];
@@ -700,12 +681,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
       setInitialHeadlinesTickers([...new Set(raw)].slice(0, 50));
       setMapRegions([]);
       setMapUsIndices([]);
-      setOverview({
-        indices,
-        sectors,
-        international,
-        commodities,
-      });
+      setOverview({ indices, sectors, international, commodities });
       setTotals({
         totalIndices: overviewData.totalIndices ?? 0,
         totalSectors: overviewData.totalSectors ?? 0,
@@ -719,6 +695,29 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
       setMoversPageGainers(0);
       setMoversPageLosers(0);
       setMoversPageMostActive(0);
+    },
+    []
+  );
+
+  const fetchAll = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [overviewData, moversData] = await Promise.all([
+        tickerApi.getMarketOverview({
+          limit_indices: TILES_PER_PAGE,
+          offset_indices: 0,
+          limit_sectors: TILES_PER_PAGE,
+          offset_sectors: 0,
+          limit_regions: TILES_PER_PAGE,
+          offset_regions: 0,
+          limit_commodities: TILES_PER_PAGE,
+          offset_commodities: 0,
+          range,
+        }),
+        tickerApi.getMarketMovers(MOVERS_LOAD_COUNT),
+      ]);
+      applyOverviewAndMoversData(overviewData, moversData);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load market data');
       setOverview(null);
@@ -731,25 +730,19 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [range, user]);
+  }, [range, applyOverviewAndMoversData]);
 
   const fetchMapOverview = useCallback(async () => {
     if (!user) return;
     setMapDataLoading(true);
     try {
-      const data = await tickerApi.getMarketOverview({
-        limit_indices: 15,
-        offset_indices: 0,
-        limit_sectors: 1,
-        offset_sectors: 0,
-        limit_regions: 100,
-        offset_regions: 0,
-        limit_commodities: 1,
-        offset_commodities: 0,
-        range,
-      });
-      setMapRegions(data.international ?? []);
-      setMapUsIndices(data.indices ?? []);
+      // Fetch only regions and indices (no sectors/commodities) so the backend does not call yfinance for unused groups.
+      const [regionsRes, indicesRes] = await Promise.all([
+        tickerApi.getMarketOverviewSection('regions', { limit: 100, offset: 0, range }),
+        tickerApi.getMarketOverviewSection('indices', { limit: 15, offset: 0, range }),
+      ]);
+      setMapRegions(regionsRes.items ?? []);
+      setMapUsIndices(indicesRes.items ?? []);
     } finally {
       setMapDataLoading(false);
     }
@@ -876,9 +869,56 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
     setMoversPageMostActive((p) => Math.min(totalPagesMostActive - 1, p + 1));
   }, [totalPagesMostActive]);
 
+  const hasInitialFetched = useRef(false);
+  const prevRangeRef = useRef(range);
+
   useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
+    if (hasInitialFetched.current) return;
+    hasInitialFetched.current = true;
+    setIsLoading(true);
+    setError(null);
+    const r = range;
+    Promise.all([
+      tickerApi.getMarketOverview({
+        limit_indices: TILES_PER_PAGE,
+        offset_indices: 0,
+        limit_sectors: TILES_PER_PAGE,
+        offset_sectors: 0,
+        limit_regions: TILES_PER_PAGE,
+        offset_regions: 0,
+        limit_commodities: TILES_PER_PAGE,
+        offset_commodities: 0,
+        range: r,
+      }),
+      tickerApi.getMarketMovers(MOVERS_LOAD_COUNT),
+    ])
+      .then(([overviewData, moversData]) => {
+        applyOverviewAndMoversData(overviewData, moversData);
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : 'Failed to load market data');
+        setOverview(null);
+        setMapRegions([]);
+        setMapUsIndices([]);
+        setGainers([]);
+        setLosers([]);
+        setMostActive([]);
+        setInitialHeadlinesTickers([]);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [applyOverviewAndMoversData]);
+
+  useEffect(() => {
+    if (prevRangeRef.current === range) return;
+    prevRangeRef.current = range;
+    if (activeTab === 'overview') {
+      fetchOverview(0, 0, 0, 0);
+    } else if (activeTab === 'regional' && user) {
+      fetchMapOverview();
+    }
+  }, [range, activeTab, user, fetchOverview, fetchMapOverview]);
 
   if (error) {
     return (
@@ -1051,7 +1091,8 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
         )}
       </section>
 
-      <section className="mt-8 space-y-6">
+      <section className="mt-8 pt-8 border-t border-gray-700 space-y-4">
+        <h2 className="text-sm font-semibold text-gray-300">Today&apos;s market movers</h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           <MoversTable
             rows={gainers}
@@ -1108,7 +1149,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
             <p className="mt-1 text-gray-500 text-xs">Market data for the map is only loaded for logged-in users.</p>
           </div>
         </>
-        ) : mapDataLoading ? (
+        ) : mapDataLoading && mapRegions.length === 0 && mapUsIndices.length === 0 ? (
         <>
           <div className="rounded-lg border border-gray-700 bg-gray-800/60 overflow-hidden m-4">
             <div className="h-8 bg-gray-700/80 border-b border-gray-700" />
@@ -1134,6 +1175,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
           regionalItems={mapRegions}
           usIndices={mapUsIndices}
           onSelectTicker={onSelectTicker}
+          loading={mapDataLoading}
         />
         )
         }

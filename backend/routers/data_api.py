@@ -123,6 +123,10 @@ async def data_market_overview(
     return await task
 
 
+# Max time for section overview (regions/1w with many tickers can be slow or hang on Yahoo).
+MARKET_OVERVIEW_SECTION_TIMEOUT_SEC = 90
+
+
 @router.get("/market-overview/section")
 async def data_market_overview_section(
     section: str = Query(
@@ -144,13 +148,22 @@ async def data_market_overview_section(
     }
     """
     engine = _engine()
-    return await asyncio.to_thread(
-        engine.get_market_overview_section,
-        section,
-        limit,
-        offset,
-        range_,
-    )
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(
+                engine.get_market_overview_section,
+                section,
+                limit,
+                offset,
+                range_,
+            ),
+            timeout=MARKET_OVERVIEW_SECTION_TIMEOUT_SEC,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=504,
+            detail=f"Market overview section request timed out after {MARKET_OVERVIEW_SECTION_TIMEOUT_SEC}s. Try a different range or retry.",
+        )
 
 
 @router.get("/news")
