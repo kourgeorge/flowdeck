@@ -1261,17 +1261,22 @@ class InfoFetcher:
         def _normalize_quote(q: Dict[str, Any]) -> Dict[str, Any]:
             price = self._coerce_float(q.get("regularMarketPrice"))
             change = self._coerce_float(q.get("regularMarketChange"))
-            change_pct = self._coerce_float(q.get("regularMarketChangePercent"))
-            # yahooquery screener may return change percent as percentage (61.21) or fractional; normalize to percentage
-            if change_pct is not None and abs(change_pct) <= 1.5 and change_pct != 0:
-                change_pct = change_pct * 100.0
+            prev_close = self._coerce_float(q.get("regularMarketPreviousClose"))
+            # Derive percentage from change and previous close so we don't depend on Yahoo's
+            # inconsistent regularMarketChangePercent (sometimes fractional, sometimes percentage).
+            if change is not None and prev_close is not None and prev_close != 0:
+                change_pct = (change / prev_close) * 100.0
+            else:
+                change_pct = self._coerce_float(q.get("regularMarketChangePercent"))
+                if change_pct is not None and abs(change_pct) <= 1.5 and change_pct != 0:
+                    change_pct = change_pct * 100.0
             return {
                 "symbol": (q.get("symbol") or "").strip() or None,
                 "shortName": (q.get("shortName") or q.get("longName") or "").strip() or None,
                 "regularMarketPrice": round(price, 2) if price is not None else None,
                 "regularMarketChange": round(change, 2) if change is not None else None,
                 "regularMarketChangePercent": round(change_pct, 2) if change_pct is not None else None,
-                "regularMarketPreviousClose": self._coerce_float(q.get("regularMarketPreviousClose")),
+                "regularMarketPreviousClose": prev_close,
                 "regularMarketVolume": int(q["regularMarketVolume"]) if q.get("regularMarketVolume") is not None else None,
             }
 
