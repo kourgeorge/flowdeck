@@ -554,6 +554,25 @@ export const tickerApi = {
     return response.data;
   },
 
+  // Get a single market overview section (only fetches that group from Yahoo). Use for map to avoid fetching sectors/commodities.
+  getMarketOverviewSection: async (
+    section: 'indices' | 'sectors' | 'regions' | 'commodities',
+    params?: {
+      limit?: number;
+      offset?: number;
+      range?: '1d' | '1w' | '1mo' | '3mo' | '6mo' | 'ytd';
+    }
+  ): Promise<{
+    section: string;
+    items: Array<{ ticker: string; name: string; price: number | null; change: number | null; changePercent: number | null }>;
+    total: number;
+  }> => {
+    const response = await api.get(`/api/data/market-overview/section`, {
+      params: { section, ...(params ?? {}) },
+    });
+    return response.data;
+  },
+
   // Get market overview: indices, sectors, international (prices and change). Pagination per group. range: 1d, 1w, 1mo, 3mo, 6mo, ytd.
   getMarketOverview: async (params?: {
     limit_indices?: number;
