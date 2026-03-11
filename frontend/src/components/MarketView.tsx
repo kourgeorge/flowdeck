@@ -120,7 +120,7 @@ function OverviewCard({
 
 const TILES_PER_PAGE = 6;
 const MOVERS_PAGE_SIZE = 8;
-const MOVERS_LOAD_COUNT = 24;
+const MOVERS_TOTAL_PAGES = 3;
 
 function OverviewSection({
   title,
@@ -209,6 +209,7 @@ function MoversTable({
   onPrev,
   onNext,
   pageSize = MOVERS_PAGE_SIZE,
+  paginationLoading,
 }: {
   rows: MarketMoverRow[];
   title: string;
@@ -219,11 +220,12 @@ function MoversTable({
   onPrev?: () => void;
   onNext?: () => void;
   pageSize?: number;
+  paginationLoading?: boolean;
 }) {
   const changeClass =
     changeColor === 'gainers' ? 'text-green-400' : changeColor === 'losers' ? 'text-red-400' : 'text-gray-300';
-  const canPrev = totalPages > 1 && currentPage > 0;
-  const canNext = totalPages > 1 && currentPage < totalPages - 1;
+  const canPrev = totalPages > 1 && currentPage > 0 && !paginationLoading;
+  const canNext = !paginationLoading && currentPage < totalPages - 1;
   const pageRows = totalPages > 1
     ? rows.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
     : rows;
@@ -253,6 +255,7 @@ function MoversTable({
               disabled={!canNext}
               className="p-1 rounded border border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700 hover:border-gray-500 disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:border-gray-600 transition-colors"
               aria-label="Next page"
+              aria-busy={paginationLoading}
             >
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -261,7 +264,22 @@ function MoversTable({
           </div>
         )}
       </div>
-      <div className="overflow-x-auto flex-1 min-h-0">
+      <div className="overflow-x-auto flex-1 min-h-0 relative">
+        {paginationLoading && (
+          <div
+            className="absolute inset-0 z-10 flex items-center justify-center bg-gray-800/80 rounded-b-xl"
+            aria-live="polite"
+            aria-busy="true"
+          >
+            <span className="text-xs text-gray-400 flex items-center gap-1.5">
+              <svg className="w-4 h-4 animate-spin shrink-0 text-blue-400" fill="none" viewBox="0 0 24 24" aria-hidden>
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              Updating…
+            </span>
+          </div>
+        )}
         <table className="w-full text-left text-xs">
           <thead>
             <tr className="border-b border-gray-700 text-gray-400">
@@ -508,6 +526,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
   const [moversPageGainers, setMoversPageGainers] = useState(0);
   const [moversPageLosers, setMoversPageLosers] = useState(0);
   const [moversPageMostActive, setMoversPageMostActive] = useState(0);
+  const [moversPaginationLoading, setMoversPaginationLoading] = useState<'gainers' | 'losers' | 'most_active' | null>(null);
   const [headlines, setHeadlines] = useState<HeadlineArticle[]>([]);
   const [headlinesLoading, setHeadlinesLoading] = useState(false);
   const [mapRegions, setMapRegions] = useState<OverviewItem[]>([]);
@@ -714,7 +733,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
           offset_commodities: 0,
           range,
         }),
-        tickerApi.getMarketMovers(MOVERS_LOAD_COUNT),
+        tickerApi.getMarketMovers(MOVERS_PAGE_SIZE),
       ]);
       applyOverviewAndMoversData(overviewData, moversData);
     } catch (e) {
@@ -844,27 +863,57 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
     }
   }, [paginationSection, pages, totalPagesCommodities, fetchOverview]);
 
-  const totalPagesGainers = Math.max(1, Math.ceil(gainers.length / MOVERS_PAGE_SIZE));
-  const totalPagesLosers = Math.max(1, Math.ceil(losers.length / MOVERS_PAGE_SIZE));
-  const totalPagesMostActive = Math.max(1, Math.ceil(mostActive.length / MOVERS_PAGE_SIZE));
+  const totalPagesGainers = MOVERS_TOTAL_PAGES;
+  const totalPagesLosers = MOVERS_TOTAL_PAGES;
+  const totalPagesMostActive = MOVERS_TOTAL_PAGES;
+
+  const fetchMoreMovers = useCallback(async (requiredCount: number, table: 'gainers' | 'losers' | 'most_active') => {
+    const capped = Math.min(requiredCount, MOVERS_TOTAL_PAGES * MOVERS_PAGE_SIZE);
+    if (capped <= gainers.length) return;
+    setMoversPaginationLoading(table);
+    try {
+      const data = await tickerApi.getMarketMovers(capped);
+      setGainers(data.gainers ?? []);
+      setLosers(data.losers ?? []);
+      setMostActive(data.most_active ?? []);
+    } finally {
+      setMoversPaginationLoading(null);
+    }
+  }, [gainers.length]);
+
   const handlePrevGainers = useCallback(() => {
     setMoversPageGainers((p) => Math.max(0, p - 1));
   }, []);
-  const handleNextGainers = useCallback(() => {
-    setMoversPageGainers((p) => Math.min(totalPagesGainers - 1, p + 1));
-  }, [totalPagesGainers]);
+  const handleNextGainers = useCallback(async () => {
+    const nextPage = moversPageGainers + 1;
+    const requiredCount = (nextPage + 1) * MOVERS_PAGE_SIZE;
+    if (gainers.length < requiredCount) {
+      await fetchMoreMovers(requiredCount, 'gainers');
+    }
+    setMoversPageGainers(nextPage);
+  }, [moversPageGainers, gainers.length, fetchMoreMovers]);
   const handlePrevLosers = useCallback(() => {
     setMoversPageLosers((p) => Math.max(0, p - 1));
   }, []);
-  const handleNextLosers = useCallback(() => {
-    setMoversPageLosers((p) => Math.min(totalPagesLosers - 1, p + 1));
-  }, [totalPagesLosers]);
+  const handleNextLosers = useCallback(async () => {
+    const nextPage = moversPageLosers + 1;
+    const requiredCount = (nextPage + 1) * MOVERS_PAGE_SIZE;
+    if (losers.length < requiredCount) {
+      await fetchMoreMovers(requiredCount, 'losers');
+    }
+    setMoversPageLosers(nextPage);
+  }, [moversPageLosers, losers.length, fetchMoreMovers]);
   const handlePrevMostActive = useCallback(() => {
     setMoversPageMostActive((p) => Math.max(0, p - 1));
   }, []);
-  const handleNextMostActive = useCallback(() => {
-    setMoversPageMostActive((p) => Math.min(totalPagesMostActive - 1, p + 1));
-  }, [totalPagesMostActive]);
+  const handleNextMostActive = useCallback(async () => {
+    const nextPage = moversPageMostActive + 1;
+    const requiredCount = (nextPage + 1) * MOVERS_PAGE_SIZE;
+    if (mostActive.length < requiredCount) {
+      await fetchMoreMovers(requiredCount, 'most_active');
+    }
+    setMoversPageMostActive(nextPage);
+  }, [moversPageMostActive, mostActive.length, fetchMoreMovers]);
 
   const hasInitialFetched = useRef(false);
   const prevRangeRef = useRef(range);
@@ -885,7 +934,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
       offset_commodities: 0,
       range: r,
     });
-    const moversPromise = tickerApi.getMarketMovers(MOVERS_LOAD_COUNT);
+    const moversPromise = tickerApi.getMarketMovers(MOVERS_PAGE_SIZE);
 
     // Show market movers as soon as they load
     moversPromise
@@ -1112,6 +1161,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
               onPrev={handlePrevGainers}
               onNext={handleNextGainers}
               pageSize={MOVERS_PAGE_SIZE}
+              paginationLoading={moversPaginationLoading === 'gainers'}
             />
             <MoversTable
               rows={losers}
@@ -1123,6 +1173,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
               onPrev={handlePrevLosers}
               onNext={handleNextLosers}
               pageSize={MOVERS_PAGE_SIZE}
+              paginationLoading={moversPaginationLoading === 'losers'}
             />
             <MoversTable
               rows={mostActive}
@@ -1134,6 +1185,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
               onPrev={handlePrevMostActive}
               onNext={handleNextMostActive}
               pageSize={MOVERS_PAGE_SIZE}
+              paginationLoading={moversPaginationLoading === 'most_active'}
             />
           </div>
         ) : (
