@@ -70,7 +70,8 @@ function buildChartData<T extends Record<string, (number | null)[]>>(
   periods: string[],
   series: T
 ): Array<{ period: string } & Record<keyof T, number | null>> {
-  return periods.map((period, i) => {
+  // Reverse so x-axis is chronological: oldest (left) → newest (right)
+  const rows = periods.map((period, i) => {
     const row: Record<string, string | number | null> = { period: period.length > 7 ? period.slice(0, 7) : period };
     (Object.keys(series) as (keyof T)[]).forEach((k) => {
       const arr = series[k];
@@ -78,6 +79,7 @@ function buildChartData<T extends Record<string, (number | null)[]>>(
     });
     return row as { period: string } & Record<keyof T, number | null>;
   });
+  return rows.reverse();
 }
 
 const chartTheme = {
