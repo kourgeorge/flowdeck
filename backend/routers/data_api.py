@@ -80,9 +80,9 @@ async def data_market_overview(
     offset_regions: int = Query(0, ge=0),
     limit_commodities: int = Query(12, ge=1, le=100),
     offset_commodities: int = Query(0, ge=0),
-    range_: str = Query("1d", alias="range", description="1d, 1w, 1mo, 3mo, ytd"),
+    range_: str = Query("1d", alias="range", description="1d, 1w, 1mo, 3mo, 6mo, ytd"),
 ) -> Dict[str, Any]:
-    """Get market overview: US indices, sectors, regional ETFs, and commodities with price and change. Pagination per group. range: 1d, 1w, 1mo, 3mo, ytd."""
+    """Get market overview: US indices, sectors, regional ETFs, and commodities with price and change. Pagination per group. range: 1d, 1w, 1mo, 3mo, 6mo, ytd."""
     engine = _engine()
     key = (
         limit_indices,

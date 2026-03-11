@@ -1439,6 +1439,13 @@ class InfoFetcher:
         ("commodities", "CORN", "Corn"),
     ]
 
+    # Overview pane only needs a small regions set (6*3 tiles). Map tab fetches full list separately.
+    OVERVIEW_INTERNATIONAL_TICKERS = [
+        (g, t, n)
+        for g, t, n in MARKET_OVERVIEW_TICKERS
+        if g == "international"
+    ][:18]
+
     def get_market_overview(
         self,
         limit_indices: int = 50,
@@ -1452,15 +1459,27 @@ class InfoFetcher:
         range_: str = "1d",
     ) -> Dict[str, Any]:
         """Get high-level market overview: indices, sectors, international, commodities with prices and change.
-        range_: 1d (daily), 1w (1 week), 1mo (1 month), 3mo, ytd.
+        range_: 1d (daily), 1w (1 week), 1mo (1 month), 3mo, 6mo, ytd.
         Within each section, items are ordered by absolute change (biggest movers first). Pagination via limit/offset."""
-        valid_ranges = ("1d", "1w", "1mo", "3mo", "ytd")
+        valid_ranges = ("1d", "1w", "1mo", "3mo", "6mo", "ytd")
         range_ = range_ if range_ in valid_ranges else "1d"
         svc = self._get_market_data_service()
+        # Overview pane requests small region slice (e.g. 6); use 18 region tickers. Map requests 100 and get full list.
+        use_overview_regions = limit_regions <= 18
         by_group: Dict[str, List[tuple]] = {"indices": [], "sectors": [], "international": [], "commodities": []}
         for group_key, ticker, name in self.MARKET_OVERVIEW_TICKERS:
+            if group_key == "international" and use_overview_regions:
+                continue
             by_group[group_key].append((ticker.upper(), name))
-        tickers = list({row[1].upper() for row in self.MARKET_OVERVIEW_TICKERS})
+        if use_overview_regions:
+            for _, ticker, name in self.OVERVIEW_INTERNATIONAL_TICKERS:
+                by_group["international"].append((ticker.upper(), name))
+        if use_overview_regions:
+            other = {row[1].upper() for row in self.MARKET_OVERVIEW_TICKERS if row[0] != "international"}
+            region = {t.upper() for _, t, _ in self.OVERVIEW_INTERNATIONAL_TICKERS}
+            tickers = list(other | region)
+        else:
+            tickers = list({row[1].upper() for row in self.MARKET_OVERVIEW_TICKERS})
         quotes = svc.get_multiple_quotes_batch_with_range(tickers, range_)
 
         def _build_and_sort(group_key: str) -> List[Dict[str, Any]]:
@@ -1521,7 +1540,7 @@ class InfoFetcher:
           "total": int
         }
         """
-        valid_ranges = ("1d", "1w", "1mo", "3mo", "ytd")
+        valid_ranges = ("1d", "1w", "1mo", "3mo", "6mo", "ytd")
         range_ = range_ if range_ in valid_ranges else "1d"
 
         normalized_section = section.lower()

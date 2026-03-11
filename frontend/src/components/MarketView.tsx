@@ -514,7 +514,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
   const [mapUsIndices, setMapUsIndices] = useState<OverviewItem[]>([]);
   const [mapDataLoading, setMapDataLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'regional'>('overview');
-  const [range, setRange] = useState<'1d' | '1w' | '1mo' | '3mo' | 'ytd'>('1d');
+  const [range, setRange] = useState<'1d' | '1w' | '1mo' | '6mo' | 'ytd'>('1d');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [paginationSection, setPaginationSection] = useState<'indices' | 'sectors' | 'regions' | 'commodities' | null>(null);
@@ -933,7 +933,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
           </button>
         </div>
         <div className="flex gap-0.5 pb-1" role="group" aria-label="Timeframe">
-          {(['1d', '1w', '1mo', '3mo', 'ytd'] as const).map((r) => (
+          {(['1d', '1w', '1mo', '6mo', 'ytd'] as const).map((r) => (
             <button
               key={r}
               type="button"
@@ -944,7 +944,15 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
                   : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'
               }`}
             >
-              {r === '1d' ? '1D' : r === '1w' ? '1W' : r === '1mo' ? '1M' : r === '3mo' ? '3M' : 'YTD'}
+              {r === '1d'
+                ? '1D'
+                : r === '1w'
+                  ? '1W'
+                  : r === '1mo'
+                    ? '1M'
+                    : r === '6mo'
+                      ? '6M'
+                      : 'YTD'}
             </button>
           ))}
         </div>

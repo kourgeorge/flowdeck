@@ -12,14 +12,16 @@ MARKET_RANGE_PERIODS = {
     "1w": "1mo",
     "1mo": "1mo",
     "3mo": "3mo",
+    "6mo": "6mo",
     "ytd": "ytd",
 }
-# Index offset from last close: -1 is current, -2 is prev day. For 1w: 5 sessions back = -6, 1mo: -22, 3mo: -64
+# Index offset from last close: -1 is current, -2 is prev day. For 1w: 5 sessions back = -6, 1mo: -22, 3mo: -64, 6mo: ~126
 MARKET_RANGE_OFFSETS = {
     "1d": 2,  # prev close
     "1w": 6,  # 5 trading days back
     "1mo": 22,  # ~21 trading days
     "3mo": 64,  # ~63 trading days
+    "6mo": 126,  # ~6 months of trading days
     "ytd": None,  # use first row of current year
 }
 
@@ -345,10 +347,11 @@ class MarketDataService:
     @staticmethod
     def get_multiple_quotes_batch_with_range(
         tickers: List[str],
-        range_: Literal["1d", "1w", "1mo", "3mo", "ytd"] = "1d",
+        range_: Literal["1d", "1w", "1mo", "3mo", "6mo", "ytd"] = "1d",
     ) -> Dict[str, Optional[TickerQuote]]:
         """Fetch quotes with change over the specified range (1d, 1w, 1mo, 3mo, ytd).
-        For 1d uses previous close; for 1w/1mo/3mo uses close N sessions ago; for ytd uses year-start close."""
+        For 1d uses previous close; for 1w/1mo/3mo uses close N sessions ago; for ytd uses year-start close.
+        Downloads in batches to avoid empty responses from Yahoo when requesting many tickers at once."""
         if not tickers:
             return {}
         if range_ == "1d":
@@ -359,97 +362,110 @@ class MarketDataService:
         period = MARKET_RANGE_PERIODS.get(range_, "1mo")
         offset = MARKET_RANGE_OFFSETS.get(range_)
 
-        try:
-            data = yf.download(
-                tickers,
-                period=period,
-                interval="1d",
-                group_by="ticker",
-                auto_adjust=False,
-                prepost=False,
-                threads=True,
-                progress=False,
-            )
-            if data.empty:
-                return results
+        batch_size = 25
+        for i in range(0, len(tickers), batch_size):
+            chunk = tickers[i : i + batch_size]
+            try:
+                data = yf.download(
+                    chunk,
+                    period=period,
+                    interval="1d",
+                    group_by="ticker",
+                    auto_adjust=False,
+                    prepost=False,
+                    threads=True,
+                    progress=False,
+                )
+                if data.empty:
+                    continue
 
-            def get_close_series(t: str):
-                if len(tickers) == 1:
-                    t = tickers[0]
-                    if isinstance(data.columns, pd.MultiIndex) and t in data.columns.get_level_values(0):
+                def get_close_series(data: pd.DataFrame, chunk_tickers: List[str], t: str):
+                    if len(chunk_tickers) == 1:
+                        tc = chunk_tickers[0]
+                        if isinstance(data.columns, pd.MultiIndex) and tc in data.columns.get_level_values(0):
+                            return data[tc]["Close"] if "Close" in data[tc].columns else None
+                        return data["Close"] if "Close" in data.columns else None
+                    if not isinstance(data.columns, pd.MultiIndex):
+                        return None
+                    if t in data.columns.get_level_values(0):
                         return data[t]["Close"] if "Close" in data[t].columns else None
-                    return data["Close"] if "Close" in data.columns else None
-                if t in data.columns.get_level_values(0):
-                    return data[t]["Close"] if isinstance(data.columns, pd.MultiIndex) and "Close" in data[t].columns else None
-                return data["Close"].get(t) if hasattr(data["Close"], "get") else None
+                    if t in data.columns.get_level_values(1) and "Close" in data.columns.get_level_values(0):
+                        return data["Close"].get(t)
+                    return None
 
-            def get_volume_series(t: str):
-                if len(tickers) == 1:
-                    if isinstance(data.columns, pd.MultiIndex) and t in data.columns.get_level_values(0):
-                        return data[t]["Volume"] if "Volume" in data[t].columns else None
-                    return data["Volume"] if "Volume" in data.columns else None
-                if isinstance(data.columns, pd.MultiIndex) and (t, "Volume") in data.columns:
-                    return data[(t, "Volume")]
-                return data[t]["Volume"] if t in data.columns.get_level_values(0) and "Volume" in data[t].columns else None
+                def get_volume_series(data: pd.DataFrame, chunk_tickers: List[str], t: str):
+                    if len(chunk_tickers) == 1:
+                        tc = chunk_tickers[0]
+                        if isinstance(data.columns, pd.MultiIndex) and tc in data.columns.get_level_values(0):
+                            return data[tc]["Volume"] if "Volume" in data[tc].columns else None
+                        return data["Volume"] if "Volume" in data.columns else None
+                    if not isinstance(data.columns, pd.MultiIndex):
+                        return None
+                    if (t, "Volume") in data.columns:
+                        return data[(t, "Volume")]
+                    if t in data.columns.get_level_values(0) and "Volume" in data[t].columns:
+                        return data[t]["Volume"]
+                    if t in data.columns.get_level_values(1) and "Volume" in data.columns.get_level_values(0):
+                        return data["Volume"].get(t)
+                    return None
 
-            for t in tickers:
-                try:
-                    close_series = get_close_series(t)
-                    if close_series is None:
-                        continue
-                    valid = close_series.dropna()
-                    if len(valid) < 2:
-                        continue
-                    current = _safe_float(valid.iloc[-1])
-                    if current is None or not _is_valid_price(current):
-                        continue
+                for t in chunk:
+                    try:
+                        close_series = get_close_series(data, chunk, t)
+                        if close_series is None:
+                            continue
+                        valid = close_series.dropna()
+                        if len(valid) < 2:
+                            continue
+                        current = _safe_float(valid.iloc[-1])
+                        if current is None or not _is_valid_price(current):
+                            continue
 
-                    if offset is not None:
-                        if len(valid) < offset:
-                            prev = _safe_float(valid.iloc[0])
+                        if offset is not None:
+                            if len(valid) < offset:
+                                prev = _safe_float(valid.iloc[0])
+                            else:
+                                prev = _safe_float(valid.iloc[-offset])
                         else:
-                            prev = _safe_float(valid.iloc[-offset])
-                    else:
-                        # ytd: first close of current year
-                        today = datetime.now()
-                        yr = today.year
-                        prev = None
-                        for i in range(len(valid)):
-                            idx = valid.index[i]
-                            if hasattr(idx, "year") and idx.year == yr:
-                                prev = _safe_float(valid.iloc[i])
-                                break
-                        if prev is None:
-                            prev = _safe_float(valid.iloc[0])
+                            today = datetime.now()
+                            yr = today.year
+                            prev = None
+                            for j in range(len(valid)):
+                                idx = valid.index[j]
+                                if hasattr(idx, "year") and idx.year == yr:
+                                    prev = _safe_float(valid.iloc[j])
+                                    break
+                            if prev is None:
+                                prev = _safe_float(valid.iloc[0])
 
-                    if prev is None or not _is_valid_price(prev) or prev <= 0:
-                        prev = current
-                    change = current - prev
-                    change_pct = (change / prev * 100) if prev and prev > 0 else 0.0
+                        if prev is None or not _is_valid_price(prev) or prev <= 0:
+                            prev = current
+                        change = current - prev
+                        change_pct = (change / prev * 100) if prev and prev > 0 else 0.0
 
-                    vol_series = get_volume_series(t)
-                    vol = _safe_int(vol_series.iloc[-1]) if vol_series is not None else None
+                        vol_series = get_volume_series(data, chunk, t)
+                        vol = _safe_int(vol_series.iloc[-1]) if vol_series is not None else None
 
-                    results[t] = TickerQuote(
-                        ticker=t,
-                        current_price=round(current, 2),
-                        daily_change=round(change, 2),
-                        daily_change_percent=round(change_pct, 2),
-                        bid_price=None,
-                        ask_price=None,
-                        bid_size=None,
-                        ask_size=None,
-                        volume=vol,
-                        previous_close=round(prev, 2) if prev else None,
-                        day_high=None,
-                        day_low=None,
-                        fifty_two_week_high=None,
-                        fifty_two_week_low=None,
-                        market_status="UNKNOWN",
-                        last_update_time=datetime.now(),
-                    )
-                except Exception as e:
-                    print(f"Warning: Failed to parse range quote for {t}: {e}")
-        except Exception as e:
-            print(f"Warning: Batch range quote fetch failed: {e}")
+                        results[t] = TickerQuote(
+                            ticker=t,
+                            current_price=round(current, 2),
+                            daily_change=round(change, 2),
+                            daily_change_percent=round(change_pct, 2),
+                            bid_price=None,
+                            ask_price=None,
+                            bid_size=None,
+                            ask_size=None,
+                            volume=vol,
+                            previous_close=round(prev, 2) if prev else None,
+                            day_high=None,
+                            day_low=None,
+                            fifty_two_week_high=None,
+                            fifty_two_week_low=None,
+                            market_status="UNKNOWN",
+                            last_update_time=datetime.now(),
+                        )
+                    except Exception as e:
+                        print(f"Warning: Failed to parse range quote for {t}: {e}")
+            except Exception as e:
+                print(f"Warning: Batch range quote fetch failed for chunk: {e}")
         return results
