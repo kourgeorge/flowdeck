@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { ComposableMap, Geographies, Geography, Marker } from 'react-simple-maps';
 
 /** GeoJSON-like feature used by Geographies render prop */
@@ -33,7 +33,6 @@ const REGION_COORDS: Record<string, [number, number]> = {
   '^VIX': [-87.65, 41.88],    // Chicago (CBOE)
   // Israel
   '^TA125.TA': [34.78, 32.08],
-  'TA35.TA': [34.78, 32.08],
   // Gulf / Middle East
   '^TASI.SR': [46.72, 24.71],
   KSA: [46.72, 24.71],
@@ -41,10 +40,6 @@ const REGION_COORDS: Record<string, [number, number]> = {
   QAT: [51.53, 25.28],   // iShares MSCI Qatar ETF
   BAX: [50.58, 26.23],
   KWT: [47.98, 29.38],
-  EGPT: [31.24, 30.04],
-  '^CASE30': [31.24, 30.04],
-  'MASI': [-7.61, 33.59],
-  '^NQMA': [-7.61, 33.59],
   // Europe
   '^FTSE': [-0.13, 51.51],
   '^GDAXI': [8.68, 50.11],
@@ -52,22 +47,17 @@ const REGION_COORDS: Record<string, [number, number]> = {
   '^STOXX50E': [4.35, 50.85],
   EWG: [8.68, 50.11],
   EWU: [-0.13, 51.51],
-  'FTSEMIB.MI': [9.19, 45.46],
   '^IBEX': [-3.70, 40.42],
   '^AEX': [4.9, 52.37],
   '^SSMI': [8.54, 47.38],
   '^OMXSPI': [18.07, 59.33],
-  'WIG20.WA': [21.01, 52.23],
   '^ATX': [16.37, 48.21],
   '^BFX': [4.35, 50.85],
-  '^OMXC20': [12.57, 55.68],
+  '^OMXC20': [12.57, 55.68],   // Denmark Copenhagen
   '^OMXH25': [24.94, 60.17],
   'GD.AT': [23.73, 37.98],
-  'FPXAA.PR': [-9.14, 38.72],
   EIRL: [-6.26, 53.35],
   '^OSEAX': [10.75, 59.91],
-  '^BUX.BD': [19.04, 47.5],
-  'IMOEX.ME': [37.62, 55.75],   // Russia MOEX
   // Asia-Pacific
   '^N225': [139.69, 35.69],
   '^HSI': [114.17, 22.32],
@@ -98,22 +88,17 @@ const REGION_COORDS: Record<string, [number, number]> = {
   '^GSPTSE': [-79.38, 43.65],
   '^BVSP': [-46.63, -23.55],
   '^MXX': [-99.13, 19.43],
-  '^IPSA': [-70.65, -33.45],
+  '^IPSA': [-70.65, -33.45],   // Chile Santiago
   '^MERV': [-58.38, -34.6],
   'ICOLCAP.CL': [-74.07, 4.71],
   EPU: [-77.04, -12.05],
-  'IBC.CR': [-84.09, 9.93],
   EWC: [-79.38, 43.65],
   EWZ: [-46.63, -23.55],
   EWA: [151.21, -33.87],
   // Africa
-  '^SPAFREP': [20, -5],       // Africa (S&P Pan Africa)
   AFK: [15, -8],              // Pan-Africa ETF
   '^JN0U.JO': [28.05, -26.2],
   EZA: [28.05, -26.2],
-  NGE: [3.39, 6.45],          // Global X MSCI Nigeria ETF
-  'FNKEN2.L': [36.82, -1.29], // Kenya FNKEN2 (NSE 20)
-  FM: [31.24, 30.04],
   // Generic ETFs - place at representative locations
   EFA: [-0.13, 51.51],
   EEM: [114.17, 22.32],
@@ -128,7 +113,7 @@ function getCoords(item: OverviewItem): [number, number] | null {
 }
 
 // Primary ticker to show when multiple items share the same location (US exchanges, South Africa, etc.)
-const PRIMARY_TICKERS = new Set(['^GSPC', '^IXIC', '^VIX', '^JN0U.JO', '^CASE30', '^NQMA']);
+const PRIMARY_TICKERS = new Set(['^GSPC', '^IXIC', '^VIX', '^JN0U.JO']);
 
 // Dedupe by approximate coords (same rounded lon,lat) to avoid stacked markers.
 // For US exchanges we keep the primary index (e.g. ^GSPC for NYSE, ^IXIC for NASDAQ).
@@ -178,13 +163,15 @@ interface WorldMapRegionalStocksProps {
   regionalItems: OverviewItem[];
   usIndices?: OverviewItem[];
   onSelectTicker?: (ticker: string) => void;
+  /** When true, show a subtle loading indicator without hiding the map (e.g. while refetching for new range). */
+  loading?: boolean;
 }
 
 type ChangeFilter = 'all' | 'gainers' | 'losers';
 
 type CountryTooltip = { name: string; x: number; y: number };
 
-export default function WorldMapRegionalStocks({ regionalItems, usIndices = [], onSelectTicker }: WorldMapRegionalStocksProps) {
+export default function WorldMapRegionalStocks({ regionalItems, usIndices = [], onSelectTicker, loading = false }: WorldMapRegionalStocksProps) {
   const [changeFilter, setChangeFilter] = useState<ChangeFilter>('all');
   const [selectedItem, setSelectedItem] = useState<OverviewItem | null>(null);
   const [countryTooltip, setCountryTooltip] = useState<CountryTooltip | null>(null);
@@ -212,22 +199,34 @@ export default function WorldMapRegionalStocks({ regionalItems, usIndices = [], 
     setCountryTooltip(null);
   }, []);
 
-  let combined = [...regionalItems, ...usIndices];
+  const combined = useMemo(() => {
+    let list = [...regionalItems, ...usIndices];
+    if (changeFilter === 'gainers') list = list.filter((i) => (i.changePercent ?? 0) > 0);
+    else if (changeFilter === 'losers') list = list.filter((i) => (i.changePercent ?? 0) < 0);
+    return list;
+  }, [regionalItems, usIndices, changeFilter]);
 
-  if (changeFilter === 'gainers') {
-    combined = combined.filter((i) => (i.changePercent ?? 0) > 0);
-  } else if (changeFilter === 'losers') {
-    combined = combined.filter((i) => (i.changePercent ?? 0) < 0);
-  }
+  const withCoords = useMemo(
+    () => combined.filter((i) => getCoords(i) != null),
+    [combined]
+  );
 
-  const withCoords = combined.filter((i) => getCoords(i) != null);
-  const mappable = dedupeByLocation(withCoords);
+  const mappable = useMemo(() => dedupeByLocation(withCoords), [withCoords]);
 
   return (
     <div className="rounded-lg border border-gray-700 bg-gray-800/60 overflow-hidden">
       <div className="px-2.5 py-1.5 border-b border-gray-700 bg-gray-800/80 flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Regional markets</h3>
         <div className="flex flex-wrap items-center gap-4">
+          {loading && (
+            <span className="flex items-center gap-1.5 text-[10px] text-gray-400" aria-live="polite">
+              <svg className="w-3.5 h-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden>
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              Updating…
+            </span>
+          )}
           <div className="flex items-center gap-1 text-[10px]">
             <span className="font-medium text-gray-400">Filter</span>
             {(['all', 'gainers', 'losers'] as const).map((f) => (

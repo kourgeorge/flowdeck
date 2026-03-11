@@ -17,24 +17,23 @@ import os
 import sys
 import requests
 
-# Tickers from frontend WorldMapRegionalStocks REGION_COORDS (keys only)
+# Tickers from frontend WorldMapRegionalStocks REGION_COORDS (keys only).
+# Excludes tickers that don't return valid Yahoo data (1W/1M/6M/YTD).
 MAP_TICKERS = [
     "^GSPC", "^DJI", "^RUT", "SPY", "DIA", "IWM", "MDY", "VOO", "VTI",
     "^IXIC", "^NDX", "QQQ", "^VIX",
     "^TA125.TA", "TA35.TA",
-    "^TASI.SR", "KSA", "UAE", "QAT", "BAX", "KWT", "EGPT", "^CASE30",
-    "MASI", "^NQMA",
+    "^TASI.SR", "KSA", "UAE", "QAT", "BAX", "KWT", "MASI",
     "^FTSE", "^GDAXI", "^FCHI", "^STOXX50E", "EWG", "EWU", "FTSEMIB.MI",
-    "^IBEX", "^AEX", "^SSMI", "^OMXSPI", "WIG20.WA", "^ATX", "^BFX", "^OMXC20",
-    "^OMXH25", "GD.AT", "FPXAA.PR", "EIRL",     "^OSEAX", "^BUX.BD",
-    "IMOEX.ME",
+    "^IBEX", "^AEX", "^SSMI", "^OMXSPI", "^ATX", "^BFX",
+    "^OMXH25", "GD.AT", "EIRL", "^OSEAX",
     "^N225", "^HSI", "^STI", "^AXJO", "^KS11", "^TWII", "^BSESN", "^NSEI",
     "^JKSE", "^KLSE", "000001.SS", "^SET.BK", "PSEI.PS", "VNM", "XBAK.DE",
     "^NZ50", "ENZL", "EWJ", "FXI", "INDA", "EWM", "EIDO",
     "XU100.IS", "TUR",
-    "^GSPTSE", "^BVSP", "^MXX", "^IPSA", "^MERV", "ICOLCAP.CL", "EPU", "IBC.CR",
+    "^GSPTSE", "^BVSP", "^MXX", "^MERV", "ICOLCAP.CL", "EPU",
     "EWC", "EWZ", "EWA",
-    "^SPAFREP", "AFK", "^JN0U.JO", "EZA", "NGE", "FNKEN2.L", "FM",
+    "AFK", "^JN0U.JO", "EZA",
     "EFA", "EEM", "VEA", "VWO",
 ]
 

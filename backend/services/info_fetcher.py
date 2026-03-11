@@ -1339,19 +1339,13 @@ class InfoFetcher:
         ("international", "VWO", "Emerging Markets (Vanguard)"),
         # Israel (Tel Aviv)
         ("international", "^TA125.TA", "Israel TA-125"),
-        ("international", "^TA35.TA", "Israel TA-35"),
         # Arab / Gulf
         ("international", "^TASI.SR", "Saudi Arabia TASI"),
         ("international", "KSA", "Saudi Arabia (iShares)"),
         ("international", "UAE", "UAE (iShares)"),
         ("international", "QAT", "Qatar (iShares)"),
-        ("international", "^QSI", "Qatar Stock Index"),
         ("international", "BAX", "Baxter International Inc."),
         ("international", "KWT", "Kuwait (iShares)"),
-        ("international", "EGPT", "Egypt (VanEck)"),
-        ("international", "^CASE30", "Egypt EGX 30"),
-        ("international", "^MASI", "Morocco MASI"),
-        ("international", "^NQMA", "Morocco NQMA"),
         # Europe indices
         ("international", "^FTSE", "UK FTSE 100"),
         ("international", "^GDAXI", "Germany DAX"),
@@ -1359,24 +1353,17 @@ class InfoFetcher:
         ("international", "^STOXX50E", "Euro Stoxx 50"),
         ("international", "EWG", "Germany (iShares)"),
         ("international", "EWU", "UK (iShares)"),
-        ("international", "^FTSEMIB", "Italy FTSE MIB"),
         ("international", "^IBEX", "Spain IBEX 35"),
         ("international", "^AEX", "Netherlands AEX"),
         ("international", "^SSMI", "Switzerland SMI"),
         ("international", "^OMXSPI", "Sweden OMX"),
-        ("international", "WIG20.WA", "Poland WIG 20"),
         ("international", "^ATX", "Austria ATX"),
         ("international", "^BFX", "Belgium BEL 20"),
         ("international", "^OMXC20", "Denmark OMX Copenhagen"),
         ("international", "^OMXH25", "Finland OMX Helsinki"),
         ("international", "GD.AT", "Greece Athens General"),
-        ("international", "FPXAA.PR", "Portugal PSI"),
         ("international", "EIRL", "Ireland (iShares)"),
         ("international", "^OSEAX", "Norway Oslo OBX"),
-        ("international", "^OMXIPI", "Iceland OMX"),
-        ("international", "^BUX", "Hungary BUX"),
-        ("international", "^RTSI", "Russia RTS"),
-        ("international", "IMOEX.ME", "Russia MOEX"),
         # Asia-Pacific indices
         ("international", "^N225", "Japan Nikkei 225"),
         ("international", "^HSI", "Hong Kong Hang Seng"),
@@ -1411,20 +1398,14 @@ class InfoFetcher:
         ("international", "^MERV", "Argentina Merval"),
         ("international", "ICOLCAP.CL", "Colombia COLCAP"),
         ("international", "EPU", "Peru (iShares)"),
-        ("international", "IBC.CR", "Costa Rica IBC"),
         ("international", "EWC", "Canada (iShares)"),
         ("international", "EWZ", "Brazil (iShares)"),
         ("international", "EWA", "Australia (iShares)"),
         # Africa
-        ("international", "^SPAFREP", "Africa (S&P Pan Africa)"),
         ("international", "AFK", "Pan-Africa ETF"),
         ("international", "^JN0U.JO", "South Africa Top 40"),
         ("international", "EZA", "South Africa (iShares)"),
-        ("international", "NGE", "Nigeria (VanEck)"),
-        ("international", "NGXASI", "Nigeria NGX All-Share"),
-        ("international", "FNKEN2.L", "Kenya FNKEN2 (NSE 20)"),
-        ("international", "FM", "Frontier Markets"),
-        # Commodities / materials (ETFs and common proxies)
+        # Commodities / materials (ETFs and common proxies) / materials (ETFs and common proxies)
         ("commodities", "GLD", "Gold"),
         ("commodities", "SLV", "Silver"),
         ("commodities", "IAU", "Gold (iShares)"),
@@ -1480,7 +1461,20 @@ class InfoFetcher:
             tickers = list(other | region)
         else:
             tickers = list({row[1].upper() for row in self.MARKET_OVERVIEW_TICKERS})
-        quotes = svc.get_multiple_quotes_batch_with_range(tickers, range_)
+        # Fetch each group separately so we use smaller, homogeneous batches (same as regional test).
+        # One big combined list causes more Yahoo timeouts/failures and yields missing data for some tickers.
+        quotes: Dict[str, Any] = {}
+        for group_key in ("indices", "sectors", "international", "commodities"):
+            group_tickers = [t for t, _ in by_group[group_key]]
+            if not group_tickers:
+                continue
+            group_quotes = svc.get_multiple_quotes_batch_with_range(group_tickers, range_)
+            for t, q in group_quotes.items():
+                if q is not None:
+                    quotes[t] = q
+        # Fallback: if we didn't do per-group (e.g. empty groups), use original combined fetch
+        if not quotes and tickers:
+            quotes = svc.get_multiple_quotes_batch_with_range(tickers, range_)
 
         def _build_and_sort(group_key: str) -> List[Dict[str, Any]]:
             items: List[Dict[str, Any]] = []
