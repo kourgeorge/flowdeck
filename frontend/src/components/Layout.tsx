@@ -75,8 +75,8 @@ function MarketIcon() {
 
 const navItems: { to: string; label: string; icon: () => JSX.Element; authOnly?: boolean }[] = [
   { to: '/', label: 'FlowDeck', icon: FlowDeckIcon },
-  { to: '/dashboard', label: 'Dashboard', icon: DashboardIcon, authOnly: true },
   { to: '/market', label: 'Market View', icon: MarketIcon },
+  { to: '/dashboard', label: 'Dashboard', icon: DashboardIcon, authOnly: true },
   { to: '/copilot', label: 'Trading Copilot', icon: CopilotIcon, authOnly: true },
   { to: '/chat', label: 'AI Analyst Agent', icon: ChatIcon, authOnly: true },
 ];
@@ -188,14 +188,30 @@ export default function Layout() {
         >
           <div className="flex-1">
             <ul className="space-y-1">
-              {navItems
-                .filter((item) => !('authOnly' in item && item.authOnly) || user)
-                .map(({ to, label, icon: Icon }) => (
+              {navItems.map(({ to, label, icon: Icon, authOnly }) => {
+                const disabled = authOnly && !user;
+                const title = !sidebarExpanded ? (disabled ? `Sign in to access ${label}` : label) : undefined;
+                if (disabled) {
+                  return (
+                    <li key={to}>
+                      <button
+                        type="button"
+                        title={title}
+                        onClick={() => setAuthModalOpen(true)}
+                        className={`flex items-center ${sidebarExpanded ? 'gap-3 px-4' : 'justify-center px-2'} py-2 rounded-lg text-sm font-medium w-full text-left cursor-pointer text-gray-500 hover:text-gray-400 opacity-75 hover:opacity-90 transition-colors pointer-events-auto`}
+                      >
+                        <Icon />
+                        {sidebarExpanded && <span>{label}</span>}
+                      </button>
+                    </li>
+                  );
+                }
+                return (
                   <li key={to}>
                     <NavLink
                       to={to}
                       end={to === '/'}
-                      title={!sidebarExpanded ? label : undefined}
+                      title={title}
                       className={({ isActive }) =>
                         `flex items-center ${sidebarExpanded ? 'gap-3 px-4' : 'justify-center px-2'} py-2 rounded-lg text-sm font-medium transition-colors ${
                           isActive
@@ -208,7 +224,8 @@ export default function Layout() {
                       {sidebarExpanded && <span>{label}</span>}
                     </NavLink>
                   </li>
-                ))}
+                );
+              })}
               {user?.is_admin && (
                 <li>
                   <NavLink
@@ -266,22 +283,37 @@ export default function Layout() {
                     </button>
                   </li>
                 </>
-              ) : sidebarExpanded ? (
-                <li>
-                  <div className="rounded-lg bg-blue-950/60 border border-blue-700/40 p-3 flex flex-col gap-2">
-                    <p className="text-xs text-gray-300 leading-snug">
-                      <span className="font-medium text-white">Sign in</span> to run AI analysis on any stock, access your personalized dashboard, and use {COPILOT_NAME} — your Trading Copilot.
-                    </p>
+              ) : (
+                <>
+                  <li>
                     <button
                       type="button"
+                      title={!sidebarExpanded ? 'Sign in to access Profile' : undefined}
                       onClick={() => setAuthModalOpen(true)}
-                      className="w-full px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                      className={`flex items-center ${sidebarExpanded ? 'gap-3 px-4' : 'justify-center px-2'} py-2 rounded-lg text-sm font-medium w-full text-left text-gray-500 hover:text-gray-400 opacity-75 hover:opacity-90 transition-colors`}
                     >
-                      Sign in
+                      <ProfileIcon />
+                      {sidebarExpanded && <span>Profile</span>}
                     </button>
-                  </div>
-                </li>
-              ) : null}
+                  </li>
+                  {sidebarExpanded && (
+                    <li>
+                      <div className="rounded-lg bg-blue-950/60 border border-blue-700/40 p-3 flex flex-col gap-2">
+                        <p className="text-xs text-gray-300 leading-snug">
+                          <span className="font-medium text-white">Sign in</span> to run AI analysis on any stock, access your personalized dashboard, and use {COPILOT_NAME} — your Trading Copilot.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setAuthModalOpen(true)}
+                          className="w-full px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                        >
+                          Sign in
+                        </button>
+                      </div>
+                    </li>
+                  )}
+                </>
+              )}
             </ul>
           </div>
         </nav>
