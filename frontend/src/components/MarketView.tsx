@@ -513,10 +513,9 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
   const [mapRegions, setMapRegions] = useState<OverviewItem[]>([]);
   const [mapUsIndices, setMapUsIndices] = useState<OverviewItem[]>([]);
   const [mapDataLoading, setMapDataLoading] = useState(false);
+  const [overviewDataLoading, setOverviewDataLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'regional'>('overview');
   const [range, setRange] = useState<'1d' | '1w' | '1mo' | '6mo' | 'ytd'>('1d');
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [paginationSection, setPaginationSection] = useState<'indices' | 'sectors' | 'regions' | 'commodities' | null>(null);
   // Ticker list for headlines: set only on initial load so news does not refresh when navigating sections
   const [initialHeadlinesTickers, setInitialHeadlinesTickers] = useState<string[]>([]);
@@ -700,7 +699,6 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
   );
 
   const fetchAll = useCallback(async () => {
-    setIsLoading(true);
     setError(null);
     try {
       const [overviewData, moversData] = await Promise.all([
@@ -727,8 +725,6 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
       setLosers([]);
       setMostActive([]);
       setInitialHeadlinesTickers([]);
-    } finally {
-      setIsLoading(false);
     }
   }, [range, applyOverviewAndMoversData]);
 
@@ -875,23 +871,54 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
   useEffect(() => {
     if (hasInitialFetched.current) return;
     hasInitialFetched.current = true;
-    setIsLoading(true);
     setError(null);
     const r = range;
-    Promise.all([
-      tickerApi.getMarketOverview({
-        limit_indices: TILES_PER_PAGE,
-        offset_indices: 0,
-        limit_sectors: TILES_PER_PAGE,
-        offset_sectors: 0,
-        limit_regions: TILES_PER_PAGE,
-        offset_regions: 0,
-        limit_commodities: TILES_PER_PAGE,
-        offset_commodities: 0,
-        range: r,
-      }),
-      tickerApi.getMarketMovers(MOVERS_LOAD_COUNT),
-    ])
+    const overviewPromise = tickerApi.getMarketOverview({
+      limit_indices: TILES_PER_PAGE,
+      offset_indices: 0,
+      limit_sectors: TILES_PER_PAGE,
+      offset_sectors: 0,
+      limit_regions: TILES_PER_PAGE,
+      offset_regions: 0,
+      limit_commodities: TILES_PER_PAGE,
+      offset_commodities: 0,
+      range: r,
+    });
+    const moversPromise = tickerApi.getMarketMovers(MOVERS_LOAD_COUNT);
+
+    // Show market movers as soon as they load
+    moversPromise
+      .then((moversData) => {
+        setGainers(moversData.gainers ?? []);
+        setLosers(moversData.losers ?? []);
+        setMostActive(moversData.most_active ?? []);
+        setMoversPageGainers(0);
+        setMoversPageLosers(0);
+        setMoversPageMostActive(0);
+      })
+      .catch(() => {});
+
+    // Show overview tiles as soon as they load
+    overviewPromise
+      .then((overviewData) => {
+        setOverview({
+          indices: overviewData.indices ?? [],
+          sectors: overviewData.sectors ?? [],
+          international: overviewData.international ?? [],
+          commodities: overviewData.commodities ?? [],
+        });
+        setTotals({
+          totalIndices: overviewData.totalIndices ?? 0,
+          totalSectors: overviewData.totalSectors ?? 0,
+          totalRegions: overviewData.totalRegions ?? 0,
+          totalCommodities: overviewData.totalCommodities ?? 0,
+        });
+        setPages({ indices: 0, sectors: 0, regions: 0, commodities: 0 });
+      })
+      .catch(() => {});
+
+    // When both are ready, set merged headlines and ensure full state
+    Promise.all([overviewPromise, moversPromise])
       .then(([overviewData, moversData]) => {
         applyOverviewAndMoversData(overviewData, moversData);
       })
@@ -904,9 +931,6 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
         setLosers([]);
         setMostActive([]);
         setInitialHeadlinesTickers([]);
-      })
-      .finally(() => {
-        setIsLoading(false);
       });
   }, [applyOverviewAndMoversData]);
 
@@ -914,7 +938,8 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
     if (prevRangeRef.current === range) return;
     prevRangeRef.current = range;
     if (activeTab === 'overview') {
-      fetchOverview(0, 0, 0, 0);
+      setOverviewDataLoading(true);
+      fetchOverview(0, 0, 0, 0).finally(() => setOverviewDataLoading(false));
     } else if (activeTab === 'regional' && user) {
       fetchMapOverview();
     }
@@ -973,6 +998,15 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
           </button>
         </div>
         <div className="flex gap-0.5 pb-1" role="group" aria-label="Timeframe">
+          {activeTab === 'overview' && overviewDataLoading && (
+            <span className="flex items-center gap-1.5 text-xs text-gray-400 mr-2" aria-live="polite">
+              <svg className="w-3.5 h-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden>
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              Updating…
+            </span>
+          )}
           {(['1d', '1w', '1mo', '6mo', 'ytd'] as const).map((r) => (
             <button
               key={r}
@@ -1001,51 +1035,9 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
       {activeTab === 'overview' && (
       <>
       <div className="relative">
-      {isLoading ? (
-        <>
-          <div className="animate-pulse space-y-6 p-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="rounded-lg border border-gray-700 bg-gray-800/60 overflow-hidden">
-                  <div className="h-8 bg-gray-700/80" />
-                  <div className="p-2 grid grid-cols-2 gap-1.5">
-                    {[1, 2, 3, 4, 5, 6].map((j) => (
-                      <div key={j} className="h-14 bg-gray-700 rounded" />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="rounded-xl border border-gray-700 bg-gray-800 overflow-hidden">
-                  <div className="h-8 bg-gray-700/80" />
-                  <div className="space-y-2 p-2">
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map((j) => (
-                      <div key={j} className="h-10 bg-gray-700 rounded" />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="absolute top-0 left-0 right-0 z-10 border-b border-gray-700/80 bg-gray-800/98 backdrop-blur-sm px-4 py-3 shadow-lg">
-            <div className="flex items-center gap-3">
-              <svg className="w-5 h-5 text-blue-400 animate-spin shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden>
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
-              <div className="min-w-0">
-                <div className="text-sm font-medium text-gray-200">Preparing Market View…</div>
-                <div className="mt-0.5 text-xs text-gray-400 animate-pulse">Loading indices, sectors, regions & movers…</div>
-              </div>
-            </div>
-          </div>
-        </>
-      ) : (
-      <>
+      {/* Overview tiles: show skeleton until overview data is ready */}
       <section className="space-y-4">
-        {overview && (
+        {overview ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             <OverviewSection
               title="Indices"
@@ -1088,49 +1080,76 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
               onSelectTicker={onSelectTicker}
             />
           </div>
+        ) : (
+          <div className="animate-pulse grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="rounded-lg border border-gray-700 bg-gray-800/60 overflow-hidden">
+                <div className="h-8 bg-gray-700/80" />
+                <div className="p-2 grid grid-cols-2 gap-1.5">
+                  {[1, 2, 3, 4, 5, 6].map((j) => (
+                    <div key={j} className="h-14 bg-gray-700 rounded" />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </section>
 
+      {/* Market movers: show as soon as loaded; skeleton until then */}
       <section className="mt-8 pt-8 border-t border-gray-700 space-y-4">
         <h2 className="text-sm font-semibold text-gray-300">Today&apos;s market movers</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-          <MoversTable
-            rows={gainers}
-            title="Top gainers"
-            changeColor="gainers"
-            onSelectTicker={onSelectTicker}
-            currentPage={moversPageGainers}
-            totalPages={totalPagesGainers}
-            onPrev={handlePrevGainers}
-            onNext={handleNextGainers}
-            pageSize={MOVERS_PAGE_SIZE}
-          />
-          <MoversTable
-            rows={losers}
-            title="Top losers"
-            changeColor="losers"
-            onSelectTicker={onSelectTicker}
-            currentPage={moversPageLosers}
-            totalPages={totalPagesLosers}
-            onPrev={handlePrevLosers}
-            onNext={handleNextLosers}
-            pageSize={MOVERS_PAGE_SIZE}
-          />
-          <MoversTable
-            rows={mostActive}
-            title="Most active"
-            changeColor="neutral"
-            onSelectTicker={onSelectTicker}
-            currentPage={moversPageMostActive}
-            totalPages={totalPagesMostActive}
-            onPrev={handlePrevMostActive}
-            onNext={handleNextMostActive}
-            pageSize={MOVERS_PAGE_SIZE}
-          />
-        </div>
+        {gainers.length > 0 || losers.length > 0 || mostActive.length > 0 ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            <MoversTable
+              rows={gainers}
+              title="Top gainers"
+              changeColor="gainers"
+              onSelectTicker={onSelectTicker}
+              currentPage={moversPageGainers}
+              totalPages={totalPagesGainers}
+              onPrev={handlePrevGainers}
+              onNext={handleNextGainers}
+              pageSize={MOVERS_PAGE_SIZE}
+            />
+            <MoversTable
+              rows={losers}
+              title="Top losers"
+              changeColor="losers"
+              onSelectTicker={onSelectTicker}
+              currentPage={moversPageLosers}
+              totalPages={totalPagesLosers}
+              onPrev={handlePrevLosers}
+              onNext={handleNextLosers}
+              pageSize={MOVERS_PAGE_SIZE}
+            />
+            <MoversTable
+              rows={mostActive}
+              title="Most active"
+              changeColor="neutral"
+              onSelectTicker={onSelectTicker}
+              currentPage={moversPageMostActive}
+              totalPages={totalPagesMostActive}
+              onPrev={handlePrevMostActive}
+              onNext={handleNextMostActive}
+              pageSize={MOVERS_PAGE_SIZE}
+            />
+          </div>
+        ) : (
+          <div className="animate-pulse grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="rounded-xl border border-gray-700 bg-gray-800 overflow-hidden">
+                <div className="h-8 bg-gray-700/80" />
+                <div className="space-y-2 p-2">
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((j) => (
+                    <div key={j} className="h-10 bg-gray-700 rounded" />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
-      </>
-      )}
       </div>
       </>
       )}

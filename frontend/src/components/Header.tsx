@@ -29,7 +29,7 @@ export default function Header() {
               to="/market"
               className="text-gray-300 hover:text-white text-sm font-medium transition-colors"
             >
-              Market
+              Market View
             </Link>
             <Link
               to="/how-it-works"
@@ -85,7 +85,7 @@ export default function Header() {
               className="text-gray-300 hover:text-white text-sm font-medium transition-colors"
               onClick={() => setIsMenuOpen(false)}
             >
-              Market
+              Market View
             </Link>
             <Link
               to="/how-it-works"

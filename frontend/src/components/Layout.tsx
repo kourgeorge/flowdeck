@@ -76,7 +76,7 @@ function MarketIcon() {
 const navItems: { to: string; label: string; icon: () => JSX.Element; authOnly?: boolean }[] = [
   { to: '/', label: 'FlowDeck', icon: FlowDeckIcon },
   { to: '/dashboard', label: 'Dashboard', icon: DashboardIcon, authOnly: true },
-  { to: '/market', label: 'Market', icon: MarketIcon },
+  { to: '/market', label: 'Market View', icon: MarketIcon },
   { to: '/copilot', label: 'Trading Copilot', icon: CopilotIcon, authOnly: true },
   { to: '/chat', label: 'AI Analyst Agent', icon: ChatIcon, authOnly: true },
 ];
