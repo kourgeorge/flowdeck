@@ -517,6 +517,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'regional'>('overview');
   const [range, setRange] = useState<'1d' | '1w' | '1mo' | '6mo' | 'ytd'>('1d');
   const [paginationSection, setPaginationSection] = useState<'indices' | 'sectors' | 'regions' | 'commodities' | null>(null);
+  const [error, setError] = useState<string | null>(null);
   // Ticker list for headlines: set only on initial load so news does not refresh when navigating sections
   const [initialHeadlinesTickers, setInitialHeadlinesTickers] = useState<string[]>([]);
 
