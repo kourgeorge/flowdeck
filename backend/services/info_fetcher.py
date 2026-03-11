@@ -1411,17 +1411,17 @@ class InfoFetcher:
         ("international", "^JN0U.JO", "South Africa Top 40"),
         ("international", "EZA", "South Africa (iShares)"),
         # Commodities (Yahoo futures tickers; display name = ticker)
-        ("commodities", "GC=F", "GC=F"),   # Gold
-        ("commodities", "SI=F", "SI=F"),   # Silver
-        ("commodities", "CL=F", "CL=F"),   # Oil (WTI)
-        ("commodities", "NG=F", "NG=F"),   # Natural Gas
-        ("commodities", "HG=F", "HG=F"),   # Copper
-        ("commodities", "PA=F", "PA=F"),   # Palladium
-        ("commodities", "PL=F", "PL=F"),   # Platinum
-        ("commodities", "ZW=F", "ZW=F"),   # Wheat
-        ("commodities", "ZC=F", "ZC=F"),   # Corn
-        ("commodities", "DBA", "DBA"),     # Agriculture ETF
-        ("commodities", "DBC", "DBC"),     # Broad Commodities ETF
+        ("commodities", "GC=F", "Gold"),
+        ("commodities", "SI=F", "Silver"),
+        ("commodities", "CL=F", "Oil (WTI)"),
+        ("commodities", "NG=F", "Natural Gas"),
+        ("commodities", "HG=F", "Copper"),
+        ("commodities", "PA=F", "Palladium"),
+        ("commodities", "PL=F", "Platinum"),
+        ("commodities", "ZW=F", "Wheat"),
+        ("commodities", "ZC=F", "Corn"),
+        ("commodities", "DBA", "Agriculture"),
+        ("commodities", "DBC", "Broad Commodities"),
     ]
 
     # Overview pane only needs a small regions set (6*3 tiles). Map tab fetches full list separately.
