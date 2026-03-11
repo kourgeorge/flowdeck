@@ -1410,19 +1410,18 @@ class InfoFetcher:
         ("international", "AFK", "Pan-Africa ETF"),
         ("international", "^JN0U.JO", "South Africa Top 40"),
         ("international", "EZA", "South Africa (iShares)"),
-        # Commodities / materials (ETFs and common proxies) / materials (ETFs and common proxies)
-        ("commodities", "GLD", "Gold"),
-        ("commodities", "SLV", "Silver"),
-        ("commodities", "IAU", "Gold (iShares)"),
-        ("commodities", "CL=F", "Oil (WTI)"),
-        ("commodities", "UNG", "Natural Gas"),
-        ("commodities", "DBA", "Agriculture"),
-        ("commodities", "DBC", "Broad Commodities"),
-        ("commodities", "CPER", "Copper"),
-        ("commodities", "PALL", "Palladium"),
-        ("commodities", "PLTM", "Platinum"),
-        ("commodities", "WEAT", "Wheat"),
-        ("commodities", "CORN", "Corn"),
+        # Commodities (Yahoo futures tickers; display name = ticker)
+        ("commodities", "GC=F", "GC=F"),   # Gold
+        ("commodities", "SI=F", "SI=F"),   # Silver
+        ("commodities", "CL=F", "CL=F"),   # Oil (WTI)
+        ("commodities", "NG=F", "NG=F"),   # Natural Gas
+        ("commodities", "HG=F", "HG=F"),   # Copper
+        ("commodities", "PA=F", "PA=F"),   # Palladium
+        ("commodities", "PL=F", "PL=F"),   # Platinum
+        ("commodities", "ZW=F", "ZW=F"),   # Wheat
+        ("commodities", "ZC=F", "ZC=F"),   # Corn
+        ("commodities", "DBA", "DBA"),     # Agriculture ETF
+        ("commodities", "DBC", "DBC"),     # Broad Commodities ETF
     ]
 
     # Overview pane only needs a small regions set (6*3 tiles). Map tab fetches full list separately.
