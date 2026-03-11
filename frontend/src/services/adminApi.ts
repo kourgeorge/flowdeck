@@ -122,6 +122,16 @@ export interface MissionControlRunResponse {
   failed: MissionControlRunErrorItem[];
 }
 
+export interface RunningAnalysisItem {
+  analysis_run_id: number;
+  ticker: string;
+  date: string | null;
+  status: string;
+  agent_statuses: Record<string, string>;
+  current_agent: string | null;
+  updated_at: string | null;
+}
+
 export const adminApi = {
   getStats: async (): Promise<AdminStats> => {
     const res = await api.get<AdminStats>('/api/admin/stats', {
@@ -258,6 +268,23 @@ export const adminApi = {
     const res = await api.post<MissionControlRunResponse>(
       '/api/admin/mission-control/run',
       { tickers, force },
+      { headers: authHeaders() },
+    );
+    return res.data;
+  },
+
+  getRunningAnalyses: async (): Promise<RunningAnalysisItem[]> => {
+    const res = await api.get<RunningAnalysisItem[]>(
+      '/api/admin/running-analyses',
+      { headers: authHeaders() },
+    );
+    return res.data;
+  },
+
+  stopRunningAnalysis: async (runId: number): Promise<{ ok: boolean; run_id: number }> => {
+    const res = await api.post<{ ok: boolean; run_id: number }>(
+      `/api/admin/running-analyses/${runId}/stop`,
+      {},
       { headers: authHeaders() },
     );
     return res.data;

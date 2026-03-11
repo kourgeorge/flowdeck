@@ -6,7 +6,6 @@ import os
 import sys
 import datetime
 import threading
-import json
 from typing import Dict, Optional, Callable, Any
 from pathlib import Path
 from dotenv import load_dotenv
@@ -14,6 +13,13 @@ import re
 
 logger = logging.getLogger(__name__)
 
+from services.data_cache import (
+    clear_stop_requested,
+    delete_analysis_status,
+    get_analysis_status as get_analysis_status_from_cache,
+    get_stop_requested,
+    set_analysis_status,
+)
 from services.key_takeaways import extract_key_takeaways
 from services.report_service import save_report
 from services.email_service import notify_subscribers_new_report
@@ -105,49 +111,22 @@ class AnalysisService:
         self.running_analyses: Dict[int, Dict] = {}
         self._lock = threading.Lock()  # Lock to prevent race conditions
     
-    def _write_status_file(self, analysis_run_id: int) -> None:
-        """Write current status to file in results folder."""
+    def _persist_analysis_status(self, analysis_run_id: int) -> None:
+        """Write current status to shared cache DB (visible to all workers)."""
         analysis_info = self.running_analyses.get(analysis_run_id)
         if not analysis_info:
             return
-        
-        results_dir = analysis_info.get("results_dir")
-        if not results_dir:
-            return
-        
-        try:
-            status_file = Path(results_dir) / "status.json"
-            status_data = {
-                "analysis_run_id": analysis_run_id,
-                "ticker": analysis_info["ticker"],
-                "date": analysis_info["date"],
-                "status": analysis_info["status"],
-                "agent_statuses": analysis_info.get("agent_statuses", {}),
-                "current_agent": analysis_info.get("current_agent"),
-                "updated_at": datetime.datetime.utcnow().isoformat(),
-            }
-            with open(status_file, 'w') as f:
-                json.dump(status_data, f, indent=2)
-        except Exception as e:
-            logger.warning(f"Failed to write status file for analysis_run_id={analysis_run_id}: {e}")
-    
-    def _delete_status_file(self, analysis_run_id: int) -> None:
-        """Delete status file when analysis completes."""
-        analysis_info = self.running_analyses.get(analysis_run_id)
-        if not analysis_info:
-            return
-        
-        results_dir = analysis_info.get("results_dir")
-        if not results_dir:
-            return
-        
-        try:
-            status_file = Path(results_dir) / "status.json"
-            if status_file.exists():
-                status_file.unlink()
-        except Exception as e:
-            logger.warning(f"Failed to delete status file for analysis_run_id={analysis_run_id}: {e}")
-    
+        status_data = {
+            "analysis_run_id": analysis_run_id,
+            "ticker": analysis_info["ticker"],
+            "date": analysis_info["date"],
+            "status": analysis_info["status"],
+            "agent_statuses": analysis_info.get("agent_statuses", {}),
+            "current_agent": analysis_info.get("current_agent"),
+            "updated_at": datetime.datetime.utcnow().isoformat(),
+        }
+        set_analysis_status("ticker", analysis_run_id, status_data)
+
     def get_running_analysis_run_id(self, ticker: str, analysis_date: str) -> Optional[int]:
         """Return analysis_run_id if an analysis is already running for this (ticker, date)."""
         ticker_upper = ticker.upper()
@@ -291,7 +270,7 @@ class AnalysisService:
             }
             
             # Write initial status to file
-            self._write_status_file(analysis_run_id)
+            self._persist_analysis_status(analysis_run_id)
         
         # Start analysis in background
         # Create a new event loop in a thread to run the async analysis
@@ -420,6 +399,16 @@ class AnalysisService:
             _progress_log(f"Analysis started analysis_run_id={ar_id} ticker={ticker}")
             last_chunk = None
             for chunk in graph.graph.stream(init_agent_state, **args):
+                if get_stop_requested(analysis_run_id):
+                    logger.info(
+                        "Analysis stop requested analysis_run_id=%s ticker=%s",
+                        analysis_run_id, ticker,
+                    )
+                    analysis_info["status"] = "cancelled"
+                    self._persist_analysis_status(analysis_run_id)
+                    delete_analysis_status("ticker", analysis_run_id)
+                    clear_stop_requested(analysis_run_id)
+                    break
                 last_chunk = chunk
                 # Process messages
                 if len(chunk.get("messages", [])) > 0:
@@ -466,14 +455,14 @@ class AnalysisService:
                         c = chunk[chunk_key]
                         analysis_info["reports"][key] = c
                         analysis_info["agent_statuses"][agent] = "completed"
-                        self._write_status_file(analysis_run_id)
+                        self._persist_analysis_status(analysis_run_id)
                         _write_report(key, c, chunk.get(score_key), label)
                         _progress_log(f"{agent} completed → {key} saved")
                         if last_analyst_report_key and key == last_analyst_report_key:
                             analysis_info["agent_statuses"]["Bull Researcher"] = "in_progress"
                             analysis_info["agent_statuses"]["Bear Researcher"] = "in_progress"
                             analysis_info["agent_statuses"]["Research Manager"] = "in_progress"
-                            self._write_status_file(analysis_run_id)
+                            self._persist_analysis_status(analysis_run_id)
                             _progress_log("Bull/Bear researchers & Research Manager started")
 
                 if "investment_debate_state" in chunk and chunk["investment_debate_state"]:
@@ -485,7 +474,7 @@ class AnalysisService:
                         analysis_info["agent_statuses"]["Bear Researcher"] = "completed"
                         analysis_info["agent_statuses"]["Research Manager"] = "completed"
                         analysis_info["agent_statuses"]["Trader"] = "in_progress"
-                        self._write_status_file(analysis_run_id)
+                        self._persist_analysis_status(analysis_run_id)
                         _progress_log("Bull/Bear/Research Manager completed → Trader started")
                 
                 if "investment_plan" in chunk and chunk["investment_plan"]:
@@ -528,7 +517,7 @@ class AnalysisService:
                     analysis_info["agent_statuses"]["Risky Analyst"] = "in_progress"
                     analysis_info["agent_statuses"]["Safe Analyst"] = "in_progress"
                     analysis_info["agent_statuses"]["Neutral Analyst"] = "in_progress"
-                    self._write_status_file(analysis_run_id)
+                    self._persist_analysis_status(analysis_run_id)
                     _progress_log("Trader completed → Risk debate (Risky/Safe/Neutral) started")
                 
                 if "risk_debate_state" in chunk and chunk["risk_debate_state"]:
@@ -540,12 +529,12 @@ class AnalysisService:
                         analysis_info["agent_statuses"]["Safe Analyst"] = "completed"
                         analysis_info["agent_statuses"]["Neutral Analyst"] = "completed"
                         analysis_info["agent_statuses"]["Portfolio Manager"] = "in_progress"
-                        self._write_status_file(analysis_run_id)
+                        self._persist_analysis_status(analysis_run_id)
                         _progress_log("Risk analysts completed → Portfolio Manager started")
                 
                 if "final_trade_decision" in chunk and chunk["final_trade_decision"]:
                     analysis_info["agent_statuses"]["Portfolio Manager"] = "completed"
-                    self._write_status_file(analysis_run_id)
+                    self._persist_analysis_status(analysis_run_id)
                     content = chunk["final_trade_decision"]
                     risky = chunk.get("risky_summary") or []
                     safe = chunk.get("safe_summary") or []
@@ -582,6 +571,10 @@ class AnalysisService:
                     except Exception:
                         pass
 
+            # If we broke due to stop request, skip completion (already persisted and deleted).
+            if analysis_info.get("status") == "cancelled":
+                return
+
             # Fallback: ensure optional analyst reports are saved if missed in stream chunks.
             if last_chunk:
                 fallback_reports = [
@@ -604,7 +597,7 @@ class AnalysisService:
             
             # Mark as completed
             analysis_info["status"] = "completed"
-            self._write_status_file(analysis_run_id)
+            self._persist_analysis_status(analysis_run_id)
             logger.info(
                 "Analysis completed analysis_run_id=%s ticker=%s reports=%s",
                 ar_id, ticker, list(analysis_info.get("reports", {}).keys()),
@@ -616,7 +609,7 @@ class AnalysisService:
             )
             
             # Delete status file after completion (analysis is done)
-            self._delete_status_file(analysis_run_id)
+            delete_analysis_status("ticker", analysis_run_id)
 
             # Notify subscribed users and initiator by email (best-effort; do not fail analysis)
             try:
@@ -652,32 +645,15 @@ class AnalysisService:
             if analysis_info:
                 analysis_info["status"] = "error"
                 analysis_info["error"] = str(e)
-                self._write_status_file(analysis_run_id)
+                self._persist_analysis_status(analysis_run_id)
                 if analysis_info["progress_callback"]:
                     try:
                         analysis_info["progress_callback"]({"type": "error", "error": str(e)}, analysis_info)
                     except Exception:
                         pass
                 # Delete status file after error (analysis is done)
-                self._delete_status_file(analysis_run_id)
+                delete_analysis_status("ticker", analysis_run_id)
     
     def get_analysis_status(self, analysis_run_id: int) -> Optional[Dict]:
-        """Get current status of a running analysis from filesystem only (works across workers)."""
-        try:
-            run_id_str = str(analysis_run_id)
-            for ticker_dir in self.results_dir.glob("*"):
-                if not ticker_dir.is_dir():
-                    continue
-                run_dir = ticker_dir / run_id_str
-                if not run_dir.is_dir():
-                    continue
-                status_file = run_dir / "status.json"
-                if status_file.exists():
-                    with open(status_file, 'r') as f:
-                        data = json.load(f)
-                        if data.get("analysis_run_id") == analysis_run_id:
-                            return data
-        except Exception as e:
-            logger.warning(f"Error reading status for analysis_run_id={analysis_run_id}: {e}")
-        
-        return None
+        """Get current status of a running analysis from shared cache (works across workers)."""
+        return get_analysis_status_from_cache("ticker", analysis_run_id)

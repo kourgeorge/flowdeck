@@ -16,9 +16,24 @@ from database import get_db
 from models.db_models import User, Report, AnalysisRun, ReportView, Subscription
 from services import token_service
 from services.analysis_service import AnalysisService
+from services.data_cache import delete_analysis_status, list_running_analyses, set_stop_requested
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
-_MISSION_ANALYSIS_SERVICE = AnalysisService(results_dir=RESULTS_DIR)
+# Use shared analysis service injected by main so mission control and API share in-memory + cache state
+_analysis_service: Optional[AnalysisService] = None
+
+
+def set_analysis_service(service: AnalysisService) -> None:
+    """Set the shared analysis service (called from main.py)."""
+    global _analysis_service
+    _analysis_service = service
+
+
+def _get_mission_analysis_service() -> AnalysisService:
+    """Analysis service for mission control; use shared one from main when set."""
+    if _analysis_service is not None:
+        return _analysis_service
+    return AnalysisService(results_dir=RESULTS_DIR)
 _MAJOR_STOCKS_SECTORS_PATH = (
     Path(__file__).resolve().parents[1] / "data" / "major_stocks_sectors.json"
 )
@@ -100,40 +115,19 @@ def _quote_type_sort_rank(quote_type: Optional[str]) -> int:
 
 def _load_running_statuses_by_ticker(tickers: list[str]) -> dict[str, dict]:
     """
-    Return currently running status payload keyed by ticker.
-    Status files are removed by AnalysisService when analyses complete/error.
+    Return currently running status payload keyed by ticker (from shared cache DB).
     """
-    root = _results_root()
-    if not root.exists():
-        return {}
-
     allowed_tickers = {t.upper() for t in tickers}
     by_ticker: dict[str, dict] = {}
-    for ticker_dir in root.iterdir():
-        if not ticker_dir.is_dir():
+    for item in list_running_analyses("ticker"):
+        ticker_upper = str(item.get("ticker") or "").upper()
+        if not ticker_upper or ticker_upper not in allowed_tickers:
             continue
-        ticker_upper = ticker_dir.name.upper()
-        if ticker_upper not in allowed_tickers:
-            continue
-
-        for status_file in sorted(ticker_dir.glob("*/status.json"), key=lambda p: p.parent.name, reverse=True):
-            try:
-                with status_file.open("r", encoding="utf-8") as f:
-                    data = load(f) or {}
-            except (OSError, JSONDecodeError):
-                continue
-
-            if data.get("status") != "running":
-                continue
-            if str(data.get("ticker") or "").upper() != ticker_upper:
-                continue
-
-            current = by_ticker.get(ticker_upper)
-            current_updated_at = str((current or {}).get("updated_at") or "")
-            candidate_updated_at = str(data.get("updated_at") or "")
-            if current is None or candidate_updated_at >= current_updated_at:
-                by_ticker[ticker_upper] = data
-
+        current = by_ticker.get(ticker_upper)
+        current_updated_at = str((current or {}).get("updated_at") or "")
+        candidate_updated_at = str(item.get("updated_at") or "")
+        if current is None or candidate_updated_at >= current_updated_at:
+            by_ticker[ticker_upper] = item
     return by_ticker
 
 
@@ -305,6 +299,17 @@ class MissionControlRunResponse(BaseModel):
     failed: list[MissionControlRunErrorItem]
 
 
+class RunningAnalysisItem(BaseModel):
+    """One running analysis from the cache (for admin list + stop)."""
+    analysis_run_id: int
+    ticker: str
+    date: Optional[str] = None
+    status: str
+    agent_statuses: dict[str, str] = Field(default_factory=dict)
+    current_agent: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
 # --- Endpoints ---
 
 @router.get("/stats", response_model=AdminStatsResponse)
@@ -347,6 +352,37 @@ def get_admin_stats(
         reports_last_24h=reports_last_24h,
         reports_last_7d=reports_last_7d,
     )
+
+
+@router.get("/running-analyses", response_model=list[RunningAnalysisItem])
+def get_running_analyses_list(
+    _user: User = Depends(get_current_admin_user),
+):
+    """List all running analyses (from cache). For admin UI."""
+    items = list_running_analyses("ticker")
+    return [
+        RunningAnalysisItem(
+            analysis_run_id=it.get("analysis_run_id") or it.get("run_id", 0),
+            ticker=str(it.get("ticker") or ""),
+            date=it.get("date"),
+            status=str(it.get("status") or "running"),
+            agent_statuses=it.get("agent_statuses") or {},
+            current_agent=it.get("current_agent"),
+            updated_at=it.get("updated_at"),
+        )
+        for it in items
+    ]
+
+
+@router.post("/running-analyses/{run_id}/stop")
+def stop_running_analysis(
+    run_id: int,
+    _user: User = Depends(get_current_admin_user),
+):
+    """Signal the analysis to stop and remove it from the running list (cache)."""
+    set_stop_requested(run_id)
+    delete_analysis_status("ticker", run_id)
+    return {"ok": True, "run_id": run_id}
 
 
 @router.get("/users", response_model=AdminUsersResponse)
@@ -798,7 +834,7 @@ def run_mission_control(
 
         try:
             analysis_run_id = token_service.record_analysis_run(_user.id, ticker, db)
-            returned_run_id, existing = _MISSION_ANALYSIS_SERVICE.start_analysis(
+            returned_run_id, existing = _get_mission_analysis_service().start_analysis(
                 ticker=ticker,
                 analysis_date=date_str,
                 analysts=["market", "news", "fundamentals", "technical", "sec"],

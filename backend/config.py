@@ -22,6 +22,9 @@ MARKET_DATA_CACHE_TTL = 60  # 1 minute
 # Data cache layer (avoids repeated third-party fetches)
 DATA_CACHE_ENABLED = True
 DATA_CACHE_MAX_SIZE = 1000
+# Default: same directory as system DB (backend/flowdeck.db)
+_BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_CACHE_PATH = os.environ.get("DATA_CACHE_PATH", "").strip() or os.path.join(_BACKEND_DIR, "data_cache.sqlite")
 
 # Per-type TTL in seconds
 DATA_CACHE_TTL_QUOTE = 60              # Real-time

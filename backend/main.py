@@ -37,6 +37,7 @@ from services.analysis_service import AnalysisService
 from services.news_service import NewsService
 from services.info_fetcher import get_info_fetcher
 from config import MAJOR_TICKERS, CORS_ORIGINS
+from routers import admin as admin_module
 from routers.data_api import router as data_router
 from routers.users import router as users_router
 from routers.subscriptions import router as subscriptions_router
@@ -57,6 +58,8 @@ from services import token_service
 async def lifespan(app: FastAPI):
     """Initialize DB and start optional daily sync scheduler."""
     init_db()
+    from services.data_cache import ensure_data_cache
+    ensure_data_cache()
     scheduler = None
     if os.environ.get("ENABLE_DAILY_SYNC", "true").lower() in ("true", "1", "yes"):
         try:
@@ -107,6 +110,7 @@ get_info_fetcher(market_data_service=market_data_service, news_service=news_serv
 app.include_router(data_router, prefix="/api/data")
 app.include_router(users_router)
 app.include_router(subscriptions_router)
+admin_module.set_analysis_service(analysis_service)
 app.include_router(admin_router)
 app.include_router(contact_router)
 app.include_router(payments_router)
@@ -312,29 +316,17 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
 
     # When analysis is generating, use the in-progress analysis_run_id so reports count increments 1→2→…→7
     # instead of switching from the previous run (e.g. 5 reports) to the new run (1 report).
-    # Check filesystem for running analyses (works reliably across all workers)
+    # Check shared cache DB for running analyses (works across all workers)
     is_generating = False
     generation_analysis_run_id = None
-
     try:
-        ticker_dir = analysis_service.results_dir / ticker.upper()
-        if ticker_dir.exists():
-            for run_dir in ticker_dir.glob("*"):
-                if not run_dir.is_dir():
-                    continue
-                status_file = run_dir / "status.json"
-                if status_file.exists():
-                    import json
-                    with open(status_file, 'r') as f:
-                        status_data = json.load(f)
-                        if status_data.get("status") == "running" and status_data.get("ticker") == ticker.upper():
-                            is_generating = True
-                            generation_analysis_run_id = status_data.get("analysis_run_id")
-                            break
+        from services.data_cache import get_running_analysis_run_id_for_ticker
+        generation_analysis_run_id = get_running_analysis_run_id_for_ticker("ticker", ticker)
+        if generation_analysis_run_id is not None:
+            is_generating = True
     except Exception as e:
-        # Log but don't fail the request
         import logging
-        logging.getLogger(__name__).warning(f"Error checking filesystem for running analysis: {e}")
+        logging.getLogger(__name__).warning("Error checking cache for running analysis: %s", e)
 
     latest_run = report_service.get_latest_analysis_run(ticker)
     if is_generating and generation_analysis_run_id is not None:

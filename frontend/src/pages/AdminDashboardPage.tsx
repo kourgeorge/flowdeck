@@ -23,6 +23,7 @@ import {
   type AdminReportViewItem,
   type MissionControlTickerItem,
   type MissionControlRunResponse,
+  type RunningAnalysisItem,
 } from '../services/adminApi';
 
 type AdminTab = 'overview' | 'mission-control';
@@ -164,6 +165,9 @@ export default function AdminDashboardPage() {
   const [missionItems, setMissionItems] = useState<MissionControlTickerItem[]>([]);
   const [selectedMissionTickers, setSelectedMissionTickers] = useState<string[]>([]);
   const [missionLoading, setMissionLoading] = useState(false);
+  const [runningAnalyses, setRunningAnalyses] = useState<RunningAnalysisItem[]>([]);
+  const [runningAnalysesLoading, setRunningAnalysesLoading] = useState(false);
+  const [stoppingRunId, setStoppingRunId] = useState<number | null>(null);
   const [missionError, setMissionError] = useState<string | null>(null);
   const [missionActionError, setMissionActionError] = useState<string | null>(null);
   const [missionActionInfo, setMissionActionInfo] = useState<string | null>(null);
@@ -348,12 +352,38 @@ export default function AdminDashboardPage() {
     });
   };
 
+  const refreshRunningAnalyses = async () => {
+    setRunningAnalysesLoading(true);
+    try {
+      const list = await adminApi.getRunningAnalyses();
+      setRunningAnalyses(list);
+    } catch {
+      setRunningAnalyses([]);
+    } finally {
+      setRunningAnalysesLoading(false);
+    }
+  };
+
+  const handleStopRunningAnalysis = async (runId: number) => {
+    setStoppingRunId(runId);
+    try {
+      await adminApi.stopRunningAnalysis(runId);
+      await Promise.all([refreshRunningAnalyses(), refreshMissionControl()]);
+    } finally {
+      setStoppingRunId(null);
+    }
+  };
+
   const refreshMissionControl = async () => {
     setMissionLoading(true);
     setMissionError(null);
     try {
-      const res = await adminApi.getMissionControl();
+      const [res, running] = await Promise.all([
+        adminApi.getMissionControl(),
+        adminApi.getRunningAnalyses(),
+      ]);
       setMissionItems(res.items);
+      setRunningAnalyses(running);
       setSelectedMissionTickers((prev) => {
         const valid = new Set(res.items.map((item) => item.ticker));
         return prev.filter((ticker) => valid.has(ticker));
@@ -378,6 +408,31 @@ export default function AdminDashboardPage() {
         const failures = result.failed.map((item) => `${item.ticker}: ${item.error}`).join(' | ');
         setMissionActionError(failures);
       }
+      const today = new Date().toISOString().slice(0, 10);
+      const fromRun = [
+        ...result.triggered,
+        ...result.already_running,
+      ].map((item) => ({
+        analysis_run_id: item.analysis_run_id,
+        ticker: item.ticker,
+        date: today,
+        status: 'running',
+        agent_statuses: {},
+        current_agent: null,
+        updated_at: new Date().toISOString(),
+      }));
+      setRunningAnalyses((prev) => {
+        const byId = new Map(prev.map((r) => [r.analysis_run_id, r]));
+        fromRun.forEach((r) => byId.set(r.analysis_run_id, r));
+        return Array.from(byId.values());
+      });
+      setMissionItems((prev) =>
+        prev.map((item) => {
+          const run = fromRun.find((r) => r.ticker === item.ticker);
+          if (!run) return item;
+          return { ...item, is_running: true, running_analysis_id: run.analysis_run_id };
+        }),
+      );
       await refreshMissionControl();
     } catch (err: unknown) {
       const ax = err as { response?: { data?: { detail?: string } } };
@@ -398,8 +453,9 @@ export default function AdminDashboardPage() {
       adminApi.getAnalysesDaily(30),
       adminApi.getViewsDaily(30),
       adminApi.getMissionControl(),
+      adminApi.getRunningAnalyses(),
     ])
-      .then(([s, u, r, a, sub, viewRunsRes, dailyA, dailyV, mission]) => {
+      .then(([s, u, r, a, sub, viewRunsRes, dailyA, dailyV, mission, running]) => {
         if (cancelled) return;
         setStats(s);
         setUsers(u.users);
@@ -418,6 +474,7 @@ export default function AdminDashboardPage() {
         setDailyAnalyses(dailyA.data);
         setDailyViews(dailyV.data);
         setMissionItems(mission.items);
+        setRunningAnalyses(running);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -516,6 +573,59 @@ export default function AdminDashboardPage() {
 
         {activeTab === 'mission-control' ? (
           <section>
+            {/* Running analyses: list + stop */}
+            <div className="mb-4 rounded-lg border border-gray-700 bg-gray-800/80 p-4">
+              <h3 className="mb-2 text-sm font-semibold text-gray-300">
+                Running analyses {runningAnalyses.length > 0 ? `(${runningAnalyses.length})` : ''}
+              </h3>
+              {(missionLoading || runningAnalysesLoading) && runningAnalyses.length === 0 ? (
+                <p className="text-sm text-gray-500">Loading…</p>
+              ) : runningAnalyses.length === 0 ? (
+                <p className="text-sm text-gray-500">No analyses currently running.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-700 text-gray-400">
+                        <th className="px-3 py-2 font-medium">Ticker</th>
+                        <th className="px-3 py-2 font-medium">Date</th>
+                        <th className="px-3 py-2 font-medium">Current agent</th>
+                        <th className="px-3 py-2 font-medium">Updated</th>
+                        <th className="px-3 py-2 font-medium w-20">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {runningAnalyses.map((r) => (
+                        <tr key={r.analysis_run_id} className="border-b border-gray-700/80">
+                          <td className="px-3 py-2 font-mono">
+                            <Link
+                              to={`/tickers/${r.ticker}`}
+                              className="text-blue-400 hover:text-blue-300"
+                            >
+                              {r.ticker}
+                            </Link>
+                          </td>
+                          <td className="px-3 py-2 text-gray-300">{r.date ?? '—'}</td>
+                          <td className="px-3 py-2 text-gray-300">{r.current_agent ?? '—'}</td>
+                          <td className="px-3 py-2 text-gray-500">{r.updated_at ?? '—'}</td>
+                          <td className="px-3 py-2">
+                            <button
+                              type="button"
+                              onClick={() => void handleStopRunningAnalysis(r.analysis_run_id)}
+                              disabled={stoppingRunId === r.analysis_run_id}
+                              className="rounded bg-red-700/80 px-2 py-1 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50"
+                            >
+                              {stoppingRunId === r.analysis_run_id ? 'Stopping…' : 'Stop'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
             <div className="mb-4 flex flex-wrap items-center gap-3">
               <button
                 type="button"

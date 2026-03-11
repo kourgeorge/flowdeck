@@ -1,16 +1,35 @@
 """
-Generic TTL cache for third-party data fetch results.
+Generic TTL cache and running process status in a single SQLite file.
 
-Supports per-key TTL with an in-memory store. Thread-safe for use in async FastAPI context.
+Supports per-key TTL cache (quotes, company info, etc.) and analysis/process status
+(type + run_id) so data persists and is shared across workers. Thread-safe.
 """
 
 from __future__ import annotations
 
-import time
+import json
+import sqlite3
 import threading
-from typing import Callable, Dict, List, Optional, Tuple, TypeVar
+import time
+from datetime import date, datetime
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
 
 T = TypeVar("T")
+
+
+def _cache_dumps(obj: Any) -> str:
+    """JSON encode cache values; support datetime/date for API responses."""
+    if obj is None:
+        return "null"
+
+    class _Encoder(json.JSONEncoder):
+        def default(self, o: Any) -> Any:
+            if isinstance(o, (datetime, date)):
+                return o.isoformat()
+            return json.JSONEncoder.default(self, o)
+
+    return json.dumps(obj, cls=_Encoder)
 
 
 class _TTLStore:
@@ -31,7 +50,6 @@ class _TTLStore:
                 del self._data[key]
                 self._order.remove(key)
                 return None
-            # Move to end for LRU
             self._order.remove(key)
             self._order.append(key)
             return value
@@ -42,7 +60,6 @@ class _TTLStore:
             if key in self._data:
                 self._order.remove(key)
             elif len(self._data) >= self._maxsize and self._order:
-                # Evict oldest
                 oldest = self._order.pop(0)
                 del self._data[oldest]
             self._data[key] = (value, expires_at)
@@ -54,16 +71,234 @@ class _TTLStore:
             self._order.clear()
 
 
-_store: Optional[_TTLStore] = None
+class _SQLiteTTLStore:
+    """SQLite-backed TTL store and analysis status. One connection per thread (safe with asyncio.to_thread)."""
+
+    _DATA_CACHE_TABLE = "data_cache"
+    _ANALYSIS_STATUS_TABLE = "analysis_status"
+
+    def __init__(self, path: str, maxsize: int):
+        self._path = path
+        self._maxsize = maxsize
+        self._lock = threading.Lock()
+        self._local = threading.local()
+
+    def _connection(self) -> sqlite3.Connection:
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            parent = Path(self._path).parent
+            if parent:
+                parent.mkdir(parents=True, exist_ok=True)
+            conn = sqlite3.connect(self._path, timeout=10.0)
+            conn.execute("PRAGMA busy_timeout=10000")
+            self._ensure_tables(conn)
+            self._local.conn = conn
+        return conn
+
+    def _ensure_tables(self, conn: sqlite3.Connection) -> None:
+        conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {self._DATA_CACHE_TABLE} (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                expires_at REAL NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {self._ANALYSIS_STATUS_TABLE} (
+                type TEXT NOT NULL,
+                run_id INTEGER NOT NULL,
+                payload TEXT NOT NULL,
+                PRIMARY KEY (type, run_id)
+            )
+            """
+        )
+        conn.commit()
+        now = time.time()
+        conn.execute(
+            f"DELETE FROM {self._DATA_CACHE_TABLE} WHERE expires_at <= ?", (now,)
+        )
+        conn.commit()
+
+    def get(self, key: str) -> Optional[T]:
+        with self._lock:
+            conn = self._connection()
+            row = conn.execute(
+                f"SELECT value, expires_at FROM {self._DATA_CACHE_TABLE} WHERE key = ?",
+                (key,),
+            ).fetchone()
+            if row is None:
+                return None
+            value_json, expires_at = row
+            if time.time() >= expires_at:
+                conn.execute(f"DELETE FROM {self._DATA_CACHE_TABLE} WHERE key = ?", (key,))
+                conn.commit()
+                return None
+            return json.loads(value_json)
+
+    def set(self, key: str, value: T, ttl_seconds: float) -> None:
+        with self._lock:
+            conn = self._connection()
+            expires_at = time.time() + ttl_seconds
+            value_json = _cache_dumps(value)
+            conn.execute(
+                f"""
+                INSERT OR REPLACE INTO {self._DATA_CACHE_TABLE} (key, value, expires_at)
+                VALUES (?, ?, ?)
+                """,
+                (key, value_json, expires_at),
+            )
+            conn.commit()
+            now = time.time()
+            conn.execute(
+                f"DELETE FROM {self._DATA_CACHE_TABLE} WHERE expires_at <= ?", (now,)
+            )
+            conn.commit()
+            count = conn.execute(
+                f"SELECT count(*) FROM {self._DATA_CACHE_TABLE}"
+            ).fetchone()[0]
+            while count > self._maxsize:
+                conn.execute(
+                    f"""
+                    DELETE FROM {self._DATA_CACHE_TABLE}
+                    WHERE key = (
+                        SELECT key FROM {self._DATA_CACHE_TABLE}
+                        ORDER BY expires_at ASC
+                        LIMIT 1
+                    )
+                    """
+                )
+                conn.commit()
+                count = conn.execute(
+                    f"SELECT count(*) FROM {self._DATA_CACHE_TABLE}"
+                ).fetchone()[0]
+
+    def clear(self) -> None:
+        with self._lock:
+            conn = self._connection()
+            conn.execute(f"DELETE FROM {self._DATA_CACHE_TABLE}")
+            conn.commit()
+
+    def get_analysis_status(self, type_name: str, run_id: int) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            conn = self._connection()
+            row = conn.execute(
+                f"SELECT payload FROM {self._ANALYSIS_STATUS_TABLE} WHERE type = ? AND run_id = ?",
+                (type_name, run_id),
+            ).fetchone()
+            if row is None:
+                return None
+            return json.loads(row[0])
+
+    def set_analysis_status(self, type_name: str, run_id: int, data: Dict[str, Any]) -> None:
+        with self._lock:
+            conn = self._connection()
+            payload = _cache_dumps(data)
+            conn.execute(
+                f"""
+                INSERT OR REPLACE INTO {self._ANALYSIS_STATUS_TABLE} (type, run_id, payload)
+                VALUES (?, ?, ?)
+                """,
+                (type_name, run_id, payload),
+            )
+            conn.commit()
+
+    def delete_analysis_status(self, type_name: str, run_id: int) -> None:
+        with self._lock:
+            conn = self._connection()
+            conn.execute(
+                f"DELETE FROM {self._ANALYSIS_STATUS_TABLE} WHERE type = ? AND run_id = ?",
+                (type_name, run_id),
+            )
+            conn.commit()
+
+    def get_running_analysis_run_id_for_ticker(self, type_name: str, ticker: str) -> Optional[int]:
+        """Return analysis_run_id for a running analysis of this ticker, or None."""
+        with self._lock:
+            conn = self._connection()
+            rows = conn.execute(
+                f"SELECT run_id, payload FROM {self._ANALYSIS_STATUS_TABLE} WHERE type = ?",
+                (type_name,),
+            ).fetchall()
+            ticker_upper = ticker.upper()
+            for run_id, payload_json in rows:
+                data = json.loads(payload_json)
+                if data.get("status") == "running" and (data.get("ticker") or "").upper() == ticker_upper:
+                    return run_id
+            return None
+
+    def list_running_analyses(self, type_name: str) -> List[Dict[str, Any]]:
+        """Return all running status rows for this type. Each dict has run_id plus payload fields."""
+        with self._lock:
+            conn = self._connection()
+            rows = conn.execute(
+                f"SELECT run_id, payload FROM {self._ANALYSIS_STATUS_TABLE} WHERE type = ?",
+                (type_name,),
+            ).fetchall()
+            result: List[Dict[str, Any]] = []
+            for run_id, payload_json in rows:
+                data = json.loads(payload_json)
+                if data.get("status") != "running":
+                    continue
+                out = dict(data)
+                out["analysis_run_id"] = run_id
+                out["run_id"] = run_id
+                result.append(out)
+            return result
+
+    _STOP_REQUEST_TYPE = "stop_request"
+
+    def set_stop_requested(self, run_id: int) -> None:
+        """Record that this run_id was requested to stop (so the analysis thread can exit)."""
+        with self._lock:
+            conn = self._connection()
+            conn.execute(
+                f"""
+                INSERT OR REPLACE INTO {self._ANALYSIS_STATUS_TABLE} (type, run_id, payload)
+                VALUES (?, ?, ?)
+                """,
+                (self._STOP_REQUEST_TYPE, run_id, "{}"),
+            )
+            conn.commit()
+
+    def get_stop_requested(self, run_id: int) -> bool:
+        """Return True if stop was requested for this run_id."""
+        with self._lock:
+            conn = self._connection()
+            row = conn.execute(
+                f"SELECT 1 FROM {self._ANALYSIS_STATUS_TABLE} WHERE type = ? AND run_id = ?",
+                (self._STOP_REQUEST_TYPE, run_id),
+            ).fetchone()
+            return row is not None
+
+    def clear_stop_requested(self, run_id: int) -> None:
+        """Clear the stop request for this run_id (e.g. after analysis has exited)."""
+        with self._lock:
+            conn = self._connection()
+            conn.execute(
+                f"DELETE FROM {self._ANALYSIS_STATUS_TABLE} WHERE type = ? AND run_id = ?",
+                (self._STOP_REQUEST_TYPE, run_id),
+            )
+            conn.commit()
 
 
-def _get_store() -> _TTLStore:
+_store: Optional[Union[_TTLStore, _SQLiteTTLStore]] = None
+
+
+def _get_store() -> Union[_TTLStore, _SQLiteTTLStore]:
     """Get or create the shared store."""
     global _store
     if _store is None:
-        from config import DATA_CACHE_MAX_SIZE
-        _store = _TTLStore(maxsize=DATA_CACHE_MAX_SIZE)
+        from config import DATA_CACHE_MAX_SIZE, DATA_CACHE_PATH
+        _store = _SQLiteTTLStore(path=DATA_CACHE_PATH, maxsize=DATA_CACHE_MAX_SIZE)
     return _store
+
+
+def ensure_data_cache() -> None:
+    """Initialize the shared SQLite store if needed. Call at app startup so analysis status is visible to all workers."""
+    _get_store()
 
 
 def get_cached(
@@ -136,15 +371,76 @@ def get_cached_batch(
     return result
 
 
-def init_cache(maxsize: int) -> _TTLStore:
-    """Initialize the module-level cache. Called at startup."""
+def init_cache(maxsize: int) -> Union[_TTLStore, _SQLiteTTLStore]:
+    """Initialize the module-level cache. Called at startup or for tests."""
     global _store
-    _store = _TTLStore(maxsize=maxsize)
+    from config import DATA_CACHE_PATH
+    _store = _SQLiteTTLStore(path=DATA_CACHE_PATH, maxsize=maxsize)
     return _store
 
 
 def clear_cache() -> None:
-    """Clear all cached entries. Useful for testing."""
+    """Clear all TTL cache entries. Useful for testing. Does not clear analysis_status."""
     global _store
     if _store is not None:
         _store.clear()
+
+
+def get_analysis_status(type_name: str, run_id: int) -> Optional[Dict[str, Any]]:
+    """Get status of a running process by type and run_id. Returns None if not found."""
+    store = _get_store()
+    if isinstance(store, _SQLiteTTLStore):
+        return store.get_analysis_status(type_name, run_id)
+    return None
+
+
+def set_analysis_status(type_name: str, run_id: int, data: Dict[str, Any]) -> None:
+    """Upsert status for a running process (e.g. type='ticker', run_id=analysis_run_id)."""
+    store = _get_store()
+    if isinstance(store, _SQLiteTTLStore):
+        store.set_analysis_status(type_name, run_id, data)
+
+
+def delete_analysis_status(type_name: str, run_id: int) -> None:
+    """Remove status when process completes or errors."""
+    store = _get_store()
+    if isinstance(store, _SQLiteTTLStore):
+        store.delete_analysis_status(type_name, run_id)
+
+
+def get_running_analysis_run_id_for_ticker(type_name: str, ticker: str) -> Optional[int]:
+    """Return run_id for a running analysis of this ticker, or None. Used to show progress in UI."""
+    store = _get_store()
+    if isinstance(store, _SQLiteTTLStore):
+        return store.get_running_analysis_run_id_for_ticker(type_name, ticker)
+    return None
+
+
+def list_running_analyses(type_name: str) -> List[Dict[str, Any]]:
+    """Return all running analyses for this type (e.g. 'ticker'). For admin UI."""
+    store = _get_store()
+    if isinstance(store, _SQLiteTTLStore):
+        return store.list_running_analyses(type_name)
+    return []
+
+
+def set_stop_requested(run_id: int) -> None:
+    """Record that this run_id was requested to stop (so the analysis thread can exit)."""
+    store = _get_store()
+    if isinstance(store, _SQLiteTTLStore):
+        store.set_stop_requested(run_id)
+
+
+def get_stop_requested(run_id: int) -> bool:
+    """Return True if stop was requested for this run_id."""
+    store = _get_store()
+    if isinstance(store, _SQLiteTTLStore):
+        return store.get_stop_requested(run_id)
+    return False
+
+
+def clear_stop_requested(run_id: int) -> None:
+    """Clear the stop request for this run_id (e.g. after analysis has exited)."""
+    store = _get_store()
+    if isinstance(store, _SQLiteTTLStore):
+        store.clear_stop_requested(run_id)

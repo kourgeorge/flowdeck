@@ -70,6 +70,10 @@ frontend/dist/
 # -----------------------------------------------------------------------------
 .flowdeck.pids
 backend/flowdeck.db
+backend/data_cache.sqlite
+backend/data_cache.sqlite-wal
+backend/data_cache.sqlite-shm
+
 results/
 eval_results/
 eval_data/
