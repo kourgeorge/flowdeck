@@ -687,11 +687,12 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     ? Object.values(analystRecommendations.breakdown).some((v) => Number(v) > 0)
     : false;
   const analystHasData = Boolean(
-    (analystRecommendations?.recommendation && String(analystRecommendations.recommendation).trim() !== '') ||
     Number(analystRecommendations?.total_analysts ?? 0) > 0 ||
     analystBreakdownHasCounts ||
     analystTrendRowsSorted.length > 0 ||
-    analystPriceValues.length > 0,
+    analystHasPriceLow ||
+    analystHasPriceAverage ||
+    analystHasPriceHigh,
   );
   const analystBreakdownFallback = {
     period: '0m',

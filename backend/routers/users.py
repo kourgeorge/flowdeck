@@ -169,11 +169,12 @@ def google_callback(code: str, state: str, db: Session = Depends(get_db)):
         token_response.raise_for_status()
         tokens = token_response.json()
         
-        # Verify and decode the ID token
+        # Verify and decode the ID token (allow 10s clock skew for server/client time drift)
         id_info = id_token.verify_oauth2_token(
             tokens["id_token"],
             google_requests.Request(),
             GOOGLE_CLIENT_ID,
+            clock_skew_in_seconds=10,
         )
         
         # Extract user info
