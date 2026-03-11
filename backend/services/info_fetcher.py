@@ -1409,7 +1409,7 @@ class InfoFetcher:
         ("commodities", "GLD", "Gold"),
         ("commodities", "SLV", "Silver"),
         ("commodities", "IAU", "Gold (iShares)"),
-        ("commodities", "USO", "Oil (WTI)"),
+        ("commodities", "CL=F", "Oil (WTI)"),
         ("commodities", "UNG", "Natural Gas"),
         ("commodities", "DBA", "Agriculture"),
         ("commodities", "DBC", "Broad Commodities"),
