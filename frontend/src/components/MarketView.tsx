@@ -512,6 +512,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
   const [headlinesLoading, setHeadlinesLoading] = useState(false);
   const [mapRegions, setMapRegions] = useState<OverviewItem[]>([]);
   const [mapUsIndices, setMapUsIndices] = useState<OverviewItem[]>([]);
+  const [mapDataLoading, setMapDataLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'regional'>('overview');
   const [range, setRange] = useState<'1d' | '1w' | '1mo' | '3mo' | 'ytd'>('1d');
   const [isLoading, setIsLoading] = useState(true);
@@ -668,24 +669,10 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
         range,
       });
       const moversPromise = tickerApi.getMarketMovers(MOVERS_LOAD_COUNT);
-      const mapOverviewPromise = user
-        ? tickerApi.getMarketOverview({
-            limit_indices: 15,
-            offset_indices: 0,
-            limit_sectors: 1,
-            offset_sectors: 0,
-            limit_regions: 100,
-            offset_regions: 0,
-            limit_commodities: 1,
-            offset_commodities: 0,
-            range,
-          })
-        : Promise.resolve(null);
 
-      const [overviewData, moversData, mapOverviewData] = await Promise.all([
+      const [overviewData, moversData] = await Promise.all([
         overviewPromise,
         moversPromise,
-        mapOverviewPromise,
       ]);
       const gainersList = moversData.gainers ?? [];
       const losersList = moversData.losers ?? [];
@@ -711,13 +698,8 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
         if (i.ticker?.trim()) raw.push(i.ticker.trim());
       });
       setInitialHeadlinesTickers([...new Set(raw)].slice(0, 50));
-      if (user && mapOverviewData) {
-        setMapRegions(mapOverviewData.international ?? []);
-        setMapUsIndices(mapOverviewData.indices ?? []);
-      } else {
-        setMapRegions([]);
-        setMapUsIndices([]);
-      }
+      setMapRegions([]);
+      setMapUsIndices([]);
       setOverview({
         indices,
         sectors,
@@ -750,6 +732,34 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
       setIsLoading(false);
     }
   }, [range, user]);
+
+  const fetchMapOverview = useCallback(async () => {
+    if (!user) return;
+    setMapDataLoading(true);
+    try {
+      const data = await tickerApi.getMarketOverview({
+        limit_indices: 15,
+        offset_indices: 0,
+        limit_sectors: 1,
+        offset_sectors: 0,
+        limit_regions: 100,
+        offset_regions: 0,
+        limit_commodities: 1,
+        offset_commodities: 0,
+        range,
+      });
+      setMapRegions(data.international ?? []);
+      setMapUsIndices(data.indices ?? []);
+    } finally {
+      setMapDataLoading(false);
+    }
+  }, [user, range]);
+
+  useEffect(() => {
+    if (activeTab === 'regional' && user) {
+      fetchMapOverview();
+    }
+  }, [activeTab, user, fetchMapOverview]);
 
   const totalPagesIndices = Math.max(1, Math.ceil(totals.totalIndices / TILES_PER_PAGE));
   const totalPagesSectors = Math.max(1, Math.ceil(totals.totalSectors / TILES_PER_PAGE));
@@ -1090,7 +1100,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
             <p className="mt-1 text-gray-500 text-xs">Market data for the map is only loaded for logged-in users.</p>
           </div>
         </>
-        ) : isLoading ? (
+        ) : mapDataLoading ? (
         <>
           <div className="rounded-lg border border-gray-700 bg-gray-800/60 overflow-hidden m-4">
             <div className="h-8 bg-gray-700/80 border-b border-gray-700" />
@@ -1111,13 +1121,13 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
             </div>
           </div>
         </>
-        ) : (mapRegions.length > 0 || mapUsIndices.length > 0) ? (
+        ) : (
         <WorldMapRegionalStocks
           regionalItems={mapRegions}
           usIndices={mapUsIndices}
           onSelectTicker={onSelectTicker}
         />
-        ) : null
+        )
         }
         </div>
       )}

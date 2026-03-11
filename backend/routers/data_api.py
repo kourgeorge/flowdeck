@@ -7,9 +7,11 @@ Single source of truth for all market/fundamental data. Used by:
 
 All data flows through InfoFetcher. Report endpoints expose ReportService for agents.
 Blocking engine calls run in thread pool (non-blocking event loop).
+Market overview uses single-flight coalescing: concurrent identical requests share one fetch.
 """
 
 import asyncio
+from typing import Dict, Any, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -28,6 +30,10 @@ class ReportsBatchBody(BaseModel):
 
 
 router = APIRouter(tags=["Data API"])
+
+# Single-flight for market overview: concurrent requests with same params share one thread/fetch.
+_market_overview_in_flight: Dict[Tuple, asyncio.Task] = {}
+_market_overview_lock = asyncio.Lock()
 
 
 def _engine():
@@ -75,11 +81,10 @@ async def data_market_overview(
     limit_commodities: int = Query(12, ge=1, le=100),
     offset_commodities: int = Query(0, ge=0),
     range_: str = Query("1d", alias="range", description="1d, 1w, 1mo, 3mo, ytd"),
-):
+) -> Dict[str, Any]:
     """Get market overview: US indices, sectors, regional ETFs, and commodities with price and change. Pagination per group. range: 1d, 1w, 1mo, 3mo, ytd."""
     engine = _engine()
-    return await asyncio.to_thread(
-        engine.get_market_overview,
+    key = (
         limit_indices,
         offset_indices,
         limit_sectors,
@@ -90,6 +95,32 @@ async def data_market_overview(
         offset_commodities,
         range_,
     )
+    async with _market_overview_lock:
+        if key in _market_overview_in_flight:
+            task = _market_overview_in_flight[key]
+        else:
+            task = asyncio.create_task(
+                asyncio.to_thread(
+                    engine.get_market_overview,
+                    limit_indices,
+                    offset_indices,
+                    limit_sectors,
+                    offset_sectors,
+                    limit_regions,
+                    offset_regions,
+                    limit_commodities,
+                    offset_commodities,
+                    range_,
+                )
+            )
+            _market_overview_in_flight[key] = task
+
+            def _remove_when_done(t: asyncio.Task) -> None:
+                if _market_overview_in_flight.get(key) is t:
+                    _market_overview_in_flight.pop(key, None)
+
+            task.add_done_callback(_remove_when_done)
+    return await task
 
 
 @router.get("/market-overview/section")
