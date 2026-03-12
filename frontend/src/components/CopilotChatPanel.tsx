@@ -100,6 +100,17 @@ export default function CopilotChatPanel({
     chatApi.getChatSessions().then(setSessions).catch(() => {});
   }, [user]);
 
+  // Most recent first (recent at top)
+  const sessionsByRecency = useMemo(
+    () =>
+      [...sessions].sort((a, b) => {
+        const tA = (a.updated_at && new Date(a.updated_at).getTime()) || 0;
+        const tB = (b.updated_at && new Date(b.updated_at).getTime()) || 0;
+        return tB - tA;
+      }),
+    [sessions],
+  );
+
   // Build context object with all tickers so the AI knows the full watchlist
   const context = useMemo(
     () => (tickers.length > 0 ? { tickers } : undefined),
@@ -285,10 +296,10 @@ export default function CopilotChatPanel({
                     <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Previous conversations</p>
                   </div>
                   <ul className="overflow-y-auto py-1 flex-1 min-h-0">
-                    {sessions.length === 0 ? (
+                    {sessionsByRecency.length === 0 ? (
                       <li className="px-3 py-4 text-center text-xs text-slate-500">No conversations yet</li>
                     ) : (
-                      sessions.map((s) => (
+                      sessionsByRecency.map((s) => (
                         <li key={s.id} className="flex items-center group">
                           <button
                             type="button"

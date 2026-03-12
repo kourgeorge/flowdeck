@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import ChatView, { useChatState, type ChatMessageWithMeta } from '../components/ChatView';
 import PageHeader from '../components/PageHeader';
 import { useAuth } from '../contexts/AuthContext';
@@ -101,6 +101,17 @@ export default function ChatPage() {
     ? displayName ?? (user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1))
     : null;
 
+  // Most recent first (recent at top)
+  const sessionsByRecency = useMemo(
+    () =>
+      [...sessions].sort((a, b) => {
+        const tA = (a.updated_at && new Date(a.updated_at).getTime()) || 0;
+        const tB = (b.updated_at && new Date(b.updated_at).getTime()) || 0;
+        return tB - tA;
+      }),
+    [sessions],
+  );
+
   return (
     <div className="flex flex-col h-full bg-gray-900">
       <PageHeader
@@ -182,7 +193,7 @@ export default function ChatPage() {
             </div>
             {!historyCollapsed && (
               <ul className="flex-1 overflow-y-auto py-1">
-                {sessions.map((s) => (
+                {sessionsByRecency.map((s) => (
                   <li key={s.id}>
                     <div
                       role="button"
