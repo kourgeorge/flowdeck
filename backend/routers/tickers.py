@@ -229,14 +229,15 @@ def _get_ticker_widgets_sync(
 def _get_ticker_page_sync(ticker: str) -> TickerPageData:
     """Sync implementation of ticker page data (runs in thread pool to avoid blocking event loop)."""
     report_service = _get_report_service()
-    market_data_service = _get_market_data_service()
+    cached_fetcher = get_info_fetcher()
 
-    quote = market_data_service.get_current_quote(ticker)
-    if quote is None:
+    quote_data = cached_fetcher.get_quote(ticker)
+    if not quote_data or not isinstance(quote_data, dict):
         raise HTTPException(
             status_code=404,
             detail=f"Ticker '{ticker}' not found. Check the symbol and try again.",
         )
+    quote = TickerQuote(**quote_data)
 
     is_generating = False
     generation_analysis_run_id = None

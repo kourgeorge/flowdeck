@@ -90,6 +90,8 @@ class MarketDataService:
                 auto_adjust=False,
                 prepost=False,
             )
+            if hist is None or not hasattr(hist, "columns") or hist.columns is None:
+                return None
             if hist.empty or "Close" not in hist.columns:
                 return None
             close_series = hist["Close"].dropna()
@@ -309,7 +311,10 @@ class MarketDataService:
                 for t in tickers:
                     try:
                         if t in data.columns.get_level_values(0):
-                            close_col = data[t]["Close"] if isinstance(data.columns, pd.MultiIndex) else data["Close"][t]
+                            t_block = data[t]
+                            if t_block is None or not hasattr(t_block, "columns"):
+                                continue
+                            close_col = t_block["Close"] if "Close" in t_block.columns else None
                         else:
                             close_col = data["Close"].get(t) if hasattr(data["Close"], "get") else None
                         if close_col is None:
