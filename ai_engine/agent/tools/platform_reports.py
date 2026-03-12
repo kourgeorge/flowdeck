@@ -229,9 +229,31 @@ def _fetch_platform_reports(
             lines.append(" | ".join(parts))
             lines.append("")
 
-    # Per-report summaries
+    # Trader Plan and TPS — include full trading plan narrative and structured TPS so the agent cites them
+    tip = reports.get("trader_investment_plan") or {}
+    if tip:
+        lines.append("## 📋 Trader Plan (recommended trading plan)")
+        content = tip.get("content") or ""
+        if content.strip():
+            lines.append(content.strip())
+        else:
+            kt = tip.get("key_takeaways")
+            if kt and isinstance(kt, list):
+                for item in kt[:8]:
+                    lines.append(f"- {item}")
+        tps = tip.get("tps_plan")
+        if tps and str(tps).strip():
+            lines.append("")
+            lines.append("### TPS — structured entry, stop-loss, and take-profit levels")
+            lines.append("Use these levels when answering questions about entry, exit, stop-loss, or take-profit.")
+            lines.append("```")
+            lines.append(str(tps).strip())
+            lines.append("```")
+        lines.append("")
+
+    # Per-report summaries (skip trader_investment_plan — already covered above)
     for key, label in _REPORT_LABELS.items():
-        if key in ("final_trade_decision", "investment_plan"):
+        if key in ("final_trade_decision", "investment_plan", "trader_investment_plan"):
             continue
         rpt = reports.get(key) or {}
         if not rpt:
