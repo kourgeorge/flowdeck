@@ -117,7 +117,7 @@ function calculateAverageAnalystScore(scoreEntries: [string, { score: number | n
 function getRadarFillColor(avgScore: number | null): string {
   if (avgScore == null) return '#38bdf8';
   if (avgScore <= 3) return '#f87171';
-  if (avgScore <= 5) return '#facc15';
+  if (avgScore <= 6) return '#facc15';
   if (avgScore <= 7) return '#38bdf8';
   return '#4ade80';
 }
