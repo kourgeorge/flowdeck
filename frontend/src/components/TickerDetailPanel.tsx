@@ -1300,9 +1300,6 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                 </div>
               ) : (
                 <>
-                  <div className="text-sm text-amber-400/90 bg-amber-950/30 border border-amber-700/40 rounded-lg px-4 py-2">
-                    <span>For informational purposes only. Not investment advice.</span>
-                  </div>
                   {analysisError && (
                     <div className="flex items-center gap-3 rounded-lg border border-red-800 bg-red-950/50 px-4 py-3 text-red-200" role="alert">
                       <svg className="h-5 w-5 shrink-0 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -1327,6 +1324,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                     const activeBull = selectedRunId ? (planReport?.bull_case_return_pct ?? null) : stockData.bull_case_return_pct ?? null;
                     const hasReturnScenarios = activeExpected != null || activeBear != null || activeBull != null;
                     return (
+                    <>
                     <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 rounded-lg border border-blue-700/50 p-5">
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                         <div className="flex-1">
@@ -1486,6 +1484,10 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                           </div>
                       </div>
                     </div>
+                    <div className="text-sm text-amber-400/90 bg-amber-950/30 border border-amber-700/40 rounded-lg px-4 py-2 mt-4">
+                      <span>For informational purposes only. Not investment advice.</span>
+                    </div>
+                    </>
                     );
                   })()}
                   <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
