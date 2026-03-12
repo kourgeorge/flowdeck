@@ -124,6 +124,12 @@ export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
+  const closeSidebarIfMobile = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setSidebarExpanded(false);
+    }
+  };
+
   return (
     <div className="flex min-h-screen">
       {/* Backdrop: mobile only when sidebar expanded */}
@@ -147,6 +153,7 @@ export default function Layout() {
             <>
               <NavLink
                 to="/"
+                onClick={closeSidebarIfMobile}
                 className="flex flex-col items-center gap-2 rounded-lg hover:opacity-90 transition-opacity focus:outline-none md:flex-1"
               >
                 <img
@@ -197,7 +204,7 @@ export default function Layout() {
                       <button
                         type="button"
                         title={title}
-                        onClick={() => setAuthModalOpen(true)}
+                        onClick={() => { closeSidebarIfMobile(); setAuthModalOpen(true); }}
                         className={`flex items-center ${sidebarExpanded ? 'gap-3 px-4' : 'justify-center px-2'} py-2 rounded-lg text-sm font-medium w-full text-left cursor-pointer text-gray-500 hover:text-gray-400 opacity-75 hover:opacity-90 transition-colors pointer-events-auto`}
                       >
                         <Icon />
@@ -212,6 +219,7 @@ export default function Layout() {
                       to={to}
                       end={to === '/'}
                       title={title}
+                      onClick={closeSidebarIfMobile}
                       className={({ isActive }) =>
                         `flex items-center ${sidebarExpanded ? 'gap-3 px-4' : 'justify-center px-2'} py-2 rounded-lg text-sm font-medium transition-colors ${
                           isActive
@@ -231,6 +239,7 @@ export default function Layout() {
                   <NavLink
                     to="/admin"
                     title={!sidebarExpanded ? 'Admin' : undefined}
+                    onClick={closeSidebarIfMobile}
                     className={({ isActive }) =>
                       `flex items-center ${sidebarExpanded ? 'gap-3 px-4' : 'justify-center px-2'} py-2 rounded-lg text-sm font-medium transition-colors ${
                         isActive
@@ -261,6 +270,7 @@ export default function Layout() {
                     <NavLink
                       to="/profile"
                       title={!sidebarExpanded ? 'Profile' : undefined}
+                      onClick={closeSidebarIfMobile}
                       className={({ isActive }) =>
                         `flex items-center ${sidebarExpanded ? 'gap-3 px-4' : 'justify-center px-2'} py-2 rounded-lg text-sm font-medium transition-colors ${
                           isActive ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'
@@ -275,7 +285,7 @@ export default function Layout() {
                     <button
                       type="button"
                       title={!sidebarExpanded ? 'Log out' : undefined}
-                      onClick={() => { logout(); navigate('/'); }}
+                      onClick={() => { closeSidebarIfMobile(); logout(); navigate('/'); }}
                       className={`flex items-center ${sidebarExpanded ? 'gap-3 px-4' : 'justify-center px-2'} w-full text-left py-2 rounded-lg text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white transition-colors`}
                     >
                       <LogoutIcon />
@@ -289,7 +299,7 @@ export default function Layout() {
                     <button
                       type="button"
                       title={!sidebarExpanded ? 'Sign in to access Profile' : undefined}
-                      onClick={() => setAuthModalOpen(true)}
+                      onClick={() => { closeSidebarIfMobile(); setAuthModalOpen(true); }}
                       className={`flex items-center ${sidebarExpanded ? 'gap-3 px-4' : 'justify-center px-2'} py-2 rounded-lg text-sm font-medium w-full text-left text-gray-500 hover:text-gray-400 opacity-75 hover:opacity-90 transition-colors`}
                     >
                       <ProfileIcon />
@@ -304,7 +314,7 @@ export default function Layout() {
                         </p>
                         <button
                           type="button"
-                          onClick={() => setAuthModalOpen(true)}
+                          onClick={() => { closeSidebarIfMobile(); setAuthModalOpen(true); }}
                           className="w-full px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
                         >
                           Sign in

@@ -11,7 +11,7 @@ import { useChatState } from '../components/ChatView';
 
 export default function CopilotPage() {
   const { user } = useAuth();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [chatCollapsed, setChatCollapsed] = useState(false);
   const [chatWidth, setChatWidth] = useState(384); // default w-96
   const isResizing = useRef(false);
@@ -237,7 +237,7 @@ export default function CopilotPage() {
               </svg>
             </button>
             {!sidebarCollapsed && (
-              <div className="absolute top-full left-0 right-0 z-[60] bg-gray-800 border-4 border-blue-900/40 shadow-2xl" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
+              <div className="absolute top-full left-0 right-0 z-[60] bg-gray-950 border border-gray-700 shadow-2xl" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
                 <DashboardTickerSidebar
                   subscribedWidgets={widgets}
                   recentWidgets={[]}

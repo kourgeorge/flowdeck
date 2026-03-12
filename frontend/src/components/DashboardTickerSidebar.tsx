@@ -137,14 +137,14 @@ function SidebarTickerSearch({ onSelect }: { onSelect: (ticker: string) => void 
       {showSuggestions && suggestions.length > 0 && (
         <div
           ref={suggestionsRef}
-          className="absolute z-50 left-2 right-2 mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl max-h-60 overflow-y-auto"
+          className="absolute z-50 left-2 right-2 mt-1 bg-gray-950 border border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto"
         >
           {suggestions.map((stock, index) => (
             <div
               key={stock.ticker}
               onMouseDown={() => handleSelect(stock)}
               className={`px-3 py-2 cursor-pointer transition-colors ${
-                index === selectedIndex ? 'bg-blue-600/50' : 'hover:bg-gray-700'
+                index === selectedIndex ? 'bg-blue-600/60 text-white' : 'hover:bg-gray-700/80 text-gray-200'
               }`}
             >
               <div className="font-semibold text-white text-sm">{stock.ticker}</div>
@@ -215,7 +215,7 @@ function SidebarRow({
     <div
       className={`group w-full flex items-center border-b border-gray-700/60 last:border-0 ${
         isSelected
-          ? 'bg-blue-600/20 border-l-2 border-l-blue-500'
+          ? 'bg-blue-600/30 border-l-2 border-l-blue-400'
           : 'hover:bg-gray-700/50 border-l-2 border-l-transparent'
       }`}
     >
