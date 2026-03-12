@@ -7,7 +7,6 @@ Uses per-type TTLs from config.
 
 from __future__ import annotations
 
-import itertools
 import math
 from typing import Any, Dict, List, Optional
 
@@ -303,38 +302,35 @@ class CachedInfoFetcher:
         """
         Force-fetch market overview data and write it to the cache (TTL 15min).
         Called by a periodic job so Overview and Regional Map are warm without waiting on first request.
-        Warms: all 16 offset combinations (each section page 0 or 1) for 1D, 1W, 1M, 6M, YTD;
-        and sections regions/indices for Regional Map.
+        Warms only the first page of each section (fewer tickers, faster refresh).
         """
-        limit = 6
-        # Each section can be page 0 (offset 0) or page 1 (offset 6); warm all 2^4 combinations
-        # so that "next page" in any single section (e.g. sectors only) is cached.
-        for oi, os_, or_, oc in itertools.product((0, limit), repeat=4):
+        limit = 6  # First page size (TILES_PER_PAGE in MarketView)
+        # Only first page: offset 0 for all sections (indices, sectors, regions, commodities)
+        for range_ in ("1d", "1w", "1mo", "6mo", "ytd"):
+            key = f"market_overview:{range_}:{limit}:0:{limit}:0:{limit}:0:{limit}:0"
+            refresh_cached(
+                key,
+                DATA_CACHE_TTL_MARKET_OVERVIEW,
+                lambda r=range_: self._fetcher.get_market_overview(
+                    limit_indices=limit,
+                    offset_indices=0,
+                    limit_sectors=limit,
+                    offset_sectors=0,
+                    limit_regions=limit,
+                    offset_regions=0,
+                    limit_commodities=limit,
+                    offset_commodities=0,
+                    range_=r,
+                ),
+            )
+        # Regional Map: only first page of each section (15 items each) so refresh loads fewer tickers
+        for section, section_limit in (("regions", 15), ("indices", 15)):
             for range_ in ("1d", "1w", "1mo", "6mo", "ytd"):
-                key = f"market_overview:{range_}:{limit}:{oi}:{limit}:{os_}:{limit}:{or_}:{limit}:{oc}"
+                key = f"market_overview_section:{section}:{range_}:{section_limit}:0"
                 refresh_cached(
                     key,
                     DATA_CACHE_TTL_MARKET_OVERVIEW,
-                    lambda r=range_, oi_=oi, os__=os_, or__=or_, oc_=oc: self._fetcher.get_market_overview(
-                        limit_indices=limit,
-                        offset_indices=oi_,
-                        limit_sectors=limit,
-                        offset_sectors=os__,
-                        limit_regions=limit,
-                        offset_regions=or__,
-                        limit_commodities=limit,
-                        offset_commodities=oc_,
-                        range_=r,
-                    ),
-                )
-        # Sections used by Regional Map: regions (limit 100), indices (limit 15)
-        for section, limit in (("regions", 100), ("indices", 15)):
-            for range_ in ("1d", "1w", "1mo", "6mo", "ytd"):
-                key = f"market_overview_section:{section}:{range_}:{limit}:0"
-                refresh_cached(
-                    key,
-                    DATA_CACHE_TTL_MARKET_OVERVIEW,
-                    lambda s=section, lim=limit, r=range_: self._fetcher.get_market_overview_section(
+                    lambda s=section, lim=section_limit, r=range_: self._fetcher.get_market_overview_section(
                         section=s,
                         limit=lim,
                         offset=0,
