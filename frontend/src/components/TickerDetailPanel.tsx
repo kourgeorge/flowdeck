@@ -98,6 +98,13 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const [similarHasMoreByPage, setSimilarHasMoreByPage] = useState<Record<number, boolean>>({});
   const [similarStocksPage, setSimilarStocksPage] = useState(1);
   const [isLoadingSimilarTickers, setIsLoadingSimilarTickers] = useState(false);
+  const [showModelNames, setShowModelNames] = useState(() => {
+    try {
+      return localStorage.getItem('flowdeck_show_model_names') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [priceFlash, setPriceFlash] = useState(false);
   const [companyOfficers, setCompanyOfficers] = useState<any[]>([]);
   const [isLoadingOfficers, setIsLoadingOfficers] = useState(false);
@@ -1346,13 +1353,20 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                           </div>
                           {modelsUsed && (modelsUsed.provider || modelsUsed.deep_think || modelsUsed.quick_think) && (
                             <div className="text-xs text-gray-400 mt-0.5 space-y-0.5">
-                              {modelsUsed.provider && <div>Provider: {modelsUsed.provider}</div>}
-                              {(modelsUsed.deep_think || modelsUsed.quick_think) && (
-                                <div>
-                                  {modelsUsed.deep_think && <span>Deep: {modelsUsed.deep_think}</span>}
-                                  {modelsUsed.deep_think && modelsUsed.quick_think && <span className="mx-1">·</span>}
-                                  {modelsUsed.quick_think && <span>Fast: {modelsUsed.quick_think}</span>}
-                                </div>
+                              {showModelNames ? (
+                                <>
+                                  {modelsUsed.provider && <div>Provider: {modelsUsed.provider}</div>}
+                                  {(modelsUsed.deep_think || modelsUsed.quick_think) && (
+                                    <div>
+                                      {modelsUsed.deep_think && <span>Deep: {modelsUsed.deep_think}</span>}
+                                      {modelsUsed.deep_think && modelsUsed.quick_think && <span className="mx-1">·</span>}
+                                      {modelsUsed.quick_think && <span>Fast: {modelsUsed.quick_think}</span>}
+                                    </div>
+                                  )}
+                                  <button type="button" onClick={() => { setShowModelNames(false); try { localStorage.setItem('flowdeck_show_model_names', 'false'); } catch {} }} className="text-gray-500 hover:text-gray-300 underline">Hide model names</button>
+                                </>
+                              ) : (
+                                <button type="button" onClick={() => { setShowModelNames(true); try { localStorage.setItem('flowdeck_show_model_names', 'true'); } catch {} }} className="text-gray-500 hover:text-gray-300 underline">Show model names</button>
                               )}
                               {!selectedRunId && stockData.report_days_ago != null && stockData.report_days_ago > 7 && <div className="text-amber-400/90">Consider re-running for fresh insights.</div>}
                             </div>
