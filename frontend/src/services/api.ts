@@ -753,6 +753,7 @@ export interface ChatStreamEvent {
   tools_called?: number;
   balance?: number;
   follow_up_questions?: string[];
+  session_id?: number;
   // tool_call fields
   name?: string;
   input?: string;
@@ -767,23 +768,87 @@ export interface ChatStreamEvent {
   steps?: number;
 }
 
+/** Session list item from GET /api/chat/sessions */
+export interface ChatSessionListItem {
+  id: number;
+  title: string | null;
+  updated_at: string;
+}
+
+/** Message as returned from GET /api/chat/sessions/:id (with meta) */
+export interface ChatMessageWithMetaApi {
+  role: string;
+  content: string;
+  sort_order: number;
+  tokens_used?: number | null;
+  tools_called?: number | null;
+  tool_call_events?: ToolCallEvent[] | null;
+  skill_activation_events?: SkillActivationEvent[] | null;
+  charts?: ChartSpec[] | null;
+  follow_up_questions?: string[] | null;
+  created_at?: string | null;
+}
+
+/** Session detail from GET /api/chat/sessions/:id */
+export interface ChatSessionDetail {
+  id: number;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+  messages: ChatMessageWithMetaApi[];
+}
+
 export const chatApi = {
-  sendMessage: async (messages: ChatMessage[], context?: Record<string, unknown>): Promise<ChatResponse> => {
+  sendMessage: async (
+    messages: ChatMessage[],
+    context?: Record<string, unknown>,
+    sessionId?: number | null,
+  ): Promise<ChatResponse> => {
     const token = getStoredToken();
-    const response = await api.post<ChatResponse>(
-      '/api/chat',
-      { messages, ...(context ? { context } : {}) },
-      {
-        headers: {
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-      }
-    );
+    const body: Record<string, unknown> = { messages, ...(context ? { context } : {}) };
+    if (sessionId != null) body.session_id = sessionId;
+    const response = await api.post<ChatResponse>('/api/chat', body, {
+      headers: { ...(token && { Authorization: `Bearer ${token}` }) },
+    });
     return response.data;
+  },
+
+  getChatSessions: async (): Promise<ChatSessionListItem[]> => {
+    const token = getStoredToken();
+    const res = await api.get<{ sessions: ChatSessionListItem[] }>('/api/chat/sessions', {
+      headers: { ...(token && { Authorization: `Bearer ${token}` }) },
+    });
+    return res.data.sessions;
+  },
+
+  createChatSession: async (): Promise<{ id: number; title: string | null; created_at: string; updated_at: string }> => {
+    const token = getStoredToken();
+    const res = await api.post<{ id: number; title: string | null; created_at: string; updated_at: string }>(
+      '/api/chat/sessions',
+      {},
+      { headers: { ...(token && { Authorization: `Bearer ${token}` }) } },
+    );
+    return res.data;
+  },
+
+  getChatSession: async (sessionId: number): Promise<ChatSessionDetail> => {
+    const token = getStoredToken();
+    const res = await api.get<ChatSessionDetail>(`/api/chat/sessions/${sessionId}`, {
+      headers: { ...(token && { Authorization: `Bearer ${token}` }) },
+    });
+    return res.data;
+  },
+
+  deleteChatSession: async (sessionId: number): Promise<void> => {
+    const token = getStoredToken();
+    await api.delete(`/api/chat/sessions/${sessionId}`, {
+      headers: { ...(token && { Authorization: `Bearer ${token}` }) },
+    });
   },
 
   /**
    * Stream a chat response via SSE.
+   * When sessionId is set, backend loads session history and persists new messages on done.
    * Calls `onToken` for each incremental text chunk,
    * `onThinking` for tool-call progress status messages,
    * `onToolCall` for each tool execution (name, input, output),
@@ -796,16 +861,19 @@ export const chatApi = {
   streamMessage: (
     messages: ChatMessage[],
     onToken: (chunk: string) => void,
-    onDone: (tokensUsed: number, balance: number, toolsCalled: number, followUpQuestions?: string[]) => void,
+    onDone: (tokensUsed: number, balance: number, toolsCalled: number, followUpQuestions?: string[], sessionId?: number) => void,
     onError: (message: string) => void,
     onThinking?: (status: string) => void,
     onToolCall?: (toolCall: ToolCallEvent) => void,
     context?: Record<string, unknown>,
     onChart?: (spec: ChartSpec) => void,
     onSkillActivation?: (event: SkillActivationEvent) => void,
+    sessionId?: number | null,
   ): AbortController => {
     const controller = new AbortController();
     const token = getStoredToken();
+    const body: Record<string, unknown> = { messages, ...(context ? { context } : {}) };
+    if (sessionId != null) body.session_id = sessionId;
 
     const run = async () => {
       let pendingSkill: SkillActivationEvent | null = null;
@@ -816,7 +884,7 @@ export const chatApi = {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify({ messages, ...(context ? { context } : {}) }),
+          body: JSON.stringify(body),
           signal: controller.signal,
         });
 
@@ -875,7 +943,13 @@ export const chatApi = {
                 onSkillActivation?.(pendingSkill);
                 pendingSkill = null;
               } else if (event.type === 'done') {
-                onDone(event.tokens_used ?? 1, event.balance ?? 0, event.tools_called ?? 0, event.follow_up_questions);
+                onDone(
+                  event.tokens_used ?? 1,
+                  event.balance ?? 0,
+                  event.tools_called ?? 0,
+                  event.follow_up_questions,
+                  event.session_id,
+                );
               } else if (event.type === 'error') {
                 onError(event.content ?? 'Unknown error');
               }

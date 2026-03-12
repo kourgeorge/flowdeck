@@ -762,6 +762,7 @@ export function MessageBubble({
 
 export interface UseChatStateReturn {
   messages: ChatMessageWithMeta[];
+  setMessages: (messages: ChatMessageWithMeta[] | ((prev: ChatMessageWithMeta[]) => ChatMessageWithMeta[])) => void;
   input: string;
   setInput: (v: string) => void;
   isLoading: boolean;
@@ -777,7 +778,12 @@ export interface UseChatStateReturn {
   clearChat: () => void;
 }
 
-export function useChatState(onBalanceUpdate?: (balance: number) => void, context?: Record<string, unknown>): UseChatStateReturn {
+export function useChatState(
+  onBalanceUpdate?: (balance: number) => void,
+  context?: Record<string, unknown>,
+  sessionId?: number | null,
+  onStreamDone?: (newSessionId?: number) => void,
+): UseChatStateReturn {
   const [messages, setMessages] = useState<ChatMessageWithMeta[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -812,7 +818,9 @@ export function useChatState(onBalanceUpdate?: (balance: number) => void, contex
     setError(null);
 
     const assistantIndex = newMessages.length;
-    const apiMessages = newMessages.map((m) => ({ role: m.role, content: m.content }));
+    // When sessionId is set, backend loads history from DB; send only the new user message
+    const apiMessages =
+      sessionId != null ? [userMessage] : newMessages.map((m) => ({ role: m.role, content: m.content }));
 
     // Extract @TICKER mentions from the user's message and merge into context
     const mentionedTickers = extractMentionedTickers(trimmed);
@@ -844,7 +852,7 @@ export function useChatState(onBalanceUpdate?: (balance: number) => void, contex
           return updated;
         });
       },
-      (tokensUsed, balance, toolsCalled, followUpQuestions) => {
+      (tokensUsed, balance, toolsCalled, followUpQuestions, newSessionId) => {
         setIsStreaming(false);
         setIsLoading(false);
         setThinkingStatus(null);
@@ -852,6 +860,7 @@ export function useChatState(onBalanceUpdate?: (balance: number) => void, contex
           setTokenBalance(balance);
           onBalanceUpdate?.(balance);
         }
+        onStreamDone?.(newSessionId);
         setMessages((prev) => {
           const updated = [...prev];
           if (updated[assistantIndex]?.role === 'assistant') {
@@ -944,6 +953,7 @@ export function useChatState(onBalanceUpdate?: (balance: number) => void, contex
           return updated;
         });
       },
+      sessionId ?? undefined,
     );
   };
 
@@ -959,6 +969,7 @@ export function useChatState(onBalanceUpdate?: (balance: number) => void, contex
 
   return {
     messages,
+    setMessages,
     input,
     setInput,
     isLoading,

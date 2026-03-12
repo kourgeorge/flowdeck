@@ -1,8 +1,22 @@
-import { useEffect, useMemo } from 'react';
-import ChatView, { useChatState, type UseChatStateReturn } from './ChatView';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ChatView, { useChatState, type ChatMessageWithMeta, type UseChatStateReturn } from './ChatView';
 import { useAuth } from '../contexts/AuthContext';
 import { profileApi } from '../services/authApi';
+import { chatApi, type ChatSessionListItem, type ChatMessageWithMetaApi } from '../services/api';
 import { COPILOT_NAME } from '../config';
+
+function apiMessageToChatMessageWithMeta(m: ChatMessageWithMetaApi): ChatMessageWithMeta {
+  return {
+    role: m.role as 'user' | 'assistant',
+    content: m.content,
+    tokens_used: m.tokens_used ?? undefined,
+    tools_called: m.tools_called ?? undefined,
+    tool_call_events: m.tool_call_events ?? undefined,
+    skill_activation_events: m.skill_activation_events ?? undefined,
+    charts: m.charts ?? undefined,
+    follow_up_questions: m.follow_up_questions ?? undefined,
+  };
+}
 
 function getSuggestedQuestions(ticker?: string | null, tickers?: string[]): string[] {
   if (ticker) {
@@ -62,13 +76,38 @@ export default function CopilotChatPanel({
 }: CopilotChatPanelProps) {
   const panelTitle = title ?? COPILOT_NAME;
   const { user } = useAuth();
+  const useInternalSession = externalChatState == null;
+
+  const [sessionId, setSessionId] = useState<number | null>(null);
+  const [sessions, setSessions] = useState<ChatSessionListItem[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const historyDropdownRef = useRef<HTMLDivElement>(null);
+
+  const refreshSessions = useCallback(() => {
+    if (!user) return;
+    chatApi.getChatSessions().then(setSessions).catch(() => {});
+  }, [user]);
+
   // Build context object with all tickers so the AI knows the full watchlist
   const context = useMemo(
     () => (tickers.length > 0 ? { tickers } : undefined),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [tickers.join(',')],
   );
-  const internalChat = useChatState(undefined, context);
+  const onStreamDone = useCallback(
+    (newSessionId?: number) => {
+      if (useInternalSession && newSessionId != null) setSessionId(newSessionId);
+      refreshSessions();
+    },
+    [useInternalSession, refreshSessions],
+  );
+
+  const internalChat = useChatState(
+    undefined,
+    context,
+    useInternalSession ? sessionId : undefined,
+    useInternalSession ? onStreamDone : undefined,
+  );
   const chat = externalChatState ?? internalChat;
 
   // Fetch token balance when user logs in
@@ -78,6 +117,38 @@ export default function CopilotChatPanel({
       chat.setTokenBalance(me.token_balance);
     }).catch(() => {});
   }, [user]);
+
+  // Load session list when user is logged in (for history dropdown on both internal and external chat)
+  useEffect(() => {
+    if (!user) return;
+    refreshSessions();
+  }, [user, refreshSessions]);
+
+  // Close history dropdown on click outside
+  useEffect(() => {
+    if (!historyOpen) return;
+    const handle = (e: MouseEvent) => {
+      if (historyDropdownRef.current && !historyDropdownRef.current.contains(e.target as Node)) {
+        setHistoryOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [historyOpen]);
+
+  const handleNewChat = useCallback(() => {
+    if (!user || !useInternalSession) return;
+    setSessionId(null);
+    chat.clearChat();
+  }, [user, useInternalSession, chat]);
+
+  const handleLoadSession = useCallback((id: number) => {
+    chatApi.getChatSession(id).then((detail) => {
+      if (useInternalSession) setSessionId(detail.id);
+      chat.setMessages(detail.messages.map(apiMessageToChatMessageWithMeta));
+      setHistoryOpen(false);
+    }).catch(() => {});
+  }, [chat, useInternalSession]);
 
   // Focus input when panel expands
   useEffect(() => {
@@ -149,16 +220,65 @@ export default function CopilotChatPanel({
           {user && (
             <button
               type="button"
-              onClick={chat.clearChat}
-              disabled={chat.messages.length === 0 && !chat.error}
+              onClick={useInternalSession ? handleNewChat : chat.clearChat}
+              disabled={!useInternalSession && chat.messages.length === 0 && !chat.error}
               title="New chat"
-              className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors px-2 py-1 rounded-lg hover:bg-gray-700 border border-gray-600 hover:border-gray-500 disabled:opacity-40 disabled:cursor-default"
+              className="flex items-center justify-center w-7 h-7 text-slate-400 hover:text-slate-200 transition-colors rounded-lg hover:bg-gray-700 border border-gray-600 hover:border-gray-500 disabled:opacity-40 disabled:cursor-default"
             >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              New
             </button>
+          )}
+
+          {/* Previous conversations (history) dropdown */}
+          {user && (
+            <div className="relative" ref={historyDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setHistoryOpen((v) => !v)}
+                title="Previous conversations"
+                className={`flex items-center justify-center w-7 h-7 rounded-lg border transition-colors ${
+                  historyOpen
+                    ? 'bg-gray-700 border-gray-500 text-white'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-gray-700 border-gray-600 hover:border-gray-500'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </button>
+              {historyOpen && (
+                <div className="absolute right-0 top-full mt-1 w-64 max-h-72 overflow-hidden rounded-lg border border-gray-600 bg-gray-800 shadow-xl z-50 flex flex-col">
+                  <div className="px-2 py-2 border-b border-gray-700">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Previous conversations</p>
+                  </div>
+                  <ul className="overflow-y-auto py-1 flex-1 min-h-0">
+                    {sessions.length === 0 ? (
+                      <li className="px-3 py-4 text-center text-xs text-slate-500">No conversations yet</li>
+                    ) : (
+                      sessions.map((s) => (
+                        <li key={s.id}>
+                          <button
+                            type="button"
+                            onClick={() => handleLoadSession(s.id)}
+                            className={`w-full text-left px-3 py-2 text-sm border-l-2 transition-colors ${
+                              sessionId === s.id
+                                ? 'border-blue-500 bg-gray-700/60 text-white'
+                                : 'border-transparent hover:bg-gray-700/40 text-slate-300'
+                            }`}
+                          >
+                            <span className="block truncate" title={s.title ?? undefined}>
+                              {s.title || 'New chat'}
+                            </span>
+                          </button>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Collapse toggle */}

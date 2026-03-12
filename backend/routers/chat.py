@@ -3,21 +3,25 @@ Chat router: POST /api/chat  and  POST /api/chat/stream
 
 Authenticated endpoints that run a stock market analyst ReAct agent.
 Deducts tokens from the user's balance based on the number of agent trajectory steps.
+
+Session persistence: optional session_id on request; GET/POST/DELETE /api/chat/sessions.
 """
 
 import asyncio
 import json
 import logging
-from typing import AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from auth import get_current_user
 from database import get_db
+from models.db_models import ChatMessage, ChatSession
 from services import token_service
+from services.chat_persistence import save_assistant_message, save_user_message, update_session_after_messages
 from services.chat_service import get_chat_service
 
 logger = logging.getLogger(__name__)
@@ -33,6 +37,7 @@ class ChatMessageIn(BaseModel):
 class ChatRequest(BaseModel):
     messages: List[ChatMessageIn]
     context: Optional[Dict] = None  # optional context (e.g. {"tickers": ["AAPL", "MSFT"]})
+    session_id: Optional[int] = None  # when set, load history and persist new messages
 
 
 class ChatResponse(BaseModel):
@@ -40,6 +45,174 @@ class ChatResponse(BaseModel):
     tokens_used: int
     balance: int
     follow_up_questions: Optional[List[str]] = None
+    session_id: Optional[int] = None  # set when backend created a new session for this turn
+
+
+# --- Session list/detail schemas ---
+
+
+class ChatMessageOut(BaseModel):
+    role: str
+    content: str
+    sort_order: int
+    tokens_used: Optional[int] = None
+    tools_called: Optional[int] = None
+    tool_call_events: Optional[List[Dict[str, Any]]] = None
+    skill_activation_events: Optional[List[Dict[str, Any]]] = None
+    charts: Optional[List[Dict[str, Any]]] = None
+    follow_up_questions: Optional[List[str]] = None
+    created_at: Optional[str] = None
+
+
+class ChatSessionOut(BaseModel):
+    id: int
+    title: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+class SessionListItem(BaseModel):
+    id: int
+    title: Optional[str] = None
+    updated_at: str
+
+
+class SessionListResponse(BaseModel):
+    sessions: List[SessionListItem]
+
+
+class SessionDetailResponse(BaseModel):
+    id: int
+    title: Optional[str] = None
+    created_at: str
+    updated_at: str
+    messages: List[ChatMessageOut]
+
+
+def _message_to_out(m: ChatMessage) -> ChatMessageOut:
+    """Convert DB ChatMessage to API schema with parsed JSON fields."""
+    tool_call_events = None
+    if m.tool_calls_json:
+        try:
+            tool_call_events = json.loads(m.tool_calls_json)
+        except Exception:
+            pass
+    skill_activation_events = None
+    if m.skill_events_json:
+        try:
+            skill_activation_events = json.loads(m.skill_events_json)
+        except Exception:
+            pass
+    charts = None
+    if m.charts_json:
+        try:
+            charts = json.loads(m.charts_json)
+        except Exception:
+            pass
+    follow_up_questions = None
+    if m.follow_up_questions_json:
+        try:
+            follow_up_questions = json.loads(m.follow_up_questions_json)
+        except Exception:
+            pass
+    return ChatMessageOut(
+        role=m.role,
+        content=m.content or "",
+        sort_order=m.sort_order,
+        tokens_used=m.tokens_used,
+        tools_called=m.tools_called,
+        tool_call_events=tool_call_events,
+        skill_activation_events=skill_activation_events,
+        charts=charts,
+        follow_up_questions=follow_up_questions,
+        created_at=m.created_at.isoformat() if m.created_at else None,
+    )
+
+
+def _get_session_for_user(db: Session, session_id: int, user_id: int) -> Optional[ChatSession]:
+    """Load session by id if it belongs to the user."""
+    session = db.get(ChatSession, session_id)
+    if session is None or session.user_id != user_id:
+        return None
+    return session
+
+
+@router.get("/chat/sessions", response_model=SessionListResponse)
+async def list_sessions(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+    limit: int = 50,
+):
+    """List current user's chat sessions, most recently updated first."""
+    sessions = (
+        db.query(ChatSession)
+        .filter(ChatSession.user_id == current_user.id)
+        .order_by(ChatSession.updated_at.desc())
+        .limit(max(1, min(limit, 100)))
+        .all()
+    )
+    return SessionListResponse(
+        sessions=[
+            SessionListItem(
+                id=s.id,
+                title=s.title,
+                updated_at=s.updated_at.isoformat() if s.updated_at else "",
+            )
+            for s in sessions
+        ]
+    )
+
+
+@router.post("/chat/sessions", response_model=ChatSessionOut)
+async def create_session(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create a new chat session."""
+    session = ChatSession(user_id=current_user.id)
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return ChatSessionOut(
+        id=session.id,
+        title=session.title,
+        created_at=session.created_at.isoformat() if session.created_at else "",
+        updated_at=session.updated_at.isoformat() if session.updated_at else "",
+    )
+
+
+@router.get("/chat/sessions/{session_id}", response_model=SessionDetailResponse)
+async def get_session(
+    session_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get one session and its messages. 404 if not found or not owned by user."""
+    session = _get_session_for_user(db, session_id, current_user.id)
+    if session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    messages = list(session.messages)
+    return SessionDetailResponse(
+        id=session.id,
+        title=session.title,
+        created_at=session.created_at.isoformat() if session.created_at else "",
+        updated_at=session.updated_at.isoformat() if session.updated_at else "",
+        messages=[_message_to_out(m) for m in messages],
+    )
+
+
+@router.delete("/chat/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_session(
+    session_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a session and all its messages. 404 if not found or not owned by user."""
+    session = _get_session_for_user(db, session_id, current_user.id)
+    if session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    db.delete(session)
+    db.commit()
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -64,9 +237,20 @@ async def chat(
             detail="Insufficient token balance. Please purchase more tokens to continue chatting.",
         )
 
-    messages = [{"role": m.role, "content": m.content} for m in body.messages]
     user_id = current_user.id
     context = body.context or {}
+
+    # When session_id is set, load session messages and prepend to request messages
+    if body.session_id is not None:
+        session = _get_session_for_user(db, body.session_id, user_id)
+        if session is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+        db_messages = [{"role": m.role, "content": m.content} for m in session.messages]
+        messages = db_messages + [{"role": m.role, "content": m.content} for m in body.messages]
+        existing_message_count = len(db_messages)
+    else:
+        messages = [{"role": m.role, "content": m.content} for m in body.messages]
+        existing_message_count = 0
 
     # Run the agent in a thread pool (blocking LangChain calls)
     try:
@@ -91,7 +275,46 @@ async def chat(
 
     new_balance = token_service.get_balance(current_user.id, db)
 
-    return ChatResponse(reply=reply, tokens_used=tokens_used, balance=new_balance, follow_up_questions=follow_up_questions)
+    # Persist on first input: use existing session or create one
+    persisted_session_id: Optional[int] = None
+    if body.messages:
+        try:
+            sid = body.session_id
+            if sid is None:
+                new_session = ChatSession(user_id=user_id)
+                db.add(new_session)
+                db.flush()
+                sid = new_session.id
+                persisted_session_id = sid
+            base_order = existing_message_count
+            for i, um in enumerate(body.messages):
+                save_user_message(db, sid, um.content, base_order + i)
+            save_assistant_message(
+                db,
+                sid,
+                reply,
+                base_order + len(body.messages),
+                tokens_used=tokens_used,
+                tools_called=result.get("tools_called"),
+                follow_up_questions=follow_up_questions,
+            )
+            update_session_after_messages(
+                db,
+                sid,
+                first_user_content=body.messages[0].content if body.messages else None,
+            )
+            db.commit()
+        except Exception as persist_err:
+            logger.exception("Failed to persist chat turn: %s", persist_err)
+            db.rollback()
+
+    return ChatResponse(
+        reply=reply,
+        tokens_used=tokens_used,
+        balance=new_balance,
+        follow_up_questions=follow_up_questions,
+        session_id=persisted_session_id,
+    )
 
 
 @router.post("/chat/stream")
@@ -110,6 +333,7 @@ async def chat_stream(
 
     - Requires authentication (Bearer token).
     - Returns 402 if the user has insufficient token balance.
+    - If session_id is set: load session history, append body.messages, then persist new user + assistant messages on done.
     """
     balance = token_service.get_balance(current_user.id, db)
     if balance < 1:
@@ -118,15 +342,33 @@ async def chat_stream(
             detail="Insufficient token balance. Please purchase more tokens to continue chatting.",
         )
 
-    messages = [{"role": m.role, "content": m.content} for m in body.messages]
     user_id = current_user.id
     context = body.context or {}
+
+    # When session_id is set, load session messages and prepend to request messages
+    session_id_for_persist: Optional[int] = None
+    existing_message_count = 0
+    if body.session_id is not None:
+        session = _get_session_for_user(db, body.session_id, user_id)
+        if session is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+        db_messages = [{"role": m.role, "content": m.content} for m in session.messages]
+        existing_message_count = len(db_messages)
+        messages = db_messages + [{"role": m.role, "content": m.content} for m in body.messages]
+        session_id_for_persist = body.session_id
+    else:
+        messages = [{"role": m.role, "content": m.content} for m in body.messages]
 
     async def event_generator() -> AsyncIterator[str]:
         service = get_chat_service()
         tokens_used = 1
+        # Accumulators for persistence when session_id is set
+        acc_content: List[str] = []
+        acc_tool_calls: List[Dict[str, Any]] = []
+        acc_charts: List[Dict[str, Any]] = []
+        acc_skill_events: List[Dict[str, Any]] = []
+        pending_skill_steps: List[Dict[str, Any]] = []
         try:
-            # Run the blocking generator in a thread and yield chunks as they arrive
             loop = asyncio.get_event_loop()
             queue: asyncio.Queue[str | None] = asyncio.Queue()
 
@@ -138,7 +380,7 @@ async def chat_stream(
                     err_event = f"data: {json.dumps({'type': 'error', 'content': str(exc)})}\n\n"
                     loop.call_soon_threadsafe(queue.put_nowait, err_event)
                 finally:
-                    loop.call_soon_threadsafe(queue.put_nowait, None)  # sentinel
+                    loop.call_soon_threadsafe(queue.put_nowait, None)
 
             thread_task = asyncio.get_event_loop().run_in_executor(None, run_generator)
 
@@ -146,23 +388,83 @@ async def chat_stream(
                 item = await queue.get()
                 if item is None:
                     break
-                # Parse tokens_used from done event, deduct immediately, then send updated balance
+                # Accumulate for persistence when we have messages (create session on first input)
+                try:
+                    raw = item.removeprefix("data: ").strip()
+                    payload = json.loads(raw)
+                    typ = payload.get("type")
+                    if typ == "token" and payload.get("content"):
+                        acc_content.append(payload["content"])
+                    elif typ == "tool_call" and payload.get("name"):
+                        acc_tool_calls.append({
+                            "name": payload.get("name", ""),
+                            "input": payload.get("input", ""),
+                            "output": payload.get("output", ""),
+                        })
+                    elif typ == "chart" and payload.get("spec"):
+                        acc_charts.append(payload["spec"])
+                    elif typ == "skill_step":
+                        pending_skill_steps.append({
+                            "tool": payload.get("tool", ""),
+                            "input": payload.get("input", ""),
+                            "output": payload.get("output", ""),
+                            "ok": payload.get("ok", True),
+                        })
+                    elif typ == "skill_done" and payload.get("name"):
+                        acc_skill_events.append({"name": payload.get("name"), "steps": list(pending_skill_steps)})
+                        pending_skill_steps = []
+                except Exception:
+                    pass
+
                 if '"type":"done"' in item or '"type": "done"' in item:
                     try:
                         payload = json.loads(item.removeprefix("data: ").strip())
                         tokens_used = payload.get("tokens_used", 1)
-                        # Deduct tokens now so the balance we send is post-deduction
                         try:
                             token_service.deduct_for_chat(user_id, tokens_used, db)
                         except Exception as deduct_err:
                             logger.warning("Failed to deduct tokens for user_id=%s: %s", user_id, deduct_err)
-                        # Send the updated (post-deduction) balance to the client; forward follow_up_questions
                         new_balance = token_service.get_balance(user_id, db)
                         payload["balance"] = new_balance
                         if "follow_up_questions" not in payload:
                             payload["follow_up_questions"] = []
+                        # Persist on first input: use existing session or create one
+                        if body.messages:
+                            try:
+                                sid = session_id_for_persist
+                                if sid is None:
+                                    new_session = ChatSession(user_id=user_id)
+                                    db.add(new_session)
+                                    db.flush()
+                                    sid = new_session.id
+                                base_order = existing_message_count if session_id_for_persist is not None else 0
+                                for i, um in enumerate(body.messages):
+                                    save_user_message(db, sid, um.content, base_order + i)
+                                assistant_content = "".join(acc_content)
+                                save_assistant_message(
+                                    db,
+                                    sid,
+                                    assistant_content,
+                                    base_order + len(body.messages),
+                                    tokens_used=tokens_used,
+                                    tools_called=payload.get("tools_called"),
+                                    tool_calls=acc_tool_calls if acc_tool_calls else None,
+                                    skill_events=acc_skill_events if acc_skill_events else None,
+                                    charts=acc_charts if acc_charts else None,
+                                    follow_up_questions=payload.get("follow_up_questions"),
+                                )
+                                update_session_after_messages(
+                                    db,
+                                    sid,
+                                    first_user_content=body.messages[0].content if body.messages else None,
+                                )
+                                db.commit()
+                                payload["session_id"] = sid
+                            except Exception as persist_err:
+                                logger.exception("Failed to persist chat turn: %s", persist_err)
+                                db.rollback()
                         yield f"data: {json.dumps(payload)}\n\n"
-                        tokens_used = 0  # mark as already deducted
+                        tokens_used = 0
                         continue
                     except Exception:
                         pass
@@ -174,7 +476,6 @@ async def chat_stream(
             logger.exception("Chat stream failed for user_id=%s: %s", user_id, e)
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
         finally:
-            # Deduct tokens only if not already deducted in the done-event handler
             if tokens_used > 0:
                 try:
                     token_service.deduct_for_chat(user_id, tokens_used, db)

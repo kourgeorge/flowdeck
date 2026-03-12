@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
-import ChatView, { useChatState } from '../components/ChatView';
+import { useCallback, useEffect, useState } from 'react';
+import ChatView, { useChatState, type ChatMessageWithMeta } from '../components/ChatView';
 import { useAuth } from '../contexts/AuthContext';
 import { profileApi } from '../services/authApi';
+import { chatApi, type ChatSessionListItem, type ChatMessageWithMetaApi } from '../services/api';
 
 const SUGGESTED_QUESTIONS = [
   "What's the current price and today's performance for AAPL?",
@@ -13,25 +14,83 @@ const SUGGESTED_QUESTIONS = [
   'Calculate the Pearson correlation between META and IBM daily returns over the past year',
 ];
 
+function apiMessageToChatMessageWithMeta(m: ChatMessageWithMetaApi): ChatMessageWithMeta {
+  return {
+    role: m.role as 'user' | 'assistant',
+    content: m.content,
+    tokens_used: m.tokens_used ?? undefined,
+    tools_called: m.tools_called ?? undefined,
+    tool_call_events: m.tool_call_events ?? undefined,
+    skill_activation_events: m.skill_activation_events ?? undefined,
+    charts: m.charts ?? undefined,
+    follow_up_questions: m.follow_up_questions ?? undefined,
+  };
+}
+
 export default function ChatPage() {
   const { user } = useAuth();
   const [displayName, setDisplayName] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<number | null>(null);
+  const [sessions, setSessions] = useState<ChatSessionListItem[]>([]);
+  const [historyCollapsed, setHistoryCollapsed] = useState(false);
 
-  const chat = useChatState();
+  const refreshSessions = useCallback(() => {
+    if (!user) return;
+    chatApi.getChatSessions().then(setSessions).catch(() => {});
+  }, [user]);
+
+  const onStreamDone = useCallback(
+    (newSessionId?: number) => {
+      if (newSessionId != null) setSessionId(newSessionId);
+      refreshSessions();
+    },
+    [refreshSessions],
+  );
+
+  const chat = useChatState(undefined, undefined, sessionId, onStreamDone);
 
   // Fetch initial token balance and display name when user is logged in
   useEffect(() => {
-    if (!user) { chat.setTokenBalance(null); setDisplayName(null); return; }
+    if (!user) {
+      chat.setTokenBalance(null);
+      setDisplayName(null);
+      setSessions([]);
+      setSessionId(null);
+      return;
+    }
     profileApi.getMe().then((me) => {
       chat.setTokenBalance(me.token_balance);
       setDisplayName(me.name && me.name.trim() ? me.name.trim() : null);
     }).catch(() => {});
   }, [user]);
 
+  useEffect(() => {
+    refreshSessions();
+  }, [refreshSessions]);
+
   // Focus input on mount
   useEffect(() => {
     chat.inputRef.current?.focus();
   }, []);
+
+  const handleOpenSession = (id: number) => {
+    chatApi.getChatSession(id).then((detail) => {
+      setSessionId(detail.id);
+      chat.setMessages(detail.messages.map(apiMessageToChatMessageWithMeta));
+    }).catch(() => {});
+  };
+
+  const handleDeleteSession = (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!user) return;
+    chatApi.deleteChatSession(id).then(() => {
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+      if (sessionId === id) {
+        setSessionId(null);
+        chat.clearChat();
+      }
+    }).catch(() => {});
+  };
 
   const greeting = user
     ? displayName ?? (user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1))
@@ -69,9 +128,8 @@ export default function ChatPage() {
             )}
             <button
               type="button"
-              onClick={chat.clearChat}
-              disabled={chat.messages.length === 0 && !chat.error}
-              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-700 border border-gray-600 hover:border-gray-500 disabled:opacity-40 disabled:cursor-default"
+              onClick={() => { setSessionId(null); chat.clearChat(); }}
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-700 border border-gray-600 hover:border-gray-500"
               title="Start a new chat"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -83,26 +141,103 @@ export default function ChatPage() {
         )}
       </div>
 
-      {/* Centered content wrapper for the messages + input */}
-      <div className="flex flex-col flex-1 min-h-0">
-        <div className="flex flex-col flex-1 min-h-0 max-w-3xl w-full mx-auto px-4">
-          <ChatView
-            chat={chat}
-            isAuthenticated={!!user}
-            suggestedQuestions={SUGGESTED_QUESTIONS}
-            welcomeHeading={
-              greeting
-                ? `Hi ${greeting}!\nAsk me anything about the market`
-                : undefined
-            }
-            welcomeSubtext="I have access to live prices, AI reports, fundamentals, news, technicals, insider activity & your watchlist."
-            inputPlaceholder={user ? 'Ask about any stock…' : 'Sign in to start chatting…'}
-            inputFooter={
-              <p className="text-xs text-slate-500 text-center py-1.5">
-                AI can make mistakes — always verify important information · Not financial advice
-              </p>
-            }
-          />
+      <div className="flex flex-1 min-h-0">
+        {/* Session list sidebar (authenticated only), collapsible */}
+        {user && (
+          <aside
+            className={`shrink-0 border-r border-gray-700 bg-gray-800/50 flex flex-col overflow-hidden transition-[width] duration-200 ${
+              historyCollapsed ? 'w-12' : 'w-56'
+            }`}
+          >
+            <div className="flex items-center border-b border-gray-700 min-h-[40px]">
+              {historyCollapsed ? (
+                <button
+                  type="button"
+                  onClick={() => setHistoryCollapsed(false)}
+                  title="Expand chat history"
+                  className="w-full flex items-center justify-center py-2 text-slate-400 hover:text-white hover:bg-gray-700/50 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                </button>
+              ) : (
+                <>
+                  <div className="flex-1 px-3 py-2 min-w-0">
+                    <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide truncate">Chat history</h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryCollapsed(true)}
+                    title="Collapse chat history"
+                    className="shrink-0 w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white hover:bg-gray-700/50 transition-colors"
+                    aria-label="Collapse chat history"
+                  >
+                    <svg className="w-4 h-4 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </>
+              )}
+            </div>
+            {!historyCollapsed && (
+              <ul className="flex-1 overflow-y-auto py-1">
+                {sessions.map((s) => (
+                  <li key={s.id}>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleOpenSession(s.id)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleOpenSession(s.id)}
+                      className={`group flex items-center gap-2 px-3 py-2 text-left cursor-pointer border-l-2 transition-colors ${
+                        sessionId === s.id
+                          ? 'border-blue-500 bg-gray-700/60 text-white'
+                          : 'border-transparent hover:bg-gray-700/40 text-slate-300'
+                      }`}
+                    >
+                      <span className="flex-1 min-w-0 truncate text-sm" title={s.title ?? undefined}>
+                        {s.title || 'New chat'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteSession(s.id, e)}
+                        className="shrink-0 w-6 h-6 flex items-center justify-center rounded text-slate-500 hover:text-red-400 hover:bg-gray-600/60 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Delete chat"
+                        aria-label="Delete chat"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </aside>
+        )}
+
+        {/* Centered content wrapper for the messages + input */}
+        <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex flex-col flex-1 min-h-0 max-w-3xl w-full mx-auto px-4">
+            <ChatView
+              chat={chat}
+              isAuthenticated={!!user}
+              suggestedQuestions={SUGGESTED_QUESTIONS}
+              welcomeHeading={
+                greeting
+                  ? `Hi ${greeting}!\nAsk me anything about the market`
+                  : undefined
+              }
+              welcomeSubtext="I have access to live prices, AI reports, fundamentals, news, technicals, insider activity & your watchlist."
+              inputPlaceholder={user ? 'Ask about any stock…' : 'Sign in to start chatting…'}
+              inputFooter={
+                <p className="text-xs text-slate-500 text-center py-1.5">
+                  AI can make mistakes — always verify important information · Not financial advice
+                </p>
+              }
+            />
+          </div>
         </div>
       </div>
     </div>

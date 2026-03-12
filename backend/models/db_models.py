@@ -88,6 +88,47 @@ class Subscription(Base):
     )
 
 
+class ChatSession(Base):
+    """One chat session per user; holds many messages."""
+    __tablename__ = "chat_sessions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(255), nullable=True)  # e.g. first user message snippet
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan", order_by="ChatMessage.sort_order")
+
+    __table_args__ = (
+        Index("idx_chat_sessions_user_updated", "user_id", "updated_at"),
+    )
+
+
+class ChatMessage(Base):
+    """One message in a chat session; assistant messages store token/tool metadata as JSON."""
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(Integer, ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String(32), nullable=False)  # user | assistant
+    content = Column(Text, nullable=False, default="")
+    sort_order = Column(Integer, nullable=False, default=0)
+    tokens_used = Column(Integer, nullable=True)
+    tools_called = Column(Integer, nullable=True)
+    tool_calls_json = Column(Text, nullable=True)  # JSON array of {name, input, output}
+    skill_events_json = Column(Text, nullable=True)
+    charts_json = Column(Text, nullable=True)
+    follow_up_questions_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    session = relationship("ChatSession", back_populates="messages")
+
+    __table_args__ = (
+        Index("idx_chat_messages_session_id", "session_id"),
+    )
+
+
 class ApiKey(Base):
     """API keys for programmatic access to FlowDeck."""
     __tablename__ = "api_keys"
