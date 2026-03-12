@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import DashboardTickerSidebar from '../components/DashboardTickerSidebar';
 import StockDetailPanel from '../components/TickerDetailPanel';
 import CopilotChatPanel from '../components/CopilotChatPanel';
+import PageHeader from '../components/PageHeader';
 import { useSubscribedStocks } from '../hooks/useSubscribedStocks';
 import { useAuth } from '../contexts/AuthContext';
 import { COPILOT_NAME } from '../config';
@@ -118,16 +119,14 @@ export default function CopilotPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
 
-      {/* ── Page header bar ── */}
-      <div className="shrink-0 border-b border-gray-700 bg-gray-800/80 px-4 py-2 flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <PageHeader
+        title={`${COPILOT_NAME} – Trading assistant`}
+        icon={
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
-          <span className="text-sm font-semibold text-white">{COPILOT_NAME} - Trading assistant</span>
-        </div>
-        <div className="ml-auto" />
-      </div>
+        }
+      />
 
       {/* ── Three-column layout (desktop) ── */}
       <div className="flex flex-1 min-h-0 overflow-hidden">

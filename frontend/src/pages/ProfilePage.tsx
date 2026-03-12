@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { profileApi, type MeProfile } from '../services/authApi';
 import { subscriptionApi, type Subscription } from '../services/subscriptionApi';
+import PageHeader from '../components/PageHeader';
 import TokenPurchase from '../components/TokenPurchase';
 import UserStatsSection from '../components/UserStatsSection';
 import ApiKeyManagement from '../components/ApiKeyManagement';
@@ -476,12 +477,19 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen px-4 py-6 sm:p-6 lg:p-8">
-      <div className="max-w-layout mx-auto min-w-0 w-full">
-        <h1 className="text-2xl font-bold text-white mb-8">Profile</h1>
-
-        {/* Tab Navigation */}
-        <div className="flex gap-1 mb-8 border-b border-gray-700">
+    <div className="flex flex-col min-h-screen">
+      <PageHeader
+        title="Profile"
+        icon={
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+        }
+      />
+      <div className="flex-1 px-4 py-6 sm:p-6 lg:p-8">
+        <div className="max-w-layout mx-auto min-w-0 w-full">
+          {/* Tab Navigation */}
+          <div className="flex gap-1 mb-8 border-b border-gray-700">
           <button
             onClick={() => {
               setActiveTab('overview');
@@ -523,8 +531,9 @@ export default function ProfilePage() {
           </button>
         </div>
 
-        {/* Tab Content */}
-        {renderTabContent()}
+          {/* Tab Content */}
+          {renderTabContent()}
+        </div>
       </div>
     </div>
   );
