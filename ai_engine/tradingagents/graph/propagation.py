@@ -47,6 +47,7 @@ class Propagator:
             "news_score": None,
             "technical_report": "",
             "technical_score": None,
+            "report_usage": {},
         }
 
     def get_graph_args(self) -> Dict[str, Any]:

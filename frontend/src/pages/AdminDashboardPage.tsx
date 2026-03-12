@@ -1030,16 +1030,19 @@ export default function AdminDashboardPage() {
               <h2 className="text-lg font-semibold text-white mb-4">Recent analyses ({analysesTotal})</h2>
               <div className="overflow-x-auto overflow-y-auto max-h-96 rounded-lg border border-gray-700 bg-gray-800/80">
                 <table className="w-full min-w-[500px] text-left text-sm">
-                  <thead className="sticky top-0 bg-gray-800 z-10">
-                    <tr className="border-b border-gray-700">
-                      <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
-                      <th className="px-4 py-3 text-gray-400 font-medium">Run ID</th>
-                      <th className="px-4 py-3 text-gray-400 font-medium">Creator</th>
-                      <th className="px-4 py-3 text-gray-400 font-medium">Earned tokens</th>
-                      <th className="px-4 py-3 text-gray-400 font-medium">Created</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                    <thead className="sticky top-0 bg-gray-800 z-10">
+                      <tr className="border-b border-gray-700">
+                        <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
+                        <th className="px-4 py-3 text-gray-400 font-medium">Run ID</th>
+                        <th className="px-4 py-3 text-gray-400 font-medium">Creator</th>
+                        <th className="px-4 py-3 text-gray-400 font-medium">Earned tokens</th>
+                        <th className="px-4 py-3 text-gray-400 font-medium">In tokens</th>
+                        <th className="px-4 py-3 text-gray-400 font-medium">Out tokens</th>
+                        <th className="px-4 py-3 text-gray-400 font-medium">LLM cost</th>
+                        <th className="px-4 py-3 text-gray-400 font-medium">Created</th>
+                      </tr>
+                    </thead>
+                    <tbody>
                     {analyses.map((a) => (
                       <tr key={a.id} className="border-b border-gray-700/50">
                         <td className="px-4 py-3">
@@ -1053,6 +1056,21 @@ export default function AdminDashboardPage() {
                         <td className="px-4 py-3 text-gray-300 font-mono text-xs">{a.id}</td>
                         <td className="px-4 py-3 text-gray-300">{a.creator_email}</td>
                         <td className="px-4 py-3 text-white">{a.earned_tokens}</td>
+                        <td className="px-4 py-3 text-gray-400 tabular-nums">
+                          {a.input_tokens != null && a.input_tokens > 0
+                            ? a.input_tokens.toLocaleString()
+                            : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-gray-400 tabular-nums">
+                          {a.output_tokens != null && a.output_tokens > 0
+                            ? a.output_tokens.toLocaleString()
+                            : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-gray-400 tabular-nums">
+                          {a.cost_usd != null && a.cost_usd > 0
+                            ? `$${a.cost_usd.toFixed(4)}`
+                            : '—'}
+                        </td>
                         <td className="px-4 py-3 text-gray-400">{formatDate(a.created_at)}</td>
                       </tr>
                     ))}
@@ -1215,6 +1233,9 @@ export default function AdminDashboardPage() {
                         <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
                         <th className="px-4 py-3 text-gray-400 font-medium">Run ID</th>
                         <th className="px-4 py-3 text-gray-400 font-medium">Type</th>
+                        <th className="px-4 py-3 text-gray-400 font-medium">In tokens</th>
+                        <th className="px-4 py-3 text-gray-400 font-medium">Out tokens</th>
+                        <th className="px-4 py-3 text-gray-400 font-medium">Cost</th>
                         <th className="px-4 py-3 text-gray-400 font-medium">Created</th>
                       </tr>
                     </thead>
@@ -1231,6 +1252,15 @@ export default function AdminDashboardPage() {
                           </td>
                           <td className="px-4 py-3 text-gray-300 font-mono text-xs">{r.analysis_run_id}</td>
                           <td className="px-4 py-3 text-gray-300">{r.report_type}</td>
+                          <td className="px-4 py-3 text-gray-400 tabular-nums">
+                            {r.input_tokens != null ? r.input_tokens.toLocaleString() : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-gray-400 tabular-nums">
+                            {r.output_tokens != null ? r.output_tokens.toLocaleString() : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-gray-400 tabular-nums">
+                            {r.cost_usd != null ? `$${r.cost_usd.toFixed(4)}` : '—'}
+                          </td>
                           <td className="px-4 py-3 text-gray-400">{formatDate(r.created_at)}</td>
                         </tr>
                       ))}

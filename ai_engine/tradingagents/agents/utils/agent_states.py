@@ -1,4 +1,4 @@
-from typing import Annotated, List, Sequence
+from typing import Annotated, Any, Dict, List, Sequence
 from datetime import date, timedelta, datetime
 from typing_extensions import TypedDict, Optional
 from langchain_core.messages import AnyMessage
@@ -6,6 +6,14 @@ from langchain_openai import ChatOpenAI
 from .. import *  # agents package
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import END, StateGraph, START, MessagesState, add_messages
+
+
+def _merge_report_usage(current: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
+    """Reducer: merge report_usage dicts so each node adds its report key."""
+    base = dict(current) if current else {}
+    upd = dict(update) if update else {}
+    base.update(upd)
+    return base
 
 
 # Researcher team state
@@ -96,3 +104,6 @@ class AgentState(MessagesState):
     neutral_summary: Annotated[Optional[List[str]], "Risk Manager summary of neutral analyst key arguments"]
     risk_score: Annotated[Optional[int], "Risk score from 1-10 indicating confidence and strength of the risk assessment and final decision"]
     final_report_key_takeaways: Annotated[Optional[List[str]], "Structured key takeaways from the final trade decision report"]
+
+    # LLM usage per report (input_tokens, output_tokens, cost_usd) for DB metadata; merged by report key
+    report_usage: Annotated[Dict[str, Any], _merge_report_usage]

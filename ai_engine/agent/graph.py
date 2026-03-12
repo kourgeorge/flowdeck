@@ -130,15 +130,20 @@ Respond ONLY with valid JSON:
 """
 
 
-def _analyze_task_complexity(llm: Any, user_message: str) -> Dict[str, Any]:
+def _analyze_task_complexity(
+    llm: Any, user_message: str, usage_list: Optional[List[Any]] = None
+) -> Dict[str, Any]:
     """
     Use LLM to classify task complexity.
-    
+
     Returns dict with: complexity, reasoning, estimated_steps, requires_planning
     """
     try:
+        from ai_engine.llm_usage import record_usage_from_message
+
         prompt = _TASK_COMPLEXITY_PROMPT.format(user_message=user_message)
         response = llm.invoke([SystemMessage(content=prompt)])
+        record_usage_from_message(response, llm, usage_list)
         content = response.content if isinstance(response.content, str) else str(response.content)
         
         # Strip markdown code fences if present
@@ -162,24 +167,27 @@ def _analyze_task_complexity(llm: Any, user_message: str) -> Dict[str, Any]:
         }
 
 
-def _create_task_plan(llm: Any, user_message: str, state: AgentState) -> Dict[str, Any]:
+def _create_task_plan(
+    llm: Any, user_message: str, state: AgentState, usage_list: Optional[List[Any]] = None
+) -> Dict[str, Any]:
     """
     Create a detailed execution plan for a long-horizon task.
-    
+
     Returns dict with: todos, explanation, estimated_duration
     """
     from ai_engine.agent.skills import SKILL_DESCRIPTIONS
     from ai_engine.agent.lc_tools import get_all_lc_tools
-    
+    from ai_engine.llm_usage import record_usage_from_message
+
     # Get tool descriptions
     user_id = state.get("user_id")
     db = state.get("db")
     tools = get_all_lc_tools(user_id=user_id, db=db)
     tool_descriptions = "\n".join([f"- {t.name}: {t.description}" for t in tools[:15]])  # Limit to avoid token overflow
-    
+
     # Get skill descriptions
     skill_descriptions = "\n".join([f"- {name}: {desc}" for name, desc in SKILL_DESCRIPTIONS.items()])
-    
+
     try:
         prompt = _PLAN_CREATION_PROMPT.format(
             user_message=user_message,
@@ -187,6 +195,7 @@ def _create_task_plan(llm: Any, user_message: str, state: AgentState) -> Dict[st
             skill_descriptions=skill_descriptions
         )
         response = llm.invoke([SystemMessage(content=prompt)])
+        record_usage_from_message(response, llm, usage_list)
         content = response.content if isinstance(response.content, str) else str(response.content)
         
         # Strip markdown code fences
@@ -274,10 +283,12 @@ def planning_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
             "planning_phase": "executing"
         }
     
+    usage_list = (config or {}).get("configurable", {}).get("llm_usage")
+
     # Analyze task complexity
-    analysis = _analyze_task_complexity(llm, last_user_msg)
+    analysis = _analyze_task_complexity(llm, last_user_msg, usage_list)
     complexity = analysis.get("complexity", "simple")
-    
+
     if complexity == "simple":
         logger.info("planning_node | simple task, skipping planning")
         return {
@@ -295,7 +306,7 @@ def planning_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
     
     # Long-horizon task: create a plan
     logger.info("planning_node | long-horizon task, creating plan")
-    plan = _create_task_plan(llm, last_user_msg, state)
+    plan = _create_task_plan(llm, last_user_msg, state, usage_list)
     
     if not plan.get("todos"):
         # Plan creation failed, fall back to simple execution
@@ -471,12 +482,16 @@ def _build_skill_list_text() -> str:
     return "\n".join(lines)
 
 
-def _llm_select_skill(llm: Any, user_message: str) -> tuple[Optional[str], dict]:
+def _llm_select_skill(
+    llm: Any, user_message: str, usage_list: Optional[List[Any]] = None
+) -> tuple[Optional[str], dict]:
     """
     Ask the LLM to select a skill and extract arguments from the user message.
 
     Returns (skill_name_or_None, args_dict).
     """
+    from ai_engine.llm_usage import record_usage_from_message
+
     skill_list = _build_skill_list_text()
     system_prompt = _SKILL_ROUTER_SYSTEM.format(skill_list=skill_list)
 
@@ -485,6 +500,7 @@ def _llm_select_skill(llm: Any, user_message: str) -> tuple[Optional[str], dict]
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_message),
         ])
+        record_usage_from_message(response, llm, usage_list)
         content = response.content if isinstance(response.content, str) else str(response.content)
 
         # Strip markdown code fences if present
@@ -541,7 +557,8 @@ def skill_router_node(state: AgentState, config: RunnableConfig) -> Dict[str, An
         logger.warning("skill_router | no LLM in config, skipping skill routing")
         return {"skill_used": None, "skill_args": {}}
 
-    skill_name, skill_args = _llm_select_skill(llm, last_user)
+    usage_list = (config or {}).get("configurable", {}).get("llm_usage")
+    skill_name, skill_args = _llm_select_skill(llm, last_user, usage_list)
     return {"skill_used": skill_name, "skill_args": skill_args}
 
 
@@ -700,7 +717,8 @@ def llm_synthesize_node(state: AgentState, config: RunnableConfig) -> Dict[str, 
         ]
 
     token_queue = cfg.get("token_queue")
-    response = _invoke_llm_with_streaming(llm, messages, [], token_queue=token_queue)
+    usage_list = cfg.get("llm_usage")
+    response = _invoke_llm_with_streaming(llm, messages, [], token_queue=token_queue, usage_list=usage_list)
     return {"messages": [response]}
 
 
@@ -804,11 +822,15 @@ def _invoke_llm_with_streaming(
     messages: List[Any],
     tools: List[Any],
     token_queue: Optional[queue.Queue] = None,
+    usage_list: Optional[List[Any]] = None,
 ) -> AIMessage:
     """
     Invoke the LLM; if token_queue is set, stream tokens into it and accumulate the full response.
+    Records token usage and cost into usage_list when provided.
     Returns the final AIMessage for graph state.
     """
+    from ai_engine.llm_usage import record_usage_from_message
+
     invoke_messages = list(messages)
     if token_queue is not None:
         try:
@@ -839,11 +861,13 @@ def _invoke_llm_with_streaming(
                 else:
                     content_str = str(mc or "")
             tool_calls = getattr(merged, "tool_calls", None) or []
-            return AIMessage(
+            result = AIMessage(
                 content=content_str,
                 tool_calls=tool_calls,
                 additional_kwargs=getattr(merged, "additional_kwargs", {}),
             )
+            record_usage_from_message(merged, llm, usage_list)
+            return result
         except Exception as exc:
             logger.warning("LLM stream failed, using invoke fallback: %s", exc)
             if tools:
@@ -853,6 +877,7 @@ def _invoke_llm_with_streaming(
                     response = llm.invoke(invoke_messages)
             else:
                 response = llm.invoke(invoke_messages)
+            record_usage_from_message(response, llm, usage_list)
             if token_queue:
                 content = response.content if isinstance(response.content, str) else str(response.content or "")
                 if content and not getattr(response, "tool_calls", None):
@@ -862,10 +887,13 @@ def _invoke_llm_with_streaming(
     # Non-streaming path
     if tools:
         try:
-            return llm.bind_tools(tools).invoke(invoke_messages)
+            response = llm.bind_tools(tools).invoke(invoke_messages)
         except NotImplementedError:
-            return llm.invoke(invoke_messages)
-    return llm.invoke(invoke_messages)
+            response = llm.invoke(invoke_messages)
+    else:
+        response = llm.invoke(invoke_messages)
+    record_usage_from_message(response, llm, usage_list)
+    return response
 
 
 def _call_model_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
@@ -874,6 +902,7 @@ def _call_model_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any
     llm = cfg.get("llm")
     tools = cfg.get("tools", [])
     token_queue = cfg.get("token_queue")
+    usage_list = cfg.get("llm_usage")
 
     if llm is None:
         raise RuntimeError("_call_model_node: 'llm' not found in RunnableConfig configurable")
@@ -886,9 +915,9 @@ def _call_model_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any
 
     if tool_calls_made >= max_tool_calls:
         logger.warning("_call_model_node | max_tool_calls=%d reached, forcing final answer", max_tool_calls)
-        response = _invoke_llm_with_streaming(llm, messages, [], token_queue=token_queue)
+        response = _invoke_llm_with_streaming(llm, messages, [], token_queue=token_queue, usage_list=usage_list)
     else:
-        response = _invoke_llm_with_streaming(llm, messages, tools or [], token_queue=token_queue)
+        response = _invoke_llm_with_streaming(llm, messages, tools or [], token_queue=token_queue, usage_list=usage_list)
 
     return {"messages": [response]}
 
@@ -958,6 +987,7 @@ class FlowDeckAgent:
                     db=db,
                     max_tool_calls=max_tool_calls,
                 ),
+                "llm_usage": [],
             }
         }
 
@@ -1058,11 +1088,17 @@ class FlowDeckAgent:
             if isinstance(msg, ToolMessage)
         )
 
+        from ai_engine.llm_usage import sum_usage
+        usage_records = config.get("configurable", {}).get("llm_usage", [])
+        usage_summary = sum_usage(usage_records) if usage_records else {}
+        total_tokens = usage_summary.get("total_tokens", 0)
+
         return {
             "reply": reply,
-            "tokens_used": max(1, 1 + tools_called),
+            "tokens_used": max(1, total_tokens) if total_tokens else max(1, 1 + tools_called),
             "tools_called": tools_called,
             "skill_used": final_state.get("skill_used"),
+            "llm_usage": usage_summary,
         }
 
     def stream(
@@ -1212,7 +1248,12 @@ class FlowDeckAgent:
                                 yield f"data: {json.dumps({'type': 'thinking', 'content': f'Calling {names_str}...'})}\n\n"
 
             if not got_error:
-                yield f"data: {json.dumps({'type': 'done', 'tokens_used': max(1, 1 + tools_called), 'tools_called': tools_called, 'skill_used': skill_used})}\n\n"
+                from ai_engine.llm_usage import sum_usage
+                usage_records = config.get("configurable", {}).get("llm_usage", [])
+                usage_summary = sum_usage(usage_records) if usage_records else {}
+                total_tokens = usage_summary.get("total_tokens", 0)
+                tokens_used = max(1, total_tokens) if total_tokens else max(1, 1 + tools_called)
+                yield f"data: {json.dumps({'type': 'done', 'tokens_used': tokens_used, 'tools_called': tools_called, 'skill_used': skill_used, 'llm_usage': usage_summary})}\n\n"
 
         except Exception as exc:
             logger.exception("FlowDeckAgent.stream | error | user_id=%s | %s", user_id, exc)

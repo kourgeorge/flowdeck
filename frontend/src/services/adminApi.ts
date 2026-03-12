@@ -40,6 +40,10 @@ export interface AdminReportItem {
   analysis_run_id: number;
   report_type: string;
   created_at: string;
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
+  cost_usd?: number;
 }
 
 export interface AdminAnalysisItem {
@@ -49,6 +53,10 @@ export interface AdminAnalysisItem {
   creator_email: string;
   earned_tokens: number;
   created_at: string;
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
+  cost_usd?: number;
 }
 
 export interface AdminSubscriptionItem {

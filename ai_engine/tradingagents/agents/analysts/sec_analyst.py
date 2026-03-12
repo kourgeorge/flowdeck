@@ -3,6 +3,7 @@
 from pydantic import BaseModel, Field
 
 from ..utils.edgar_tools import get_edgar_filing_content
+from .helpers import _capture_usage
 from .prompts import build_sec_analyst_prompt
 
 
@@ -71,10 +72,14 @@ def create_sec_analyst(llm):
                 report = result.content if hasattr(result, "content") else str(result)
                 sec_score = None
 
-        return {
+        usage_meta = _capture_usage(result, llm)
+        out = {
             "messages": [result],
             "sec_report": report,
             "sec_score": sec_score,
         }
+        if usage_meta:
+            out["report_usage"] = {"sec_report": usage_meta}
+        return out
 
     return sec_analyst_node

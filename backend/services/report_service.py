@@ -69,6 +69,10 @@ def _report_row_to_dict(row: Report, date: str) -> Dict[str, Any]:
         "bull_case_return_pct": meta.get("bull_case_return_pct"),
         "confidence": meta.get("confidence"),
         "models_used": meta.get("models_used"),
+        "input_tokens": meta.get("input_tokens"),
+        "output_tokens": meta.get("output_tokens"),
+        "total_tokens": meta.get("total_tokens"),
+        "cost_usd": meta.get("cost_usd"),
     }
     if meta.get("bull_viewpoint") is not None:
         out["bull_viewpoint"] = meta["bull_viewpoint"]

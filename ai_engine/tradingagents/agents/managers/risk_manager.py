@@ -2,6 +2,8 @@ from typing import List, Literal
 from statistics import pstdev
 from pydantic import BaseModel, Field
 
+from ..analysts.helpers import _UsageCaptureCallback, _capture_usage
+
 
 class RiskManagerOutput(BaseModel):
     """Structured output for risk manager: risk analysis text, risk score, recommendation, key takeaways, analyst summaries."""
@@ -151,10 +153,16 @@ Focus on actionable insights and continuous improvement. Build on past lessons, 
         safe_summary = []
         neutral_summary = []
         recommendation = None
+        usage_meta = None
+        usage_cb = _UsageCaptureCallback()
         try:
             structured_llm = llm.with_structured_output(RiskManagerOutput)
-            structured_response = structured_llm.invoke(prompt)
+            structured_response = structured_llm.invoke(
+                prompt, config={"callbacks": [usage_cb]}
+            )
             final_trade_decision = structured_response.final_trade_decision
+            if usage_cb.last_message is not None:
+                usage_meta = _capture_usage(usage_cb.last_message, llm)
             recommendation = structured_response.recommendation
             risk_score = structured_response.risk_score
             key_takeaways = list(getattr(structured_response, "key_takeaways", []) or [])[:5]
@@ -167,6 +175,7 @@ Focus on actionable insights and continuous improvement. Build on past lessons, 
             response = Response(final_trade_decision)
         except Exception:
             response = llm.invoke(prompt)
+            usage_meta = _capture_usage(response, llm)
             final_trade_decision = response.content
             recommendation = None
             risk_score = None
@@ -184,7 +193,7 @@ Focus on actionable insights and continuous improvement. Build on past lessons, 
             "count": risk_debate_state["count"],
         }
 
-        return {
+        out = {
             "risk_debate_state": new_risk_debate_state,
             "final_trade_decision": final_trade_decision,
             "recommendation": recommendation,
@@ -194,5 +203,8 @@ Focus on actionable insights and continuous improvement. Build on past lessons, 
             "safe_summary": safe_summary,
             "neutral_summary": neutral_summary,
         }
+        if usage_meta:
+            out["report_usage"] = {"final_trade_decision": usage_meta}
+        return out
 
     return risk_manager_node

@@ -354,11 +354,16 @@ class AnalysisService:
                         analysis_run_id, key, e,
                     )
 
-            def _write_report(key, content, score, label, **extra):
+            def _write_report(key, content, score, label, llm_usage=None, **extra):
                 try:
                     data = _build_report_json(content, score, label, _takeaways(content), **extra)
                     meta = data.get("metadata", {})
                     meta.update({k: v for k, v in data.items() if k not in ("metadata", "content")})
+                    if llm_usage:
+                        meta["input_tokens"] = llm_usage.get("input_tokens")
+                        meta["output_tokens"] = llm_usage.get("output_tokens")
+                        meta["total_tokens"] = llm_usage.get("total_tokens")
+                        meta["cost_usd"] = llm_usage.get("cost_usd")
                     save_report(
                         ticker=analysis_info["ticker"],
                         report_type=key,
@@ -456,7 +461,8 @@ class AnalysisService:
                         analysis_info["reports"][key] = c
                         analysis_info["agent_statuses"][agent] = "completed"
                         self._persist_analysis_status(analysis_run_id)
-                        _write_report(key, c, chunk.get(score_key), label)
+                        report_usage = chunk.get("report_usage") or {}
+                        _write_report(key, c, chunk.get(score_key), label, llm_usage=report_usage.get(key))
                         _progress_log(f"{agent} completed → {key} saved")
                         if last_analyst_report_key and key == last_analyst_report_key:
                             analysis_info["agent_statuses"]["Bull Researcher"] = "in_progress"
@@ -488,6 +494,12 @@ class AnalysisService:
                         bull_case_return_pct=chunk.get("bull_case_return_pct"))
                     data = {**meta, "bull_viewpoint": bull, "bear_viewpoint": bear}
                     inner = meta.get("metadata", meta)
+                    usage = (chunk.get("report_usage") or {}).get("investment_plan")
+                    if usage:
+                        inner["input_tokens"] = usage.get("input_tokens")
+                        inner["output_tokens"] = usage.get("output_tokens")
+                        inner["total_tokens"] = usage.get("total_tokens")
+                        inner["cost_usd"] = usage.get("cost_usd")
                     save_report(
                         ticker=analysis_info["ticker"],
                         report_type="investment_plan",
@@ -506,11 +518,13 @@ class AnalysisService:
                     if tps:
                         analysis_info["reports"]["trader_tps_plan"] = tps
                     analysis_info["agent_statuses"]["Trader"] = "completed"
+                    report_usage = chunk.get("report_usage") or {}
                     _write_report(
                         "trader_investment_plan",
                         c,
                         None,
                         "Trader Plan",
+                        llm_usage=report_usage.get("trader_investment_plan"),
                         recommendation=chunk.get("trader_recommendation"),
                         tps_plan=tps or None,
                     )
@@ -550,6 +564,12 @@ class AnalysisService:
                         confidence=(rscore / 10.0) if rscore is not None else None)
                     data = {**meta, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral}
                     inner = meta.get("metadata", meta)
+                    usage = (chunk.get("report_usage") or {}).get("final_trade_decision")
+                    if usage:
+                        inner["input_tokens"] = usage.get("input_tokens")
+                        inner["output_tokens"] = usage.get("output_tokens")
+                        inner["total_tokens"] = usage.get("total_tokens")
+                        inner["cost_usd"] = usage.get("cost_usd")
                     save_report(
                         ticker=analysis_info["ticker"],
                         report_type="final_trade_decision",
@@ -588,7 +608,8 @@ class AnalysisService:
                     if not content:
                         continue
                     try:
-                        _write_report(report_key, content, last_chunk.get(score_key), label)
+                        report_usage = last_chunk.get("report_usage") or {}
+                        _write_report(report_key, content, last_chunk.get(score_key), label, llm_usage=report_usage.get(report_key))
                         analysis_info["reports"][report_key] = content
                         analysis_info["agent_statuses"][agent] = "completed"
                         _progress_log(f"{agent} report saved (from final state)")

@@ -9,7 +9,7 @@ from ..utils.agent_utils import (
     get_indicators,
     get_analysts_recommendation,
 )
-from .helpers import is_tool_result_message, try_structured_response
+from .helpers import _capture_usage, is_tool_result_message, try_structured_response
 from .prompts import build_market_analyst_prompt
 
 logger = logging.getLogger(__name__)
@@ -50,19 +50,23 @@ def create_market_analyst(llm):
         # Check if last message is a tool result (indicating we're ready for final response)
         last_message = state_messages[-1] if state_messages else None
         if is_tool_result_message(last_message):
-            report, market_score = try_structured_response(
+            report, market_score, usage_meta = try_structured_response(
                 structured_chain,
                 state_messages,
-                 score_field="market_score",
+                score_field="market_score",
                 logger=logger,
                 agent_name="Market analyst",
+                llm=llm,
             )
             if report is not None:
-                return {
+                out = {
                     "messages": [AIMessage(content=report)],
                     "market_report": report,
                     "market_score": market_score,
                 }
+                if usage_meta:
+                    out["report_usage"] = {"market_report": usage_meta}
+                return out
 
             # Fallback: produce a final narrative response without tool calling.
             fallback_result = (prompt | llm).invoke(state_messages)
@@ -71,11 +75,15 @@ def create_market_analyst(llm):
                 if hasattr(fallback_result, "content")
                 else str(fallback_result)
             )
-            return {
+            usage_meta = _capture_usage(fallback_result, llm)
+            out = {
                 "messages": [fallback_result],
                 "market_report": fallback_report,
                 "market_score": None,
             }
+            if usage_meta:
+                out["report_usage"] = {"market_report": usage_meta}
+            return out
         
         # Default: use tools (for initial calls or if structured output failed)
         chain_with_tools = prompt | llm.bind_tools(tools)
@@ -85,27 +93,35 @@ def create_market_analyst(llm):
         # Try structured output parsing
         if not getattr(result, "tool_calls", []):
             messages_with_result = [*state_messages, result]
-            report, market_score = try_structured_response(
+            report, market_score, usage_meta = try_structured_response(
                 structured_chain,
                 messages_with_result,
                 score_field="market_score",
                 logger=logger,
                 agent_name="Market analyst",
+                llm=llm,
             )
             if report is not None:
-                return {
+                out = {
                     "messages": [AIMessage(content=report)],
                     "market_report": report,
                     "market_score": market_score,
                 }
+                if usage_meta:
+                    out["report_usage"] = {"market_report": usage_meta}
+                return out
 
             report = result.content if hasattr(result, "content") else str(result)
-            return {
+            usage_meta = _capture_usage(result, llm)
+            out = {
                 "messages": [result],
                 "market_report": report,
                 "market_score": None,
             }
-       
+            if usage_meta:
+                out["report_usage"] = {"market_report": usage_meta}
+            return out
+
         return {
             "messages": [result],
             "market_report": "",

@@ -46,6 +46,7 @@ class ChatResponse(BaseModel):
     balance: int
     follow_up_questions: Optional[List[str]] = None
     session_id: Optional[int] = None  # set when backend created a new session for this turn
+    llm_usage: Optional[Dict[str, Any]] = None  # input_tokens, output_tokens, cost_usd, per_call
 
 
 # --- Session list/detail schemas ---
@@ -314,6 +315,7 @@ async def chat(
         balance=new_balance,
         follow_up_questions=follow_up_questions,
         session_id=persisted_session_id,
+        llm_usage=result.get("llm_usage"),
     )
 
 

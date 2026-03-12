@@ -198,11 +198,16 @@ def main() -> None:
         meta.update({k: v for k, v in extra.items() if v is not None})
         return {"metadata": meta, "content": content or ""}
 
-    def _write_report(key, content, score, label, **extra):
+    def _write_report(key, content, score, label, llm_usage=None, **extra):
         try:
             data = _build_report_json(content, score, label, _takeaways(content), **extra)
             meta = data.get("metadata", {})
             meta.update({k: v for k, v in data.items() if k not in ("metadata", "content")})
+            if llm_usage:
+                meta["input_tokens"] = llm_usage.get("input_tokens")
+                meta["output_tokens"] = llm_usage.get("output_tokens")
+                meta["total_tokens"] = llm_usage.get("total_tokens")
+                meta["cost_usd"] = llm_usage.get("cost_usd")
             save_report(
                 ticker=ticker,
                 report_type=key,
@@ -235,7 +240,7 @@ def main() -> None:
         try:
             init_agent_state = graph.propagator.create_initial_state(ticker, analysis_date)
             graph_args = graph.propagator.get_graph_args()
-            _progress_log(f"Analysis started ticker={ticker} run_id={run_id} analysts={analysts}")
+            _progress_log(f"Analysis started ticker={ticker} analysis_run_id={analysis_run_id} analysts={analysts}")
             analyst_to_report_key = {
                 "market": "market_report",
                 "social": "sentiment_report",
@@ -276,7 +281,8 @@ def main() -> None:
                         c = chunk[chunk_key]
                         reports[key] = c
                         agent_statuses[agent] = "completed"
-                        _write_report(key, c, chunk.get(score_key), label)
+                        report_usage = chunk.get("report_usage") or {}
+                        _write_report(key, c, chunk.get(score_key), label, llm_usage=report_usage.get(key))
                         _progress_log(f"{agent} completed → {key} saved")
                         if last_analyst_report_key and key == last_analyst_report_key:
                             agent_statuses["Bull Researcher"] = "in_progress"
@@ -302,6 +308,12 @@ def main() -> None:
                         bear_case_return_pct=chunk.get("bear_case_return_pct"),
                         bull_case_return_pct=chunk.get("bull_case_return_pct"),
                     )
+                    usage = (chunk.get("report_usage") or {}).get("investment_plan")
+                    if usage:
+                        meta["input_tokens"] = usage.get("input_tokens")
+                        meta["output_tokens"] = usage.get("output_tokens")
+                        meta["total_tokens"] = usage.get("total_tokens")
+                        meta["cost_usd"] = usage.get("cost_usd")
                     save_report(
                         ticker=ticker,
                         report_type="investment_plan",
@@ -315,11 +327,13 @@ def main() -> None:
                     c = chunk["trader_investment_plan"]
                     reports["trader_investment_plan"] = c
                     agent_statuses["Trader"] = "completed"
+                    report_usage = chunk.get("report_usage") or {}
                     _write_report(
                         "trader_investment_plan",
                         c,
                         None,
                         "Trader Plan",
+                        llm_usage=report_usage.get("trader_investment_plan"),
                         recommendation=chunk.get("trader_recommendation"),
                     )
                     agent_statuses["Risky Analyst"] = "in_progress"
@@ -350,6 +364,12 @@ def main() -> None:
                         recommendation=chunk.get("recommendation"),
                         confidence=(rscore / 10.0) if rscore is not None else None,
                     )
+                    usage = (chunk.get("report_usage") or {}).get("final_trade_decision")
+                    if usage:
+                        meta["input_tokens"] = usage.get("input_tokens")
+                        meta["output_tokens"] = usage.get("output_tokens")
+                        meta["total_tokens"] = usage.get("total_tokens")
+                        meta["cost_usd"] = usage.get("cost_usd")
                     save_report(
                         ticker=ticker,
                         report_type="final_trade_decision",

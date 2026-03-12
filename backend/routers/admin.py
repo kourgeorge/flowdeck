@@ -1,5 +1,6 @@
 """Admin-only API: stats, users, reports, analyses, subscriptions."""
 
+import json
 from json import JSONDecodeError, load
 from datetime import datetime, timedelta, timezone, date
 from pathlib import Path
@@ -189,6 +190,10 @@ class AdminReportItem(BaseModel):
     analysis_run_id: int
     report_type: str
     created_at: datetime
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    total_tokens: Optional[int] = None
+    cost_usd: Optional[float] = None
 
 
 class AdminReportsResponse(BaseModel):
@@ -203,6 +208,10 @@ class AdminAnalysisItem(BaseModel):
     creator_email: str
     earned_tokens: int
     created_at: datetime
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    total_tokens: Optional[int] = None
+    cost_usd: Optional[float] = None
 
 
 class AdminAnalysesResponse(BaseModel):
@@ -456,16 +465,27 @@ def get_admin_reports(
         .limit(limit)
         .all()
     )
-    items = [
-        AdminReportItem(
-            id=r.id,
-            ticker=r.ticker,
-            analysis_run_id=ar_id or 0,
-            report_type=r.report_type,
-            created_at=r.created_at,
+    items = []
+    for r, ar_id in rows_with_run:
+        meta = {}
+        if r.metadata_json:
+            try:
+                meta = json.loads(r.metadata_json) or {}
+            except Exception:
+                pass
+        items.append(
+            AdminReportItem(
+                id=r.id,
+                ticker=r.ticker,
+                analysis_run_id=ar_id or 0,
+                report_type=r.report_type,
+                created_at=r.created_at,
+                input_tokens=meta.get("input_tokens"),
+                output_tokens=meta.get("output_tokens"),
+                total_tokens=meta.get("total_tokens"),
+                cost_usd=meta.get("cost_usd"),
+            )
         )
-        for r, ar_id in rows_with_run
-    ]
     return AdminReportsResponse(reports=items, total=total)
 
 
@@ -475,7 +495,7 @@ def get_admin_analyses(
     db: Session = Depends(get_db),
     limit: int = Query(50, ge=1, le=200),
 ):
-    """Recent analysis runs with creator email."""
+    """Recent analysis runs with creator email and sum of report tokens/cost."""
     total = db.query(func.count(AnalysisRun.id)).scalar() or 0
     rows = (
         db.query(AnalysisRun, User.email)
@@ -484,17 +504,52 @@ def get_admin_analyses(
         .limit(limit)
         .all()
     )
-    items = [
-        AdminAnalysisItem(
-            id=ar.id,
-            ticker=ar.ticker,
-            creator_id=ar.creator_id,
-            creator_email=email or "",
-            earned_tokens=ar.earned_tokens,
-            created_at=ar.created_at,
+    ar_ids = [ar.id for ar, _ in rows]
+    sums_by_ar: dict[int, tuple[int, int, float]] = {}
+    if ar_ids:
+        reports = (
+            db.query(Report.analysis_run_id, Report.metadata_json)
+            .filter(Report.analysis_run_id.in_(ar_ids))
+            .all()
         )
-        for ar, email in rows
-    ]
+        for ar_id, meta_json in reports:
+            if ar_id is None:
+                continue
+            meta = {}
+            if meta_json:
+                try:
+                    meta = json.loads(meta_json) or {}
+                except Exception:
+                    pass
+            inp = meta.get("input_tokens")
+            out = meta.get("output_tokens")
+            cost = meta.get("cost_usd")
+            if cost is not None:
+                cost = float(cost)
+            prev_inp, prev_out, prev_cost = sums_by_ar.get(ar_id, (0, 0, 0.0))
+            sums_by_ar[ar_id] = (
+                prev_inp + (int(inp) if inp is not None else 0),
+                prev_out + (int(out) if out is not None else 0),
+                prev_cost + (cost if cost is not None else 0.0),
+            )
+    items = []
+    for ar, email in rows:
+        inp, out, cost = sums_by_ar.get(ar.id, (0, 0, 0.0))
+        tot = inp + out
+        items.append(
+            AdminAnalysisItem(
+                id=ar.id,
+                ticker=ar.ticker,
+                creator_id=ar.creator_id,
+                creator_email=email or "",
+                earned_tokens=ar.earned_tokens,
+                created_at=ar.created_at,
+                input_tokens=inp if inp else None,
+                output_tokens=out if out else None,
+                total_tokens=tot if tot else None,
+                cost_usd=round(cost, 6) if cost else None,
+            )
+        )
     return AdminAnalysesResponse(analyses=items, total=total)
 
 

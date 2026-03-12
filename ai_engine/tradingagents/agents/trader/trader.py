@@ -5,6 +5,8 @@ from typing import List, Literal, Optional, Union
 from langchain_core.messages import AIMessage, BaseMessage
 from pydantic import BaseModel, Field
 
+from ..analysts.helpers import _UsageCaptureCallback, _capture_usage
+
 
 # ---------------------------------------------------------------------------
 # Pydantic models mirroring TPS-YAML v0.1 JSON Schema exactly
@@ -195,10 +197,16 @@ def create_trader(llm, memory):
 
         recommendation = None
         tps_plan_yaml = ""
+        usage_meta = None
+        usage_cb = _UsageCaptureCallback()
         try:
             structured_llm = llm.with_structured_output(TraderOutput)
-            structured_response = structured_llm.invoke(messages)
+            structured_response = structured_llm.invoke(
+                messages, config={"callbacks": [usage_cb]}
+            )
             trader_investment_plan = structured_response.trader_investment_plan
+            if usage_cb.last_message is not None:
+                usage_meta = _capture_usage(usage_cb.last_message, llm)
             recommendation = getattr(structured_response, "recommendation", None)
             tps_obj = getattr(structured_response, "tps_plan", None)
             if tps_obj is not None:
@@ -206,6 +214,7 @@ def create_trader(llm, memory):
             result_message = AIMessage(content=trader_investment_plan)
         except Exception:
             raw_result = llm.invoke(messages)
+            usage_meta = _capture_usage(raw_result, llm)
             trader_investment_plan = (
                 raw_result.content
                 if hasattr(raw_result, "content")
@@ -216,14 +225,16 @@ def create_trader(llm, memory):
                 if isinstance(raw_result, BaseMessage)
                 else AIMessage(content=trader_investment_plan)
             )
-
-        return {
+        out = {
             "messages": [result_message],
             "trader_investment_plan": trader_investment_plan,
             "trader_recommendation": recommendation,
             "trader_tps_plan": tps_plan_yaml,
             "sender": name,
         }
+        if usage_meta:
+            out["report_usage"] = {"trader_investment_plan": usage_meta}
+        return out
 
     return functools.partial(trader_node, name="Trader")
 

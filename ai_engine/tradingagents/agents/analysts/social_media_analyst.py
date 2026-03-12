@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from ..utils.agent_utils import get_news
+from .helpers import _capture_usage
 from .prompts import build_social_media_analyst_prompt
 
 
@@ -82,10 +83,14 @@ def create_social_media_analyst(llm):
                 report = result.content if hasattr(result, 'content') else str(result)
                 sentiment_score = None
 
-        return {
+        usage_meta = _capture_usage(result, llm)
+        out = {
             "messages": [result],
             "sentiment_report": report,
             "sentiment_score": sentiment_score,
         }
+        if usage_meta:
+            out["report_usage"] = {"sentiment_report": usage_meta}
+        return out
 
     return social_media_analyst_node

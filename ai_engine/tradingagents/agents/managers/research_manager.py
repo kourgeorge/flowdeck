@@ -1,6 +1,8 @@
 from typing import Optional, List
 from pydantic import BaseModel, Field
 
+from ..analysts.helpers import _UsageCaptureCallback, _capture_usage
+
 
 class ResearchManagerOutput(BaseModel):
     """Structured output for research manager: strategy narrative, directional score, and return expectations."""
@@ -98,10 +100,16 @@ Debate History:
         expected_return_pct = None
         bear_case_return_pct = None
         bull_case_return_pct = None
+        usage_meta = None
+        usage_cb = _UsageCaptureCallback()
         try:
             structured_llm = llm.with_structured_output(ResearchManagerOutput)
-            structured_response = structured_llm.invoke(prompt)
+            structured_response = structured_llm.invoke(
+                prompt, config={"callbacks": [usage_cb]}
+            )
             investment_plan = structured_response.investment_plan
+            if usage_cb.last_message is not None:
+                usage_meta = _capture_usage(usage_cb.last_message, llm)
             recommendation_score = structured_response.recommendation_score
             bull_summary = getattr(structured_response, "bull_summary", None) or []
             bear_summary = getattr(structured_response, "bear_summary", None) or []
@@ -117,6 +125,7 @@ Debate History:
         except Exception:
             response = llm.invoke(prompt)
             investment_plan = response.content
+            usage_meta = _capture_usage(response, llm)
             recommendation_score = None
             bull_summary = []
             bear_summary = []
@@ -130,7 +139,7 @@ Debate History:
             "count": investment_debate_state["count"],
         }
 
-        return {
+        out = {
             "investment_debate_state": new_investment_debate_state,
             "investment_plan": investment_plan,
             "recommendation_score": recommendation_score,
@@ -140,5 +149,8 @@ Debate History:
             "bear_case_return_pct": bear_case_return_pct,
             "bull_case_return_pct": bull_case_return_pct,
         }
+        if usage_meta:
+            out["report_usage"] = {"investment_plan": usage_meta}
+        return out
 
     return research_manager_node

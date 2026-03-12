@@ -8,7 +8,7 @@ from ..utils.advanced_technical_tools import (
     detect_regime,
     detect_support_resistance
 )
-from .helpers import is_tool_result_message, try_structured_response
+from .helpers import _capture_usage, is_tool_result_message, try_structured_response
 from .prompts import build_technical_analyst_prompt
 
 logger = logging.getLogger(__name__)
@@ -51,19 +51,23 @@ def create_technical_analyst(llm):
         # Check if last message is a tool result (indicating we're ready for final response)
         last_message = state_messages[-1] if state_messages else None
         if is_tool_result_message(last_message):
-            report, technical_score = try_structured_response(
+            report, technical_score, usage_meta = try_structured_response(
                 structured_chain,
                 state_messages,
                 score_field="technical_score",
                 logger=logger,
                 agent_name="Technical analyst",
+                llm=llm,
             )
             if report is not None:
-                return {
+                out = {
                     "messages": [AIMessage(content=report)],
                     "technical_report": report,
                     "technical_score": technical_score,
                 }
+                if usage_meta:
+                    out["report_usage"] = {"technical_report": usage_meta}
+                return out
 
             fallback_result = (prompt | llm).invoke(state_messages)
             fallback_report = (
@@ -71,11 +75,15 @@ def create_technical_analyst(llm):
                 if hasattr(fallback_result, "content")
                 else str(fallback_result)
             )
-            return {
+            usage_meta = _capture_usage(fallback_result, llm)
+            out = {
                 "messages": [fallback_result],
                 "technical_report": fallback_report,
                 "technical_score": None,
             }
+            if usage_meta:
+                out["report_usage"] = {"technical_report": usage_meta}
+            return out
         
         # Default: use tools (for initial calls or if structured output failed)
         chain_with_tools = prompt | llm.bind_tools(tools)
@@ -85,27 +93,35 @@ def create_technical_analyst(llm):
         # Try structured output parsing
         if not getattr(result, "tool_calls", []):
             messages_with_result = [*state_messages, result]
-            report, technical_score = try_structured_response(
+            report, technical_score, usage_meta = try_structured_response(
                 structured_chain,
                 messages_with_result,
                 score_field="technical_score",
                 logger=logger,
                 agent_name="Technical analyst",
+                llm=llm,
             )
             if report is not None:
-                return {
+                out = {
                     "messages": [AIMessage(content=report)],
                     "technical_report": report,
                     "technical_score": technical_score,
                 }
+                if usage_meta:
+                    out["report_usage"] = {"technical_report": usage_meta}
+                return out
 
             report = result.content if hasattr(result, "content") else str(result)
-            return {
+            usage_meta = _capture_usage(result, llm)
+            out = {
                 "messages": [result],
                 "technical_report": report,
                 "technical_score": None,
             }
-       
+            if usage_meta:
+                out["report_usage"] = {"technical_report": usage_meta}
+            return out
+
         return {
             "messages": [result],
             "technical_report": "",
