@@ -80,12 +80,19 @@ async def lifespan(app: FastAPI):
                 if hasattr(engine, "refresh_market_overview_cache"):
                     engine.refresh_market_overview_cache()
 
+            def _refresh_market_movers_cache():
+                engine = get_info_fetcher()
+                if hasattr(engine, "refresh_market_movers_cache"):
+                    engine.refresh_market_movers_cache()
+
             scheduler.add_job(_refresh_market_overview_cache, "interval", minutes=5, id="market_overview_refresh")
+            scheduler.add_job(_refresh_market_movers_cache, "interval", minutes=5, id="market_movers_refresh")
             if not scheduler.running:
                 scheduler.start()
-            # Populate cache on startup for 1D, 1W, 1M, 6M, YTD so first request is fast
+            # Populate cache on startup so first request is fast
             import threading
             threading.Thread(target=_refresh_market_overview_cache, daemon=True).start()
+            threading.Thread(target=_refresh_market_movers_cache, daemon=True).start()
         except Exception as e:
             print(f"Failed to start market overview cache refresh: {e}")
 

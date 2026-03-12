@@ -108,6 +108,36 @@ class CachedInfoFetcher:
             lambda: self._fetcher.get_news(ticker, vendor=vendor, lookback_days=lookback_days),
         )
 
+    def get_news_batch(
+        self,
+        tickers: List[str],
+        vendor: Optional[str] = None,
+        lookback_days: int = 7,
+    ) -> Dict[str, Any]:
+        """Fetch news for multiple tickers, merge and dedupe by article id/link, sort by date. Uses cache per ticker."""
+        if not tickers:
+            return {"articles": [], "count": 0}
+        by_key: Dict[str, Dict[str, Any]] = {}
+        for t in tickers:
+            raw = self.get_news(t, vendor=vendor, lookback_days=lookback_days)
+            ticker_upper = t.upper()
+            for a in (raw.get("articles") or []):
+                key = a.get("uuid") or a.get("link") or ""
+                if not key:
+                    continue
+                existing = by_key.get(key)
+                if existing:
+                    if ticker_upper not in (existing.get("tickers") or []):
+                        existing.setdefault("tickers", []).append(ticker_upper)
+                else:
+                    by_key[key] = {**a, "tickers": [ticker_upper]}
+        articles = sorted(
+            by_key.values(),
+            key=(lambda x: (x.get("published_timestamp") or 0)),
+            reverse=True,
+        )
+        return {"articles": articles, "count": len(articles)}
+
     def get_insider_transactions(self, ticker: str, limit: int = 50) -> Dict[str, Any]:
         key = f"insider_transactions:{ticker.upper()}:{limit}"
         return get_cached(
@@ -308,6 +338,18 @@ class CachedInfoFetcher:
                         range_=r,
                     ),
                 )
+
+    def refresh_market_movers_cache(self) -> None:
+        """
+        Force-fetch market movers and write to cache so first request is fast.
+        Warms counts used by Market view (8) and dashboard/API default (25).
+        """
+        for count in (8, 25):
+            refresh_cached(
+                f"market_movers:{count}",
+                DATA_CACHE_TTL_MARKET_MOVERS,
+                lambda c=count: self._fetcher.get_daily_market_movers(c),
+            )
 
     def get_company_officers(self, ticker: str) -> Dict[str, Any]:
         """Get company officers/management team (cached)."""
