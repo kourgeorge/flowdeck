@@ -7,9 +7,11 @@ and check tail latency, failure rate, and RPS.
 
 Task weights (relative frequency):
   - get_widgets (10), get_ticker_page (8), get_similar_tickers (6) — heaviest
-  - get_quote (5), get_company_info (4), get_extended_info (3)
+  - get_market_overview (5), get_quote (5), get_company_info (4), get_market_movers (4)
+  - get_extended_info (3), get_market_overview_section (3)
   - get_analyst_recommendations (2), get_historical (2)
   - get_fundamentals (1), get_future_events (1), start_analysis (1, auth only)
+  - Chat/session tasks (auth only): chat_turn (2), chat_stream_turn (1), chat_sessions (1 each)
 
 Authentication:
   - Most endpoints are public. For start_analysis (POST /api/analyses/start),
@@ -36,6 +38,10 @@ from locust import HttpUser, task, between
 
 # Tickers to vary requests (heavy data endpoints)
 TICKERS = ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA", "JPM", "V", "JNJ"]
+
+# Market overview section and range options
+MARKET_SECTIONS = ["indices", "sectors", "regions", "commodities"]
+MARKET_RANGES = ["1d", "1w", "1mo", "3mo", "6mo", "ytd"]
 
 
 class FlowdeckApiUser(HttpUser):
@@ -74,6 +80,36 @@ class FlowdeckApiUser(HttpUser):
             f"/api/data/similar-tickers/{ticker}",
             params={"limit": 10},
             name="/api/data/similar-tickers/[ticker]",
+        )
+
+    @task(5)
+    def get_market_overview(self):
+        """Heavy: indices, sectors, regions, commodities. No auth."""
+        range_ = random.choice(MARKET_RANGES)
+        self.client.get(
+            "/api/data/market-overview",
+            params={"range": range_, "limit_indices": 6, "limit_sectors": 10, "limit_regions": 8, "limit_commodities": 12},
+            name="/api/data/market-overview",
+        )
+
+    @task(4)
+    def get_market_movers(self):
+        """Top gainers/losers. No auth."""
+        self.client.get(
+            "/api/data/market-movers",
+            params={"count": random.choice([15, 25, 50])},
+            name="/api/data/market-movers",
+        )
+
+    @task(3)
+    def get_market_overview_section(self):
+        """Single section of market overview (indices/sectors/regions/commodities). No auth."""
+        section = random.choice(MARKET_SECTIONS)
+        range_ = random.choice(MARKET_RANGES)
+        self.client.get(
+            "/api/data/market-overview/section",
+            params={"section": section, "range": range_, "limit": 6},
+            name="/api/data/market-overview/section",
         )
 
     @task(5)
@@ -138,3 +174,68 @@ class FlowdeckApiUser(HttpUser):
             headers=self.auth_headers,
             name="/api/analyses/start",
         )
+
+    @task(2)
+    def chat_turn(self):
+        """Authenticated chat turn with the analyst agent."""
+        if not self.token:
+            return
+        self.client.post(
+            "/api/chat",
+            json={
+                "messages": [
+                    {"role": "user", "content": "Quick market summary for stress testing."}
+                ],
+                "context": {"tickers": random.sample(TICKERS, 2)},
+            },
+            headers=self.auth_headers,
+            name="/api/chat",
+        )
+
+    @task(1)
+    def chat_stream_turn(self):
+        """Authenticated streamed chat turn (SSE)."""
+        if not self.token:
+            return
+        self.client.post(
+            "/api/chat/stream",
+            json={
+                "messages": [
+                    {"role": "user", "content": "Streamed market update for stress testing."}
+                ],
+                "context": {"tickers": random.sample(TICKERS, 2)},
+            },
+            headers=self.auth_headers,
+            name="/api/chat/stream",
+        )
+
+    @task(1)
+    def chat_sessions_list(self):
+        """List existing chat sessions for the current user."""
+        if not self.token:
+            return
+        self.client.get(
+            "/api/chat/sessions",
+            headers=self.auth_headers,
+            name="/api/chat/sessions [GET]",
+        )
+
+    @task(1)
+    def chat_sessions_create_and_delete(self):
+        """Create a chat session and then delete it."""
+        if not self.token:
+            return
+        create_resp = self.client.post(
+            "/api/chat/sessions",
+            headers=self.auth_headers,
+            name="/api/chat/sessions [POST]",
+        )
+        if create_resp.ok:
+            payload = create_resp.json()
+            session_id = payload.get("id")
+            if session_id is not None:
+                self.client.delete(
+                    f"/api/chat/sessions/{session_id}",
+                    headers=self.auth_headers,
+                    name="/api/chat/sessions/{id} [DELETE]",
+                )
