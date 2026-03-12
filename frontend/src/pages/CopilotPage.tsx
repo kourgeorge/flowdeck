@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import DashboardTickerSidebar from '../components/DashboardTickerSidebar';
 import StockDetailPanel from '../components/TickerDetailPanel';
@@ -8,7 +8,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { COPILOT_NAME } from '../config';
 import type { TickerPageData, TickerWidget } from '../services/types';
 import { useChatState } from '../components/ChatView';
-import { profileApi } from '../services/authApi';
 
 export default function CopilotPage() {
   const { user } = useAuth();
@@ -41,16 +40,16 @@ export default function CopilotPage() {
     [allTickers.join(',')],
   );
 
-  // Lift chat state to parent component so it persists across tab switches in mobile mode
-  const chatState = useChatState(undefined, context);
+  // Session id so that loading a conversation and continuing uses the same session (no new one created)
+  const [sessionId, setSessionId] = useState<number | null>(null);
+  const chatRefreshSessionsRef = useRef<(() => void) | null>(null);
+  const onStreamDone = useCallback((newSessionId?: number) => {
+    if (newSessionId != null) setSessionId(newSessionId);
+    chatRefreshSessionsRef.current?.();
+  }, []);
 
-  // Fetch token balance when user logs in
-  useEffect(() => {
-    if (!user) { chatState.setTokenBalance(null); return; }
-    profileApi.getMe().then((me) => {
-      chatState.setTokenBalance(me.token_balance);
-    }).catch(() => {});
-  }, [user, chatState]);
+  // Lift chat state to parent component so it persists across tab switches in mobile mode
+  const chatState = useChatState(undefined, context, sessionId, onStreamDone);
 
   const onResizeStart = useCallback((e: React.MouseEvent) => {
     isResizing.current = true;
@@ -213,6 +212,9 @@ export default function CopilotPage() {
               collapsed={chatCollapsed}
               onToggleCollapse={() => setChatCollapsed((c) => !c)}
               chatState={chatState}
+              sessionId={sessionId}
+              onSessionIdChange={setSessionId}
+              externalRefreshSessionsRef={chatRefreshSessionsRef}
             />
           </div>
         </div>
@@ -256,6 +258,9 @@ export default function CopilotPage() {
             prefetchCache={prefetchCache}
             onSubscriptionChange={handleSubscriptionChange}
             chatState={chatState}
+            sessionId={sessionId}
+            onSessionIdChange={setSessionId}
+            externalRefreshSessionsRef={chatRefreshSessionsRef}
           />
         </div>
       </div>
@@ -270,12 +275,18 @@ function MobileStockChatTabs({
   prefetchCache,
   onSubscriptionChange,
   chatState,
+  sessionId,
+  onSessionIdChange,
+  externalRefreshSessionsRef,
 }: {
   selectedTicker: string | null;
   tickers: string[];
   prefetchCache: Record<string, TickerPageData>;
   onSubscriptionChange: () => void;
   chatState: ReturnType<typeof useChatState>;
+  sessionId: number | null;
+  onSessionIdChange: (id: number | null) => void;
+  externalRefreshSessionsRef: React.MutableRefObject<(() => void) | null>;
 }) {
   const [activeTab, setActiveTab] = useState<'stock' | 'chat'>('stock');
 
@@ -331,6 +342,9 @@ function MobileStockChatTabs({
               selectedTicker={selectedTicker}
               tickers={tickers}
               chatState={chatState}
+              sessionId={sessionId}
+              onSessionIdChange={onSessionIdChange}
+              externalRefreshSessionsRef={externalRefreshSessionsRef}
             />
           </div>
         )}

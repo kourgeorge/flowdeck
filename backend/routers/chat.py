@@ -95,26 +95,26 @@ def _message_to_out(m: ChatMessage) -> ChatMessageOut:
     if m.tool_calls_json:
         try:
             tool_call_events = json.loads(m.tool_calls_json)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to parse tool_calls_json for message id=%s: %s", getattr(m, "id", None), e)
     skill_activation_events = None
     if m.skill_events_json:
         try:
             skill_activation_events = json.loads(m.skill_events_json)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to parse skill_events_json for message id=%s: %s", getattr(m, "id", None), e)
     charts = None
     if m.charts_json:
         try:
             charts = json.loads(m.charts_json)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to parse charts_json for message id=%s: %s", getattr(m, "id", None), e)
     follow_up_questions = None
     if m.follow_up_questions_json:
         try:
             follow_up_questions = json.loads(m.follow_up_questions_json)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to parse follow_up_questions_json for message id=%s: %s", getattr(m, "id", None), e)
     return ChatMessageOut(
         role=m.role,
         content=m.content or "",
@@ -388,86 +388,88 @@ async def chat_stream(
                 item = await queue.get()
                 if item is None:
                     break
-                # Accumulate for persistence when we have messages (create session on first input)
+                # Parse SSE payload once; if not valid JSON, forward as-is
+                payload: Optional[Dict[str, Any]] = None
                 try:
                     raw = item.removeprefix("data: ").strip()
                     payload = json.loads(raw)
-                    typ = payload.get("type")
-                    if typ == "token" and payload.get("content"):
-                        acc_content.append(payload["content"])
-                    elif typ == "tool_call" and payload.get("name"):
-                        acc_tool_calls.append({
-                            "name": payload.get("name", ""),
-                            "input": payload.get("input", ""),
-                            "output": payload.get("output", ""),
-                        })
-                    elif typ == "chart" and payload.get("spec"):
-                        acc_charts.append(payload["spec"])
-                    elif typ == "skill_step":
-                        pending_skill_steps.append({
-                            "tool": payload.get("tool", ""),
-                            "input": payload.get("input", ""),
-                            "output": payload.get("output", ""),
-                            "ok": payload.get("ok", True),
-                        })
-                    elif typ == "skill_done" and payload.get("name"):
-                        acc_skill_events.append({"name": payload.get("name"), "steps": list(pending_skill_steps)})
-                        pending_skill_steps = []
                 except Exception:
-                    pass
+                    yield item
+                    continue
 
-                if '"type":"done"' in item or '"type": "done"' in item:
+                typ = payload.get("type")
+
+                # Accumulate for persistence
+                if typ == "token" and payload.get("content"):
+                    acc_content.append(payload["content"])
+                elif typ == "tool_call" and payload.get("name"):
+                    acc_tool_calls.append({
+                        "name": payload.get("name", ""),
+                        "input": payload.get("input", ""),
+                        "output": payload.get("output", ""),
+                    })
+                elif typ == "chart" and payload.get("spec"):
+                    acc_charts.append(payload["spec"])
+                elif typ == "skill_step":
+                    pending_skill_steps.append({
+                        "tool": payload.get("tool", ""),
+                        "input": payload.get("input", ""),
+                        "output": payload.get("output", ""),
+                        "ok": payload.get("ok", True),
+                    })
+                elif typ == "skill_done" and payload.get("name"):
+                    acc_skill_events.append({"name": payload.get("name"), "steps": list(pending_skill_steps)})
+                    pending_skill_steps = []
+
+                if typ == "done":
+                    tokens_used = payload.get("tokens_used", 1)
                     try:
-                        payload = json.loads(item.removeprefix("data: ").strip())
-                        tokens_used = payload.get("tokens_used", 1)
+                        token_service.deduct_for_chat(user_id, tokens_used, db)
+                    except Exception as deduct_err:
+                        logger.warning("Failed to deduct tokens for user_id=%s: %s", user_id, deduct_err)
+                    new_balance = token_service.get_balance(user_id, db)
+                    payload["balance"] = new_balance
+                    if "follow_up_questions" not in payload:
+                        payload["follow_up_questions"] = []
+                    sid: Optional[int] = session_id_for_persist
+                    if body.messages:
                         try:
-                            token_service.deduct_for_chat(user_id, tokens_used, db)
-                        except Exception as deduct_err:
-                            logger.warning("Failed to deduct tokens for user_id=%s: %s", user_id, deduct_err)
-                        new_balance = token_service.get_balance(user_id, db)
-                        payload["balance"] = new_balance
-                        if "follow_up_questions" not in payload:
-                            payload["follow_up_questions"] = []
-                        # Persist on first input: use existing session or create one
-                        if body.messages:
-                            try:
-                                sid = session_id_for_persist
-                                if sid is None:
-                                    new_session = ChatSession(user_id=user_id)
-                                    db.add(new_session)
-                                    db.flush()
-                                    sid = new_session.id
-                                base_order = existing_message_count if session_id_for_persist is not None else 0
-                                for i, um in enumerate(body.messages):
-                                    save_user_message(db, sid, um.content, base_order + i)
-                                assistant_content = "".join(acc_content)
-                                save_assistant_message(
-                                    db,
-                                    sid,
-                                    assistant_content,
-                                    base_order + len(body.messages),
-                                    tokens_used=tokens_used,
-                                    tools_called=payload.get("tools_called"),
-                                    tool_calls=acc_tool_calls if acc_tool_calls else None,
-                                    skill_events=acc_skill_events if acc_skill_events else None,
-                                    charts=acc_charts if acc_charts else None,
-                                    follow_up_questions=payload.get("follow_up_questions"),
-                                )
-                                update_session_after_messages(
-                                    db,
-                                    sid,
-                                    first_user_content=body.messages[0].content if body.messages else None,
-                                )
-                                db.commit()
-                                payload["session_id"] = sid
-                            except Exception as persist_err:
-                                logger.exception("Failed to persist chat turn: %s", persist_err)
-                                db.rollback()
-                        yield f"data: {json.dumps(payload)}\n\n"
-                        tokens_used = 0
-                        continue
-                    except Exception:
-                        pass
+                            if sid is None:
+                                new_session = ChatSession(user_id=user_id)
+                                db.add(new_session)
+                                db.flush()
+                                sid = new_session.id
+                            base_order = existing_message_count if session_id_for_persist is not None else 0
+                            for i, um in enumerate(body.messages):
+                                save_user_message(db, sid, um.content, base_order + i)
+                            assistant_content = "".join(acc_content)
+                            save_assistant_message(
+                                db,
+                                sid,
+                                assistant_content,
+                                base_order + len(body.messages),
+                                tokens_used=tokens_used,
+                                tools_called=payload.get("tools_called"),
+                                tool_calls=acc_tool_calls if acc_tool_calls else None,
+                                skill_events=acc_skill_events if acc_skill_events else None,
+                                charts=acc_charts if acc_charts else None,
+                                follow_up_questions=payload.get("follow_up_questions"),
+                            )
+                            update_session_after_messages(
+                                db,
+                                sid,
+                                first_user_content=body.messages[0].content if body.messages else None,
+                            )
+                            db.commit()
+                        except Exception as persist_err:
+                            logger.exception("Failed to persist chat turn: %s", persist_err)
+                            db.rollback()
+                        if sid is not None:
+                            payload["session_id"] = sid
+                    yield f"data: {json.dumps(payload)}\n\n"
+                    tokens_used = 0
+                    continue
+
                 yield item
 
             await thread_task

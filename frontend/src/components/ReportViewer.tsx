@@ -69,8 +69,8 @@ const REPORT_METADATA: Record<string, { title: string; contains: string; aspects
   final_trade_decision: {
     title: 'Risk & Confidence',
     contains: 'A detailed risk analysis and refined trader plan. Includes a Risk Score (1–10) and key takeaways for traders. The Risk Score measures confidence in the quality and clarity of the risk assessment — not the direction of the trade. It is quantitatively anchored to the average and dispersion (standard deviation) of all upstream scores (market, sentiment, news, fundamentals, SEC, technical, and conviction), then adjusted based on the debate quality.',
-    aspects: 'Summary of the Risky, Neutral, and Safe analysts\' arguments; rationale for the risk assessment; refined plan incorporating risk insights; lessons from past decisions; and 3–5 key takeaways. Note: this report does not issue a BUY/SELL/HOLD — that is handled by the Research report upstream.',
-    methodology: 'Final step in the analysis. The Risky, Neutral, and Safe analysts debate the Trader\'s plan — each arguing for high-risk, balanced, or low-risk approaches using all prior reports. The Risk Judge weighs their arguments, computes a baseline from all upstream scores, penalises or boosts confidence based on score dispersion, and produces the final risk analysis. This is the end of the pipeline.',
+    aspects: 'Summary of the Risky, Neutral, and Safe analysts\' arguments; rationale for the risk assessment; refined plan incorporating risk insights; lessons from past decisions; 3–5 key takeaways; and the final BUY/SELL/HOLD recommendation shown in the UI.',
+    methodology: 'Final step in the analysis. The Risky, Neutral, and Safe analysts debate the Trader\'s plan — each arguing for high-risk, balanced, or low-risk approaches using all prior reports. The Risk Judge weighs their arguments, computes a baseline from all upstream scores, penalises or boosts confidence based on score dispersion, and produces the final risk analysis plus final recommendation. This is the end of the pipeline.',
   },
 };
 
@@ -181,7 +181,7 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
           <div className="mb-2 text-sm font-semibold text-slate-300">Key takeaways</div>
           <ul className="list-inside list-disc space-y-1 text-sm text-slate-400">
             {keyTakeaways.map((t, i) => (
-              <li key={i}>{t}</li>
+              <li key={`${i}-${t.slice(0, 40)}`}>{t}</li>
             ))}
           </ul>
         </div>
@@ -249,7 +249,7 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
                 <div className="mb-2 text-sm font-semibold text-green-400">Bull Viewpoint</div>
                 <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
                   {bullViewpoint.map((p, i) => (
-                    <li key={i}>{p}</li>
+                    <li key={`${i}-${p.slice(0, 40)}`}>{p}</li>
                   ))}
                 </ul>
               </div>
@@ -259,7 +259,7 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
                 <div className="mb-2 text-sm font-semibold text-red-400">Bear Viewpoint</div>
                 <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
                   {bearViewpoint.map((p, i) => (
-                    <li key={i}>{p}</li>
+                    <li key={`${i}-${p.slice(0, 40)}`}>{p}</li>
                   ))}
                 </ul>
               </div>
@@ -277,7 +277,7 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
               <div className="mb-2 text-sm font-semibold text-amber-400">Risky Analyst Viewpoint</div>
               <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
                 {riskyViewpoint.map((p, i) => (
-                  <li key={i}>{p}</li>
+                  <li key={`${i}-${p.slice(0, 40)}`}>{p}</li>
                 ))}
               </ul>
             </div>
@@ -287,7 +287,7 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
               <div className="mb-2 text-sm font-semibold text-gray-300">Neutral Analyst Viewpoint</div>
               <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
                 {neutralViewpoint.map((p, i) => (
-                  <li key={i}>{p}</li>
+                  <li key={`${i}-${p.slice(0, 40)}`}>{p}</li>
                 ))}
               </ul>
             </div>
@@ -297,7 +297,7 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
               <div className="mb-2 text-sm font-semibold text-blue-400">Safe Analyst Viewpoint</div>
               <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
                 {safeViewpoint.map((p, i) => (
-                  <li key={i}>{p}</li>
+                  <li key={`${i}-${p.slice(0, 40)}`}>{p}</li>
                 ))}
               </ul>
             </div>

@@ -64,6 +64,12 @@ export interface CopilotChatPanelProps {
   title?: string;
   /** Optional external chat state for persistence across component unmounts */
   chatState?: UseChatStateReturn;
+  /** When using external chatState: current session id so continuing uses the same session */
+  sessionId?: number | null;
+  /** When using external chatState: called when user loads a session so parent can sync sessionId */
+  onSessionIdChange?: (id: number | null) => void;
+  /** When using external chatState: ref the parent can call to refresh the session list after stream done */
+  externalRefreshSessionsRef?: React.MutableRefObject<(() => void) | null>;
 }
 
 export default function CopilotChatPanel({
@@ -73,13 +79,19 @@ export default function CopilotChatPanel({
   onToggleCollapse,
   title,
   chatState: externalChatState,
+  sessionId: externalSessionId,
+  onSessionIdChange,
+  externalRefreshSessionsRef,
 }: CopilotChatPanelProps) {
   const panelTitle = title ?? COPILOT_NAME;
   const { user } = useAuth();
   const useInternalSession = externalChatState == null;
 
-  const [sessionId, setSessionId] = useState<number | null>(null);
+  const [internalSessionId, setInternalSessionId] = useState<number | null>(null);
   const [sessions, setSessions] = useState<ChatSessionListItem[]>([]);
+  // When external chat state: parent owns sessionId; else we use internal state
+  const sessionId = useInternalSession ? internalSessionId : (externalSessionId ?? null);
+  const setSessionId = useInternalSession ? setInternalSessionId : (onSessionIdChange ?? (() => {}));
   const [historyOpen, setHistoryOpen] = useState(false);
   const historyDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -96,10 +108,10 @@ export default function CopilotChatPanel({
   );
   const onStreamDone = useCallback(
     (newSessionId?: number) => {
-      if (useInternalSession && newSessionId != null) setSessionId(newSessionId);
+      if (newSessionId != null) setSessionId(newSessionId);
       refreshSessions();
     },
-    [useInternalSession, refreshSessions],
+    [setSessionId, refreshSessions],
   );
 
   const internalChat = useChatState(
@@ -116,13 +128,20 @@ export default function CopilotChatPanel({
     profileApi.getMe().then((me) => {
       chat.setTokenBalance(me.token_balance);
     }).catch(() => {});
-  }, [user]);
+  }, [user, chat]);
 
   // Load session list when user is logged in (for history dropdown on both internal and external chat)
   useEffect(() => {
     if (!user) return;
     refreshSessions();
   }, [user, refreshSessions]);
+
+  // When parent provides a ref, let it trigger session list refresh after stream done
+  useEffect(() => {
+    if (!externalRefreshSessionsRef) return;
+    externalRefreshSessionsRef.current = refreshSessions;
+    return () => { externalRefreshSessionsRef.current = null; };
+  }, [externalRefreshSessionsRef, refreshSessions]);
 
   // Close history dropdown on click outside
   useEffect(() => {
@@ -137,18 +156,18 @@ export default function CopilotChatPanel({
   }, [historyOpen]);
 
   const handleNewChat = useCallback(() => {
-    if (!user || !useInternalSession) return;
+    if (!user) return;
     setSessionId(null);
     chat.clearChat();
-  }, [user, useInternalSession, chat]);
+  }, [user, setSessionId, chat]);
 
   const handleLoadSession = useCallback((id: number) => {
     chatApi.getChatSession(id).then((detail) => {
-      if (useInternalSession) setSessionId(detail.id);
+      setSessionId(detail.id);
       chat.setMessages(detail.messages.map(apiMessageToChatMessageWithMeta));
       setHistoryOpen(false);
     }).catch(() => {});
-  }, [chat, useInternalSession]);
+  }, [chat, setSessionId]);
 
   const handleDeleteSession = useCallback((id: number, e: React.MouseEvent) => {
     e.stopPropagation();
