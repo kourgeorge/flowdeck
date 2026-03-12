@@ -100,6 +100,20 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"Failed to start market overview cache refresh: {e}")
 
+    # Warm homepage widgets cache (MAJOR_TICKERS quotes + company info) so first load is fast
+    import threading as _threading
+    from config import MAJOR_TICKERS
+
+    def _warm_homepage_cache():
+        try:
+            engine = get_info_fetcher()
+            engine.get_quotes_batch(list(MAJOR_TICKERS))
+            engine.get_company_info_batch(list(MAJOR_TICKERS))
+        except Exception as e:
+            print(f"Homepage cache warm failed: {e}")
+
+    _threading.Thread(target=_warm_homepage_cache, daemon=True).start()
+
     yield
     if scheduler is not None:
         try:
