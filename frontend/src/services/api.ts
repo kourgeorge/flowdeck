@@ -494,6 +494,29 @@ export const tickerApi = {
     return response.data;
   },
 
+  // Get merged news for multiple tickers in one request (faster than N×getNews for headlines)
+  getNewsBatch: async (tickers: string[]): Promise<{
+    articles: Array<{
+      uuid: string;
+      title: string;
+      summary?: string | null;
+      publisher?: string;
+      link: string;
+      published_time: string | null;
+      published_timestamp: number;
+      type?: string;
+      thumbnail?: string | null;
+      tickers: string[];
+    }>;
+    count: number;
+  }> => {
+    if (tickers.length === 0) return { articles: [], count: 0 };
+    const response = await api.get(`/api/data/news/batch`, {
+      params: { tickers: tickers.slice(0, 50).join(',') },
+    });
+    return response.data;
+  },
+
   // Get latest insider transactions (raw market data via /api/data)
   getInsiderTransactions: async (
     ticker: string,

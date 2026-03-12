@@ -571,28 +571,19 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
     if (initialHeadlinesTickers.length === 0) return;
     setHeadlinesLoading(true);
     try {
-      const results = await Promise.allSettled(
-        initialHeadlinesTickers.map((t) => tickerApi.getNews(t))
-      );
-      const byKey = new Map<string, HeadlineArticle>();
-      results.forEach((result, i) => {
-        if (result.status === 'fulfilled' && result.value?.articles?.length) {
-          const ticker = initialHeadlinesTickers[i];
-          result.value.articles.forEach((a) => {
-            const key = a.uuid || a.link;
-            const existing = byKey.get(key);
-            if (existing) {
-              if (!existing.tickers.includes(ticker)) {
-                existing.tickers.push(ticker);
-              }
-            } else {
-              byKey.set(key, { ...a, tickers: [ticker] });
-            }
-          });
-        }
-      });
-      const merged = Array.from(byKey.values());
-      merged.sort((a, b) => (b.published_timestamp ?? 0) - (a.published_timestamp ?? 0));
+      const { articles } = await tickerApi.getNewsBatch(initialHeadlinesTickers);
+      const merged: HeadlineArticle[] = (articles ?? []).map((a) => ({
+        uuid: a.uuid,
+        title: a.title,
+        summary: a.summary ?? null,
+        publisher: a.publisher,
+        link: a.link,
+        published_time: a.published_time ?? null,
+        published_timestamp: a.published_timestamp ?? 0,
+        type: a.type,
+        thumbnail: a.thumbnail ?? null,
+        tickers: a.tickers ?? [],
+      }));
       setHeadlines(merged);
     } finally {
       setHeadlinesLoading(false);

@@ -180,6 +180,23 @@ async def data_news(
     )
 
 
+@router.get("/news/batch")
+async def data_news_batch(
+    tickers: str = Query(..., description="Comma-separated ticker symbols (max 50)"),
+    vendor: Optional[str] = Query(None, description="News vendor"),
+    lookback_days: int = Query(7, ge=1, le=90, description="Days to look back"),
+):
+    """Get merged, deduped news for multiple tickers in one request. Each article has a 'tickers' list."""
+    raw = [s.strip().upper() for s in tickers.split(",") if s.strip()]
+    if not raw:
+        return {"articles": [], "count": 0}
+    tickers_list = raw[:50]
+    engine = _engine()
+    return await asyncio.to_thread(
+        lambda: engine.get_news_batch(tickers_list, vendor=vendor, lookback_days=lookback_days)
+    )
+
+
 @router.get("/insider-transactions/{ticker}")
 async def data_insider_transactions(
     ticker: str,
