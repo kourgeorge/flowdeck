@@ -332,6 +332,24 @@ def get_cached(
     return value
 
 
+def refresh_cached(
+    key: str,
+    ttl_seconds: float,
+    fetch_fn: Callable[[], T],
+) -> T:
+    """
+    Always run fetch_fn, store the result in cache with the given TTL, and return it.
+    Use for periodic cache warming so data is fresh before the next request.
+    """
+    from config import DATA_CACHE_ENABLED
+
+    value = fetch_fn()
+    if DATA_CACHE_ENABLED:
+        store = _get_store()
+        store.set(key, value, ttl_seconds)
+    return value
+
+
 def get_cached_batch(
     key_ttl_pairs: List[Tuple[str, float]],
     batch_fetch_fn: Callable[[List[str]], Dict[str, T]],

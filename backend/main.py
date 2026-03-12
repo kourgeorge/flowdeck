@@ -44,7 +44,7 @@ from services.info_fetcher import get_info_fetcher
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize DB and start optional daily sync scheduler."""
+    """Initialize DB and start optional daily sync and market overview cache refresh."""
     init_db()
     from services.data_cache import ensure_data_cache
     ensure_data_cache()
@@ -66,6 +66,29 @@ async def lifespan(app: FastAPI):
             scheduler.start()
         except Exception as e:
             print(f"Failed to start daily sync scheduler: {e}")
+
+    # Optional: refresh market overview cache every 5 min so Overview/Regional Map are warm
+    if os.environ.get("ENABLE_MARKET_OVERVIEW_CACHE_REFRESH", "true").lower() in ("true", "1", "yes"):
+        try:
+            if scheduler is None:
+                from apscheduler.schedulers.background import BackgroundScheduler
+                scheduler = BackgroundScheduler()
+            from services.info_fetcher import get_info_fetcher
+
+            def _refresh_market_overview_cache():
+                engine = get_info_fetcher()
+                if hasattr(engine, "refresh_market_overview_cache"):
+                    engine.refresh_market_overview_cache()
+
+            scheduler.add_job(_refresh_market_overview_cache, "interval", minutes=5, id="market_overview_refresh")
+            if not scheduler.running:
+                scheduler.start()
+            # Populate cache on startup for 1D, 1W, 1M, 6M, YTD so first request is fast
+            import threading
+            threading.Thread(target=_refresh_market_overview_cache, daemon=True).start()
+        except Exception as e:
+            print(f"Failed to start market overview cache refresh: {e}")
+
     yield
     if scheduler is not None:
         try:

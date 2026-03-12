@@ -27,7 +27,7 @@ from config import (
     DATA_CACHE_TTL_SIMILAR_TICKERS,
     DATA_CACHE_TTL_STOCK_DATA,
 )
-from services.data_cache import get_cached, get_cached_batch
+from services.data_cache import get_cached, get_cached_batch, refresh_cached
 from services.info_fetcher import InfoFetcher
 
 
@@ -267,6 +267,47 @@ class CachedInfoFetcher:
                 range_=range_,
             ),
         )
+
+    def refresh_market_overview_cache(self) -> None:
+        """
+        Force-fetch market overview data and write it to the cache (TTL 15min).
+        Called by a periodic job so Overview and Regional Map are warm without waiting on first request.
+        Warms: full overview and sections regions/indices for 1D, 1W, 1M, 6M, YTD.
+        """
+        # Full overview: first-page params used by Overview tab (TILES_PER_PAGE=6 for each group)
+        limit_indices = limit_sectors = limit_regions = limit_commodities = 6
+        offset_indices = offset_sectors = offset_regions = offset_commodities = 0
+        for range_ in ("1d", "1w", "1mo", "6mo", "ytd"):
+            key = f"market_overview:{range_}:{limit_indices}:{offset_indices}:{limit_sectors}:{offset_sectors}:{limit_regions}:{offset_regions}:{limit_commodities}:{offset_commodities}"
+            refresh_cached(
+                key,
+                DATA_CACHE_TTL_MARKET_OVERVIEW,
+                lambda r=range_: self._fetcher.get_market_overview(
+                    limit_indices=limit_indices,
+                    offset_indices=offset_indices,
+                    limit_sectors=limit_sectors,
+                    offset_sectors=offset_sectors,
+                    limit_regions=limit_regions,
+                    offset_regions=offset_regions,
+                    limit_commodities=limit_commodities,
+                    offset_commodities=offset_commodities,
+                    range_=r,
+                ),
+            )
+        # Sections used by Regional Map: regions (limit 100), indices (limit 15)
+        for section, limit in (("regions", 100), ("indices", 15)):
+            for range_ in ("1d", "1w", "1mo", "6mo", "ytd"):
+                key = f"market_overview_section:{section}:{range_}:{limit}:0"
+                refresh_cached(
+                    key,
+                    DATA_CACHE_TTL_MARKET_OVERVIEW,
+                    lambda s=section, lim=limit, r=range_: self._fetcher.get_market_overview_section(
+                        section=s,
+                        limit=lim,
+                        offset=0,
+                        range_=r,
+                    ),
+                )
 
     def get_company_officers(self, ticker: str) -> Dict[str, Any]:
         """Get company officers/management team (cached)."""

@@ -40,8 +40,8 @@ DATA_CACHE_TTL_ANALYST = 3600          # 1h
 DATA_CACHE_TTL_NEWS = 900              # 15min
 DATA_CACHE_TTL_SIMILAR_TICKERS = 86400  # 24h (sector/industry rarely changes)
 DATA_CACHE_TTL_INSIDER_TRANSACTIONS = 900  # 15min
-DATA_CACHE_TTL_MARKET_MOVERS = 300     # 5min (daily gainers/losers; reduces load on refresh)
-DATA_CACHE_TTL_MARKET_OVERVIEW = 300   # 5min (indices, sectors, regions; prices change but 5min is fine for overview)
+DATA_CACHE_TTL_MARKET_MOVERS = 600     # 10min (daily gainers/losers; reduces load on refresh)
+DATA_CACHE_TTL_MARKET_OVERVIEW = 600   # 10min (indices, sectors, regions; Overview & Regional Map)
 
 # CORS: comma-separated origins (e.g. "https://app.example.com,https://example.com")
 # If empty, defaults to common local dev origins for backwards compatibility
