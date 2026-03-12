@@ -27,7 +27,7 @@ _BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_CACHE_PATH = os.environ.get("DATA_CACHE_PATH", "").strip() or os.path.join(_BACKEND_DIR, "data_cache.sqlite")
 
 # Per-type TTL in seconds
-DATA_CACHE_TTL_QUOTE = 60              # Real-time
+DATA_CACHE_TTL_QUOTE = 300             # 5min
 DATA_CACHE_TTL_COMPANY = 86400         # 24h
 DATA_CACHE_TTL_EXTENDED = 3600         # 1h
 DATA_CACHE_TTL_FUNDAMENTALS = 86400    # 24h

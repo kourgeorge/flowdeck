@@ -13,6 +13,7 @@ from auth import get_current_user, get_current_admin_user, decode_token
 from database import get_db, SessionLocal
 from models.db_models import User as UserModel
 from services.analysis_service import AnalysisService
+from services.info_fetcher import get_info_fetcher
 from services.market_data_service import MarketDataService
 from services import token_service
 from sync_major_stocks import get_missing_and_skipped, run_analyses_for_tickers
@@ -82,14 +83,14 @@ async def start_analysis(
 ):
     """Start a new analysis. Requires signed-in user; initiator is notified by email when the report is done. Costs 200 tokens."""
     analysis_service = _get_analysis_service()
-    market_data_service = _get_market_data_service()
     try:
         body = await request.json()
         ticker = body.get("ticker", "").upper()
         if not ticker:
             raise HTTPException(status_code=400, detail="Ticker is required")
 
-        quote = await asyncio.to_thread(market_data_service.get_current_quote, ticker)
+        # Use cached fetcher so quote check goes through cache (same as data API)
+        quote = await asyncio.to_thread(get_info_fetcher().get_quote, ticker)
         if quote is None:
             raise HTTPException(
                 status_code=404,
