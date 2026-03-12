@@ -32,7 +32,10 @@ export default function ChatPage() {
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [sessions, setSessions] = useState<ChatSessionListItem[]>([]);
-  const [historyCollapsed, setHistoryCollapsed] = useState(false);
+  const [historyCollapsed, setHistoryCollapsed] = useState(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) return true;
+    return false;
+  });
 
   const refreshSessions = useCallback(() => {
     if (!user) return;
@@ -77,6 +80,7 @@ export default function ChatPage() {
     chatApi.getChatSession(id).then((detail) => {
       setSessionId(detail.id);
       chat.setMessages(detail.messages.map(apiMessageToChatMessageWithMeta));
+      setHistoryCollapsed(true);
     }).catch(() => {});
   };
 
