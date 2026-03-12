@@ -6,6 +6,8 @@ similar-tickers, data API). Use this to stress-test the backend under load
 and check tail latency, failure rate, and RPS.
 
 Task weights (relative frequency):
+  - load_first_page (6) — simulates dashboard first load: subscriptions → widgets → recent analyzed → market overview
+  - get_subscribed_stocks (4) — simulates subscribed-stocks flow: list subscriptions → widgets for those tickers
   - get_widgets (10), get_ticker_page (8), get_similar_tickers (6) — heaviest
   - get_market_overview (5), get_quote (5), get_company_info (4), get_market_movers (4)
   - get_extended_info (3), get_market_overview_section (3)
@@ -34,6 +36,8 @@ See docs/STRESS_TEST.md for full usage and tips.
 
 import os
 import random
+from datetime import datetime
+
 from locust import HttpUser, task, between
 
 # Tickers to vary requests (heavy data endpoints)
@@ -53,6 +57,87 @@ class FlowdeckApiUser(HttpUser):
         """Set Bearer token from STRESS_TEST_TOKEN env for authenticated tasks (e.g. start_analysis)."""
         self.token = os.environ.get("STRESS_TEST_TOKEN", "").strip()
         self.auth_headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
+
+    @task(6)
+    def load_first_page(self):
+        """Simulate dashboard first load: subscriptions (if auth) → widgets → recent analyzed first page → market overview."""
+        if self.token:
+            # 1) List subscriptions (dashboard needs this first)
+            subs_resp = self.client.get(
+                "/api/subscriptions",
+                headers=self.auth_headers,
+                name="/api/subscriptions [first-page]",
+            )
+            tickers = TICKERS
+            if subs_resp.ok:
+                try:
+                    data = subs_resp.json()
+                    subs = data.get("subscriptions") or []
+                    if subs:
+                        tickers = [s.get("ticker") for s in subs if s.get("ticker")]
+                except Exception:
+                    pass
+            # 2) Widgets for subscribed tickers
+            if tickers:
+                self.client.get(
+                    "/api/tickers/widgets",
+                    params={"tickers": ",".join(tickers[:30])},
+                    name="/api/tickers/widgets [subscribed]",
+                )
+            # 3) First page of recently analyzed (dashboard sidebar)
+            today = datetime.now().strftime("%Y-%m-%d")
+            self.client.get(
+                "/api/tickers/widgets",
+                params={
+                    "date": today,
+                    "only_date": "true",
+                    "limit": 20,
+                    "offset": 0,
+                    "recent_days": "3",
+                },
+                name="/api/tickers/widgets [recent-first-page]",
+            )
+        else:
+            # Unauthenticated: widgets for a fixed set + market overview
+            self.client.get(
+                "/api/tickers/widgets",
+                params={"tickers": ",".join(TICKERS[:10])},
+                name="/api/tickers/widgets [first-page]",
+            )
+        # 4) Market overview (dashboard top)
+        range_ = random.choice(MARKET_RANGES)
+        self.client.get(
+            "/api/data/market-overview",
+            params={"range": range_, "limit_indices": 6, "limit_sectors": 10, "limit_regions": 8, "limit_commodities": 12},
+            name="/api/data/market-overview [first-page]",
+        )
+
+    @task(4)
+    def get_subscribed_stocks(self):
+        """Simulate subscribed-stocks flow: list subscriptions → widgets for those tickers. Auth only."""
+        if not self.token:
+            return
+        subs_resp = self.client.get(
+            "/api/subscriptions",
+            headers=self.auth_headers,
+            name="/api/subscriptions [subscribed-stocks]",
+        )
+        if not subs_resp.ok:
+            return
+        try:
+            data = subs_resp.json()
+            subs = data.get("subscriptions") or []
+            tickers = [s.get("ticker") for s in subs if s.get("ticker")]
+        except Exception:
+            tickers = []
+        if not tickers:
+            tickers = TICKERS[:5]  # fallback so we still hit widgets
+        self.client.get(
+            "/api/tickers/widgets",
+            params={"tickers": ",".join(tickers[:30])},
+            headers=self.auth_headers,
+            name="/api/tickers/widgets [subscribed-stocks]",
+        )
 
     @task(10)
     def get_widgets(self):
