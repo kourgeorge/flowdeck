@@ -233,7 +233,7 @@ export default function ChatPage() {
               inputPlaceholder={user ? 'Ask about any stock…' : 'Sign in to start chatting…'}
               inputFooter={
                 <p className="text-xs text-slate-500 text-center py-1.5">
-                  AI can make mistakes — always verify important information · Not financial advice
+                  AI can make mistakes — always verify · Not financial advice
                 </p>
               }
             />
