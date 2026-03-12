@@ -26,6 +26,10 @@
       "stream": "ext://sys.stdout"
     }
   },
+  "root": {
+    "level": "INFO",
+    "handlers": ["default"]
+  },
   "loggers": {
     "uvicorn": {
       "handlers": [

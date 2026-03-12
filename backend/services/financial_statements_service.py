@@ -72,6 +72,7 @@ def get_financial_statements(
         "frequency": freq,
         "statements": {},
     }
+    logger.info("Fetching financial statements from Yahoo for %s (type=%s)", ticker, statement_type)
     try:
         t = yf.Ticker(ticker)
         bs_ann = t.balance_sheet

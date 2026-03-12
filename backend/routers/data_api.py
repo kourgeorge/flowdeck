@@ -11,6 +11,7 @@ Market overview uses single-flight coalescing: concurrent identical requests sha
 """
 
 import asyncio
+import logging
 from typing import Dict, Any, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -23,6 +24,8 @@ from database import get_db
 from services.edgar_service import get_edgar_service
 from services.info_fetcher import get_info_fetcher
 from services.report_service import ReportService
+
+logger = logging.getLogger(__name__)
 
 
 class ReportsBatchBody(BaseModel):
@@ -147,6 +150,7 @@ async def data_market_overview_section(
       \"total\": int
     }
     """
+    logger.info("Market overview section requested: section=%s range=%s limit=%s offset=%s", section, range_, limit, offset)
     engine = _engine()
     try:
         return await asyncio.wait_for(

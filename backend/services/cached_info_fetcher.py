@@ -7,6 +7,7 @@ Uses per-type TTLs from config.
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Any, Dict, List, Optional
 
@@ -27,8 +28,10 @@ from config import (
     DATA_CACHE_TTL_SIMILAR_TICKERS,
     DATA_CACHE_TTL_STOCK_DATA,
 )
-from services.data_cache import get_cached, get_cached_batch, refresh_cached
+from services.data_cache import get_cached, get_cached_batch, get_cached_with_origin, refresh_cached
 from services.info_fetcher import InfoFetcher
+
+logger = logging.getLogger(__name__)
 
 
 class CachedInfoFetcher:
@@ -287,7 +290,7 @@ class CachedInfoFetcher:
     ) -> Dict[str, Any]:
         """Get a single section of the market overview (cached)."""
         key = f"market_overview_section:{section}:{range_}:{limit}:{offset}"
-        return get_cached(
+        value, from_cache = get_cached_with_origin(
             key,
             DATA_CACHE_TTL_MARKET_OVERVIEW,
             lambda: self._fetcher.get_market_overview_section(
@@ -297,6 +300,17 @@ class CachedInfoFetcher:
                 range_=range_,
             ),
         )
+        if from_cache:
+            logger.info(
+                "Serving market overview section from cache (section=%s, range=%s, limit=%s)",
+                section, range_, limit,
+            )
+        else:
+            logger.info(
+                "Cache miss for market overview section (section=%s, range=%s), fetched from Yahoo",
+                section, range_,
+            )
+        return value
 
     def refresh_market_overview_cache(self) -> None:
         """

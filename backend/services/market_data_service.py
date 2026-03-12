@@ -1,5 +1,6 @@
 """Service to fetch real-time market data using yfinance, with yahooquery fallback when Yahoo returns 401."""
 
+import logging
 import math
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import yfinance as yf
@@ -7,6 +8,8 @@ import pandas as pd
 from typing import List, Optional, Dict, Literal, Any
 from datetime import datetime
 from models.schemas import TickerQuote
+
+logger = logging.getLogger(__name__)
 
 # Per-batch timeout for range downloads (yf.download can hang on Yahoo for 1w/regions).
 _RANGE_BATCH_TIMEOUT_SEC = 28
@@ -58,6 +61,20 @@ def _safe_float(value, default: Optional[float] = None) -> Optional[float]:
         return f
     except (TypeError, ValueError):
         return default
+
+
+def _close_series_from_block(block, *, prefer: str = "Close") -> Optional[Any]:
+    """Get Close series from a ticker block (Series or DataFrame). Prefer 'Close', fallback to 'close'."""
+    if block is None or not hasattr(block, "columns"):
+        if hasattr(block, "iloc") and hasattr(block, "dropna"):
+            return block  # already a series-like
+        return None
+    cols = block.columns
+    if prefer in cols:
+        return block[prefer]
+    if "close" in cols:
+        return block["close"]
+    return None
 
 
 def _safe_int(value) -> Optional[int]:
@@ -121,8 +138,10 @@ class MarketDataService:
     @staticmethod
     def get_current_quote(ticker: str) -> Optional[TickerQuote]:
         """Get current market quote for a ticker."""
+        ticker = ticker.upper()
+        logger.info("Fetching quote from Yahoo (yfinance) for %s", ticker)
         try:
-            ticker_obj = yf.Ticker(ticker.upper())
+            ticker_obj = yf.Ticker(ticker)
             info = ticker_obj.info
             fast_info = ticker_obj.fast_info
             # Yahoo often returns 401 (Invalid Crumb / rate limit); yfinance then gives None for info/fast_info
@@ -134,6 +153,7 @@ class MarketDataService:
             # Get current price
             current_price = fast_info.get('lastPrice') or info.get('currentPrice') or info.get('regularMarketPrice')
             if current_price is None or not _is_valid_price(current_price):
+                logger.info("Yahoo (yfinance) returned no price for %s, falling back to yahooquery", ticker)
                 return MarketDataService.get_current_quote_yahooquery(ticker)
             
             # Prefer previous close from daily history to match Yahoo's displayed change basis.
@@ -195,7 +215,7 @@ class MarketDataService:
                 currency=currency,
             )
         except Exception as e:
-            print(f"Error fetching quote for {ticker}: {e}")
+            logger.warning("Error fetching quote for %s: %s, falling back to yahooquery", ticker, e)
             return MarketDataService.get_current_quote_yahooquery(ticker)
     
     @staticmethod
@@ -215,6 +235,7 @@ class MarketDataService:
         if not tickers:
             return {}
         tickers = [t.upper() for t in tickers]
+        logger.info("Fetching quotes from Yahoo (yfinance) for %d tickers", len(tickers))
         results: Dict[str, Optional[TickerQuote]] = {t: None for t in tickers}
         try:
             # One network request for all tickers (period=5d gives us current + previous close)
@@ -239,15 +260,18 @@ class MarketDataService:
                 t = tickers[0]
                 if isinstance(data.columns, pd.MultiIndex) and t in data.columns.get_level_values(0):
                     t_data = data[t]
-                    close_series = t_data["Close"] if "Close" in t_data.columns else None
-                    volume_series = t_data["Volume"] if "Volume" in t_data.columns else None
-                    high_series = t_data["High"] if "High" in t_data.columns else None
-                    low_series = t_data["Low"] if "Low" in t_data.columns else None
+                    close_series = _close_series_from_block(t_data)
+                    if t_data is not None and hasattr(t_data, "columns"):
+                        volume_series = t_data["Volume"] if "Volume" in t_data.columns else t_data.get("volume")
+                        high_series = t_data["High"] if "High" in t_data.columns else t_data.get("high")
+                        low_series = t_data["Low"] if "Low" in t_data.columns else t_data.get("low")
+                    else:
+                        volume_series = high_series = low_series = None
                 else:
-                    close_series = data["Close"] if "Close" in data.columns else None
-                    volume_series = data["Volume"] if "Volume" in data.columns else None
-                    high_series = data["High"] if "High" in data.columns else None
-                    low_series = data["Low"] if "Low" in data.columns else None
+                    close_series = _close_series_from_block(data) if not isinstance(data.columns, pd.MultiIndex) else None
+                    volume_series = data["Volume"] if "Volume" in data.columns else data.get("volume") if "volume" in data.columns else None
+                    high_series = data["High"] if "High" in data.columns else data.get("high")
+                    low_series = data["Low"] if "Low" in data.columns else data.get("low")
 
                 if close_series is not None and len(close_series) >= 1:
                     # Use only valid closes so we get a real previous close when the raw series has NaNs (e.g. multi-ticker date alignment)
@@ -307,16 +331,15 @@ class MarketDataService:
                             currency=None,
                         )
             else:
-                # Multi-ticker: columns are MultiIndex (ticker, OHLCV) or (Ticker, Price)
+                # Multi-ticker: with group_by="ticker", columns are (Ticker, OHLCV). No top-level "Close".
                 for t in tickers:
                     try:
                         if t in data.columns.get_level_values(0):
                             t_block = data[t]
-                            if t_block is None or not hasattr(t_block, "columns"):
-                                continue
-                            close_col = t_block["Close"] if "Close" in t_block.columns else None
+                            close_col = _close_series_from_block(t_block)
                         else:
-                            close_col = data["Close"].get(t) if hasattr(data["Close"], "get") else None
+                            # Ticker not in result (e.g. Yahoo omitted it). Skip; fallback will try yahooquery.
+                            close_col = None
                         if close_col is None:
                             continue
                         close_series = close_col if hasattr(close_col, "iloc") else close_col
@@ -370,12 +393,13 @@ class MarketDataService:
                             currency=None,
                         )
                     except Exception as e:
-                        print(f"Warning: Failed to parse batch quote for {t}: {e}")
+                        logger.warning("Failed to parse batch quote for %s: %s", t, e)
         except Exception as e:
-            print(f"Warning: Batch quote fetch failed: {e}")
+            logger.warning("Batch quote fetch failed: %s", e)
         # Fallback: yahooquery for tickers that got no data (e.g. yfinance 401)
         missing = [t for t in tickers if results[t] is None]
         if missing:
+            logger.info("Yahoo (yfinance) missed %d tickers, falling back to yahooquery: %s", len(missing), missing[:10])
             fallback = MarketDataService._get_multiple_quotes_batch_yahooquery(missing)
             for t, q in fallback.items():
                 if q is not None:
@@ -396,6 +420,7 @@ class MarketDataService:
             return MarketDataService.get_multiple_quotes_batch(tickers)
 
         tickers = [t.upper() for t in tickers]
+        logger.info("Fetching range quotes from Yahoo (yfinance) for %d tickers, range=%s", len(tickers), range_)
         results: Dict[str, Optional[TickerQuote]] = {t: None for t in tickers}
         period = MARKET_RANGE_PERIODS.get(range_, "1mo")
         offset = MARKET_RANGE_OFFSETS.get(range_)
@@ -427,13 +452,19 @@ class MarketDataService:
                     if len(chunk_tickers) == 1:
                         tc = chunk_tickers[0]
                         if isinstance(data.columns, pd.MultiIndex) and tc in data.columns.get_level_values(0):
-                            return data[tc]["Close"] if "Close" in data[tc].columns else None
-                        return data["Close"] if "Close" in data.columns else None
+                            return _close_series_from_block(data[tc])
+                        if "Close" in data.columns:
+                            return data["Close"]
+                        if "close" in data.columns:
+                            return data["close"]
+                        return None
                     if not isinstance(data.columns, pd.MultiIndex):
                         return None
+                    # group_by="ticker" → level 0 = ticker, level 1 = OHLCV. No top-level "Close".
                     if t in data.columns.get_level_values(0):
-                        return data[t]["Close"] if "Close" in data[t].columns else None
-                    if t in data.columns.get_level_values(1) and "Close" in data.columns.get_level_values(0):
+                        return _close_series_from_block(data[t])
+                    # (OHLCV, ticker) layout: "Close" at level 0
+                    if "Close" in data.columns.get_level_values(0) and t in data.columns.get_level_values(1):
                         return data["Close"].get(t)
                     return None
 
@@ -441,15 +472,26 @@ class MarketDataService:
                     if len(chunk_tickers) == 1:
                         tc = chunk_tickers[0]
                         if isinstance(data.columns, pd.MultiIndex) and tc in data.columns.get_level_values(0):
-                            return data[tc]["Volume"] if "Volume" in data[tc].columns else None
-                        return data["Volume"] if "Volume" in data.columns else None
+                            blk = data[tc]
+                            if blk is not None and hasattr(blk, "columns"):
+                                return blk["Volume"] if "Volume" in blk.columns else blk["volume"] if "volume" in blk.columns else None
+                            return None
+                        if "Volume" in data.columns:
+                            return data["Volume"]
+                        if "volume" in data.columns:
+                            return data["volume"]
+                        return None
                     if not isinstance(data.columns, pd.MultiIndex):
                         return None
                     if (t, "Volume") in data.columns:
                         return data[(t, "Volume")]
-                    if t in data.columns.get_level_values(0) and "Volume" in data[t].columns:
-                        return data[t]["Volume"]
-                    if t in data.columns.get_level_values(1) and "Volume" in data.columns.get_level_values(0):
+                    if (t, "volume") in data.columns:
+                        return data[(t, "volume")]
+                    if t in data.columns.get_level_values(0):
+                        blk = data[t]
+                        if blk is not None and hasattr(blk, "columns"):
+                            return blk["Volume"] if "Volume" in blk.columns else blk.get("volume")
+                    if "Volume" in data.columns.get_level_values(0) and t in data.columns.get_level_values(1):
                         return data["Volume"].get(t)
                     return None
 
@@ -512,11 +554,14 @@ class MarketDataService:
                             currency=None,
                         )
                     except Exception as e:
-                        print(f"Warning: Failed to parse range quote for {t}: {e}")
+                        logger.warning("Failed to parse range quote for %s: %s", t, e)
             except FuturesTimeoutError:
-                print(f"Warning: Batch range quote fetch timed out for chunk (>{_RANGE_BATCH_TIMEOUT_SEC}s), skipping")
+                logger.warning(
+                    "Batch range quote fetch timed out for chunk (>%ds), skipping",
+                    _RANGE_BATCH_TIMEOUT_SEC,
+                )
             except Exception as e:
-                print(f"Warning: Batch range quote fetch failed for chunk: {e}")
+                logger.warning("Batch range quote fetch failed for chunk: %s", e)
 
         # Retry tickers that got no data (Yahoo often returns incomplete data in large batches).
         # Use a longer period for single-ticker fetch to get more rows (e.g. 3mo for 1w/1mo range).
@@ -535,12 +580,12 @@ class MarketDataService:
                 if data is None or not hasattr(data, "columns") or data.columns is None:
                     continue
                 # Single-ticker download: flat columns or MultiIndex (ticker, OHLCV)
-                if isinstance(data.columns, pd.MultiIndex) and t in data.columns.get_level_values(0):
-                    close_series = data[t]["Close"] if "Close" in data[t].columns else None
-                    vol_series = data[t]["Volume"] if "Volume" in data[t].columns else None
+                t_block = data[t] if (isinstance(data.columns, pd.MultiIndex) and t in data.columns.get_level_values(0)) else None
+                close_series = _close_series_from_block(t_block) if t_block is not None else (_close_series_from_block(data) if not isinstance(data.columns, pd.MultiIndex) else None)
+                if t_block is not None and hasattr(t_block, "columns"):
+                    vol_series = t_block["Volume"] if "Volume" in t_block.columns else t_block.get("volume")
                 else:
-                    close_series = data["Close"] if "Close" in data.columns else None
-                    vol_series = data["Volume"] if "Volume" in data.columns else None
+                    vol_series = data["Volume"] if "Volume" in data.columns else data.get("volume") if hasattr(data, "get") else None
                 if close_series is None:
                     continue
                 valid = close_series.dropna()
@@ -592,11 +637,12 @@ class MarketDataService:
             except FuturesTimeoutError:
                 pass  # skip this ticker, may get it via yahooquery fallback
             except Exception as e:
-                print(f"Warning: Retry range quote failed for {t}: {e}")
+                logger.warning("Retry range quote failed for %s: %s", t, e)
 
         # Fallback: yahooquery when yfinance failed (e.g. 401) for some tickers
         missing = [t for t in tickers if results[t] is None]
         if missing:
+            logger.info("Yahoo (yfinance) missed %d tickers for range %s, falling back to yahooquery", len(missing), range_)
             fallback = MarketDataService._get_multiple_quotes_batch_with_range_yahooquery(
                 missing, range_
             )
@@ -704,6 +750,7 @@ class MarketDataService:
         except ImportError:
             return None
         ticker = ticker.upper()
+        logger.info("Fetching quote from Yahoo (yahooquery) for %s", ticker)
         try:
             tq = YahooQueryTicker(ticker)
             raw = tq.get_modules("price summaryDetail")
@@ -760,6 +807,7 @@ class MarketDataService:
         """Batch fetch quotes via yahooquery (fallback when yfinance fails)."""
         if not tickers:
             return {}
+        logger.info("Fetching quotes from Yahoo (yahooquery) for %d tickers (fallback)", len(tickers))
         results: Dict[str, Optional[TickerQuote]] = {t: None for t in tickers}
         try:
             from yahooquery import Ticker as YahooQueryTicker
@@ -800,6 +848,7 @@ class MarketDataService:
         """Fetch range-based quotes via yahooquery history() (fallback when yfinance fails)."""
         if not tickers:
             return {}
+        logger.info("Fetching range quotes from Yahoo (yahooquery) for %d tickers, range=%s (fallback)", len(tickers), range_)
         results: Dict[str, Optional[TickerQuote]] = {t: None for t in tickers}
         try:
             from yahooquery import Ticker as YahooQueryTicker

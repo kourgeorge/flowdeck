@@ -9,6 +9,7 @@ Used by both the dashboard HTTP API and (via info service client) by AI agents.
 from __future__ import annotations
 
 import json
+import logging
 import math
 import threading
 from datetime import date, datetime, timedelta
@@ -40,6 +41,9 @@ def _tradingagents_route_to_vendor():
         sys.path.insert(0, str(tradingagents_dir))
     from ai_engine.tradingagents.dataflows.interface import route_to_vendor
     return route_to_vendor
+
+
+logger = logging.getLogger(__name__)
 
 
 class InfoFetcher:
@@ -101,6 +105,7 @@ class InfoFetcher:
         the last trading day's intraday data (not today's partial day)."""
         import yfinance as yf
         ticker = ticker.upper()
+        logger.info("Fetching historical data from Yahoo (yfinance) for %s period=%s interval=%s", ticker, period, interval)
         ticker_obj = yf.Ticker(ticker)
         intraday_intervals = ("1m", "2m", "5m", "15m", "30m", "60m")
         use_last_trading_day = period == "1d" and interval in intraday_intervals
@@ -236,6 +241,7 @@ class InfoFetcher:
         if not tickers:
             return {}
         symbols = [t.upper() for t in tickers]
+        logger.info("Fetching company info from Yahoo (yahooquery) for %d tickers", len(symbols))
         try:
             from yahooquery import Ticker as YahooQueryTicker
         except Exception:
@@ -281,6 +287,7 @@ class InfoFetcher:
         if ticker in batch:
             return batch[ticker]
         import yfinance as yf
+        logger.info("Fetching company info from Yahoo (yfinance fallback) for %s", ticker)
         try:
             info = yf.Ticker(ticker).info
             quote_type = info.get("quoteType")
@@ -303,6 +310,7 @@ class InfoFetcher:
         """Get extended metrics (beta, market cap, margins, etc.)."""
         import yfinance as yf
         ticker = ticker.upper()
+        logger.info("Fetching extended info from Yahoo (yfinance) for %s", ticker)
         try:
             ticker_obj = yf.Ticker(ticker)
             info = ticker_obj.info
@@ -374,6 +382,7 @@ class InfoFetcher:
             import pandas as pd
 
             ticker_upper = ticker.upper()
+            logger.info("Fetching analyst recommendations from Yahoo (yahooquery) for %s", ticker_upper)
             ticker_obj = YahooQueryTicker(ticker_upper)
 
             def _safe_int(value: Any) -> int:
@@ -556,6 +565,7 @@ class InfoFetcher:
         """Get upcoming earnings and ex-dividend dates from Yahoo Finance (yfinance)."""
         import yfinance as yf
         ticker = ticker.upper()
+        logger.info("Fetching future events from Yahoo (yfinance) for %s", ticker)
         today = datetime.now().date()
         events: List[Dict[str, Any]] = []
         try:
@@ -647,6 +657,7 @@ class InfoFetcher:
         """Get ETF/fund-specific data (AUM, expense ratio, category, holdings, sector weightings, etc.)."""
         import yfinance as yf
         ticker = ticker.upper()
+        logger.info("Fetching fund info from Yahoo (yfinance) for %s", ticker)
         out: Dict[str, Any] = {
             "ticker": ticker,
             "totalAssets": None,
@@ -727,6 +738,7 @@ class InfoFetcher:
         if not symbols:
             return {}
         symbols = [s.upper() for s in symbols]
+        logger.info("Fetching sector info from Yahoo (yahooquery) for %d symbols", len(symbols))
         try:
             from yahooquery import Ticker as YahooQueryTicker
         except Exception:
@@ -792,6 +804,7 @@ class InfoFetcher:
 
     def _fetch_sector_info_yfinance(self, ticker: str) -> Optional[Dict[str, Any]]:
         """Fallback: fetch sector/industry info from yfinance when yahooquery fails or returns no data."""
+        logger.info("Fetching sector info from Yahoo (yfinance fallback) for %s", ticker)
         try:
             import yfinance as yf
         except Exception:
@@ -1138,6 +1151,7 @@ class InfoFetcher:
         if not symbols:
             return
 
+        logger.info("Fetching batch quotes from Yahoo (yahooquery) for %d symbols (similar tickers)", len(symbols))
         try:
             from yahooquery import Ticker as YahooQueryTicker
         except Exception:
@@ -1256,6 +1270,7 @@ class InfoFetcher:
 
     def get_daily_market_movers(self, count: int = 25) -> Dict[str, Any]:
         """Get daily top gainers, losers, and most active from yahooquery Screener (US market)."""
+        logger.info("Fetching daily market movers from Yahoo (yahooquery Screener)")
         from yahooquery import Screener
 
         def _normalize_quote(q: Dict[str, Any]) -> Dict[str, Any]:
@@ -1567,6 +1582,10 @@ class InfoFetcher:
             return {"section": normalized_section, "items": [], "total": 0}
 
         unique_tickers = list({t for (t, _name) in group_tickers})
+        logger.info(
+            "Fetching market overview section '%s' from Yahoo (range=%s, %d tickers)",
+            normalized_section, range_, len(unique_tickers),
+        )
         quotes = svc.get_multiple_quotes_batch_with_range(unique_tickers, range_)
 
         items: List[Dict[str, Any]] = []
@@ -1610,6 +1629,7 @@ class InfoFetcher:
         import yfinance as yf
         
         ticker = ticker.upper()
+        logger.info("Fetching company officers from Yahoo (yfinance) for %s", ticker)
         
         try:
             t = yf.Ticker(ticker)

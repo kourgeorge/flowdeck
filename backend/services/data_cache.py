@@ -317,19 +317,32 @@ def get_cached(
     Returns:
         The cached or freshly fetched value.
     """
+    value, _ = get_cached_with_origin(key, ttl_seconds, fetch_fn)
+    return value
+
+
+def get_cached_with_origin(
+    key: str,
+    ttl_seconds: float,
+    fetch_fn: Callable[[], T],
+) -> Tuple[T, bool]:
+    """
+    Like get_cached but returns (value, from_cache).
+    from_cache is True if the value was served from cache, False if fetch_fn was called.
+    """
     from config import DATA_CACHE_ENABLED
 
     if not DATA_CACHE_ENABLED:
-        return fetch_fn()
+        return (fetch_fn(), False)
 
     store = _get_store()
     cached = store.get(key)
     if cached is not None:
-        return cached
+        return (cached, True)
 
     value = fetch_fn()
     store.set(key, value, ttl_seconds)
-    return value
+    return (value, False)
 
 
 def refresh_cached(

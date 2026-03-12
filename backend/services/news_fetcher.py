@@ -108,6 +108,7 @@ def get_news_yahoo(ticker: str, lookback_days: int = 7) -> Dict[str, Any]:
     """
     ticker = ticker.upper()
     curr_date = datetime.now().strftime("%Y-%m-%d")
+    logger.info("Fetching news from Yahoo for %s", ticker)
     try:
         ticker_obj = yf.Ticker(ticker)
         news = ticker_obj.news
