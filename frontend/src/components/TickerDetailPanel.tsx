@@ -108,6 +108,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const [priceFlash, setPriceFlash] = useState(false);
   const [companyOfficers, setCompanyOfficers] = useState<any[]>([]);
   const [isLoadingOfficers, setIsLoadingOfficers] = useState(false);
+  const [hasLoadedCompanyOfficers, setHasLoadedCompanyOfficers] = useState(false);
 
   const refreshedQuote = useQuoteRefresh(ticker, 60000);
   const prevPriceRef = useRef<number | null>(null);
@@ -284,6 +285,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     setCompanyInfo(null); setExtendedInfo(null); setFundamentalsData(null);
     setFinancialStatements(null); setNewsData([]); setNewsError(null); setInsiderTransactions([]);
     setInsiderTransactionsError(null); setIsLoadingInsiderTransactions(false); setHasLoadedInsiderTransactions(false);
+    setCompanyOfficers([]); setIsLoadingOfficers(false); setHasLoadedCompanyOfficers(false);
     setFundamentalsSubTab('charts'); setFundInfo(null);
     setAnalysisProgress(null); setEdgarFilings(null); setEdgarFilingsError(null); setFutureEvents(null);
     setSimilarTickers(null); setSimilarTickerPages({}); setSimilarHasMoreByPage({}); setSimilarStocksPage(1);
@@ -452,12 +454,13 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     tickerApi.getCompanyOfficers(ticker)
       .then((r) => {
         setCompanyOfficers(r.officers || []);
-        setIsLoadingOfficers(false);
+        setHasLoadedCompanyOfficers(true);
       })
       .catch(() => {
         setCompanyOfficers([]);
-        setIsLoadingOfficers(false);
-      });
+        setHasLoadedCompanyOfficers(true);
+      })
+      .finally(() => setIsLoadingOfficers(false));
   }, [ticker]);
 
   const refreshSubscriptionForTicker = useCallback(async () => {
@@ -545,7 +548,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   // END EXPERIMENTAL
 
   useEffect(() => { if (activeTab === 'news' && ticker && !isLoadingNews) fetchNews(); }, [activeTab, ticker, fetchNews]);
-  useEffect(() => { if (activeTab === 'overview' && ticker && !isLoadingOfficers && companyOfficers.length === 0) fetchCompanyOfficers(); }, [activeTab, ticker, fetchCompanyOfficers, isLoadingOfficers, companyOfficers.length]);
+  useEffect(() => { if (activeTab === 'overview' && ticker && !hasLoadedCompanyOfficers && !isLoadingOfficers) fetchCompanyOfficers(); }, [activeTab, ticker, fetchCompanyOfficers, hasLoadedCompanyOfficers, isLoadingOfficers]);
   useEffect(() => {
     if (
       activeTab === 'insider-transactions'
