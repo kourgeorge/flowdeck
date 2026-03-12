@@ -54,17 +54,17 @@ const REPORT_LABELS: Record<string, string> = {
 const SHORT_AXIS_LABELS: Record<string, string> = {
   Market: 'Mkt',
   News: 'News',
-  Fundamentals: 'Fund.',
+  Fundamentals: 'Fund',
   Technical: 'Tech',
   SEC: 'SEC',
-  Research: 'Res.',
+  Research: 'Res',
   'Low Risk': 'Risk',
 };
 
 function getAxisLabel(aspect: string, maxLen: number = 5): string {
   const short = SHORT_AXIS_LABELS[aspect];
   if (short) return short;
-  return aspect.length <= maxLen ? aspect : aspect.slice(0, maxLen - 1) + '.';
+  return aspect.length <= maxLen ? aspect : aspect.slice(0, maxLen);
 }
 
 const EXCLUDED_REPORT_TYPES = new Set(['trader_investment_plan']);
@@ -151,7 +151,7 @@ export default function AspectSpiderChart({ scoreEntries, size = 80 }: AspectSpi
         className="shrink-0 rounded border border-gray-700/80 bg-gray-900/50 flex items-center justify-center"
         style={{ width: size, height: size }}
       >
-        <span className="text-[10px] text-gray-500">N/A</span>
+        <span className="text-xs text-gray-500">N/A</span>
       </div>
     );
   }
@@ -248,12 +248,12 @@ function PentagonalRadar({ spiderData, radarColor, size }: PentagonalRadarProps)
       tabIndex={-1}
       onMouseDown={(e) => e.preventDefault()}
     >
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="block">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size + 5}`} className="block">
         {/* Banded concentric rings (alternating darker / lighter background) */}
         <g fillRule="evenodd">
           {bands.map(({ innerR, outerR, dark }, i) => {
             const fill = dark ? '#1f2937' : '#374151';
-            const opacity = dark ? 0.35 : 0.2;
+            const opacity = dark ? 0.55 : 0.4;
             if (innerR === 0) {
               return <circle key={i} cx={cx} cy={cy} r={outerR} fill={fill} fillOpacity={opacity} />;
             }
@@ -307,12 +307,12 @@ function PentagonalRadar({ spiderData, radarColor, size }: PentagonalRadarProps)
             dominantBaseline="middle"
             fill="#e5e7eb"
             fillOpacity={0.95}
-            fontSize={Math.max(8, Math.round(size * 0.1))}
+            fontSize={Math.max(9, Math.round(size * 0.11))}
             fontFamily="system-ui, -apple-system, 'Segoe UI', sans-serif"
             letterSpacing="0.02em"
             transform={`rotate(${lp.rotation} ${lp.x} ${lp.y})`}
           >
-            {lp.aspect}
+            {lp.aspect.toUpperCase()}
           </text>
         ))}
       </svg>
