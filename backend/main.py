@@ -73,26 +73,30 @@ async def lifespan(app: FastAPI):
             if scheduler is None:
                 from apscheduler.schedulers.background import BackgroundScheduler
                 scheduler = BackgroundScheduler()
+            import threading
             from services.info_fetcher import get_info_fetcher
 
+            def _run_refresh(fn):
+                try:
+                    engine = get_info_fetcher()
+                    if hasattr(engine, fn):
+                        getattr(engine, fn)()
+                except Exception as e:
+                    print(f"Market cache refresh ({fn}) failed: {e}")
+
             def _refresh_market_overview_cache():
-                engine = get_info_fetcher()
-                if hasattr(engine, "refresh_market_overview_cache"):
-                    engine.refresh_market_overview_cache()
+                threading.Thread(target=_run_refresh, args=("refresh_market_overview_cache",), daemon=True).start()
 
             def _refresh_market_movers_cache():
-                engine = get_info_fetcher()
-                if hasattr(engine, "refresh_market_movers_cache"):
-                    engine.refresh_market_movers_cache()
+                threading.Thread(target=_run_refresh, args=("refresh_market_movers_cache",), daemon=True).start()
 
             scheduler.add_job(_refresh_market_overview_cache, "interval", minutes=5, id="market_overview_refresh")
             scheduler.add_job(_refresh_market_movers_cache, "interval", minutes=5, id="market_movers_refresh")
             if not scheduler.running:
                 scheduler.start()
-            # Populate cache on startup so first request is fast
-            import threading
-            threading.Thread(target=_refresh_market_overview_cache, daemon=True).start()
-            threading.Thread(target=_refresh_market_movers_cache, daemon=True).start()
+            # Populate cache on startup in background so first request is fast (non-blocking)
+            threading.Thread(target=_run_refresh, args=("refresh_market_overview_cache",), daemon=True).start()
+            threading.Thread(target=_run_refresh, args=("refresh_market_movers_cache",), daemon=True).start()
         except Exception as e:
             print(f"Failed to start market overview cache refresh: {e}")
 

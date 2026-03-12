@@ -7,6 +7,7 @@ Uses per-type TTLs from config.
 
 from __future__ import annotations
 
+import itertools
 import math
 from typing import Any, Dict, List, Optional
 
@@ -302,28 +303,30 @@ class CachedInfoFetcher:
         """
         Force-fetch market overview data and write it to the cache (TTL 15min).
         Called by a periodic job so Overview and Regional Map are warm without waiting on first request.
-        Warms: full overview and sections regions/indices for 1D, 1W, 1M, 6M, YTD.
+        Warms: all 16 offset combinations (each section page 0 or 1) for 1D, 1W, 1M, 6M, YTD;
+        and sections regions/indices for Regional Map.
         """
-        # Full overview: first-page params used by Overview tab (TILES_PER_PAGE=6 for each group)
-        limit_indices = limit_sectors = limit_regions = limit_commodities = 6
-        offset_indices = offset_sectors = offset_regions = offset_commodities = 0
-        for range_ in ("1d", "1w", "1mo", "6mo", "ytd"):
-            key = f"market_overview:{range_}:{limit_indices}:{offset_indices}:{limit_sectors}:{offset_sectors}:{limit_regions}:{offset_regions}:{limit_commodities}:{offset_commodities}"
-            refresh_cached(
-                key,
-                DATA_CACHE_TTL_MARKET_OVERVIEW,
-                lambda r=range_: self._fetcher.get_market_overview(
-                    limit_indices=limit_indices,
-                    offset_indices=offset_indices,
-                    limit_sectors=limit_sectors,
-                    offset_sectors=offset_sectors,
-                    limit_regions=limit_regions,
-                    offset_regions=offset_regions,
-                    limit_commodities=limit_commodities,
-                    offset_commodities=offset_commodities,
-                    range_=r,
-                ),
-            )
+        limit = 6
+        # Each section can be page 0 (offset 0) or page 1 (offset 6); warm all 2^4 combinations
+        # so that "next page" in any single section (e.g. sectors only) is cached.
+        for oi, os_, or_, oc in itertools.product((0, limit), repeat=4):
+            for range_ in ("1d", "1w", "1mo", "6mo", "ytd"):
+                key = f"market_overview:{range_}:{limit}:{oi}:{limit}:{os_}:{limit}:{or_}:{limit}:{oc}"
+                refresh_cached(
+                    key,
+                    DATA_CACHE_TTL_MARKET_OVERVIEW,
+                    lambda r=range_, oi_=oi, os__=os_, or__=or_, oc_=oc: self._fetcher.get_market_overview(
+                        limit_indices=limit,
+                        offset_indices=oi_,
+                        limit_sectors=limit,
+                        offset_sectors=os__,
+                        limit_regions=limit,
+                        offset_regions=or__,
+                        limit_commodities=limit,
+                        offset_commodities=oc_,
+                        range_=r,
+                    ),
+                )
         # Sections used by Regional Map: regions (limit 100), indices (limit 15)
         for section, limit in (("regions", 100), ("indices", 15)):
             for range_ in ("1d", "1w", "1mo", "6mo", "ytd"):
@@ -342,9 +345,9 @@ class CachedInfoFetcher:
     def refresh_market_movers_cache(self) -> None:
         """
         Force-fetch market movers and write to cache so first request is fast.
-        Warms counts used by Market view (8) and dashboard/API default (25).
+        Warms all counts used by Market view pagination (8, 16, 24 for pages 1–3) and dashboard/API default (25).
         """
-        for count in (8, 25):
+        for count in (8, 16, 24, 25):
             refresh_cached(
                 f"market_movers:{count}",
                 DATA_CACHE_TTL_MARKET_MOVERS,
