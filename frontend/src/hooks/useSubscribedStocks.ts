@@ -13,6 +13,7 @@ export interface UseSubscribedStocksReturn {
   selectedTicker: string | null;
   setSelectedTicker: (ticker: string | null) => void;
   prefetchCache: Record<string, TickerPageData>;
+  prefetchProgress: { completed: number; inFlight: number; total: number };
   handleSubscriptionChange: () => void;
   /** Add a ticker to the vibe list (fetches widget data on the fly) */
   addTicker: (ticker: string) => Promise<void>;
@@ -36,9 +37,22 @@ export function useSubscribedStocks(): UseSubscribedStocksReturn {
   const [prefetchCache, setPrefetchCache] = useState<Record<string, TickerPageData>>({});
 
   const prefetchedRef = useRef<Set<string>>(new Set());
+  const prefetchingRef = useRef<Set<string>>(new Set());
+  const [prefetchProgress, setPrefetchProgress] = useState({ completed: 0, inFlight: 0, total: 0 });
   // Track which tickers were loaded from subscriptions so we can detect
   // user-added extras that should survive a subscription reload.
   const userAddedRef = useRef<Set<string>>(new Set());
+
+  const updatePrefetchProgress = useCallback((tickers: string[]) => {
+    const total = tickers.length;
+    const completed = tickers.filter((t) => prefetchedRef.current.has(t)).length;
+    const inFlight = tickers.filter((t) => prefetchingRef.current.has(t)).length;
+    setPrefetchProgress((prev) =>
+      prev.completed === completed && prev.inFlight === inFlight && prev.total === total
+        ? prev
+        : { completed, inFlight, total }
+    );
+  }, []);
 
   // Load ticker name map
   useEffect(() => {
@@ -88,10 +102,17 @@ export function useSubscribedStocks(): UseSubscribedStocksReturn {
   // Prefetch stock page data for all tickers in the list
   useEffect(() => {
     if (!user || widgets.length === 0) return;
-    const newTickers = widgets.map((w) => w.ticker).filter((t) => !prefetchedRef.current.has(t));
-    if (newTickers.length === 0) return;
+    const allTickers = widgets.map((w) => w.ticker);
+    const newTickers = allTickers.filter(
+      (t) => !prefetchedRef.current.has(t) && !prefetchingRef.current.has(t)
+    );
+    if (newTickers.length === 0) {
+      updatePrefetchProgress(allTickers);
+      return;
+    }
 
-    newTickers.forEach((t) => prefetchedRef.current.add(t));
+    newTickers.forEach((t) => prefetchingRef.current.add(t));
+    updatePrefetchProgress(allTickers);
 
     const fetchBatch = async (batch: string[]) => {
       await Promise.all(
@@ -99,9 +120,14 @@ export function useSubscribedStocks(): UseSubscribedStocksReturn {
           tickerApi.getTickerPage(ticker)
             .then((data) => {
               setPrefetchCache((prev) => ({ ...prev, [ticker]: data }));
+              prefetchedRef.current.add(ticker);
             })
             .catch(() => {
-              prefetchedRef.current.delete(ticker);
+              // leave out of prefetched so it can retry later
+            })
+            .finally(() => {
+              prefetchingRef.current.delete(ticker);
+              updatePrefetchProgress(allTickers);
             })
         )
       );
@@ -114,7 +140,7 @@ export function useSubscribedStocks(): UseSubscribedStocksReturn {
     };
 
     runQueue();
-  }, [user, widgets]);
+  }, [user, widgets, updatePrefetchProgress]);
 
   const handleSubscriptionChange = useCallback(() => {
     loadSubscriptions();
@@ -165,6 +191,7 @@ export function useSubscribedStocks(): UseSubscribedStocksReturn {
     selectedTicker,
     setSelectedTicker,
     prefetchCache,
+    prefetchProgress,
     handleSubscriptionChange,
     addTicker,
     removeTicker,

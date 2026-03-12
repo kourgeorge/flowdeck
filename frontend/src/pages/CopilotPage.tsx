@@ -26,10 +26,19 @@ export default function CopilotPage() {
     selectedTicker,
     setSelectedTicker,
     prefetchCache,
+    prefetchProgress,
     handleSubscriptionChange,
     addTicker,
     removeTicker,
   } = useSubscribedStocks();
+
+  const prefetchPercent =
+    prefetchProgress.total > 0
+      ? Math.round((prefetchProgress.completed / prefetchProgress.total) * 100)
+      : 0;
+  const showCopilotLoadingStatus =
+    widgets.length > 0 &&
+    (prefetchProgress.inFlight > 0 || prefetchProgress.completed < prefetchProgress.total);
 
   // All tickers in the user's watchlist — passed to the AI analyst for full context
   const allTickers = widgets.map((w: TickerWidget) => w.ticker);
@@ -100,21 +109,44 @@ export default function CopilotPage() {
     );
   }
 
-  // ── Loading ──
+  // ── Loading (no widgets yet) ── full-page progress like Stock View
   if (isLoading && widgets.length === 0) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="text-center">
-          <svg className="w-8 h-8 text-blue-400 animate-spin mx-auto mb-3" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-          </svg>
-          <p className="text-gray-400 text-sm">Loading {COPILOT_NAME}…</p>
+      <div className="flex flex-col h-full overflow-hidden">
+        <PageHeader
+          title={`${COPILOT_NAME} – Trading assistant`}
+          icon={
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          }
+        />
+        <div className="flex-1 flex items-center justify-center px-4">
+          <div className="w-full max-w-sm border border-gray-700 bg-gray-800/80 rounded-lg px-4 py-4 text-xs text-gray-300">
+            <div className="flex items-center gap-2">
+              <svg className="w-3.5 h-3.5 text-blue-400 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              <span>Preparing {COPILOT_NAME}…</span>
+            </div>
+            <div className="mt-3 space-y-1.5">
+              <div>
+                Focus tickers:
+                {' '}
+                {isLoading ? 'loading…' : `${widgets.length}`}
+              </div>
+              <div>
+                Stock prefetch:
+                {' '}
+                {prefetchProgress.completed} / {prefetchProgress.total}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
-
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -127,6 +159,39 @@ export default function CopilotPage() {
           </svg>
         }
       />
+
+      {showCopilotLoadingStatus && (
+        <div className="shrink-0 border-b border-gray-700 bg-gray-800/80 px-3 py-2 text-xs text-gray-300">
+          <div className="flex items-center gap-2">
+            <svg className="w-3.5 h-3.5 text-blue-400 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+            <span>Preparing {COPILOT_NAME}…</span>
+          </div>
+          <div className="mt-1.5 space-y-1">
+            <div>
+              Focus tickers:
+              {' '}
+              {widgets.length}
+            </div>
+            <div>
+              Stock prefetch:
+              {' '}
+              {prefetchProgress.completed} / {prefetchProgress.total}
+              {prefetchProgress.inFlight > 0 ? ` (${prefetchProgress.inFlight} in progress)` : ''}
+            </div>
+            {prefetchProgress.total > 0 && (
+              <div className="h-1.5 w-full rounded bg-gray-700 overflow-hidden">
+                <div
+                  className="h-full bg-blue-500 transition-all duration-300"
+                  style={{ width: `${prefetchPercent}%` }}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Three-column layout (desktop) ── */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
