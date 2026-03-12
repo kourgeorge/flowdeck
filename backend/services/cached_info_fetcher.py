@@ -337,7 +337,8 @@ class CachedInfoFetcher:
                     range_=r,
                 ),
             )
-        # Regional Map: only first page of each section (15 items each) so refresh loads fewer tickers
+        # Regional Map: first page only (15 items) to avoid Yahoo rate limits.
+        # Map requests limit=100 for regions; those will miss cache and fetch on demand.
         for section, section_limit in (("regions", 15), ("indices", 15)):
             for range_ in ("1d", "1w", "1mo", "6mo", "ytd"):
                 key = f"market_overview_section:{section}:{range_}:{section_limit}:0"
