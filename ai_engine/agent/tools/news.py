@@ -90,4 +90,4 @@ class GlobalNewsTool(BaseTool):
         except Exception as exc:
             return ToolResult(ok=False, error={"code": "TOOL_ERROR", "message": str(exc)})
 
-# Made with Bob
+

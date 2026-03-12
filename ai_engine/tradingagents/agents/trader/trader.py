@@ -227,4 +227,4 @@ def create_trader(llm, memory):
 
     return functools.partial(trader_node, name="Trader")
 
-# Made with Bob
+

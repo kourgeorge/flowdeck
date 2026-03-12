@@ -349,4 +349,4 @@ def _fetch_historical_dates(ticker: str) -> str:
     )
     return "\n".join(lines)
 
-# Made with Bob
+

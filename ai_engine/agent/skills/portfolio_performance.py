@@ -303,4 +303,3 @@ def _compute_returns(
 
     return table_text, chart_json_str
 
-# Made with Bob

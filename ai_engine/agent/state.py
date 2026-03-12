@@ -59,4 +59,3 @@ class AgentState(TypedDict):
     plan_approved: bool
     discoveries: Optional[List[str]]
 
-# Made with Bob

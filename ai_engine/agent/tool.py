@@ -144,4 +144,4 @@ class BaseTool(ABC):
         status = "enabled" if self.enabled else "disabled"
         return f"<Tool {self.spec.name}@{self.spec.version} [{status}]>"
 
-# Made with Bob
+

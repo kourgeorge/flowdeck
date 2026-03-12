@@ -232,4 +232,4 @@ class BaseSkill(ABC):
         status = "enabled" if self.enabled else "disabled"
         return f"<Skill {self.spec.name}@{self.spec.version} [{status}]>"
 
-# Made with Bob
+

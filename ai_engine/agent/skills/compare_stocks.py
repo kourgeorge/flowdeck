@@ -286,4 +286,4 @@ class CompareStocksSkill(BaseSkill):
             metrics={"tool_calls": len(steps), "tickers_compared": len(tickers)},
         )
 
-# Made with Bob
+

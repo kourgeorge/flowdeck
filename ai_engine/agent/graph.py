@@ -1218,4 +1218,3 @@ class FlowDeckAgent:
             logger.exception("FlowDeckAgent.stream | error | user_id=%s | %s", user_id, exc)
             yield f"data: {json.dumps({'type': 'error', 'content': str(exc)})}\n\n"
 
-# Made with Bob

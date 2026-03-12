@@ -279,4 +279,4 @@ def make_user_context_tools(user_id: int, db: Any) -> list[BaseTool]:
         PortfolioOverviewTool(user_id=user_id, db=db),
     ]
 
-# Made with Bob
+

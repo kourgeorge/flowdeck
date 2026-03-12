@@ -481,4 +481,4 @@ def get_chat_service() -> ChatService:
         _chat_service = ChatService()
     return _chat_service
 
-# Made with Bob
+

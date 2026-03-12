@@ -250,4 +250,4 @@ def _run_sandboxed(code: str) -> str:
 
     return output.strip() or "(no output)"
 
-# Made with Bob
+

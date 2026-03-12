@@ -380,4 +380,4 @@ def get_all_lc_tools(user_id: Optional[int] = None, db: Any = None) -> list:
         tools.extend(make_user_lc_tools(user_id, db))
     return tools
 
-# Made with Bob
+

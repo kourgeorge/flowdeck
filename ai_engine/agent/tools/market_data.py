@@ -287,4 +287,4 @@ class SpecificIndicatorTool(BaseTool):
             return ToolResult(ok=False, error={"code": "TOOL_ERROR", "message": str(exc)})
 
 
-# Made with Bob
+

@@ -457,4 +457,4 @@ def _extract_skill_args(message: str, skill: Any) -> dict:
 
     return args
 
-# Made with Bob
+

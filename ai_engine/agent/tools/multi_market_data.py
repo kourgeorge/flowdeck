@@ -154,4 +154,3 @@ def _fetch_multi_historical_prices(
 
     return json.dumps(output)
 
-# Made with Bob

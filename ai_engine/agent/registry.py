@@ -221,4 +221,4 @@ class SkillRegistry:
         names = list(self._skills.keys())
         return f"<SkillRegistry skills={names}>"
 
-# Made with Bob
+
