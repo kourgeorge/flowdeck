@@ -118,10 +118,10 @@ def get_specific_indicator(ticker: str, indicator: str, config: _InjectedConfig 
 
 
 @tool
-def get_daily_market_movers(count: int = 25, config: _InjectedConfig = None) -> str:
+def get_daily_market_movers(count: int = 8, config: _InjectedConfig = None) -> str:
     """Get today's top gainers and top losers in the US market. Returns two lists: biggest
     percentage gainers and biggest percentage losers. Use when the user asks about top gainers,
-    top losers, best/worst performers today, or daily market movers. Pass count (default 25, max 100)
+    top losers, best/worst performers today, or daily market movers. Pass count (default 8, max 100)
     to limit how many symbols per list."""
     from ai_engine.agent.tools.market_movers import MarketMoversTool
     ctx = _ctx_from_config(config)

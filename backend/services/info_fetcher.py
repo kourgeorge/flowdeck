@@ -1268,7 +1268,7 @@ class InfoFetcher:
             if isinstance(recommendation_key, str) and recommendation_key.strip():
                 ticker["recommendation_key"] = recommendation_key.strip()
 
-    def get_daily_market_movers(self, count: int = 25) -> Dict[str, Any]:
+    def get_daily_market_movers(self, count: int = 8) -> Dict[str, Any]:
         """Get daily top gainers, losers, and most active from yahooquery Screener (US market)."""
         logger.info("Fetching daily market movers from Yahoo (yahooquery Screener)")
         from yahooquery import Screener

@@ -242,7 +242,7 @@ class CachedInfoFetcher:
             lambda: self._fetcher.get_similar_tickers(ticker, limit, offset),
         )
 
-    def get_daily_market_movers(self, count: int = 25) -> Dict[str, Any]:
+    def get_daily_market_movers(self, count: int = 8) -> Dict[str, Any]:
         """Get daily top gainers and losers (cached)."""
         key = f"market_movers:{count}"
         return get_cached(
@@ -356,9 +356,9 @@ class CachedInfoFetcher:
     def refresh_market_movers_cache(self) -> None:
         """
         Force-fetch market movers and write to cache so first request is fast.
-        Warms all counts used by Market view pagination (8, 16, 24 for pages 1–3) and dashboard/API default (25).
+        Warms the default count (8) and Market view pagination (16, 24 for pages 2–3).
         """
-        for count in (8, 16, 24, 25):
+        for count in (8, 16, 24):
             refresh_cached(
                 f"market_movers:{count}",
                 DATA_CACHE_TTL_MARKET_MOVERS,

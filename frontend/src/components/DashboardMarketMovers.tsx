@@ -106,7 +106,7 @@ function MoversTable({
   );
 }
 
-export default function DashboardMarketMovers({ count = 29, onSelectTicker }: DashboardMarketMoversProps) {
+export default function DashboardMarketMovers({ count = 8, onSelectTicker }: DashboardMarketMoversProps) {
   const [gainers, setGainers] = useState<MarketMoverRow[]>([]);
   const [losers, setLosers] = useState<MarketMoverRow[]>([]);
   const [mostActive, setMostActive] = useState<MarketMoverRow[]>([]);

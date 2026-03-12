@@ -216,7 +216,7 @@ def get_edgar_filing_content(
     return "\n".join(parts)
 
 
-def get_market_movers(count: int = 25, base_url: Optional[str] = None) -> Dict[str, Any]:
+def get_market_movers(count: int = 8, base_url: Optional[str] = None) -> Dict[str, Any]:
     """Fetch daily top gainers and losers (US market) from info service.
     Returns dict with 'gainers' and 'losers' lists of quote-like dicts."""
     base_url = base_url or _get_info_service_base_url()

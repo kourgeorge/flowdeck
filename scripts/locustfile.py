@@ -182,7 +182,7 @@ class FlowdeckApiUser(HttpUser):
         """Top gainers/losers. No auth."""
         self.client.get(
             "/api/data/market-movers",
-            params={"count": random.choice([15, 25, 50])},
+            params={"count": 8},
             name="/api/data/market-movers",
         )
 

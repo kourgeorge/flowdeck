@@ -622,7 +622,7 @@ export const tickerApi = {
   },
 
   // Get daily top gainers, losers, and most active (US market, yahooquery Screener)
-  getMarketMovers: async (count: number = 25): Promise<{
+  getMarketMovers: async (count: number = 8): Promise<{
     gainers: Array<{
       symbol: string | null;
       shortName: string | null;
