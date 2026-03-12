@@ -150,6 +150,18 @@ export default function CopilotChatPanel({
     }).catch(() => {});
   }, [chat, useInternalSession]);
 
+  const handleDeleteSession = useCallback((id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    chatApi.deleteChatSession(id).then(() => {
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+      if (sessionId === id) {
+        setSessionId(null);
+        chat.clearChat();
+      }
+    }).catch(() => {});
+  }, [sessionId, chat]);
+
   // Focus input when panel expands
   useEffect(() => {
     if (!collapsed) {
@@ -258,11 +270,11 @@ export default function CopilotChatPanel({
                       <li className="px-3 py-4 text-center text-xs text-slate-500">No conversations yet</li>
                     ) : (
                       sessions.map((s) => (
-                        <li key={s.id}>
+                        <li key={s.id} className="flex items-center group">
                           <button
                             type="button"
                             onClick={() => handleLoadSession(s.id)}
-                            className={`w-full text-left px-3 py-2 text-sm border-l-2 transition-colors ${
+                            className={`flex-1 min-w-0 text-left px-3 py-2 text-sm border-l-2 transition-colors ${
                               sessionId === s.id
                                 ? 'border-blue-500 bg-gray-700/60 text-white'
                                 : 'border-transparent hover:bg-gray-700/40 text-slate-300'
@@ -271,6 +283,16 @@ export default function CopilotChatPanel({
                             <span className="block truncate" title={s.title ?? undefined}>
                               {s.title || 'New chat'}
                             </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteSession(s.id, e)}
+                            title="Delete conversation"
+                            className="shrink-0 p-1.5 mr-1 rounded text-slate-400 hover:text-red-400 hover:bg-gray-700/60 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
                           </button>
                         </li>
                       ))
