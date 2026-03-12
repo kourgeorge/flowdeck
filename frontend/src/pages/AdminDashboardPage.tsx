@@ -27,7 +27,7 @@ import {
   type RunningAnalysisItem,
 } from '../services/adminApi';
 
-type AdminTab = 'overview' | 'mission-control';
+type AdminTab = 'overview' | 'mission-control' | 'users';
 type MissionSortKey = 'ticker' | 'company' | 'type' | 'market_cap' | 'sector' | 'industry' | 'last_completed' | 'status';
 type MissionSortDirection = 'asc' | 'desc';
 type ViewRunsSortKey = 'ticker' | 'analysis_run_id' | 'unique_views' | 'viewed';
@@ -189,7 +189,22 @@ export default function AdminDashboardPage() {
   const [addTokensError, setAddTokensError] = useState<string | null>(null);
   const [addAmountByUser, setAddAmountByUser] = useState<Record<number, string>>({});
   const [latestReportsCollapsed, setLatestReportsCollapsed] = useState(true);
-  const [subscriptionsCollapsed, setSubscriptionsCollapsed] = useState(true);
+  const [expandedSubscriptionUserIds, setExpandedSubscriptionUserIds] = useState<Set<number>>(new Set());
+
+  const subscriptionsByUser = useMemo(() => {
+    const byUser = new Map<number, { user_email: string; subscriptions: AdminSubscriptionItem[] }>();
+    for (const s of subscriptions) {
+      const existing = byUser.get(s.user_id);
+      if (existing) {
+        existing.subscriptions.push(s);
+      } else {
+        byUser.set(s.user_id, { user_email: s.user_email, subscriptions: [s] });
+      }
+    }
+    return [...byUser.entries()]
+      .map(([user_id, { user_email, subscriptions: subs }]) => ({ user_id, user_email, subscriptions: subs }))
+      .sort((a, b) => a.user_email.localeCompare(b.user_email, undefined, { sensitivity: 'base' }));
+  }, [subscriptions]);
 
   const sortedMissionItems = useMemo(
     () =>
@@ -576,10 +591,189 @@ export default function AdminDashboardPage() {
             >
               Mission control
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('users')}
+              className={`px-2 py-1.5 text-sm font-medium transition-colors ${
+                activeTab === 'users'
+                  ? 'border-b-2 border-blue-500 text-blue-400'
+                  : 'text-slate-400 hover:text-slate-300'
+              }`}
+            >
+              Users
+            </button>
           </div>
         </div>
 
-        {activeTab === 'mission-control' ? (
+        {activeTab === 'users' ? (
+          <section className="space-y-10">
+            <h2 className="text-lg font-semibold text-white">Users ({usersTotal})</h2>
+            {addTokensError && (
+              <div className="rounded-lg border border-red-800 bg-red-950/50 px-4 py-2 text-sm text-red-200">
+                {addTokensError}
+                <button
+                  type="button"
+                  onClick={() => setAddTokensError(null)}
+                  className="ml-2 text-red-400 hover:text-red-100"
+                  aria-label="Dismiss"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+            <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-800/80">
+              <table className="w-full min-w-[700px] text-left text-sm">
+                <thead className="sticky top-0 bg-gray-800 z-10">
+                  <tr className="border-b border-gray-700">
+                    <th className="px-4 py-3 text-gray-400 font-medium">Email</th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">Name</th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">Tokens</th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">Subscriptions</th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">Created</th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((u) => {
+                    const amountStr = addAmountByUser[u.id] ?? '200';
+                    const amount = Math.max(1, parseInt(amountStr, 10) || 0);
+                    const isAdding = addingForUserId === u.id;
+                    return (
+                      <tr key={u.id} className="border-b border-gray-700/50">
+                        <td className="px-4 py-3 text-gray-300">{u.email}</td>
+                        <td className="px-4 py-3 text-gray-300">{u.name ?? '—'}</td>
+                        <td className="px-4 py-3 text-white">{u.token_balance.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-gray-300">{u.subscription_count}</td>
+                        <td className="px-4 py-3 text-gray-400">{formatDate(u.created_at)}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min={1}
+                              max={10000}
+                              value={amountStr}
+                              onChange={(e) =>
+                                setAddAmountByUser((prev) => ({ ...prev, [u.id]: e.target.value }))
+                              }
+                              className="w-20 rounded border border-gray-600 bg-gray-700 px-2 py-1 text-white text-right"
+                              disabled={isAdding}
+                              aria-label={`Tokens to add for ${u.email}`}
+                            />
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                setAddTokensError(null);
+                                setAddingForUserId(u.id);
+                                try {
+                                  const res = await adminApi.addTokensToUser(u.id, amount);
+                                  setUsers((prev) =>
+                                    prev.map((x) =>
+                                      x.id === u.id ? { ...x, token_balance: res.token_balance } : x,
+                                    ),
+                                  );
+                                } catch (err: unknown) {
+                                  const ax = err as { response?: { data?: { detail?: string } } };
+                                  setAddTokensError(
+                                    ax.response?.data?.detail ?? 'Failed to add tokens',
+                                  );
+                                } finally {
+                                  setAddingForUserId(null);
+                                }
+                              }}
+                              disabled={isAdding || amount < 1}
+                              className="rounded bg-blue-600 px-2 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                            >
+                              {isAdding ? '…' : 'Add tokens'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <h2 className="text-lg font-semibold text-white">Subscriptions ({subscriptionsTotal})</h2>
+            <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-800/80">
+              <table className="w-full min-w-[400px] text-left text-sm">
+                <thead className="sticky top-0 bg-gray-800 z-10">
+                  <tr className="border-b border-gray-700">
+                    <th className="px-4 py-3 text-gray-400 font-medium w-10" aria-label="Expand" />
+                    <th className="px-4 py-3 text-gray-400 font-medium">User / Ticker</th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">Email updates</th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {subscriptionsByUser.map(({ user_id, user_email, subscriptions: userSubs }) => {
+                    const isExpanded = expandedSubscriptionUserIds.has(user_id);
+                    const sortedSubs = [...userSubs].sort((a, b) =>
+                      a.ticker.localeCompare(b.ticker, undefined, { sensitivity: 'base' }),
+                    );
+                    return (
+                      <Fragment key={user_id}>
+                        <tr className="border-b border-gray-700/50 bg-gray-800">
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedSubscriptionUserIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(user_id)) next.delete(user_id);
+                                  else next.add(user_id);
+                                  return next;
+                                })
+                              }
+                              className="inline-flex items-center gap-2 text-gray-400 hover:text-gray-200"
+                              aria-expanded={isExpanded}
+                              aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                            >
+                              <span
+                                className={`inline-block transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                              >
+                                ▶
+                              </span>
+                            </button>
+                          </td>
+                          <td className="px-4 py-3 text-white font-medium" colSpan={3}>
+                            {user_email}
+                            <span className="ml-2 text-gray-400 font-normal">
+                              ({userSubs.length} subscription{userSubs.length === 1 ? '' : 's'})
+                            </span>
+                          </td>
+                        </tr>
+                        {isExpanded &&
+                          sortedSubs.map((s) => (
+                            <tr key={s.id} className="border-b border-gray-700/30 bg-gray-900/40">
+                              <td className="px-4 py-2 text-gray-500">↳</td>
+                              <td className="px-4 py-2">
+                                <Link
+                                  to={`/tickers/${s.ticker}`}
+                                  className="text-blue-400 hover:text-blue-300 font-medium"
+                                >
+                                  {s.ticker}
+                                </Link>
+                              </td>
+                              <td className="px-4 py-2 text-gray-400">{s.email_updates ? 'Yes' : 'No'}</td>
+                              <td className="px-4 py-2 text-gray-400">{formatDate(s.created_at)}</td>
+                            </tr>
+                          ))}
+                      </Fragment>
+                    );
+                  })}
+                  {subscriptionsByUser.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-6 text-center text-gray-400">
+                        No subscriptions.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : activeTab === 'mission-control' ? (
           <section>
             {/* Running analyses: list + stop */}
             <div className="mb-4 rounded-lg border border-gray-700 bg-gray-800/80 p-4">
@@ -938,95 +1132,6 @@ export default function AdminDashboardPage() {
             )}
 
             <section className="mb-10">
-              <h2 className="text-lg font-semibold text-white mb-4">Users ({usersTotal})</h2>
-              {addTokensError && (
-                <div className="mb-3 rounded-lg border border-red-800 bg-red-950/50 px-4 py-2 text-sm text-red-200">
-                  {addTokensError}
-                  <button
-                    type="button"
-                    onClick={() => setAddTokensError(null)}
-                    className="ml-2 text-red-400 hover:text-red-100"
-                    aria-label="Dismiss"
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
-              <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-800/80">
-                <table className="w-full min-w-[700px] text-left text-sm">
-                  <thead className="sticky top-0 bg-gray-800 z-10">
-                    <tr className="border-b border-gray-700">
-                      <th className="px-4 py-3 text-gray-400 font-medium">Email</th>
-                      <th className="px-4 py-3 text-gray-400 font-medium">Name</th>
-                      <th className="px-4 py-3 text-gray-400 font-medium">Tokens</th>
-                      <th className="px-4 py-3 text-gray-400 font-medium">Subscriptions</th>
-                      <th className="px-4 py-3 text-gray-400 font-medium">Created</th>
-                      <th className="px-4 py-3 text-gray-400 font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {users.map((u) => {
-                      const amountStr = addAmountByUser[u.id] ?? '200';
-                      const amount = Math.max(1, parseInt(amountStr, 10) || 0);
-                      const isAdding = addingForUserId === u.id;
-                      return (
-                        <tr key={u.id} className="border-b border-gray-700/50">
-                          <td className="px-4 py-3 text-gray-300">{u.email}</td>
-                          <td className="px-4 py-3 text-gray-300">{u.name ?? '—'}</td>
-                          <td className="px-4 py-3 text-white">{u.token_balance.toLocaleString()}</td>
-                          <td className="px-4 py-3 text-gray-300">{u.subscription_count}</td>
-                          <td className="px-4 py-3 text-gray-400">{formatDate(u.created_at)}</td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                min={1}
-                                max={10000}
-                                value={amountStr}
-                                onChange={(e) =>
-                                  setAddAmountByUser((prev) => ({ ...prev, [u.id]: e.target.value }))
-                                }
-                                className="w-20 rounded border border-gray-600 bg-gray-700 px-2 py-1 text-white text-right"
-                                disabled={isAdding}
-                                aria-label={`Tokens to add for ${u.email}`}
-                              />
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  setAddTokensError(null);
-                                  setAddingForUserId(u.id);
-                                  try {
-                                    const res = await adminApi.addTokensToUser(u.id, amount);
-                                    setUsers((prev) =>
-                                      prev.map((x) =>
-                                        x.id === u.id ? { ...x, token_balance: res.token_balance } : x,
-                                      ),
-                                    );
-                                  } catch (err: unknown) {
-                                    const ax = err as { response?: { data?: { detail?: string } } };
-                                    setAddTokensError(
-                                      ax.response?.data?.detail ?? 'Failed to add tokens',
-                                    );
-                                  } finally {
-                                    setAddingForUserId(null);
-                                  }
-                                }}
-                                disabled={isAdding || amount < 1}
-                                className="rounded bg-blue-600 px-2 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                              >
-                                {isAdding ? '…' : 'Add tokens'}
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="mb-10">
               <h2 className="text-lg font-semibold text-white mb-4">Recent analyses ({analysesTotal})</h2>
               <div className="overflow-x-auto overflow-y-auto max-h-96 rounded-lg border border-gray-700 bg-gray-800/80">
                 <table className="w-full min-w-[500px] text-left text-sm">
@@ -1262,66 +1367,6 @@ export default function AdminDashboardPage() {
                             {r.cost_usd != null ? `$${r.cost_usd.toFixed(4)}` : '—'}
                           </td>
                           <td className="px-4 py-3 text-gray-400">{formatDate(r.created_at)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-
-            <section>
-              <div className="mb-4">
-                <button
-                  type="button"
-                  onClick={() => setSubscriptionsCollapsed((prev) => !prev)}
-                  className="group flex w-full items-center gap-3 text-left"
-                  aria-expanded={!subscriptionsCollapsed}
-                  aria-controls="subscriptions-table"
-                >
-                  <h2 className="text-lg font-semibold text-white">Subscriptions ({subscriptionsTotal})</h2>
-                  <span className="h-px flex-1 bg-gray-700 transition-colors group-hover:bg-gray-600" />
-                  <span className="inline-flex items-center gap-1 text-sm text-gray-300">
-                    {subscriptionsCollapsed ? 'Show' : 'Hide'}
-                    <svg
-                      className={`h-4 w-4 transition-transform ${subscriptionsCollapsed ? '' : 'rotate-180'}`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </span>
-                </button>
-              </div>
-              {!subscriptionsCollapsed && (
-                <div
-                  id="subscriptions-table"
-                  className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-800/80"
-                >
-                  <table className="w-full min-w-[400px] text-left text-sm">
-                    <thead className="sticky top-0 bg-gray-800 z-10">
-                      <tr className="border-b border-gray-700">
-                        <th className="px-4 py-3 text-gray-400 font-medium">User email</th>
-                        <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
-                        <th className="px-4 py-3 text-gray-400 font-medium">Email updates</th>
-                        <th className="px-4 py-3 text-gray-400 font-medium">Created</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {subscriptions.map((s) => (
-                        <tr key={s.id} className="border-b border-gray-700/50">
-                          <td className="px-4 py-3 text-gray-300">{s.user_email}</td>
-                          <td className="px-4 py-3">
-                            <Link
-                              to={`/tickers/${s.ticker}`}
-                              className="text-blue-400 hover:text-blue-300 font-medium"
-                            >
-                              {s.ticker}
-                            </Link>
-                          </td>
-                          <td className="px-4 py-3 text-gray-400">{s.email_updates ? 'Yes' : 'No'}</td>
-                          <td className="px-4 py-3 text-gray-400">{formatDate(s.created_at)}</td>
                         </tr>
                       ))}
                     </tbody>
