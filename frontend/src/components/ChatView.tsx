@@ -808,10 +808,30 @@ export function useChatState(
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const lastHiddenAtRef = useRef<number>(0);
 
   // Cancel stream on unmount
   useEffect(() => {
     return () => { abortRef.current?.abort(); };
+  }, []);
+
+  // When leaving the app (e.g. switching tabs on mobile), abort the stream so we don't
+  // surface a "network error" when the browser suspends the connection.
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden) {
+        lastHiddenAtRef.current = Date.now();
+        if (abortRef.current) {
+          abortRef.current.abort();
+          abortRef.current = null;
+          setIsLoading(false);
+          setIsStreaming(false);
+          setThinkingStatus(null);
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, []);
 
   // Auto-scroll to bottom
@@ -894,6 +914,12 @@ export function useChatState(
         setIsStreaming(false);
         setIsLoading(false);
         setThinkingStatus(null);
+        // Suppress network/connection errors when app was recently in background (e.g. user left and came back).
+        const isNetworkError = /network|fetch|failed|load failed|connection|stream failed/i.test(message);
+        const recentlyHidden = Date.now() - lastHiddenAtRef.current < 3000;
+        if (isNetworkError && (document.hidden || recentlyHidden)) {
+          return;
+        }
         if (message.includes('402') || message.toLowerCase().includes('insufficient')) {
           setError('Insufficient token balance. Please purchase more tokens to continue chatting.');
         } else if (message.includes('401') || message.toLowerCase().includes('sign')) {
