@@ -154,7 +154,7 @@ export default function ChatPage() {
         )}
       </PageHeader>
 
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0 min-w-0">
         {/* Session list sidebar (authenticated only), collapsible */}
         {user && (
           <aside
@@ -231,8 +231,8 @@ export default function ChatPage() {
         )}
 
         {/* Centered content wrapper for the messages + input */}
-        <div className="flex flex-col flex-1 min-h-0">
-          <div className="flex flex-col flex-1 min-h-0 max-w-3xl w-full mx-auto px-4">
+        <div className="flex flex-col flex-1 min-h-0 min-w-0">
+          <div className="flex flex-col flex-1 min-h-0 min-w-0 max-w-3xl w-full mx-auto px-4">
             <ChatView
               chat={chat}
               isAuthenticated={!!user}

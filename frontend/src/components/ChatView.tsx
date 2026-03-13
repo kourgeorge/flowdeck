@@ -1082,7 +1082,7 @@ export default function ChatView({
   return (
     <>
       {/* Messages area */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-3 py-4">
+      <div className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden px-3 py-4">
         {isEmpty && (
           <div className="flex flex-col items-center justify-center min-h-[60%] gap-4 pb-4">
             {!isAuthenticated ? (
