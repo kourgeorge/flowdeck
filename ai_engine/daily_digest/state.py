@@ -33,6 +33,32 @@ class MarketInterpretation(BaseModel):
     relevance_to_portfolio: str = Field(description="Why the market context matters for this portfolio.")
 
 
+class FocusSelection(BaseModel):
+    """Output of the Focus Selector agent."""
+    focus_tickers: List[str] = Field(
+        description="Ordered list of tickers to focus on in today's brief (subset of the user's portfolio)."
+    )
+
+
+class ReferenceItem(BaseModel):
+    """Structured reference item used to ground the daily brief."""
+    label: str = Field(
+        description="Short human-readable label for the source (e.g. article title or feed name)."
+    )
+    url: Optional[str] = Field(
+        default=None,
+        description="Optional URL for the source, if available.",
+    )
+    source: Optional[str] = Field(
+        default=None,
+        description="Optional publisher/feed/source name.",
+    )
+    tickers: Optional[List[str]] = Field(
+        default=None,
+        description="Related tickers, if any (e.g. ['AAPL', 'MSFT']).",
+    )
+
+
 # ---------------------------------------------------------------------------
 # DigestContext (output of build_digest_context)
 # ---------------------------------------------------------------------------
@@ -94,6 +120,25 @@ class DigestWorkflowState(BaseModel):
     max_priority_tickers: int = Field(default=5, ge=1, le=20, description="Max number of tickers to analyze in depth.")
     db: Any = Field(default=None, description="DB session (optional; required for portfolio load).")
     config: Dict[str, Any] = Field(default_factory=dict, description="LLM/config overrides.")
+    user_note: Optional[str] = Field(
+        default=None,
+        description="Optional free-form user input for today's brief (preferences, concerns, focus).",
+    )
+    user_focus_tickers: Optional[List[str]] = Field(
+        default=None,
+        description=(
+            "Optional explicit list of tickers from the user's portfolio that the brief should focus on. "
+            "When provided, this is treated as a strong preference and guides focus selection."
+        ),
+    )
+    narrative_style: Optional[str] = Field(
+        default=None,
+        description=(
+            "Optional style preference for the brief narrative, e.g. "
+            "'concise', 'professional', 'technical', 'story-like'. "
+            "Used as a soft instruction for the narrative writer."
+        ),
+    )
 
     digest_context: Optional[DigestContext] = Field(default=None, description="Set after algorithmic step.")
 
@@ -101,6 +146,10 @@ class DigestWorkflowState(BaseModel):
     market_interpretation: Optional[MarketInterpretation] = Field(default=None)
     digest_narrative: str = Field(default="")
     what_to_watch: str = Field(default="")
+    references: List[ReferenceItem] = Field(
+        default_factory=list,
+        description="Structured list of sources used for this brief (news articles, feeds, web snippets, etc.).",
+    )
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -115,6 +164,10 @@ class DigestResult(BaseModel):
     what_to_watch: str = Field(description="Short 'what to watch' section.")
     digest_date: str = Field(description="Date of the digest.")
     priority_tickers: List[str] = Field(default_factory=list, description="Tickers that were analyzed in depth.")
+    references: List[ReferenceItem] = Field(
+        default_factory=list,
+        description="Structured list of sources used for this brief.",
+    )
     # Optional LLM usage metadata (for token accounting / cost analysis)
     input_tokens: Optional[int] = Field(default=None, description="Prompt tokens used by the digest workflow.")
     output_tokens: Optional[int] = Field(default=None, description="Completion tokens used by the digest workflow.")

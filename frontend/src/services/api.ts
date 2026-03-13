@@ -731,6 +731,16 @@ export interface DigestResponse {
   what_to_watch: string;
   digest_date: string;
   priority_tickers: string[];
+  user_note?: string | null;
+  narrative_style?: string | null;
+  user_focus_tickers?: string[] | null;
+   raw_metadata?: Record<string, unknown> | null;
+  references?: {
+    label: string;
+    url?: string | null;
+    source?: string | null;
+    tickers?: string[] | null;
+  }[] | null;
 }
 
 export interface DigestDatesResponse {
@@ -745,6 +755,10 @@ export interface DigestBriefItem {
   what_to_watch: string;
   digest_date: string;
   priority_tickers: string[];
+  user_note?: string | null;
+  narrative_style?: string | null;
+  user_focus_tickers?: string[] | null;
+  raw_metadata?: Record<string, unknown> | null;
 }
 
 export interface DigestListForDateResponse {
@@ -753,12 +767,25 @@ export interface DigestListForDateResponse {
 }
 
 export const digestApi = {
-  getDigest: async (params?: { date?: string; max_priority_tickers?: number }): Promise<DigestResponse> => {
+  getDigest: async (params?: { date?: string; max_priority_tickers?: number; user_note?: string; narrative_style?: string; user_focus_tickers?: string[] }): Promise<DigestResponse> => {
     const token = getStoredToken();
     if (!token) throw new Error('Sign in to get your User Daily Brief');
+    // Build query so array is sent as repeated keys (user_focus_tickers=A&user_focus_tickers=B); axios default would send [] brackets which FastAPI does not parse as list.
+    const searchParams = new URLSearchParams();
+    if (params) {
+      if (params.date != null) searchParams.set('date', params.date);
+      if (params.max_priority_tickers != null) searchParams.set('max_priority_tickers', String(params.max_priority_tickers));
+      if (params.user_note != null && params.user_note !== '') searchParams.set('user_note', params.user_note);
+      if (params.narrative_style != null && params.narrative_style !== '') searchParams.set('narrative_style', params.narrative_style);
+      if (params.user_focus_tickers?.length) {
+        for (const t of params.user_focus_tickers) {
+          searchParams.append('user_focus_tickers', t);
+        }
+      }
+    }
     const response = await api.get<DigestResponse>('/api/digest', {
       headers: { Authorization: `Bearer ${token}` },
-      params: params ?? {},
+      params: searchParams,
     });
     return response.data;
   },

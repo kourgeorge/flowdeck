@@ -26,6 +26,11 @@ class DigestResponse(BaseModel):
     what_to_watch: str
     digest_date: str
     priority_tickers: list[str]
+    references: Optional[list[dict]] = None
+    user_note: Optional[str] = None
+    narrative_style: Optional[str] = None
+    user_focus_tickers: Optional[list[str]] = None
+    raw_metadata: Optional[dict] = None
 
 
 class DigestDatesResponse(BaseModel):
@@ -40,6 +45,10 @@ class DigestBriefItem(BaseModel):
     what_to_watch: str
     digest_date: str
     priority_tickers: list[str]
+    user_note: Optional[str] = None
+    narrative_style: Optional[str] = None
+    user_focus_tickers: Optional[list[str]] = None
+    raw_metadata: Optional[dict] = None
 
 
 class DigestListForDateResponse(BaseModel):
@@ -53,6 +62,26 @@ async def get_digest(
     db: Session = Depends(get_db),
     date: Optional[str] = Query(None, description="Date for the digest (YYYY-MM-DD). Default: today."),
     max_priority_tickers: int = Query(5, ge=1, le=20, description="Max tickers to analyze in depth"),
+    user_note: Optional[str] = Query(
+        None,
+        max_length=2000,
+        description="Optional free-form note from the user to be considered by the digest writer.",
+    ),
+    narrative_style: Optional[str] = Query(
+        None,
+        max_length=64,
+        description=(
+            "Optional style preference for the brief narrative, e.g. "
+            "'concise', 'professional', 'technical', 'story-like'."
+        ),
+    ),
+    user_focus_tickers: Optional[list[str]] = Query(
+        None,
+        description=(
+            "Optional explicit list of portfolio tickers the brief should focus on. "
+            "If provided, this strongly guides focus selection."
+        ),
+    ),
 ):
     """
     Generate a short, tailored User Daily Brief for the current user's portfolio (and persist it).
@@ -77,6 +106,9 @@ async def get_digest(
             db=db,
             config=None,
             max_priority_tickers=max_priority_tickers,
+            user_note=user_note,
+            narrative_style=narrative_style,
+            user_focus_tickers=user_focus_tickers,
         )
     except Exception as e:
         logger.exception("Digest generation failed for user_id=%s: %s", current_user.id, e)
@@ -97,6 +129,12 @@ async def get_digest(
             "priority_tickers": result.priority_tickers,
             "what_to_watch": result.what_to_watch,
         }
+        if user_note:
+            metadata["user_note"] = user_note
+        if narrative_style:
+            metadata["narrative_style"] = narrative_style
+        if user_focus_tickers:
+            metadata["user_focus_tickers"] = user_focus_tickers
         # Attach LLM usage metadata when available
         if result.input_tokens is not None:
             metadata["input_tokens"] = result.input_tokens
@@ -133,6 +171,11 @@ async def get_digest(
         what_to_watch=result.what_to_watch,
         digest_date=result.digest_date,
         priority_tickers=result.priority_tickers,
+        references=[r.model_dump() for r in (result.references or [])] if hasattr(result, "references") else None,
+        user_note=user_note,
+        narrative_style=narrative_style,
+        user_focus_tickers=user_focus_tickers,
+        raw_metadata=metadata,
     )
 
 
@@ -184,6 +227,11 @@ def _report_to_brief_item(ex: Execution, report: Report, date: str) -> DigestBri
     priority_tickers = meta.get("priority_tickers") or []
     if not isinstance(priority_tickers, list):
         priority_tickers = []
+    user_note = meta.get("user_note")
+    narrative_style = meta.get("narrative_style")
+    user_focus_tickers = meta.get("user_focus_tickers") or None
+    if user_focus_tickers is not None and not isinstance(user_focus_tickers, list):
+        user_focus_tickers = None
     created_at = ex.created_at.isoformat() if ex.created_at else ""
     return DigestBriefItem(
         execution_id=ex.id,
@@ -192,6 +240,10 @@ def _report_to_brief_item(ex: Execution, report: Report, date: str) -> DigestBri
         what_to_watch=what_to_watch,
         digest_date=digest_date,
         priority_tickers=[str(t) for t in priority_tickers],
+        user_note=str(user_note) if user_note is not None else None,
+        narrative_style=str(narrative_style) if narrative_style is not None else None,
+        user_focus_tickers=[str(t) for t in (user_focus_tickers or [])] or None,
+        raw_metadata=meta or None,
     )
 
 

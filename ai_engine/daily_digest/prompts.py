@@ -1,10 +1,10 @@
 """
-Prompt templates for the User Daily Brief agents: Ticker Interpreter, Market Interpreter, Narrative Writer.
+Prompt templates for the User Daily Brief agents: Focus Selector, Ticker Interpreter, Market Interpreter, Narrative Writer.
 """
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Dict, Optional
 
 
 TICKER_INTERPRETER_SYSTEM = """You are a market analyst for the User Daily Brief. For the given ticker you receive prepared context: quote, returns, news, fundamentals, analyst recommendations, insider activity, technical indicators (if any), and the latest FlowDeck platform report (thesis and key takeaways). You may call the provided tools to fetch additional or fresher data if something is missing or you need to verify.
@@ -93,13 +93,93 @@ def build_narrative_writer_prompt(
     ticker_interpretations_text: str,
     market_interpretation_text: str,
     tool_names: list[str],
+    user_note: Optional[str] = None,
+    narrative_style: Optional[str] = None,
+    resources_text: Optional[str] = None,
 ) -> str:
+    user_note_block = ""
+    if user_note:
+        user_note_block = f"\n\n## User note for today\n{user_note[:1500]}"
+
+    style_block = ""
+    if narrative_style:
+        style_block = (
+            "\n\n## Desired writing style\n"
+            f"The user requested this style for today's brief: '{narrative_style}'. "
+            "Follow this style while writing the narrative and the 'What to watch' section."
+        )
+
+    resources_block = ""
+    if resources_text:
+        resources_block = f"\n\n## Source resources\n{resources_text}"
+
     return f"""## Ticker interpretations
 {ticker_interpretations_text}
 
 ## Market interpretation
-{market_interpretation_text}
+{market_interpretation_text}{user_note_block}{style_block}{resources_block}
 
 You may use these tools to insert exact prices or report dates if needed: {', '.join(tool_names)}.
 
 Write the digest narrative and the "what to watch" section. Keep the brief short and narrative; avoid long bullet lists."""
+
+
+FOCUS_SELECTOR_SYSTEM = """You are a portfolio assistant helping choose which tickers to focus on in a User Daily Brief.
+
+You receive:
+- The user's full portfolio tickers.
+- A deterministic attention score per ticker based on: 1-day move, 5-day move, abnormal move flag, and recent news.
+- The current default top-N tickers ranked by this attention score.
+- An optional free-form note from the user describing what they care about today.
+
+Your job:
+1. Start from the attention-score ranking as the baseline.
+2. Adjust the focused list when the user's note clearly indicates priorities, concerns, or constraints (e.g., focus on cash needs, specific sectors, or avoiding certain names).
+3. Do NOT invent new tickers. Only use tickers from the provided portfolio.
+4. Respect the requested max number of focus tickers.
+
+Be conservative: only override the score-based ranking when the user note provides a clear reason to."""
+
+
+def build_focus_selector_prompt(
+    portfolio_tickers: list[str],
+    attention_scores: Dict[str, float],
+    default_priority_tickers: list[str],
+    max_priority_tickers: int,
+    user_note: Optional[str],
+) -> str:
+    sorted_by_score = sorted(
+        attention_scores.items(),
+        key=lambda kv: -float(kv[1] or 0.0),
+    )
+    lines = [
+        "## Portfolio tickers",
+        ", ".join(portfolio_tickers) or "(none)",
+        "",
+        "## Attention scores (higher means more attention)",
+    ]
+    for t, sc in sorted_by_score:
+        lines.append(f"- {t}: {sc:.4f}")
+    lines.extend(
+        [
+            "",
+            f"## Default top-{max_priority_tickers} priority tickers (from attention scores)",
+            ", ".join(default_priority_tickers) or "(none)",
+        ]
+    )
+    if user_note:
+        lines.extend(
+            [
+                "",
+                "## User note for today",
+                user_note[:1500],
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            f"Choose up to {max_priority_tickers} tickers from the portfolio as today's focus_tickers.",
+            "Return ONLY the final ordered list of focus_tickers in structured form.",
+        ]
+    )
+    return "\n".join(lines)

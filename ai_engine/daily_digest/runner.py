@@ -13,7 +13,7 @@ from typing import Any, Dict, Optional
 from ai_engine.llm_provider import get_config_from_env, get_llm
 
 from .context_builder import build_digest_context
-from .agents import run_ticker_interpreter, run_market_interpreter, run_narrative_writer
+from .agents import run_focus_selector, run_ticker_interpreter, run_market_interpreter, run_narrative_writer
 from .state import DigestWorkflowState, DigestResult
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,9 @@ def run_digest(
     *,
     max_priority_tickers: int = 5,
     fetcher: Optional[Any] = None,
+    user_note: Optional[str] = None,
+    narrative_style: Optional[str] = None,
+    user_focus_tickers: Optional[list[str]] = None,
 ) -> DigestResult:
     """
     Run the full User Daily Brief pipeline and return a DigestResult.
@@ -60,6 +63,23 @@ def run_digest(
         db=db,
         config=cfg,
     )
+    if user_note:
+        state.user_note = user_note
+    if narrative_style:
+        state.narrative_style = narrative_style
+    if user_focus_tickers:
+        # Normalize to upper-case tickers and de-duplicate; leave final validation to focus selector.
+        seen: set[str] = set()
+        cleaned: list[str] = []
+        for t in user_focus_tickers:
+            if not t:
+                continue
+            tu = str(t).upper()
+            if tu not in seen:
+                cleaned.append(tu)
+                seen.add(tu)
+        if cleaned:
+            state.user_focus_tickers = cleaned
 
     logger.info("Digest: building context for user_id=%s date=%s", user_id, digest_date)
     ctx = build_digest_context(
@@ -102,6 +122,11 @@ def run_digest(
 
     if get_openai_callback is not None:
         with get_openai_callback() as cb:  # type: ignore[misc]
+            logger.info("Digest: running focus selector")
+            focus_tickers = run_focus_selector(state, llm)
+            if focus_tickers:
+                ctx.priority_tickers = focus_tickers
+
             logger.info("Digest: running ticker interpreter for %d tickers", len(ctx.priority_tickers))
             state.ticker_interpretations = run_ticker_interpreter(state, llm)
 
@@ -116,6 +141,11 @@ def run_digest(
         total_tokens = getattr(cb, "total_tokens", None)
         cost_usd = getattr(cb, "total_cost", None)
     else:
+        logger.info("Digest: running focus selector")
+        focus_tickers = run_focus_selector(state, llm)
+        if focus_tickers:
+            ctx.priority_tickers = focus_tickers
+
         logger.info("Digest: running ticker interpreter for %d tickers", len(ctx.priority_tickers))
         state.ticker_interpretations = run_ticker_interpreter(state, llm)
 
@@ -138,6 +168,7 @@ def run_digest(
         what_to_watch=state.what_to_watch,
         digest_date=digest_date,
         priority_tickers=ctx.priority_tickers,
+        references=state.references,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         total_tokens=total_tokens,
