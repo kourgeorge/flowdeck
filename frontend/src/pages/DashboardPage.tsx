@@ -799,8 +799,12 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              {/* Digest content */}
-              <div className="space-y-3">
+              {/* Brief panel: selected or freshly run brief content */}
+              <div className="border border-gray-700/80 rounded-md bg-gray-900/60 overflow-hidden">
+                <div className="px-3 py-2 border-b border-gray-700/80 text-[11px] font-medium text-gray-300">
+                  Brief
+                </div>
+                <div className="p-3 space-y-3">
                   {digestLoading && (
                     <div className="flex items-center gap-2 text-xs text-gray-300">
                       <span className="inline-block w-4 h-4 border-2 border-gray-500 border-t-blue-400 rounded-full animate-spin" />
@@ -813,7 +817,7 @@ export default function DashboardPage() {
                   {/* Selected day brief content (hours list is in Brief history panel) */}
                   {!digestLoading && selectedDigestDate && digestBriefsForDay.length > 0 && selectedBrief && (
                     <>
-                        <div className="space-y-3 pt-2 border-top border-gray-700">
+                        <div className="space-y-3 pt-2 border-t border-gray-700">
                           <div className="flex items-start justify-between gap-3">
                             <div className="space-y-1">
                               <p className="text-xs text-gray-500">
@@ -1109,6 +1113,7 @@ export default function DashboardPage() {
                         the calendar to view that day&apos;s briefs.
                       </p>
                     )}
+                </div>
                 </div>
               </div>
             </div>
