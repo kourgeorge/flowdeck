@@ -53,6 +53,9 @@ def main() -> None:
     db = SessionLocal()
     try:
         from ai_engine.daily_digest import run_digest
+        from services import token_service
+        from services.report_service import save_report
+
         result = run_digest(
             user_id=args.user_id,
             digest_date=digest_date,
@@ -60,6 +63,42 @@ def main() -> None:
             config=None,
             max_priority_tickers=args.max_priority,
         )
+
+        # Persist digest as Execution + Report (creator = user, subject = user_id:date)
+        try:
+            subject_id = f"{args.user_id}:{digest_date}"
+            execution_id = token_service.record_execution(
+                creator_id=args.user_id,
+                execution_type="daily_digest",
+                subject_type="user_date",
+                subject_id=subject_id,
+                db=db,
+            )
+            metadata = {
+                "digest_date": result.digest_date,
+                "priority_tickers": result.priority_tickers,
+                "what_to_watch": result.what_to_watch,
+            }
+            save_report(
+                execution_id,
+                "daily_digest",
+                content=result.narrative,
+                metadata=metadata,
+            )
+            logger.info(
+                "Persisted standalone daily digest execution_id=%s user_id=%s date=%s",
+                execution_id,
+                args.user_id,
+                digest_date,
+            )
+        except Exception as e:
+            logger.exception(
+                "Failed to persist standalone daily digest for user_id=%s date=%s: %s",
+                args.user_id,
+                digest_date,
+                e,
+            )
+
         if args.json:
             print(json.dumps({
                 "narrative": result.narrative,

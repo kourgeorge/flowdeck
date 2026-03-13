@@ -733,6 +733,10 @@ export interface DigestResponse {
   priority_tickers: string[];
 }
 
+export interface DigestDatesResponse {
+  dates: string[];
+}
+
 export const digestApi = {
   getDigest: async (params?: { date?: string; max_priority_tickers?: number }): Promise<DigestResponse> => {
     const token = getStoredToken();
@@ -740,6 +744,25 @@ export const digestApi = {
     const response = await api.get<DigestResponse>('/api/digest', {
       headers: { Authorization: `Bearer ${token}` },
       params: params ?? {},
+    });
+    return response.data;
+  },
+
+  getDigestDates: async (days: number = 90): Promise<DigestDatesResponse> => {
+    const token = getStoredToken();
+    if (!token) throw new Error('Sign in to view your User Daily Brief history');
+    const response = await api.get<DigestDatesResponse>('/api/digest/history/dates', {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { days },
+    });
+    return response.data;
+  },
+
+  getDigestForDate: async (date: string): Promise<DigestResponse> => {
+    const token = getStoredToken();
+    if (!token) throw new Error('Sign in to view your User Daily Brief history');
+    const response = await api.get<DigestResponse>(`/api/digest/history/${date}`, {
+      headers: { Authorization: `Bearer ${token}` },
     });
     return response.data;
   },

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import TickerSearch from '../components/TickerSearch';
 import DashboardTopTiles from '../components/DashboardTopTiles';
@@ -27,6 +27,9 @@ export default function DashboardPage() {
   const [digest, setDigest] = useState<DigestResponse | null>(null);
   const [digestLoading, setDigestLoading] = useState(false);
   const [digestError, setDigestError] = useState<string | null>(null);
+  const [digestDates, setDigestDates] = useState<string[]>([]);
+  const [selectedDigestDate, setSelectedDigestDate] = useState<string | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
 
   const {
     widgets,
@@ -57,6 +60,10 @@ export default function DashboardPage() {
     try {
       const data = await digestApi.getDigest();
       setDigest(data);
+      setSelectedDigestDate(data.digest_date);
+      setDigestDates((prev) =>
+        prev.includes(data.digest_date) ? prev : [...prev, data.digest_date].sort()
+      );
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       setDigestError(message);
@@ -64,6 +71,58 @@ export default function DashboardPage() {
       setDigestLoading(false);
     }
   };
+
+  // Load digest history dates when opening the digest tab (once per session)
+  useEffect(() => {
+    if (dashboardTab !== 'digest') return;
+    if (digestDates.length > 0) return;
+    (async () => {
+      try {
+        const res = await digestApi.getDigestDates(90);
+        setDigestDates(res.dates ?? []);
+      } catch {
+        // history is best-effort; ignore errors
+      }
+    })();
+  }, [dashboardTab, digestDates.length]);
+
+  const handleSelectDigestDate = async (date: string) => {
+    setDigestError(null);
+    setDigestLoading(true);
+    try {
+      const data = await digestApi.getDigestForDate(date);
+      setDigest(data);
+      setSelectedDigestDate(data.digest_date);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      setDigestError(message);
+    } finally {
+      setDigestLoading(false);
+    }
+  };
+
+  const goToPrevMonth = () => {
+    setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const goToNextMonth = () => {
+    setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
+  const calendarYear = calendarMonth.getFullYear();
+  const calendarMonthIndex = calendarMonth.getMonth(); // 0-11
+  const firstOfMonth = new Date(calendarYear, calendarMonthIndex, 1);
+  const startWeekday = firstOfMonth.getDay(); // 0 (Sun) - 6 (Sat)
+  const daysInMonth = new Date(calendarYear, calendarMonthIndex + 1, 0).getDate();
+
+  const formatDate = (y: number, mZeroBased: number, d: number) => {
+    const m = mZeroBased + 1;
+    const mm = m < 10 ? `0${m}` : String(m);
+    const dd = d < 10 ? `0${d}` : String(d);
+    return `${y}-${mm}-${dd}`;
+  };
+
+  const digestDateSet = new Set(digestDates);
 
   if (!user) {
     return (
@@ -513,51 +572,128 @@ export default function DashboardPage() {
                   </button>
                 </div>
 
-                {digestLoading && (
-                  <div className="flex items-center gap-2 text-xs text-gray-300">
-                    <span className="inline-block w-4 h-4 border-2 border-gray-500 border-t-blue-400 rounded-full animate-spin" />
-                    <span>Running the User Daily Brief workflow…</span>
-                  </div>
-                )}
-
-                {digestError && (
-                  <p className="text-xs text-red-400">
-                    {digestError}
-                  </p>
-                )}
-
-                {!digestLoading && digest && (
-                  <div className="space-y-3">
-                    <p className="text-xs text-gray-500">
-                      {digest.digest_date}
-                      {digest.priority_tickers?.length > 0 && (
-                        <span className="ml-2">
-                          · Focus:&nbsp;
-                          {digest.priority_tickers.join(', ')}
-                        </span>
-                      )}
-                    </p>
-                    <div className="prose prose-invert prose-sm max-w-none">
-                      <p className="text-gray-200 whitespace-pre-wrap leading-relaxed">
-                        {digest.narrative}
-                      </p>
+                {/* Calendar + digest viewer */}
+                <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,260px)_minmax(0,1fr)] gap-6 pt-2">
+                  {/* Calendar */}
+                  <div className="border border-gray-700 rounded-lg bg-gray-900/60 p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <button
+                        type="button"
+                        onClick={goToPrevMonth}
+                        className="p-1 text-gray-400 hover:text-white hover:bg-gray-800 rounded"
+                        aria-label="Previous month"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                      </button>
+                      <div className="text-xs font-medium text-gray-200">
+                        {calendarMonth.toLocaleString(undefined, { month: 'long', year: 'numeric' })}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={goToNextMonth}
+                        className="p-1 text-gray-400 hover:text-white hover:bg-gray-800 rounded"
+                        aria-label="Next month"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
                     </div>
-                    {digest.what_to_watch && (
-                      <div className="pt-2 border-t border-gray-700">
-                        <h3 className="text-xs font-semibold text-white mb-1">What to watch</h3>
-                        <p className="text-gray-200 text-xs whitespace-pre-wrap leading-relaxed">
-                          {digest.what_to_watch}
-                        </p>
+                    <div className="grid grid-cols-7 gap-1 text-[10px] text-center text-gray-500 mb-1">
+                      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d) => (
+                        <div key={d}>{d}</div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-7 gap-1 text-xs">
+                      {/* Leading blanks */}
+                      {Array.from({ length: startWeekday }).map((_, idx) => (
+                        <div key={`blank-${idx}`} />
+                      ))}
+                      {/* Days */}
+                      {Array.from({ length: daysInMonth }).map((_, idx) => {
+                        const day = idx + 1;
+                        const dateStr = formatDate(calendarYear, calendarMonthIndex, day);
+                        const hasDigest = digestDateSet.has(dateStr);
+                        const isSelected = selectedDigestDate === dateStr;
+                        const baseClasses =
+                          'h-7 flex items-center justify-center rounded cursor-pointer border text-xs';
+                        const variant = hasDigest
+                          ? isSelected
+                            ? 'bg-emerald-600 border-emerald-500 text-white'
+                            : 'bg-emerald-900/40 border-emerald-600/60 text-emerald-100 hover:bg-emerald-700/70'
+                          : 'bg-gray-900 border-gray-800 text-gray-500';
+                        return (
+                          <button
+                            key={dateStr}
+                            type="button"
+                            className={`${baseClasses} ${variant}`}
+                            disabled={!hasDigest}
+                            onClick={() => hasDigest && handleSelectDigestDate(dateStr)}
+                            title={hasDigest ? `View brief for ${dateStr}` : 'No brief for this day'}
+                          >
+                            {day}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="mt-2 text-[10px] text-gray-500">
+                      Green days have a saved User Daily Brief. Click a day to load that brief.
+                    </p>
+                  </div>
+
+                  {/* Digest content */}
+                  <div className="space-y-3">
+                    {digestLoading && (
+                      <div className="flex items-center gap-2 text-xs text-gray-300">
+                        <span className="inline-block w-4 h-4 border-2 border-gray-500 border-t-blue-400 rounded-full animate-spin" />
+                        <span>Loading your User Daily Brief…</span>
                       </div>
                     )}
-                  </div>
-                )}
 
-                {!digestLoading && !digest && !digestError && (
-                  <p className="text-xs text-gray-400">
-                    Click &ldquo;Run brief&rdquo; to generate today&apos;s summary for your portfolio.
-                  </p>
-                )}
+                    {digestError && (
+                      <p className="text-xs text-red-400">
+                        {digestError}
+                      </p>
+                    )}
+
+                    {!digestLoading && digest && (
+                      <div className="space-y-3">
+                        <p className="text-xs text-gray-500">
+                          {digest.digest_date}
+                          {digest.priority_tickers?.length > 0 && (
+                            <span className="ml-2">
+                              · Focus:&nbsp;
+                              {digest.priority_tickers.join(', ')}
+                            </span>
+                          )}
+                        </p>
+                        <div className="prose prose-invert prose-sm max-w-none">
+                          <p className="text-gray-200 whitespace-pre-wrap leading-relaxed">
+                            {digest.narrative}
+                          </p>
+                        </div>
+                        {digest.what_to_watch && (
+                          <div className="pt-2 border-t border-gray-700">
+                            <h3 className="text-xs font-semibold text-white mb-1">What to watch</h3>
+                            <p className="text-gray-200 text-xs whitespace-pre-wrap leading-relaxed">
+                              {digest.what_to_watch}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {!digestLoading && !digest && !digestError && (
+                      <p className="text-xs text-gray-400">
+                        Click &ldquo;Run digest&rdquo; to generate today&apos;s summary for your portfolio,
+                        or select a highlighted day in the calendar to view a previous brief.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
               </div>
             </div>
           </div>
