@@ -163,11 +163,12 @@ export default function DashboardPage() {
     setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
   };
 
-  const calendarYear = calendarMonth.getFullYear();
-  const calendarMonthIndex = calendarMonth.getMonth(); // 0-11
-  const firstOfMonth = new Date(calendarYear, calendarMonthIndex, 1);
-  const startWeekday = firstOfMonth.getDay(); // 0 (Sun) - 6 (Sat)
-  const daysInMonth = new Date(calendarYear, calendarMonthIndex + 1, 0).getDate();
+  // Show 3 months: two before and the current calendar month
+  const calendarMonthsToShow: { year: number; monthIndex: number }[] = [];
+  for (let i = 2; i >= 0; i--) {
+    const d = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - i, 1);
+    calendarMonthsToShow.push({ year: d.getFullYear(), monthIndex: d.getMonth() });
+  }
 
   const formatDate = (y: number, mZeroBased: number, d: number) => {
     const m = mZeroBased + 1;
@@ -720,7 +721,9 @@ export default function DashboardPage() {
                         </svg>
                       </button>
                       <div className="text-xs font-medium text-gray-200">
-                        {calendarMonth.toLocaleString(undefined, { month: 'long', year: 'numeric' })}
+                        {calendarMonthsToShow.length === 3
+                          ? `${new Date(calendarMonthsToShow[0].year, calendarMonthsToShow[0].monthIndex).toLocaleString(undefined, { month: 'short' })} – ${new Date(calendarMonthsToShow[2].year, calendarMonthsToShow[2].monthIndex).toLocaleString(undefined, { month: 'short', year: 'numeric' })}`
+                          : null}
                       </div>
                       <button
                         type="button"
@@ -733,48 +736,62 @@ export default function DashboardPage() {
                         </svg>
                       </button>
                     </div>
-                    <div className="grid grid-cols-7 gap-1 text-xs text-center text-gray-500 mb-1">
-                      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d) => (
-                        <div key={d}>{d}</div>
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-7 gap-1 text-xs">
-                      {Array.from({ length: startWeekday }).map((_, idx) => (
-                        <div key={`blank-${idx}`} />
-                      ))}
-                      {Array.from({ length: daysInMonth }).map((_, idx) => {
-                        const day = idx + 1;
-                        const dateStr = formatDate(calendarYear, calendarMonthIndex, day);
-                        const hasDigest = digestDateSet.has(dateStr);
-                        const count = digestCountByDate[dateStr] ?? 0;
-                        const isSelected = selectedDigestDate === dateStr;
-                        const baseClasses =
-                          'h-7 flex items-center justify-center rounded cursor-pointer border text-xs';
-                        const variant = hasDigest
-                          ? isSelected
-                            ? 'bg-emerald-600 border-emerald-500 text-white'
-                            : 'bg-emerald-900/40 border-emerald-600/60 text-emerald-100 hover:bg-emerald-700/70'
-                          : 'bg-gray-900 border-gray-800 text-gray-500';
-                        return (
-                          <button
-                            key={dateStr}
-                            type="button"
-                            className={`${baseClasses} ${variant}`}
-                            disabled={!hasDigest}
-                            onClick={() => hasDigest && handleSelectDigestDate(dateStr)}
-                            title={
-                              hasDigest
-                                ? `${count} brief${count !== 1 ? 's' : ''} on ${dateStr}`
-                                : 'No brief for this day'
-                            }
-                          >
-                            {day}
-                            {hasDigest && count > 1 && (
-                              <span className="ml-0.5 text-xs opacity-90">x{count}</span>
-                            )}
-                          </button>
-                        );
-                      })}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {calendarMonthsToShow.map(({ year, monthIndex }) => {
+                      const firstOfMonth = new Date(year, monthIndex, 1);
+                      const startWeekday = firstOfMonth.getDay();
+                      const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+                      return (
+                        <div key={`${year}-${monthIndex}`} className="min-w-0">
+                          <p className="text-xs font-medium text-gray-500 mb-1">
+                            {firstOfMonth.toLocaleString(undefined, { month: 'short', year: 'numeric' })}
+                          </p>
+                          <div className="grid grid-cols-7 gap-0.5 text-xs text-center text-gray-500 mb-0.5">
+                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d) => (
+                              <div key={d}>{d}</div>
+                            ))}
+                          </div>
+                          <div className="grid grid-cols-7 gap-0.5 text-xs">
+                            {Array.from({ length: startWeekday }).map((_, idx) => (
+                              <div key={`b-${idx}`} />
+                            ))}
+                            {Array.from({ length: daysInMonth }).map((_, idx) => {
+                              const day = idx + 1;
+                              const dateStr = formatDate(year, monthIndex, day);
+                              const hasDigest = digestDateSet.has(dateStr);
+                              const count = digestCountByDate[dateStr] ?? 0;
+                              const isSelected = selectedDigestDate === dateStr;
+                              const baseClasses =
+                                'h-7 flex items-center justify-center rounded cursor-pointer border text-xs';
+                              const variant = hasDigest
+                                ? isSelected
+                                  ? 'bg-emerald-600 border-emerald-500 text-white'
+                                  : 'bg-emerald-900/40 border-emerald-600/60 text-emerald-100 hover:bg-emerald-700/70'
+                                : 'bg-gray-900 border-gray-800 text-gray-500';
+                              return (
+                                <button
+                                  key={dateStr}
+                                  type="button"
+                                  className={`${baseClasses} ${variant} min-w-0`}
+                                  disabled={!hasDigest}
+                                  onClick={() => hasDigest && handleSelectDigestDate(dateStr)}
+                                  title={
+                                    hasDigest
+                                      ? `${count} brief${count !== 1 ? 's' : ''} on ${dateStr}`
+                                      : 'No brief for this day'
+                                  }
+                                >
+                                  {day}
+                                  {hasDigest && count > 1 && (
+                                    <span className="ml-0.5 text-xs opacity-90">x{count}</span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
                     </div>
                     <p className="mt-2 text-xs text-gray-500">
                       Green days have saved briefs; number is how many that day. Click a day to view.
