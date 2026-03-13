@@ -10,9 +10,15 @@ import { COPILOT_NAME } from '../config';
 import type { TickerPageData, TickerWidget } from '../services/types';
 import { useChatState } from '../components/ChatView';
 
+/** Desktop (md and up): tickers pane open by default. Mobile: collapsed by default. */
+function getInitialSidebarCollapsed(): boolean {
+  if (typeof window === 'undefined') return true;
+  return !window.matchMedia('(min-width: 768px)').matches;
+}
+
 export default function CopilotPage() {
   const { user } = useAuth();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarCollapsed);
   const [chatCollapsed, setChatCollapsed] = useState(false);
   const [chatWidth, setChatWidth] = useState(384); // default w-96
   const isResizing = useRef(false);
@@ -37,8 +43,9 @@ export default function CopilotPage() {
       ? Math.round((prefetchProgress.completed / prefetchProgress.total) * 100)
       : 0;
   const showCopilotLoadingStatus =
-    widgets.length > 0 &&
-    (prefetchProgress.inFlight > 0 || prefetchProgress.completed < prefetchProgress.total);
+    isLoading ||
+    (widgets.length > 0 &&
+      (prefetchProgress.inFlight > 0 || prefetchProgress.completed < prefetchProgress.total));
 
   // All tickers in the user's watchlist — passed to the AI analyst for full context
   const allTickers = widgets.map((w: TickerWidget) => w.ticker);
@@ -109,45 +116,6 @@ export default function CopilotPage() {
     );
   }
 
-  // ── Loading (no widgets yet) ── full-page progress like Stock View
-  if (isLoading && widgets.length === 0) {
-    return (
-      <div className="flex flex-col h-full overflow-hidden">
-        <PageHeader
-          title={`${COPILOT_NAME} – Trading assistant`}
-          icon={
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-          }
-        />
-        <div className="flex-1 flex items-center justify-center px-4">
-          <div className="w-full max-w-sm border border-gray-700 bg-gray-800/80 rounded-lg px-4 py-4 text-xs text-gray-300">
-            <div className="flex items-center gap-2">
-              <svg className="w-3.5 h-3.5 text-blue-400 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
-              <span>Preparing {COPILOT_NAME}…</span>
-            </div>
-            <div className="mt-3 space-y-1.5">
-              <div>
-                Focus tickers:
-                {' '}
-                {isLoading ? 'loading…' : `${widgets.length}`}
-              </div>
-              <div>
-                Stock prefetch:
-                {' '}
-                {prefetchProgress.completed} / {prefetchProgress.total}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col h-full overflow-hidden">
 
@@ -173,7 +141,7 @@ export default function CopilotPage() {
             <div>
               Focus tickers:
               {' '}
-              {widgets.length}
+              {isLoading ? 'loading…' : widgets.length}
             </div>
             <div>
               Stock prefetch:
