@@ -175,6 +175,7 @@ export default function CopilotChatPanel({
   }, [user, setSessionId, chat]);
 
   const handleLoadSession = useCallback((id: number) => {
+    chat.clearLoadingState();
     chatApi.getChatSession(id).then((detail) => {
       setSessionId(detail.id);
       chat.setMessages(detail.messages.map(apiMessageToChatMessageWithMeta));

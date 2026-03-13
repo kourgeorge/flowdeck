@@ -790,6 +790,8 @@ export interface UseChatStateReturn {
   inputRef: React.RefObject<HTMLTextAreaElement>;
   sendMessage: (text: string) => void;
   clearChat: () => void;
+  /** Clear loading/thinking state only (e.g. when switching to another conversation). */
+  clearLoadingState: () => void;
 }
 
 export function useChatState(
@@ -1009,6 +1011,14 @@ export function useChatState(
     setThinkingStatus(null);
   };
 
+  const clearLoadingState = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setIsLoading(false);
+    setIsStreaming(false);
+    setThinkingStatus(null);
+  };
+
   return {
     messages,
     setMessages,
@@ -1025,6 +1035,7 @@ export function useChatState(
     inputRef,
     sendMessage,
     clearChat,
+    clearLoadingState,
   };
 }
 

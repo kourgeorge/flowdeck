@@ -80,6 +80,7 @@ export default function ChatPage() {
   }, []);
 
   const handleOpenSession = (id: number) => {
+    chat.clearLoadingState();
     chatApi.getChatSession(id).then((detail) => {
       setSessionId(detail.id);
       chat.setMessages(detail.messages.map(apiMessageToChatMessageWithMeta));
