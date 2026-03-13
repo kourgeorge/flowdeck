@@ -8,13 +8,13 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func, cast, Date
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from auth import get_current_admin_user
 from config import RESULTS_DIR
 from database import get_db
-from models.db_models import User, Report, AnalysisRun, ReportView, Subscription
+from models.db_models import User, Report, Execution, ReportView, Subscription
 from services import token_service
 from services.analysis_service import AnalysisService
 from services.data_cache import delete_analysis_status, list_running_analyses, set_stop_requested
@@ -333,15 +333,15 @@ def get_admin_stats(
 
     total_users = db.query(func.count(User.id)).scalar() or 0
     total_reports = db.query(func.count(Report.id)).scalar() or 0
-    total_analysis_runs = db.query(func.count(AnalysisRun.id)).scalar() or 0
+    total_analysis_runs = db.query(func.count(Execution.id)).scalar() or 0
     total_report_views = db.query(func.count(ReportView.id)).scalar() or 0
     total_subscriptions = db.query(func.count(Subscription.id)).scalar() or 0
 
     analyses_last_24h = (
-        db.query(func.count(AnalysisRun.id)).filter(AnalysisRun.created_at >= t24).scalar() or 0
+        db.query(func.count(Execution.id)).filter(Execution.created_at >= t24).scalar() or 0
     )
     analyses_last_7d = (
-        db.query(func.count(AnalysisRun.id)).filter(AnalysisRun.created_at >= t7d).scalar() or 0
+        db.query(func.count(Execution.id)).filter(Execution.created_at >= t7d).scalar() or 0
     )
     reports_last_24h = (
         db.query(func.count(Report.id)).filter(Report.created_at >= t24).scalar() or 0
@@ -459,14 +459,14 @@ def get_admin_reports(
     """Latest reports. Ordered by created_at desc."""
     total = db.query(func.count(Report.id)).scalar() or 0
     rows_with_run = (
-        db.query(Report, AnalysisRun.id)
-        .outerjoin(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
+        db.query(Report, Execution.id, Execution.subject_id)
+        .outerjoin(Execution, Report.execution_id == Execution.id)
         .order_by(Report.created_at.desc())
         .limit(limit)
         .all()
     )
     items = []
-    for r, ar_id in rows_with_run:
+    for r, ex_id, subject_id in rows_with_run:
         meta = {}
         if r.metadata_json:
             try:
@@ -476,8 +476,8 @@ def get_admin_reports(
         items.append(
             AdminReportItem(
                 id=r.id,
-                ticker=r.ticker,
-                analysis_run_id=ar_id or 0,
+                ticker=subject_id or "",
+                analysis_run_id=ex_id or 0,
                 report_type=r.report_type,
                 created_at=r.created_at,
                 input_tokens=meta.get("input_tokens"),
@@ -496,24 +496,24 @@ def get_admin_analyses(
     limit: int = Query(50, ge=1, le=200),
 ):
     """Recent analysis runs with creator email and sum of report tokens/cost."""
-    total = db.query(func.count(AnalysisRun.id)).scalar() or 0
+    total = db.query(func.count(Execution.id)).scalar() or 0
     rows = (
-        db.query(AnalysisRun, User.email)
-        .join(User, User.id == AnalysisRun.creator_id)
-        .order_by(AnalysisRun.created_at.desc())
+        db.query(Execution, User.email)
+        .join(User, User.id == Execution.creator_id)
+        .order_by(Execution.created_at.desc())
         .limit(limit)
         .all()
     )
-    ar_ids = [ar.id for ar, _ in rows]
-    sums_by_ar: dict[int, tuple[int, int, float]] = {}
-    if ar_ids:
+    ex_ids = [ex.id for ex, _ in rows]
+    sums_by_ex: dict[int, tuple[int, int, float]] = {}
+    if ex_ids:
         reports = (
-            db.query(Report.analysis_run_id, Report.metadata_json)
-            .filter(Report.analysis_run_id.in_(ar_ids))
+            db.query(Report.execution_id, Report.metadata_json)
+            .filter(Report.execution_id.in_(ex_ids))
             .all()
         )
-        for ar_id, meta_json in reports:
-            if ar_id is None:
+        for ex_id, meta_json in reports:
+            if ex_id is None:
                 continue
             meta = {}
             if meta_json:
@@ -526,24 +526,24 @@ def get_admin_analyses(
             cost = meta.get("cost_usd")
             if cost is not None:
                 cost = float(cost)
-            prev_inp, prev_out, prev_cost = sums_by_ar.get(ar_id, (0, 0, 0.0))
-            sums_by_ar[ar_id] = (
+            prev_inp, prev_out, prev_cost = sums_by_ex.get(ex_id, (0, 0, 0.0))
+            sums_by_ex[ex_id] = (
                 prev_inp + (int(inp) if inp is not None else 0),
                 prev_out + (int(out) if out is not None else 0),
                 prev_cost + (cost if cost is not None else 0.0),
             )
     items = []
-    for ar, email in rows:
-        inp, out, cost = sums_by_ar.get(ar.id, (0, 0, 0.0))
+    for ex, email in rows:
+        inp, out, cost = sums_by_ex.get(ex.id, (0, 0, 0.0))
         tot = inp + out
         items.append(
             AdminAnalysisItem(
-                id=ar.id,
-                ticker=ar.ticker,
-                creator_id=ar.creator_id,
+                id=ex.id,
+                ticker=ex.subject_id if ex.execution_type == "ticker" else ex.subject_id or "",
+                creator_id=ex.creator_id,
                 creator_email=email or "",
-                earned_tokens=ar.earned_tokens,
-                created_at=ar.created_at,
+                earned_tokens=ex.earned_tokens,
+                created_at=ex.created_at,
                 input_tokens=inp if inp else None,
                 output_tokens=out if out else None,
                 total_tokens=tot if tot else None,
@@ -598,14 +598,14 @@ def get_views_for_run(
     offset: int = Query(0, ge=0),
 ):
     """Return individual views for one analysis run with viewer identity (admin only)."""
-    ar = db.query(AnalysisRun).filter(AnalysisRun.id == analysis_run_id).first()
-    if not ar:
+    ex = db.query(Execution).filter(Execution.id == analysis_run_id).first()
+    if not ex:
         return AdminReportViewsResponse(views=[], total=0)
-    ticker_upper = ar.ticker.upper()
+    ticker_upper = (ex.subject_id or "").upper() if ex.execution_type == "ticker" else (ex.subject_id or "")
     base_query = (
         db.query(ReportView, User.email, User.name)
         .outerjoin(User, User.id == ReportView.viewer_id)
-        .filter(ReportView.analysis_run_id == ar.id)
+        .filter(ReportView.execution_id == ex.id)
     )
     total = base_query.count() or 0
     rows = (
@@ -619,7 +619,7 @@ def get_views_for_run(
         AdminReportViewItem(
             id=view.id,
             ticker=ticker_upper,
-            analysis_run_id=ar.id,
+            analysis_run_id=ex.id,
             viewer_id=view.viewer_id,
             viewer_email=email or f"[deleted user id={view.viewer_id}]",
             viewer_name=name,
@@ -640,8 +640,8 @@ def get_views(
     """Return individual report views with viewer identity (admin only)."""
     total = db.query(func.count(ReportView.id)).scalar() or 0
     rows = (
-        db.query(ReportView, AnalysisRun.ticker, AnalysisRun.id, User.email, User.name)
-        .outerjoin(AnalysisRun, ReportView.analysis_run_id == AnalysisRun.id)
+        db.query(ReportView, Execution.subject_id, Execution.id, User.email, User.name)
+        .outerjoin(Execution, ReportView.execution_id == Execution.id)
         .outerjoin(User, User.id == ReportView.viewer_id)
         .order_by(ReportView.viewed_at.desc())
         .offset(offset)
@@ -652,13 +652,13 @@ def get_views(
         AdminReportViewItem(
             id=view.id,
             ticker=(ticker or "").upper(),
-            analysis_run_id=ar_id or 0,
+            analysis_run_id=ex_id or 0,
             viewer_id=view.viewer_id,
             viewer_email=email or f"[deleted user id={view.viewer_id}]",
             viewer_name=name,
             viewed_at=view.viewed_at,
         )
-        for view, ticker, ar_id, email, name in rows
+        for view, ticker, ex_id, email, name in rows
     ]
     return AdminReportViewsResponse(views=items, total=total)
 
@@ -672,16 +672,16 @@ def get_view_runs(
     """Return report runs with unique view counts, ordered for hierarchy browsing."""
     rows = (
         db.query(
-            AnalysisRun.ticker,
-            AnalysisRun.id,
+            Execution.subject_id,
+            Execution.id,
             func.count(ReportView.id).label("unique_views"),
             func.max(ReportView.viewed_at).label("last_viewed_at"),
         )
-        .join(ReportView, ReportView.analysis_run_id == AnalysisRun.id)
-        .group_by(AnalysisRun.id, AnalysisRun.ticker)
+        .join(ReportView, ReportView.execution_id == Execution.id)
+        .group_by(Execution.id, Execution.subject_id)
         .order_by(
-            AnalysisRun.id.desc(),
-            AnalysisRun.ticker.asc(),
+            Execution.id.desc(),
+            Execution.subject_id.asc(),
             func.max(ReportView.viewed_at).desc(),
             func.count(ReportView.id).desc(),
         )
@@ -689,8 +689,8 @@ def get_view_runs(
         .all()
     )
     total_runs_with_views = (
-        db.query(func.count(func.distinct(ReportView.analysis_run_id)))
-        .filter(ReportView.analysis_run_id.isnot(None))
+        db.query(func.count(func.distinct(ReportView.execution_id)))
+        .filter(ReportView.execution_id.isnot(None))
         .scalar()
         or 0
     )
@@ -698,11 +698,11 @@ def get_view_runs(
     items = [
         AdminReportViewRunItem(
             ticker=(ticker or "").upper(),
-            analysis_run_id=ar_id,
+            analysis_run_id=ex_id,
             unique_views=int(unique_views or 0),
             last_viewed_at=last_viewed_at,
         )
-        for ticker, ar_id, unique_views, last_viewed_at in rows
+        for ticker, ex_id, unique_views, last_viewed_at in rows
         if last_viewed_at is not None
     ]
     return AdminReportViewRunsResponse(
@@ -765,10 +765,10 @@ def get_analyses_daily(
     since = datetime.now(timezone.utc) - timedelta(days=days)
     rows = (
         db.query(
-            func.date(AnalysisRun.created_at).label("day"),
-            func.count(AnalysisRun.id).label("count"),
+            func.date(Execution.created_at).label("day"),
+            func.count(Execution.id).label("count"),
         )
-        .filter(AnalysisRun.created_at >= since)
+        .filter(Execution.created_at >= since)
         .group_by("day")
         .order_by("day")
         .all()
@@ -792,27 +792,21 @@ def get_mission_control(
     _user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ):
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     mission_entries = _get_mission_control_entries()
     mission_tickers = [str(item.get("ticker") or "").upper() for item in mission_entries if item.get("ticker")]
     ticker_set = set(mission_tickers)
     running_by_ticker = _load_running_statuses_by_ticker(mission_tickers)
-
+    # last_completed used for sort order and display
     last_completed = {
-        str(ticker).upper(): created_at
-        for ticker, created_at in db.query(
-            Report.ticker, func.max(Report.created_at)
-        ).group_by(Report.ticker).all()
-        if ticker and str(ticker).upper() in ticker_set and created_at is not None
-    }
-    has_report_today = {
-        str(ticker).upper()
-        for (ticker,) in db.query(Report.ticker)
-        .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
-        .filter(func.date(AnalysisRun.created_at) == date_str)
-        .distinct()
+        str(subject_id).upper(): created_at
+        for subject_id, created_at in db.query(
+            Execution.subject_id, func.max(Report.created_at)
+        )
+        .join(Report, Report.execution_id == Execution.id)
+        .filter(Execution.execution_type == "ticker")
+        .group_by(Execution.subject_id)
         .all()
-        if ticker
+        if subject_id and str(subject_id).upper() in ticker_set and created_at is not None
     }
 
     def _entry_sort_key(entry: dict[str, Any]) -> tuple[int, int, float, str]:
@@ -861,13 +855,13 @@ def run_mission_control(
     requested, invalid_tickers = _normalize_requested_tickers(body.tickers, mission_tickers)
     running_by_ticker = _load_running_statuses_by_ticker(mission_tickers)
     has_report_today = {
-        str(ticker).upper()
-        for (ticker,) in db.query(Report.ticker)
-        .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
-        .filter(func.date(AnalysisRun.created_at) == date_str)
+        str(subject_id).upper()
+        for (subject_id,) in db.query(Execution.subject_id)
+        .join(Report, Report.execution_id == Execution.id)
+        .filter(Execution.execution_type == "ticker", func.date(Execution.created_at) == date_str)
         .distinct()
         .all()
-        if ticker
+        if subject_id
     }
 
     triggered: list[MissionControlRunItem] = []

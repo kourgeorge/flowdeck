@@ -535,7 +535,7 @@ def send_subscription_confirmation(user_email: str, ticker: str) -> bool:
 
 def notify_subscribers_new_report(
     ticker: str,
-    analysis_run_id: int,
+    execution_id: int,
     recommendation: Optional[str] = None,
     confidence: Optional[float] = None,
     initiator_email: Optional[str] = None,
@@ -558,7 +558,7 @@ def notify_subscribers_new_report(
     report_service = ReportService()
     scores = None
     try:
-        scores = report_service.get_reports_with_scores(ticker, analysis_run_id)
+        scores = report_service.get_reports_with_scores(execution_id)
     except Exception:
         pass  # Continue without scores if fetch fails
     

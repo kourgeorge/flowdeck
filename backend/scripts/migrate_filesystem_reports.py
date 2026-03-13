@@ -45,7 +45,7 @@ def main() -> None:
                 continue
             db = SessionLocal()
             try:
-                analysis_run_id = token_service.record_analysis_run(creator_id, ticker, db)
+                execution_id = token_service.record_analysis_run(creator_id, ticker, db)
             finally:
                 db.close()
 
@@ -63,9 +63,8 @@ def main() -> None:
                     if key in data:
                         meta[key] = data[key]
                 save_report(
-                    ticker=ticker,
-                    report_type=f.stem,
-                    analysis_run_id=analysis_run_id,
+                    execution_id,
+                    f.stem,
                     content=content,
                     metadata=meta,
                 )

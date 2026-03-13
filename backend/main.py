@@ -34,6 +34,7 @@ from routers.api_keys import router as api_keys_router
 from routers.tickers import router as tickers_router
 from routers.analyses import router as analyses_router
 from routers.me import router as me_router
+from routers.digest import router as digest_router
 from routers.public import router as public_router
 from services.analysis_service import AnalysisService
 from services.market_data_service import MarketDataService
@@ -151,6 +152,7 @@ analyses_module.set_analysis_service(analysis_service)
 analyses_module.set_market_data_service(market_data_service)
 app.include_router(analyses_router)
 app.include_router(me_router)
+app.include_router(digest_router)
 app.include_router(public_router)
 admin_module.set_analysis_service(analysis_service)
 app.include_router(admin_router)

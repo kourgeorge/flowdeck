@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 from services.key_takeaways import extract_key_takeaways
 from database import SessionLocal
-from models.db_models import Report, AnalysisRun
+from models.db_models import Report, Execution
 
 
 def _date_part(run_id_or_date: Optional[str]) -> Optional[str]:
@@ -98,13 +98,12 @@ _EMPTY = {
 
 
 def save_report(
-    ticker: str,
+    execution_id: int,
     report_type: str,
-    analysis_run_id: int,
     content: str = "",
     metadata: Optional[Dict[str, Any]] = None,
 ) -> None:
-    """Save or upsert a report into the database. Requires analysis_run_id."""
+    """Save or upsert a report by (execution_id, report_type)."""
     meta = metadata or {}
     metadata_json = json.dumps(meta) if meta else None
     db = SessionLocal()
@@ -112,7 +111,7 @@ def save_report(
         row = (
             db.query(Report)
             .filter(
-                Report.analysis_run_id == analysis_run_id,
+                Report.execution_id == execution_id,
                 Report.report_type == report_type,
             )
             .first()
@@ -120,27 +119,25 @@ def save_report(
         if row:
             row.content = content or ""
             row.metadata_json = metadata_json
-            row.ticker = ticker.upper()
             action = "updated"
         else:
             row = Report(
-                ticker=ticker.upper(),
+                execution_id=execution_id,
                 report_type=report_type,
                 content=content or "",
                 metadata_json=metadata_json,
-                analysis_run_id=analysis_run_id,
             )
             db.add(row)
             action = "inserted"
         db.commit()
         logger.debug(
-            "Report %s ticker=%s analysis_run_id=%s report_type=%s",
-            action, ticker.upper(), analysis_run_id, report_type,
+            "Report %s execution_id=%s report_type=%s",
+            action, execution_id, report_type,
         )
     except Exception as e:
         logger.exception(
-            "Failed to save report ticker=%s analysis_run_id=%s report_type=%s error=%s",
-            ticker, analysis_run_id, report_type, e,
+            "Failed to save report execution_id=%s report_type=%s error=%s",
+            execution_id, report_type, e,
         )
         raise
     finally:
@@ -153,35 +150,47 @@ class ReportService:
     def __init__(self) -> None:
         pass
 
-    def get_latest_analysis_run(self, ticker: str) -> Optional[tuple[int, str]]:
-        """Return (analysis_run_id, date_display) for the most recent run by analysis_runs.created_at, or None."""
+    def get_latest_execution(
+        self, execution_type: str, subject_type: str, subject_id: str
+    ) -> Optional[tuple[int, str]]:
+        """Return (execution_id, date_display) for the most recent run, or None."""
         db = SessionLocal()
         try:
             row = (
-                db.query(AnalysisRun.id, AnalysisRun.created_at)
-                .join(Report, Report.analysis_run_id == AnalysisRun.id)
-                .filter(Report.ticker == ticker.upper())
-                .order_by(AnalysisRun.created_at.desc())
+                db.query(Execution.id, Execution.created_at)
+                .filter(
+                    Execution.execution_type == execution_type,
+                    Execution.subject_type == subject_type,
+                    Execution.subject_id == subject_id,
+                )
+                .order_by(Execution.created_at.desc())
                 .first()
             )
             if not row:
                 return None
-            ar_id, created = row
-            date_display = created.strftime("%Y-%m-%d %H:%M") if created else str(ar_id)
-            return (ar_id, date_display)
+            ex_id, created = row
+            date_display = created.strftime("%Y-%m-%d %H:%M") if created else str(ex_id)
+            return (ex_id, date_display)
         finally:
             db.close()
+
+    def get_latest_execution_for_ticker(self, ticker: str) -> Optional[tuple[int, str]]:
+        """Return (execution_id, date_display) for the latest ticker run, or None."""
+        return self.get_latest_execution("ticker", "ticker", ticker.upper())
 
     def has_report_for_date(self, ticker: str, date: str) -> bool:
         """date is YYYY-MM-DD; matches any run where date(created_at) = date."""
         db = SessionLocal()
         try:
             from sqlalchemy import func
-            ticker_upper = ticker.upper()
             return (
                 db.query(Report)
-                .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
-                .filter(Report.ticker == ticker_upper, func.date(AnalysisRun.created_at) == date)
+                .join(Execution, Report.execution_id == Execution.id)
+                .filter(
+                    Execution.execution_type == "ticker",
+                    Execution.subject_id == ticker.upper(),
+                    func.date(Execution.created_at) == date,
+                )
                 .limit(1)
                 .count()
             ) > 0
@@ -194,13 +203,16 @@ class ReportService:
         try:
             from sqlalchemy import func
             rows = (
-                db.query(Report.ticker)
-                .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
-                .filter(func.date(AnalysisRun.created_at) == date)
+                db.query(Execution.subject_id)
+                .join(Report, Report.execution_id == Execution.id)
+                .filter(
+                    Execution.execution_type == "ticker",
+                    func.date(Execution.created_at) == date,
+                )
                 .distinct()
                 .all()
             )
-            return [r.ticker for r in rows]
+            return [r.subject_id for r in rows]
         finally:
             db.close()
 
@@ -212,16 +224,19 @@ class ReportService:
         try:
             from sqlalchemy import func
             rows = (
-                db.query(Report.ticker, AnalysisRun.id)
-                .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
-                .filter(func.date(AnalysisRun.created_at) == date)
-                .order_by(AnalysisRun.id.desc())
+                db.query(Execution.subject_id, Execution.id)
+                .join(Report, Report.execution_id == Execution.id)
+                .filter(
+                    Execution.execution_type == "ticker",
+                    func.date(Execution.created_at) == date,
+                )
+                .order_by(Execution.id.desc())
                 .all()
             )
             seen: set[str] = set()
             ordered_tickers: List[str] = []
             for r in rows:
-                t = r.ticker.upper()
+                t = r.subject_id.upper()
                 if t not in seen:
                     seen.add(t)
                     ordered_tickers.append(t)
@@ -257,19 +272,20 @@ class ReportService:
         try:
             from sqlalchemy import func
             rows = (
-                db.query(Report.ticker, AnalysisRun.id)
-                .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
+                db.query(Execution.subject_id, Execution.id)
+                .join(Report, Report.execution_id == Execution.id)
                 .filter(
-                    func.date(AnalysisRun.created_at) >= start_bound,
-                    func.date(AnalysisRun.created_at) < end_exclusive,
+                    Execution.execution_type == "ticker",
+                    func.date(Execution.created_at) >= start_bound,
+                    func.date(Execution.created_at) < end_exclusive,
                 )
-                .order_by(AnalysisRun.id.desc())
+                .order_by(Execution.id.desc())
                 .all()
             )
             seen: set[str] = set()
             ordered_tickers: List[str] = []
             for r in rows:
-                t = r.ticker.upper()
+                t = r.subject_id.upper()
                 if t not in seen:
                     seen.add(t)
                     ordered_tickers.append(t)
@@ -293,19 +309,20 @@ class ReportService:
         try:
             from sqlalchemy import func
             rows = (
-                db.query(Report.ticker, AnalysisRun.id)
-                .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
+                db.query(Execution.subject_id, Execution.id)
+                .join(Report, Report.execution_id == Execution.id)
                 .filter(
-                    func.date(AnalysisRun.created_at) >= start_bound,
-                    func.date(AnalysisRun.created_at) < end_exclusive,
+                    Execution.execution_type == "ticker",
+                    func.date(Execution.created_at) >= start_bound,
+                    func.date(Execution.created_at) < end_exclusive,
                 )
-                .order_by(AnalysisRun.id.desc())
+                .order_by(Execution.id.desc())
                 .all()
             )
             seen: set[str] = set()
             ordered_tickers: List[str] = []
             for r in rows:
-                t = r.ticker.upper()
+                t = r.subject_id.upper()
                 if t not in seen:
                     seen.add(t)
                     ordered_tickers.append(t)
@@ -315,60 +332,61 @@ class ReportService:
         finally:
             db.close()
 
-    def get_reports_with_scores(self, ticker: str, analysis_run_id: int) -> Dict[str, Dict[str, Any]]:
-        """Returns report_type -> dict with content, score, etc. for the given analysis run."""
+    def get_reports_with_scores(self, execution_id: int) -> Dict[str, Dict[str, Any]]:
+        """Returns report_type -> dict with content, score, etc. for the given execution. Date from Execution.created_at."""
         db = SessionLocal()
         try:
-            ticker_upper = ticker.upper()
             rows = (
                 db.query(Report)
-                .join(AnalysisRun, Report.analysis_run_id == AnalysisRun.id)
-                .filter(Report.ticker == ticker_upper, Report.analysis_run_id == analysis_run_id)
+                .filter(Report.execution_id == execution_id)
                 .all()
             )
             date_str = None
-            if rows:
-                ar = db.query(AnalysisRun).filter(AnalysisRun.id == analysis_run_id).first()
-                date_str = ar.created_at.strftime("%Y-%m-%d") if ar and ar.created_at else str(analysis_run_id)
+            ex = db.query(Execution).filter(Execution.id == execution_id).first()
+            if ex and ex.created_at:
+                date_str = ex.created_at.strftime("%Y-%m-%d")
+            if not date_str and rows:
+                date_str = str(execution_id)
             result = {}
             for row in rows:
-                result[row.report_type] = _report_row_to_dict(row, date_str or str(analysis_run_id))
+                result[row.report_type] = _report_row_to_dict(row, date_str or str(execution_id))
             return result
         finally:
             db.close()
 
-    def get_reports_for_run(self, ticker: str, analysis_run_id: int) -> Dict[str, Optional[str]]:
-        scores = self.get_reports_with_scores(ticker, analysis_run_id)
+    def get_reports_for_run(self, execution_id: int) -> Dict[str, Optional[str]]:
+        scores = self.get_reports_with_scores(execution_id)
         return {k: (v.get("content") or "") for k, v in scores.items()}
 
     def get_latest_reports(self, ticker: str) -> Dict[str, Optional[str]]:
-        latest = self.get_latest_analysis_run(ticker)
-        return self.get_reports_for_run(ticker, latest[0]) if latest else {}
+        latest = self.get_latest_execution_for_ticker(ticker)
+        return self.get_reports_for_run(latest[0]) if latest else {}
 
     def get_historical_analyses(self, ticker: str) -> List[Dict]:
-        """Returns list of {analysis_run_id, date, available_reports} for each run, ordered by analysis_runs.created_at newest first. Display date is from the same source."""
+        """Returns list of {execution_id, date, available_reports} for each run (ticker), newest first. Keeps analysis_run_id key for API compatibility."""
         db = SessionLocal()
         try:
             rows = (
-                db.query(AnalysisRun.id, AnalysisRun.created_at, Report.report_type)
-                .join(Report, Report.analysis_run_id == AnalysisRun.id)
-                .filter(Report.ticker == ticker.upper())
+                db.query(Execution.id, Execution.created_at, Report.report_type)
+                .join(Report, Report.execution_id == Execution.id)
+                .filter(
+                    Execution.execution_type == "ticker",
+                    Execution.subject_id == ticker.upper(),
+                )
                 .all()
             )
-            # by_run: ar_id -> (created_at, date_str, report_types); created_at is the single source for display and sort
             by_run: Dict[int, tuple[Optional[datetime], str, List[str]]] = {}
-            for ar_id, created, report_type in rows:
-                if ar_id not in by_run:
-                    date_str = created.strftime("%Y-%m-%d %H:%M") if created else str(ar_id)
-                    by_run[ar_id] = (created, date_str, [])
-                by_run[ar_id][2].append(report_type)
+            for ex_id, created, report_type in rows:
+                if ex_id not in by_run:
+                    date_str = created.strftime("%Y-%m-%d %H:%M") if created else str(ex_id)
+                    by_run[ex_id] = (created, date_str, [])
+                by_run[ex_id][2].append(report_type)
             analyses = [
-                {"analysis_run_id": ar_id, "date": date_str, "available_reports": sorted(report_types)}
-                for ar_id, (_created, date_str, report_types) in by_run.items()
+                {"analysis_run_id": ex_id, "execution_id": ex_id, "date": date_str, "available_reports": sorted(report_types)}
+                for ex_id, (_created, date_str, report_types) in by_run.items()
             ]
-            # Sort by analysis_runs.created_at descending so order matches displayed dates
             analyses.sort(
-                key=lambda x: by_run[x["analysis_run_id"]][0] or datetime.min,
+                key=lambda x: by_run[x["execution_id"]][0] or datetime.min,
                 reverse=True,
             )
             return analyses
@@ -376,34 +394,36 @@ class ReportService:
             db.close()
 
     def has_reports(self, ticker: str) -> bool:
-        return self.get_latest_analysis_run(ticker) is not None
+        return self.get_latest_execution_for_ticker(ticker) is not None
 
     def list_report_dates(self, ticker: str) -> List[str]:
         """Return list of date strings (YYYY-MM-DD) for runs that have reports, newest first."""
         hist = self.get_historical_analyses(ticker)
         return [h["date"] for h in hist]
 
-    def get_analysis_run_for_date(self, ticker: str, date_str: str) -> Optional[tuple[int, str]]:
-        """Resolve date (YYYY-MM-DD or analysis_run_id as string) to (analysis_run_id, date_display)."""
+    def get_execution_for_date(self, ticker: str, date_str: str) -> Optional[tuple[int, str]]:
+        """Resolve date (YYYY-MM-DD or execution_id as string) to (execution_id, date_display)."""
         hist = self.get_historical_analyses(ticker)
         if not hist:
             return None
-        # Exact analysis_run_id match (user passed numeric id as string)
         try:
-            ar_id = int(date_str)
+            ex_id = int(date_str)
             for h in hist:
-                if h["analysis_run_id"] == ar_id:
-                    return (ar_id, h["date"])
+                if h["execution_id"] == ex_id:
+                    return (ex_id, h["date"])
             return None
         except ValueError:
             pass
-        # Date match: YYYY-MM-DD exact or prefix (hist is newest first)
         for h in hist:
             if h["date"] == date_str or h["date"].startswith(date_str):
-                return (h["analysis_run_id"], h["date"])
+                return (h["execution_id"], h["date"])
         return None
 
-    def get_report_content(self, ticker: str, analysis_run_id: int, report_type: str) -> Optional[str]:
+    def get_analysis_run_for_date(self, ticker: str, date_str: str) -> Optional[tuple[int, str]]:
+        """Resolve date to (execution_id, date_display). Backward-compat name; returns execution_id."""
+        return self.get_execution_for_date(ticker, date_str)
+
+    def get_report_content(self, execution_id: int, report_type: str) -> Optional[str]:
         """Return raw content for one report type, or None if not found."""
-        reports = self.get_reports_for_run(ticker, analysis_run_id)
+        reports = self.get_reports_for_run(execution_id)
         return reports.get(report_type) or None

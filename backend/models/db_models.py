@@ -24,36 +24,36 @@ class User(Base):
     subscriptions = relationship("Subscription", back_populates="user", cascade="all, delete-orphan")
 
 
-class Report(Base):
-    __tablename__ = "reports"
+class Execution(Base):
+    """One row per AI run; subject is generic (execution_type, subject_type, subject_id)."""
+    __tablename__ = "executions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    analysis_run_id = Column(Integer, ForeignKey("analysis_runs.id", ondelete="CASCADE"), nullable=True, index=True)
-    ticker = Column(String(32), nullable=False, index=True)  # denormalized from analysis_runs for query convenience
-    report_type = Column(String(64), nullable=False)  # market_report, news_report, etc.
-    content = Column(Text, nullable=True)
-    metadata_json = Column(Text, nullable=True)  # JSON: score, score_label, key_takeaways, etc.
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-
-    __table_args__ = (
-        UniqueConstraint("analysis_run_id", "report_type", name="uq_report_analysis_run_type"),
-        Index("idx_reports_ticker", "ticker"),
-        Index("idx_reports_analysis_run_id", "analysis_run_id"),
-    )
-
-
-class AnalysisRun(Base):
-    """One analysis run per row; id is the canonical run identifier (used for paths, API, FKs)."""
-    __tablename__ = "analysis_runs"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    ticker = Column(String(32), nullable=False, index=True)
+    execution_type = Column(String(64), nullable=False, index=True)  # e.g. ticker, daily_digest
+    subject_type = Column(String(32), nullable=False, index=True)  # e.g. ticker, user_date
+    subject_id = Column(String(255), nullable=False, index=True)  # e.g. AAPL, 123:2025-03-13
     creator_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     earned_tokens = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     __table_args__ = (
-        Index("idx_analysis_runs_ticker", "ticker"),
+        Index("idx_executions_type_subject", "execution_type", "subject_type", "subject_id"),
+    )
+
+
+class Report(Base):
+    __tablename__ = "reports"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    execution_id = Column(Integer, ForeignKey("executions.id", ondelete="CASCADE"), nullable=False, index=True)
+    report_type = Column(String(64), nullable=False)  # market_report, news_report, daily_digest, etc.
+    content = Column(Text, nullable=True)
+    metadata_json = Column(Text, nullable=True)  # JSON: score, score_label, key_takeaways, etc.
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("execution_id", "report_type", name="uq_report_execution_type"),
+        Index("idx_reports_execution_id", "execution_id"),
     )
 
 
@@ -62,13 +62,13 @@ class ReportView(Base):
     __tablename__ = "report_views"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    analysis_run_id = Column(Integer, ForeignKey("analysis_runs.id", ondelete="CASCADE"), nullable=True, index=True)
+    execution_id = Column(Integer, ForeignKey("executions.id", ondelete="CASCADE"), nullable=False, index=True)
     viewer_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     viewed_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     __table_args__ = (
-        UniqueConstraint("analysis_run_id", "viewer_id", name="uq_report_view_analysis_run_viewer"),
-        Index("idx_report_views_analysis_run_id", "analysis_run_id"),
+        UniqueConstraint("execution_id", "viewer_id", name="uq_report_view_execution_viewer"),
+        Index("idx_report_views_execution_id", "execution_id"),
     )
 
 

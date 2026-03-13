@@ -11,8 +11,9 @@ import DashboardPriceTrendsChart from '../components/DashboardPriceTrendsChart';
 import OverviewStatsPanel, { ByMarketSection, SubscribedChangeColumnsChart } from '../components/OverviewStatsPanel';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useAuth } from '../contexts/AuthContext';
+import { digestApi, type DigestResponse } from '../services/api';
 
-type DashboardTab = 'overview' | 'portfolio' | 'stock-view' | 'news';
+type DashboardTab = 'overview' | 'portfolio' | 'stock-view' | 'news' | 'digest';
 type StockListTab = 'subscribed' | 'recent';
 
 export default function DashboardPage() {
@@ -22,6 +23,10 @@ export default function DashboardPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const shouldLoadRecentAnalyzed =
     dashboardTab === 'stock-view' || (dashboardTab === 'overview' && stockListTab === 'recent');
+
+  const [digest, setDigest] = useState<DigestResponse | null>(null);
+  const [digestLoading, setDigestLoading] = useState(false);
+  const [digestError, setDigestError] = useState<string | null>(null);
 
   const {
     widgets,
@@ -44,6 +49,21 @@ export default function DashboardPage() {
     enablePrefetch: dashboardTab === 'stock-view',
     enableRecentAnalyzed: shouldLoadRecentAnalyzed,
   });
+
+  const handleRunDigest = async () => {
+    setDigestError(null);
+    setDigest(null);
+    setDigestLoading(true);
+    try {
+      const data = await digestApi.getDigest();
+      setDigest(data);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      setDigestError(message);
+    } finally {
+      setDigestLoading(false);
+    }
+  };
 
   if (!user) {
     return (
@@ -105,6 +125,7 @@ export default function DashboardPage() {
                 { id: 'portfolio', label: 'Portfolio' },
                 { id: 'stock-view', label: 'Stock View' },
                 { id: 'news', label: 'News' },
+                { id: 'digest', label: 'User Daily Brief' },
               ] as { id: DashboardTab; label: string }[]).map((tab) => (
               <button
                 key={tab.id}
@@ -444,6 +465,100 @@ export default function DashboardPage() {
                   <p className="text-gray-400 text-sm">Subscribe to stocks to see news here.</p>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Digest Tab ── */}
+      {dashboardTab === 'digest' && (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="px-4 py-6 sm:p-6 lg:p-8">
+            <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
+              <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-sm font-semibold text-white mb-1">User Daily Brief (beta)</h2>
+                    <p className="text-xs text-gray-400">
+                      Generate a short narrative summary of today&apos;s market and your subscribed tickers.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRunDigest}
+                    disabled={digestLoading}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                  >
+                    {digestLoading ? (
+                      <>
+                        <span
+                          className="inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"
+                          aria-hidden
+                        />
+                        Building…
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                          />
+                        </svg>
+                        Run digest
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {digestLoading && (
+                  <div className="flex items-center gap-2 text-xs text-gray-300">
+                    <span className="inline-block w-4 h-4 border-2 border-gray-500 border-t-blue-400 rounded-full animate-spin" />
+                    <span>Running the User Daily Brief workflow…</span>
+                  </div>
+                )}
+
+                {digestError && (
+                  <p className="text-xs text-red-400">
+                    {digestError}
+                  </p>
+                )}
+
+                {!digestLoading && digest && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-gray-500">
+                      {digest.digest_date}
+                      {digest.priority_tickers?.length > 0 && (
+                        <span className="ml-2">
+                          · Focus:&nbsp;
+                          {digest.priority_tickers.join(', ')}
+                        </span>
+                      )}
+                    </p>
+                    <div className="prose prose-invert prose-sm max-w-none">
+                      <p className="text-gray-200 whitespace-pre-wrap leading-relaxed">
+                        {digest.narrative}
+                      </p>
+                    </div>
+                    {digest.what_to_watch && (
+                      <div className="pt-2 border-t border-gray-700">
+                        <h3 className="text-xs font-semibold text-white mb-1">What to watch</h3>
+                        <p className="text-gray-200 text-xs whitespace-pre-wrap leading-relaxed">
+                          {digest.what_to_watch}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!digestLoading && !digest && !digestError && (
+                  <p className="text-xs text-gray-400">
+                    Click &ldquo;Run brief&rdquo; to generate today&apos;s summary for your portfolio.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>

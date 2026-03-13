@@ -725,6 +725,26 @@ export const contactApi = {
   },
 };
 
+/** User Daily Brief: narrative + what to watch (no persistence, for testing). Requires auth. */
+export interface DigestResponse {
+  narrative: string;
+  what_to_watch: string;
+  digest_date: string;
+  priority_tickers: string[];
+}
+
+export const digestApi = {
+  getDigest: async (params?: { date?: string; max_priority_tickers?: number }): Promise<DigestResponse> => {
+    const token = getStoredToken();
+    if (!token) throw new Error('Sign in to get your User Daily Brief');
+    const response = await api.get<DigestResponse>('/api/digest', {
+      headers: { Authorization: `Bearer ${token}` },
+      params: params ?? {},
+    });
+    return response.data;
+  },
+};
+
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;

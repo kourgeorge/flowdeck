@@ -365,11 +365,10 @@ class AnalysisService:
                         meta["total_tokens"] = llm_usage.get("total_tokens")
                         meta["cost_usd"] = llm_usage.get("cost_usd")
                     save_report(
-                        ticker=analysis_info["ticker"],
-                        report_type=key,
+                        analysis_info["analysis_run_id"],
+                        key,
                         content=data.get("content", ""),
                         metadata=meta,
-                        analysis_run_id=analysis_info["analysis_run_id"],
                     )
                     logger.info(
                         "Report saved analysis_run_id=%s ticker=%s report_type=%s",
@@ -501,11 +500,10 @@ class AnalysisService:
                         inner["total_tokens"] = usage.get("total_tokens")
                         inner["cost_usd"] = usage.get("cost_usd")
                     save_report(
-                        ticker=analysis_info["ticker"],
-                        report_type="investment_plan",
+                        analysis_info["analysis_run_id"],
+                        "investment_plan",
                         content=content,
                         metadata={**inner, "bull_viewpoint": bull, "bear_viewpoint": bear},
-                        analysis_run_id=analysis_info["analysis_run_id"],
                     )
                     if write_reports_to_results:
                         _write_report_to_filesystem("investment_plan", content, analysis_info["report_dir"])
@@ -571,11 +569,10 @@ class AnalysisService:
                         inner["total_tokens"] = usage.get("total_tokens")
                         inner["cost_usd"] = usage.get("cost_usd")
                     save_report(
-                        ticker=analysis_info["ticker"],
-                        report_type="final_trade_decision",
+                        analysis_info["analysis_run_id"],
+                        "final_trade_decision",
                         content=content,
                         metadata={**inner, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral},
-                        analysis_run_id=analysis_info["analysis_run_id"],
                     )
                     if write_reports_to_results:
                         _write_report_to_filesystem("final_trade_decision", content, analysis_info["report_dir"])
@@ -636,7 +633,7 @@ class AnalysisService:
             try:
                 notify_subscribers_new_report(
                     ticker=analysis_info["ticker"],
-                    analysis_run_id=analysis_info["analysis_run_id"],
+                    execution_id=analysis_info["analysis_run_id"],
                     recommendation=analysis_info.get("recommendation"),
                     confidence=analysis_info.get("confidence"),
                     initiator_email=analysis_info.get("initiator_email"),

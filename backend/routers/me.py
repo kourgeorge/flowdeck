@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from auth import get_current_user, get_current_admin_user, hash_password, verify_password
 from database import get_db
-from models.db_models import User, AnalysisRun, ReportView, Subscription
+from models.db_models import User, Execution, ReportView, Subscription
 from services import token_service
 
 router = APIRouter(prefix="/api", tags=["me"])
@@ -94,13 +94,13 @@ async def update_me(
 async def get_me_stats(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     """Return usage statistics for the current user."""
     analyses_created = (
-        db.query(sqla_func.count(AnalysisRun.id))
-        .filter(AnalysisRun.creator_id == current_user.id)
+        db.query(sqla_func.count(Execution.id))
+        .filter(Execution.creator_id == current_user.id)
         .scalar() or 0
     )
     tokens_earned = (
-        db.query(sqla_func.coalesce(sqla_func.sum(AnalysisRun.earned_tokens), 0))
-        .filter(AnalysisRun.creator_id == current_user.id)
+        db.query(sqla_func.coalesce(sqla_func.sum(Execution.earned_tokens), 0))
+        .filter(Execution.creator_id == current_user.id)
         .scalar() or 0
     )
     reports_viewed = (
@@ -109,8 +109,8 @@ async def get_me_stats(current_user=Depends(get_current_user), db: Session = Dep
         .scalar() or 0
     )
     unique_tickers = (
-        db.query(sqla_func.count(sqla_func.distinct(AnalysisRun.ticker)))
-        .filter(AnalysisRun.creator_id == current_user.id)
+        db.query(sqla_func.count(sqla_func.distinct(Execution.subject_id)))
+        .filter(Execution.creator_id == current_user.id, Execution.execution_type == "ticker")
         .scalar() or 0
     )
     subscriptions_count = (

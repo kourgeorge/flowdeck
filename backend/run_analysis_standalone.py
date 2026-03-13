@@ -3,7 +3,7 @@
 Standalone analysis runner for Node backend. Invoked as:
   python backend/run_analysis_standalone.py --ticker AAPL --analysis-date 2025-02-08 --info-service-url http://127.0.0.1:8002 ...
 
-Creates an AnalysisRun (analysis_run_id) via token_service, uses that id for the results directory and reports.
+Creates an Execution (execution_id) via token_service.record_analysis_run, uses that id for the results directory and reports.
 Streams NDJSON progress to stdout. Writes reports to DB via save_report. Logs go to stderr.
 """
 
@@ -209,9 +209,8 @@ def main() -> None:
                 meta["total_tokens"] = llm_usage.get("total_tokens")
                 meta["cost_usd"] = llm_usage.get("cost_usd")
             save_report(
-                ticker=ticker,
-                report_type=key,
-                analysis_run_id=analysis_run_id,
+                analysis_run_id,
+                key,
                 content=data.get("content", ""),
                 metadata=meta,
             )
@@ -315,9 +314,8 @@ def main() -> None:
                         meta["total_tokens"] = usage.get("total_tokens")
                         meta["cost_usd"] = usage.get("cost_usd")
                     save_report(
-                        ticker=ticker,
-                        report_type="investment_plan",
-                        analysis_run_id=analysis_run_id,
+                        analysis_run_id,
+                        "investment_plan",
                         content=content,
                         metadata={**meta, "bull_viewpoint": bull, "bear_viewpoint": bear},
                     )
@@ -371,9 +369,8 @@ def main() -> None:
                         meta["total_tokens"] = usage.get("total_tokens")
                         meta["cost_usd"] = usage.get("cost_usd")
                     save_report(
-                        ticker=ticker,
-                        report_type="final_trade_decision",
-                        analysis_run_id=analysis_run_id,
+                        analysis_run_id,
+                        "final_trade_decision",
                         content=content,
                         metadata={**meta, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral},
                     )
@@ -395,7 +392,7 @@ def main() -> None:
             try:
                 notify_subscribers_new_report(
                     ticker=ticker,
-                    analysis_run_id=analysis_run_id,
+                    execution_id=analysis_run_id,
                     recommendation=final_recommendation,
                     confidence=final_confidence,
                     initiator_email=initiator_email,
