@@ -81,7 +81,7 @@ function MessageBubble({
   message,
   isStreaming = false,
 }: {
-  message: ChatMessage & { tokens_used?: number; tools_called?: number };
+  message: ChatMessage & { tokens_used?: number; platform_tokens_used?: number; cost_usd?: number; tools_called?: number };
   isStreaming?: boolean;
 }) {
   const isUser = message.role === 'user';
@@ -147,7 +147,7 @@ function MessageBubble({
             {isStreaming && <StreamingCursor />}
           </div>
         </div>
-        {(message.tokens_used != null || (message.tools_called != null && message.tools_called > 0)) && (
+        {((message.platform_tokens_used != null || message.tokens_used != null) || (message.tools_called != null && message.tools_called > 0)) && (
           <div className="flex items-center gap-2.5 text-xs text-slate-500 mt-1 ml-1">
             {message.tools_called != null && message.tools_called > 0 && (
               <span className="flex items-center gap-1">
@@ -158,8 +158,19 @@ function MessageBubble({
                 {message.tools_called} tool{message.tools_called !== 1 ? 's' : ''} accessed
               </span>
             )}
-            {message.tokens_used != null && (
-              <span>{message.tokens_used} token{message.tokens_used !== 1 ? 's' : ''} used</span>
+            {(message.platform_tokens_used != null || message.tokens_used != null) && (
+              <span>
+                {(message.platform_tokens_used ?? message.tokens_used)} {(message.platform_tokens_used ?? message.tokens_used) !== 1 ? 'DECKS' : 'DECK'} used
+                {(message.tokens_used != null || message.cost_usd != null) && (
+                  <span>
+                    {' ('}
+                    {message.tokens_used != null && message.tokens_used.toLocaleString()}
+                    {message.tokens_used != null && message.cost_usd != null && ' · '}
+                    {message.cost_usd != null && `${(message.cost_usd * 100).toFixed(2)} ¢`}
+                    {')'}
+                  </span>
+                )}
+              </span>
             )}
           </div>
         )}
@@ -169,7 +180,7 @@ function MessageBubble({
 }
 
 export default function TickerAnalystChat({ ticker, companyName }: TickerAnalystChatProps) {
-  const [messages, setMessages] = useState<(ChatMessage & { tokens_used?: number; tools_called?: number })[]>([]);
+  const [messages, setMessages] = useState<(ChatMessage & { tokens_used?: number; platform_tokens_used?: number; cost_usd?: number; tools_called?: number })[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -240,8 +251,8 @@ export default function TickerAnalystChat({ ticker, companyName }: TickerAnalyst
           return updated;
         });
       },
-      // onDone — tools_called comes authoritatively from the backend done event
-      (tokensUsed, _balance, toolsCalled) => {
+      // onDone — tools_called, platform_tokens_used, cost_usd from backend done event
+      (tokensUsed, _balance, toolsCalled, _followUp, _sessionId, platformTokensUsed, costUsd) => {
         setIsStreaming(false);
         setIsLoading(false);
         setThinkingStatus(null);
@@ -251,6 +262,8 @@ export default function TickerAnalystChat({ ticker, companyName }: TickerAnalyst
             updated[assistantIndex] = {
               ...updated[assistantIndex],
               tokens_used: tokensUsed,
+              platform_tokens_used: platformTokensUsed,
+              cost_usd: costUsd,
               tools_called: toolsCalled,
             };
           }

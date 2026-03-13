@@ -20,6 +20,8 @@ function apiMessageToChatMessageWithMeta(m: ChatMessageWithMetaApi): ChatMessage
     role: m.role as 'user' | 'assistant',
     content: m.content,
     tokens_used: m.tokens_used ?? undefined,
+    platform_tokens_used: m.platform_tokens_used ?? undefined,
+    cost_usd: m.cost_usd ?? undefined,
     tools_called: m.tools_called ?? undefined,
     tool_call_events: m.tool_call_events ?? undefined,
     skill_activation_events: m.skill_activation_events ?? undefined,

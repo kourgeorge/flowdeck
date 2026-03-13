@@ -825,10 +825,12 @@ export interface ChatMessage {
 export interface ChatResponse {
   reply: string;
   tokens_used: number;
-  /** Platform tokens deducted (shown in UI) */
+  /** Platform tokens deducted from balance (show this in the UI) */
   platform_tokens_used: number;
   balance: number;
   follow_up_questions?: string[];
+  session_id?: number | null;
+  llm_usage?: { cost_usd?: number };
 }
 
 export interface ToolCallEvent {
@@ -867,12 +869,13 @@ export interface ChatStreamEvent {
   type: 'token' | 'done' | 'error' | 'thinking' | 'tool_call' | 'chart' | 'skill_start' | 'skill_step' | 'skill_done';
   content?: string;
   tokens_used?: number;
-  /** Platform tokens deducted (shown in UI) */
+  /** Platform tokens deducted (show this in the UI) */
   platform_tokens_used?: number;
   tools_called?: number;
   balance?: number;
   follow_up_questions?: string[];
   session_id?: number;
+  llm_usage?: { cost_usd?: number };
   // tool_call fields
   name?: string;
   input?: string;
@@ -900,7 +903,7 @@ export interface ChatMessageWithMetaApi {
   content: string;
   sort_order: number;
   tokens_used?: number | null;
-  /** Platform tokens (for UI display) */
+  /** Platform tokens deducted (show this in the UI) */
   platform_tokens_used?: number | null;
   tools_called?: number | null;
   tool_call_events?: ToolCallEvent[] | null;
@@ -908,6 +911,7 @@ export interface ChatMessageWithMetaApi {
   charts?: ChartSpec[] | null;
   follow_up_questions?: string[] | null;
   created_at?: string | null;
+  cost_usd?: number | null;
 }
 
 /** Session detail from GET /api/chat/sessions/:id */
@@ -975,14 +979,14 @@ export const chatApi = {
    * `onToolCall` for each tool execution (name, input, output),
    * `onChart` for each chart spec emitted by execute_python,
    * `onSkillActivation` when a skill workflow starts (name + accumulated steps),
-   * `onDone` when the stream finishes (with tokens_used and balance),
+   * `onDone` when the stream finishes (with tokens_used, platform_tokens_used, and balance),
    * and `onError` on failure.
    * Returns an AbortController so the caller can cancel the stream.
    */
   streamMessage: (
     messages: ChatMessage[],
     onToken: (chunk: string) => void,
-    onDone: (tokensUsed: number, balance: number, toolsCalled: number, followUpQuestions?: string[], sessionId?: number, platformTokensUsed?: number) => void,
+    onDone: (tokensUsed: number, balance: number, toolsCalled: number, followUpQuestions?: string[], sessionId?: number, platformTokensUsed?: number, costUsd?: number) => void,
     onError: (message: string) => void,
     onThinking?: (status: string) => void,
     onToolCall?: (toolCall: ToolCallEvent) => void,
@@ -1071,6 +1075,7 @@ export const chatApi = {
                   event.follow_up_questions,
                   event.session_id,
                   event.platform_tokens_used,
+                  event.llm_usage?.cost_usd,
                 );
               } else if (event.type === 'error') {
                 onError(event.content ?? 'Unknown error');

@@ -321,8 +321,9 @@ export function SkillActivationBlock({ event }: { event: SkillActivationEvent })
 
 export type ChatMessageWithMeta = ChatMessage & {
   tokens_used?: number;
-  /** Platform tokens (shown in UI); prefer over tokens_used when present */
+  /** Platform tokens deducted (prefer this for display) */
   platform_tokens_used?: number;
+  cost_usd?: number;
   tools_called?: number;
   tool_call_events?: ToolCallEvent[];
   skill_activation_events?: SkillActivationEvent[];
@@ -719,7 +720,7 @@ export function MessageBubble({
           {!isStreaming && stripChartJsonFromContent(stripFollowUpJsonLine(message.content ?? '')) && (
             <CopyButton onClick={triggerCopy} copied={copied} title="Copy message" />
           )}
-          {(message.tokens_used != null || (message.tools_called != null && message.tools_called > 0)) && (
+          {((message.platform_tokens_used != null || message.tokens_used != null) || (message.tools_called != null && message.tools_called > 0)) && (
             <div className="flex items-center gap-2.5 text-xs text-slate-500">
               {message.tools_called != null && message.tools_called > 0 && (
                 <span className="flex items-center gap-1">
@@ -730,8 +731,19 @@ export function MessageBubble({
                   {message.tools_called} tool{message.tools_called !== 1 ? 's' : ''} used
                 </span>
               )}
-              {message.tokens_used != null && (
-                <span>{message.tokens_used} token{message.tokens_used !== 1 ? 's' : ''} used</span>
+              {(message.platform_tokens_used != null || message.tokens_used != null) && (
+                <span>
+                  {(message.platform_tokens_used ?? message.tokens_used)!} {(message.platform_tokens_used ?? message.tokens_used) !== 1 ? 'DECKS' : 'DECK'} used
+                  {(message.tokens_used != null || message.cost_usd != null) && (
+                    <span>
+                      {' ('}
+                      {message.tokens_used != null && message.tokens_used.toLocaleString()}
+                      {message.tokens_used != null && message.cost_usd != null && ' · '}
+                      {message.cost_usd != null && `${(message.cost_usd * 100).toFixed(2)} ¢`}
+                      {')'}
+                    </span>
+                  )}
+                </span>
               )}
             </div>
           )}
@@ -854,7 +866,7 @@ export function useChatState(
           return updated;
         });
       },
-      (tokensUsed, balance, toolsCalled, followUpQuestions, newSessionId) => {
+      (tokensUsed, balance, toolsCalled, followUpQuestions, newSessionId, platformTokensUsed, costUsd) => {
         setIsStreaming(false);
         setIsLoading(false);
         setThinkingStatus(null);
@@ -869,6 +881,8 @@ export function useChatState(
             updated[assistantIndex] = {
               ...updated[assistantIndex],
               tokens_used: tokensUsed,
+              platform_tokens_used: platformTokensUsed,
+              cost_usd: costUsd,
               tools_called: toolsCalled,
               follow_up_questions: followUpQuestions ?? undefined,
             };

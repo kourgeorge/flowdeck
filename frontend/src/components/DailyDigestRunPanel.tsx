@@ -2,7 +2,7 @@
  * Panel with User Daily Brief title, collapsible brief options (style, note, focus tickers), and Run digest button.
  * Rendered above the Brief history panel on the digest tab.
  */
-import type { ChangeEvent } from 'react';
+import { type ChangeEvent, useState, useRef, useEffect } from 'react';
 
 export type DigestNarrativeStyle = 'default' | 'concise' | 'professional' | 'technical';
 export type DigestSpan = 'daily' | 'weekly';
@@ -38,6 +38,32 @@ export default function DailyDigestRunPanel({
   onRunDigest,
   digestLoading,
 }: DailyDigestRunPanelProps) {
+  const [spanOpen, setSpanOpen] = useState(false);
+  const [styleOpen, setStyleOpen] = useState(false);
+  const spanRef = useRef<HTMLDivElement>(null);
+  const styleRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (spanRef.current && !spanRef.current.contains(target)) setSpanOpen(false);
+      if (styleRef.current && !styleRef.current.contains(target)) setStyleOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const spanOptions: { value: DigestSpan; label: string }[] = [
+    { value: 'daily', label: 'Daily' },
+    { value: 'weekly', label: 'Weekly' },
+  ];
+  const styleOptions: { value: DigestNarrativeStyle; label: string }[] = [
+    { value: 'default', label: 'Balanced (default)' },
+    { value: 'concise', label: 'Concise' },
+    { value: 'professional', label: 'Professional' },
+    { value: 'technical', label: 'Technical (more detail)' },
+  ];
+
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
       <div>
@@ -47,19 +73,41 @@ export default function DailyDigestRunPanel({
         </p>
       </div>
 
-      <div className="flex items-center gap-3">
-        <label htmlFor="digest-span" className="text-[11px] font-medium text-gray-300">
+      <div className="flex items-center gap-3" ref={spanRef}>
+        <label htmlFor="digest-span" className="text-sm font-medium text-gray-300">
           Time span
         </label>
-        <select
-          id="digest-span"
-          value={digestSpan}
-          onChange={(e) => onDigestSpanChange(e.target.value as DigestSpan)}
-          className="rounded-lg border border-gray-600 bg-gray-800/80 py-2 pl-3 pr-8 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/60"
-        >
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-        </select>
+        <div className="relative">
+          <button
+            type="button"
+            id="digest-span"
+            onClick={() => { setSpanOpen((o) => !o); setStyleOpen(false); }}
+            className="min-w-[7rem] flex items-center justify-between gap-2 rounded-lg border border-gray-600 bg-gray-900/80 py-2 px-3 text-sm text-gray-100 shadow-sm transition-colors hover:border-gray-500 hover:bg-gray-800/80 focus:outline-none focus:ring-2 focus:ring-emerald-500/60 focus:border-emerald-500/70"
+          >
+            <span>{spanOptions.find((o) => o.value === digestSpan)?.label ?? digestSpan}</span>
+            <svg className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${spanOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {spanOpen && (
+            <div className="absolute top-full left-0 z-10 mt-1 w-full rounded-lg border border-gray-600 bg-gray-900 shadow-xl py-1 min-w-[7rem]">
+              {spanOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => { onDigestSpanChange(opt.value); setSpanOpen(false); }}
+                  className={`w-full text-left px-3 py-2 text-sm transition-colors first:rounded-t-lg last:rounded-b-lg ${
+                    opt.value === digestSpan
+                      ? 'bg-emerald-900/50 text-emerald-100 font-medium'
+                      : 'text-gray-200 hover:bg-gray-700/80'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="border border-gray-700/80 rounded-md bg-gray-900/60 overflow-hidden">
@@ -80,30 +128,40 @@ export default function DailyDigestRunPanel({
         </button>
         {digestInputExpanded && (
           <div className="space-y-3 px-3 pb-3 pt-0">
-            <div className="space-y-1">
-              <label htmlFor="digest-style" className="block text-[11px] font-medium text-gray-300">
+            <div className="space-y-1" ref={styleRef}>
+              <label htmlFor="digest-style" className="block text-sm font-medium text-gray-300">
                 Brief style
               </label>
               <div className="relative w-full max-w-xs">
-                <select
+                <button
+                  type="button"
                   id="digest-style"
-                  value={digestNarrativeStyle}
-                  onChange={(e) => onDigestNarrativeStyleChange(e.target.value as DigestNarrativeStyle)}
-                  className="w-full appearance-none rounded-lg border border-gray-600 bg-gray-800/80 py-2.5 pl-3 pr-9 text-sm text-gray-100 shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/60 focus:border-emerald-500/70 hover:border-gray-500"
+                  onClick={() => { setStyleOpen((o) => !o); setSpanOpen(false); }}
+                  className="w-full flex items-center justify-between gap-2 rounded-lg border border-gray-600 bg-gray-900/80 py-2.5 pl-3 pr-3 text-sm text-gray-100 shadow-sm transition-colors hover:border-gray-500 hover:bg-gray-800/80 focus:outline-none focus:ring-2 focus:ring-emerald-500/60 focus:border-emerald-500/70"
                 >
-                  <option value="default">Balanced (default)</option>
-                  <option value="concise">Concise</option>
-                  <option value="professional">Professional</option>
-                  <option value="technical">Technical (more detail)</option>
-                </select>
-                <svg
-                  className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
+                  <span>{styleOptions.find((o) => o.value === digestNarrativeStyle)?.label ?? digestNarrativeStyle}</span>
+                  <svg className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${styleOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {styleOpen && (
+                  <div className="absolute top-full left-0 z-10 mt-1 w-full rounded-lg border border-gray-600 bg-gray-900 shadow-xl py-1 max-w-xs">
+                    {styleOptions.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => { onDigestNarrativeStyleChange(opt.value); setStyleOpen(false); }}
+                        className={`w-full text-left px-3 py-2 text-sm transition-colors first:rounded-t-lg last:rounded-b-lg ${
+                          opt.value === digestNarrativeStyle
+                            ? 'bg-emerald-900/50 text-emerald-100 font-medium'
+                            : 'text-gray-200 hover:bg-gray-700/80'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 

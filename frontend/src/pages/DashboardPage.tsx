@@ -694,7 +694,7 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setShowDigestHistory((v) => !v)}
-                  className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-[11px] font-medium text-gray-300 hover:text-white hover:bg-gray-800/60 transition-colors"
+                  className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-800/60 transition-colors"
                 >
                   <span>Brief history</span>
                   <svg
@@ -733,7 +733,7 @@ export default function DashboardPage() {
                         </svg>
                       </button>
                     </div>
-                    <div className="grid grid-cols-7 gap-1 text-[10px] text-center text-gray-500 mb-1">
+                    <div className="grid grid-cols-7 gap-1 text-xs text-center text-gray-500 mb-1">
                       {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d) => (
                         <div key={d}>{d}</div>
                       ))}
@@ -770,18 +770,18 @@ export default function DashboardPage() {
                           >
                             {day}
                             {hasDigest && count > 1 && (
-                              <span className="ml-0.5 text-[10px] opacity-90">x{count}</span>
+                              <span className="ml-0.5 text-xs opacity-90">x{count}</span>
                             )}
                           </button>
                         );
                       })}
                     </div>
-                    <p className="mt-2 text-[10px] text-gray-500">
+                    <p className="mt-2 text-xs text-gray-500">
                       Green days have saved briefs; number is how many that day. Click a day to view.
                     </p>
                     {weeklyDigestSlots.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-gray-700">
-                        <p className="text-[10px] font-medium text-gray-500 mb-1.5">Weekly briefs</p>
+                        <p className="text-xs font-medium text-gray-500 mb-1.5">Weekly briefs</p>
                         <div className="flex flex-wrap gap-1.5">
                           {weeklyDigestSlots.map((slot) => {
                             const endDate = slot.startsWith('w:') ? slot.slice(2) : slot;
@@ -807,7 +807,7 @@ export default function DashboardPage() {
                     )}
                     {selectedDigestDate && digestBriefsForDay.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-gray-700">
-                        <p className="text-[10px] font-medium text-gray-500 mb-1.5">
+                        <p className="text-xs font-medium text-gray-500 mb-1.5">
                           {selectedDigestDate.startsWith('w:') ? 'Briefs for this week' : 'Briefs on this day'}
                         </p>
                         <div className="flex flex-wrap gap-1.5">
@@ -835,18 +835,18 @@ export default function DashboardPage() {
 
               {/* Brief panel: selected or freshly run brief content */}
               <div className="border border-gray-700/80 rounded-md bg-gray-900/60 overflow-hidden">
-                <div className="px-3 py-2 border-b border-gray-700/80 text-[11px] font-medium text-gray-300">
+                <div className="px-3 py-2 border-b border-gray-700/80 text-sm font-medium text-gray-300">
                   Brief
                 </div>
                 <div className="p-3 space-y-3">
                   {digestLoading && (
-                    <div className="flex items-center gap-2 text-xs text-gray-300">
+                    <div className="flex items-center gap-2 text-sm text-gray-300">
                       <span className="inline-block w-4 h-4 border-2 border-gray-500 border-t-blue-400 rounded-full animate-spin" />
                       <span>Loading briefs…</span>
                     </div>
                   )}
 
-                  {digestError && <p className="text-xs text-red-400">{digestError}</p>}
+                  {digestError && <p className="text-sm text-red-400">{digestError}</p>}
 
                   {/* Selected day brief content (hours list is in Brief history panel) */}
                   {!digestLoading && selectedDigestDate && digestBriefsForDay.length > 0 && selectedBrief && (
@@ -854,7 +854,7 @@ export default function DashboardPage() {
                         <div className="space-y-3 pt-2 border-t border-gray-700">
                           <div className="flex items-start justify-between gap-3">
                             <div className="space-y-1">
-                              <p className="text-xs text-gray-500">
+                              <p className="text-sm text-gray-500">
                                 {selectedBrief.span_label && selectedBrief.span_label !== 'Daily' && (
                                   <span className="mr-2">{selectedBrief.span_label}</span>
                                 )}
@@ -865,11 +865,11 @@ export default function DashboardPage() {
                               </p>
                               {selectedBrief.priority_tickers?.length > 0 && (
                                 <div className="flex flex-wrap items-center gap-1.5">
-                                  <span className="text-[10px] uppercase tracking-wide text-gray-500">Focus</span>
+                                  <span className="text-xs uppercase tracking-wide text-gray-500">Focus</span>
                                   {selectedBrief.priority_tickers.map((t) => (
                                     <span
                                       key={t}
-                                      className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-600/60 text-[11px] text-emerald-100"
+                                      className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-600/60 text-sm text-emerald-100"
                                     >
                                       {t}
                                     </span>
@@ -879,8 +879,8 @@ export default function DashboardPage() {
                               {(selectedBrief.user_note ||
                                 selectedBrief.narrative_style ||
                                 selectedBrief.user_focus_tickers?.length) && (
-                                  <div className="mt-2 space-y-1 text-[11px] text-gray-300 bg-gray-900/60 border border-gray-700 rounded px-2 py-1.5">
-                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                                  <div className="mt-2 space-y-1 text-sm text-gray-300 bg-gray-900/60 border border-gray-700 rounded px-2 py-1.5">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                                       Run inputs
                                     </p>
                                     {selectedBrief.narrative_style && (
@@ -896,7 +896,7 @@ export default function DashboardPage() {
                                       </p>
                                     ) : null}
                                     {selectedBrief.user_note && (
-                                      <p className="text-[11px] text-gray-300">
+                                      <p className="text-sm text-gray-300">
                                         <span className="uppercase tracking-wide text-gray-500 mr-1">User note:</span>
                                         <span className="whitespace-pre-wrap align-top">{selectedBrief.user_note}</span>
                                       </p>
@@ -908,7 +908,7 @@ export default function DashboardPage() {
                               <button
                                 type="button"
                                 onClick={() => handleCopyBrief(selectedBrief)}
-                                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-600/10"
+                                className="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-600/10"
                               >
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path
@@ -923,18 +923,18 @@ export default function DashboardPage() {
                               <button
                                 type="button"
                                 onClick={() => setShowRawDigest((v) => !v)}
-                                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded border border-gray-500 text-gray-300 hover:bg-gray-800/80"
+                                className="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium rounded border border-gray-500 text-gray-300 hover:bg-gray-800/80"
                               >
                                 {showRawDigest ? 'Hide raw' : 'Show raw'}
                               </button>
                             </div>
                           </div>
-                          <div className="prose prose-invert prose-sm max-w-none">
-                            <p className="text-gray-200 whitespace-pre-wrap leading-relaxed">{selectedBrief.narrative}</p>
+                          <div className="prose prose-invert max-w-none">
+                            <p className="text-sm text-gray-200 whitespace-pre-wrap leading-relaxed">{selectedBrief.narrative}</p>
                           </div>
                           {showRawDigest && (
                             <div className="mt-2 rounded border border-gray-700 bg-black/50 p-2">
-                              <pre className="text-[11px] whitespace-pre-wrap text-gray-200">
+                              <pre className="text-xs whitespace-pre-wrap text-gray-200">
                                 {formatBriefRaw(selectedBrief)}
                               </pre>
                             </div>
@@ -954,7 +954,7 @@ export default function DashboardPage() {
                               <button
                                 type="button"
                                 onClick={() => setShowReferences((v) => !v)}
-                                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-300 hover:text-white"
+                                className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-300 hover:text-white"
                               >
                                 <svg
                                   className={`w-3 h-3 transition-transform ${
@@ -967,14 +967,14 @@ export default function DashboardPage() {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                 </svg>
                                 <span>References</span>
-                                <span className="text-[10px] text-gray-500">({selectedBrief.references.length})</span>
+                                <span className="text-xs text-gray-500">({selectedBrief.references.length})</span>
                               </button>
                               {showReferences && (
-                                <ul className="mt-1.5 space-y-1.5 text-[11px] text-gray-300">
+                                <ul className="mt-1.5 space-y-1.5 text-sm text-gray-300">
                                   {selectedBrief.references.map((ref, idx) => (
                                     <li key={idx} className="flex flex-col">
                                       <span className="font-medium">{ref.label}</span>
-                                      <div className="flex flex-wrap gap-2 text-[10px] text-gray-500">
+                                      <div className="flex flex-wrap gap-2 text-xs text-gray-500">
                                         {ref.source && <span>{ref.source}</span>}
                                         {ref.url && (
                                           <a
@@ -1005,7 +1005,7 @@ export default function DashboardPage() {
                     <div className="space-y-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="space-y-1">
-                          <p className="text-xs text-gray-500">
+                          <p className="text-sm text-gray-500">
                             {digest.span_label && digest.span_label !== 'Daily' && (
                               <span className="mr-2">{digest.span_label}</span>
                             )}
@@ -1013,11 +1013,11 @@ export default function DashboardPage() {
                           </p>
                           {digest.priority_tickers?.length > 0 && (
                             <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="text-[10px] uppercase tracking-wide text-gray-500">Focus</span>
+                              <span className="text-xs uppercase tracking-wide text-gray-500">Focus</span>
                               {digest.priority_tickers.map((t) => (
                                 <span
                                   key={t}
-                                  className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-600/60 text-[11px] text-emerald-100"
+                                  className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-600/60 text-sm text-emerald-100"
                                 >
                                   {t}
                                 </span>
@@ -1025,8 +1025,8 @@ export default function DashboardPage() {
                             </div>
                           )}
                           {(digest.user_note || digest.narrative_style || digest.user_focus_tickers?.length) && (
-                            <div className="mt-2 space-y-1 text-[11px] text-gray-300 bg-gray-900/60 border border-gray-700 rounded px-2 py-1.5">
-                              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                            <div className="mt-2 space-y-1 text-sm text-gray-300 bg-gray-900/60 border border-gray-700 rounded px-2 py-1.5">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                                 Run inputs
                               </p>
                               {digest.narrative_style && (
@@ -1042,7 +1042,7 @@ export default function DashboardPage() {
                                 </p>
                               ) : null}
                               {digest.user_note && (
-                                <p className="text-[11px] text-gray-300">
+                                <p className="text-sm text-gray-300">
                                   <span className="uppercase tracking-wide text-gray-500 mr-1">User note:</span>
                                   <span className="whitespace-pre-wrap align-top">{digest.user_note}</span>
                                 </p>
@@ -1054,7 +1054,7 @@ export default function DashboardPage() {
                           <button
                             type="button"
                             onClick={() => handleCopyBrief(digest)}
-                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-600/10"
+                            className="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-600/10"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path
@@ -1069,18 +1069,18 @@ export default function DashboardPage() {
                           <button
                             type="button"
                             onClick={() => setShowRawDigest((v) => !v)}
-                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded border border-gray-500 text-gray-300 hover:bg-gray-800/80"
+                            className="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium rounded border border-gray-500 text-gray-300 hover:bg-gray-800/80"
                           >
                             {showRawDigest ? 'Hide raw' : 'Show raw'}
                           </button>
                         </div>
                       </div>
-                      <div className="prose prose-invert prose-sm max-w-none">
-                        <p className="text-gray-200 whitespace-pre-wrap leading-relaxed">{digest.narrative}</p>
+                      <div className="prose prose-invert max-w-none">
+                        <p className="text-sm text-gray-200 whitespace-pre-wrap leading-relaxed">{digest.narrative}</p>
                       </div>
                       {showRawDigest && (
                         <div className="mt-2 rounded border border-gray-700 bg-black/50 p-2">
-                          <pre className="text-[11px] whitespace-pre-wrap text-gray-200">
+                          <pre className="text-xs whitespace-pre-wrap text-gray-200">
                             {formatBriefRaw(digest)}
                           </pre>
                         </div>
@@ -1098,7 +1098,7 @@ export default function DashboardPage() {
                               <button
                                 type="button"
                                 onClick={() => setShowReferences((v) => !v)}
-                                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-300 hover:text-white"
+                                className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-300 hover:text-white"
                               >
                                 <svg
                                   className={`w-3 h-3 transition-transform ${
@@ -1111,14 +1111,14 @@ export default function DashboardPage() {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                 </svg>
                                 <span>References</span>
-                                <span className="text-[10px] text-gray-500">({digest.references.length})</span>
+                                <span className="text-xs text-gray-500">({digest.references.length})</span>
                               </button>
                               {showReferences && (
-                                <ul className="mt-1.5 space-y-1.5 text-[11px] text-gray-300">
+                                <ul className="mt-1.5 space-y-1.5 text-sm text-gray-300">
                                   {digest.references.map((ref, idx) => (
                                     <li key={idx} className="flex flex-col">
                                       <span className="font-medium">{ref.label}</span>
-                                      <div className="flex flex-wrap gap-2 text-[10px] text-gray-500">
+                                      <div className="flex flex-wrap gap-2 text-xs text-gray-500">
                                         {ref.source && <span>{ref.source}</span>}
                                         {ref.url && (
                                           <a
@@ -1150,7 +1150,7 @@ export default function DashboardPage() {
                     !digestError &&
                     !digest &&
                     (!selectedDigestDate || digestBriefsForDay.length === 0) && (
-                      <p className="text-xs text-gray-400">
+                      <p className="text-sm text-gray-400">
                         Click &ldquo;Run digest&rdquo; to generate today&apos;s summary, or select a highlighted day in
                         the calendar to view that day&apos;s briefs.
                       </p>

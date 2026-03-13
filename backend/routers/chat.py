@@ -42,8 +42,8 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
-    tokens_used: int  # LLM tokens (for debugging/transparency)
-    platform_tokens_used: int  # deducted from balance; shown in UI
+    tokens_used: int  # LLM token count (for debugging/analytics)
+    platform_tokens_used: int  # tokens deducted from balance (what the UI should show)
     balance: int
     follow_up_questions: Optional[List[str]] = None
     session_id: Optional[int] = None  # set when backend created a new session for this turn
@@ -57,8 +57,8 @@ class ChatMessageOut(BaseModel):
     role: str
     content: str
     sort_order: int
-    tokens_used: Optional[int] = None  # LLM tokens (stored)
-    platform_tokens_used: Optional[int] = None  # for UI display
+    tokens_used: Optional[int] = None  # LLM token count (stored in DB)
+    platform_tokens_used: Optional[int] = None  # tokens deducted from balance (for UI display)
     tools_called: Optional[int] = None
     tool_call_events: Optional[List[Dict[str, Any]]] = None
     skill_activation_events: Optional[List[Dict[str, Any]]] = None
@@ -272,6 +272,7 @@ async def chat(
 
     reply = result.get("reply", "")
     tokens_used = result.get("tokens_used", 1)
+    platform_tokens_used = token_service.llm_tokens_to_platform_tokens(tokens_used)
     follow_up_questions = result.get("follow_up_questions")
 
     # Deduct tokens (best-effort; don't fail the response if deduction fails)
@@ -315,7 +316,6 @@ async def chat(
             logger.exception("Failed to persist chat turn: %s", persist_err)
             db.rollback()
 
-    platform_tokens_used = token_service.llm_tokens_to_platform_tokens(tokens_used)
     return ChatResponse(
         reply=reply,
         tokens_used=tokens_used,
@@ -433,13 +433,14 @@ async def chat_stream(
 
                 if typ == "done":
                     tokens_used = payload.get("tokens_used", 1)
-                    payload["platform_tokens_used"] = token_service.llm_tokens_to_platform_tokens(tokens_used)
+                    platform_tokens_used = token_service.llm_tokens_to_platform_tokens(tokens_used)
                     try:
                         token_service.deduct_for_chat(user_id, tokens_used, db)
                     except Exception as deduct_err:
                         logger.warning("Failed to deduct tokens for user_id=%s: %s", user_id, deduct_err)
                     new_balance = token_service.get_balance(user_id, db)
                     payload["balance"] = new_balance
+                    payload["platform_tokens_used"] = platform_tokens_used
                     if "follow_up_questions" not in payload:
                         payload["follow_up_questions"] = []
                     sid: Optional[int] = session_id_for_persist

@@ -58,7 +58,7 @@ function TypingIndicator() {
   );
 }
 
-function MessageBubble({ message }: { message: ChatMessage & { tokens_used?: number } }) {
+function MessageBubble({ message }: { message: ChatMessage & { tokens_used?: number; platform_tokens_used?: number; cost_usd?: number } }) {
   const isUser = message.role === 'user';
   
   // Detect if message contains RTL text
@@ -119,8 +119,19 @@ function MessageBubble({ message }: { message: ChatMessage & { tokens_used?: num
             </ReactMarkdown>
           </div>
         </div>
-        {message.tokens_used != null && (
-          <div className="text-xs text-slate-500 mt-0.5 ml-1">{message.tokens_used} token{message.tokens_used !== 1 ? 's' : ''} used</div>
+        {(message.platform_tokens_used != null || message.tokens_used != null) && (
+          <div className="text-xs text-slate-500 mt-0.5 ml-1">
+            {(message.platform_tokens_used ?? message.tokens_used)} {(message.platform_tokens_used ?? message.tokens_used) !== 1 ? 'DECKS' : 'DECK'} used
+            {(message.tokens_used != null || message.cost_usd != null) && (
+              <span>
+                {' ('}
+                {message.tokens_used != null && message.tokens_used.toLocaleString()}
+                {message.tokens_used != null && message.cost_usd != null && ' · '}
+                {message.cost_usd != null && `${(message.cost_usd * 100).toFixed(2)} ¢`}
+                {')'}
+              </span>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -128,7 +139,7 @@ function MessageBubble({ message }: { message: ChatMessage & { tokens_used?: num
 }
 
 export default function TickerChatPanel({ onClose, initialBalance }: TickerChatPanelProps) {
-  const [messages, setMessages] = useState<(ChatMessage & { tokens_used?: number })[]>([]);
+  const [messages, setMessages] = useState<(ChatMessage & { tokens_used?: number; platform_tokens_used?: number; cost_usd?: number })[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -159,7 +170,7 @@ export default function TickerChatPanel({ onClose, initialBalance }: TickerChatP
       const result = await chatApi.sendMessage(newMessages.map(m => ({ role: m.role, content: m.content })));
       setMessages(prev => [
         ...prev,
-        { role: 'assistant', content: result.reply, tokens_used: result.tokens_used },
+        { role: 'assistant', content: result.reply, tokens_used: result.tokens_used, platform_tokens_used: result.platform_tokens_used, cost_usd: result.llm_usage?.cost_usd },
       ]);
       setBalance(result.balance);
     } catch (err: any) {
