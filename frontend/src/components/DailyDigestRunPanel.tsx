@@ -5,12 +5,15 @@
 import type { ChangeEvent } from 'react';
 
 export type DigestNarrativeStyle = 'default' | 'concise' | 'professional' | 'technical';
+export type DigestSpan = 'daily' | 'weekly';
 
 export interface DailyDigestRunPanelProps {
   digestUserNote: string;
   onDigestUserNoteChange: (value: string) => void;
   digestNarrativeStyle: DigestNarrativeStyle;
   onDigestNarrativeStyleChange: (value: DigestNarrativeStyle) => void;
+  digestSpan: DigestSpan;
+  onDigestSpanChange: (value: DigestSpan) => void;
   digestInputExpanded: boolean;
   onDigestInputExpandedChange: (value: boolean) => void;
   selectedFocusTickers: string[];
@@ -25,6 +28,8 @@ export default function DailyDigestRunPanel({
   onDigestUserNoteChange,
   digestNarrativeStyle,
   onDigestNarrativeStyleChange,
+  digestSpan,
+  onDigestSpanChange,
   digestInputExpanded,
   onDigestInputExpandedChange,
   selectedFocusTickers,
@@ -38,8 +43,23 @@ export default function DailyDigestRunPanel({
       <div>
         <h2 className="text-sm font-semibold text-white mb-1">User Daily Brief (beta)</h2>
         <p className="text-xs text-gray-400">
-          Generate a short narrative summary of today&apos;s market and your subscribed tickers.
+          Generate a short narrative summary of {digestSpan === 'weekly' ? 'the past week\'s' : 'today\'s'} market and your subscribed tickers.
         </p>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <label htmlFor="digest-span" className="text-[11px] font-medium text-gray-300">
+          Time span
+        </label>
+        <select
+          id="digest-span"
+          value={digestSpan}
+          onChange={(e) => onDigestSpanChange(e.target.value as DigestSpan)}
+          className="rounded-lg border border-gray-600 bg-gray-800/80 py-2 pl-3 pr-8 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/60"
+        >
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+        </select>
       </div>
 
       <div className="border border-gray-700/80 rounded-md bg-gray-900/60 overflow-hidden">

@@ -65,3 +65,15 @@ BACKEND_URL = os.environ.get("BACKEND_URL", "").strip() or "http://127.0.0.1:800
 # Whether to write AI agent reports as markdown files inside the results folder.
 # Disabled by default; set WRITE_AI_REPORTS_TO_RESULTS=true to enable.
 WRITE_AI_REPORTS_TO_RESULTS = os.environ.get("WRITE_AI_REPORTS_TO_RESULTS", "false").strip().lower() in ("1", "true", "yes")
+
+# Chat token conversion: N LLM tokens = 1 platform token. User balance is in platform tokens.
+# Set LLM_TOKENS_PER_PLATFORM_TOKEN (e.g. 10000) to configure. Default: 10000.
+def _parse_llm_tokens_per_platform() -> int:
+    raw = os.environ.get("LLM_TOKENS_PER_PLATFORM_TOKEN", "10000").strip()
+    val = int(raw)
+    if val < 1:
+        raise ValueError("LLM_TOKENS_PER_PLATFORM_TOKEN must be >= 1")
+    return val
+
+
+LLM_TOKENS_PER_PLATFORM_TOKEN = _parse_llm_tokens_per_platform()

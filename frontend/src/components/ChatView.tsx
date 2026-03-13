@@ -321,6 +321,8 @@ export function SkillActivationBlock({ event }: { event: SkillActivationEvent })
 
 export type ChatMessageWithMeta = ChatMessage & {
   tokens_used?: number;
+  /** Platform tokens (shown in UI); prefer over tokens_used when present */
+  platform_tokens_used?: number;
   tools_called?: number;
   tool_call_events?: ToolCallEvent[];
   skill_activation_events?: SkillActivationEvent[];

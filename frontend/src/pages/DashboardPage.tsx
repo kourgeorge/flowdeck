@@ -36,6 +36,7 @@ export default function DashboardPage() {
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
   const [digestUserNote, setDigestUserNote] = useState<string>('');
   const [digestNarrativeStyle, setDigestNarrativeStyle] = useState<'default' | 'concise' | 'professional' | 'technical'>('default');
+  const [digestSpan, setDigestSpan] = useState<'daily' | 'weekly'>('daily');
   const [selectedFocusTickers, setSelectedFocusTickers] = useState<string[]>([]);
   const [showReferences, setShowReferences] = useState<boolean>(false);
   const [showDigestHistory, setShowDigestHistory] = useState<boolean>(true);
@@ -71,7 +72,8 @@ export default function DashboardPage() {
     try {
       const trimmedNote = digestUserNote.trim();
       const styleParam = digestNarrativeStyle === 'default' ? undefined : digestNarrativeStyle;
-      const params: { user_note?: string; narrative_style?: string; user_focus_tickers?: string[] } = {};
+      const params: { span?: 'daily' | 'weekly'; user_note?: string; narrative_style?: string; user_focus_tickers?: string[] } = {};
+      if (digestSpan !== 'daily') params.span = digestSpan;
       if (trimmedNote) params.user_note = trimmedNote;
       if (styleParam) params.narrative_style = styleParam;
       if (selectedFocusTickers.length > 0) params.user_focus_tickers = selectedFocusTickers;
@@ -79,19 +81,19 @@ export default function DashboardPage() {
         Object.keys(params).length ? params : undefined,
       );
       setDigest(data);
-      setSelectedDigestDate(data.digest_date);
+      const slot = (data.span_type === 'weekly' ? `w:${data.digest_date}` : data.digest_date);
+      setSelectedDigestDate(slot);
       setDigestDates((prev) =>
-        prev.includes(data.digest_date) ? prev : [...prev, data.digest_date].sort()
+        prev.includes(slot) ? prev : [...prev, slot].sort()
       );
       setDigestCountByDate((prev) => ({
         ...prev,
-        [data.digest_date]: (prev[data.digest_date] ?? 0) + 1,
+        [slot]: (prev[slot] ?? 0) + 1,
       }));
       if (trimmedNote) {
         setDigestUserNote('');
       }
-      // Refresh list for today so the new brief appears
-      const listRes = await digestApi.getDigestsForDate(data.digest_date);
+      const listRes = await digestApi.getDigestsForDate(slot);
       setDigestBriefsForDay(listRes.briefs);
       setSelectedBrief(listRes.briefs[0] ?? null);
     } catch (e: unknown) {
@@ -113,12 +115,12 @@ export default function DashboardPage() {
         setDigestDates(dates);
         setDigestCountByDate(res.count_by_date ?? {});
         if (dates.length > 0) {
-          const latestDate = dates[dates.length - 1];
-          setSelectedDigestDate(latestDate);
+          const latestSlot = dates[dates.length - 1];
+          setSelectedDigestDate(latestSlot);
           setDigest(null);
           setDigestLoading(true);
           try {
-            const listRes = await digestApi.getDigestsForDate(latestDate);
+            const listRes = await digestApi.getDigestsForDate(latestSlot);
             setDigestBriefsForDay(listRes.briefs);
             setSelectedBrief(listRes.briefs[0] ?? null);
           } catch {
@@ -174,7 +176,9 @@ export default function DashboardPage() {
     return `${y}-${mm}-${dd}`;
   };
 
-  const digestDateSet = new Set(digestDates);
+  const dailyDigestDates = digestDates.filter((d) => !d.startsWith('w:'));
+  const weeklyDigestSlots = digestDates.filter((d) => d.startsWith('w:'));
+  const digestDateSet = new Set(dailyDigestDates);
 
   const formatBriefTime = (iso: string) => {
     try {
@@ -674,6 +678,8 @@ export default function DashboardPage() {
                 onDigestUserNoteChange={setDigestUserNote}
                 digestNarrativeStyle={digestNarrativeStyle}
                 onDigestNarrativeStyleChange={setDigestNarrativeStyle}
+                digestSpan={digestSpan}
+                onDigestSpanChange={setDigestSpan}
                 digestInputExpanded={digestInputExpanded}
                 onDigestInputExpandedChange={setDigestInputExpanded}
                 selectedFocusTickers={selectedFocusTickers}
@@ -773,9 +779,37 @@ export default function DashboardPage() {
                     <p className="mt-2 text-[10px] text-gray-500">
                       Green days have saved briefs; number is how many that day. Click a day to view.
                     </p>
+                    {weeklyDigestSlots.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-gray-700">
+                        <p className="text-[10px] font-medium text-gray-500 mb-1.5">Weekly briefs</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {weeklyDigestSlots.map((slot) => {
+                            const endDate = slot.startsWith('w:') ? slot.slice(2) : slot;
+                            const isSelected = selectedDigestDate === slot;
+                            return (
+                              <button
+                                key={slot}
+                                type="button"
+                                onClick={() => handleSelectDigestDate(slot)}
+                                className={`px-2 py-1 text-xs rounded border transition-colors ${
+                                  isSelected
+                                    ? 'bg-emerald-600 border-emerald-500 text-white'
+                                    : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
+                                }`}
+                                title={endDate}
+                              >
+                                Week {endDate}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                     {selectedDigestDate && digestBriefsForDay.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-gray-700">
-                        <p className="text-[10px] font-medium text-gray-500 mb-1.5">Briefs on this day</p>
+                        <p className="text-[10px] font-medium text-gray-500 mb-1.5">
+                          {selectedDigestDate.startsWith('w:') ? 'Briefs for this week' : 'Briefs on this day'}
+                        </p>
                         <div className="flex flex-wrap gap-1.5">
                           {digestBriefsForDay.map((brief, i) => (
                             <button
@@ -821,6 +855,9 @@ export default function DashboardPage() {
                           <div className="flex items-start justify-between gap-3">
                             <div className="space-y-1">
                               <p className="text-xs text-gray-500">
+                                {selectedBrief.span_label && selectedBrief.span_label !== 'Daily' && (
+                                  <span className="mr-2">{selectedBrief.span_label}</span>
+                                )}
                                 {selectedBrief.digest_date}
                                 {selectedBrief.created_at && (
                                   <span className="ml-2">· {formatBriefTime(selectedBrief.created_at)}</span>
@@ -963,12 +1000,17 @@ export default function DashboardPage() {
                     </>
                   )}
 
-                  {/* Freshly run digest (no history selected) */}
-                  {!digestLoading && digest && !selectedDigestDate && (
+                  {/* Freshly run digest (shown when no list/selection yet, e.g. right after run or list fetch failed) */}
+                  {!digestLoading && digest && (!selectedDigestDate || digestBriefsForDay.length === 0) && (
                     <div className="space-y-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="space-y-1">
-                          <p className="text-xs text-gray-500">{digest.digest_date}</p>
+                          <p className="text-xs text-gray-500">
+                            {digest.span_label && digest.span_label !== 'Daily' && (
+                              <span className="mr-2">{digest.span_label}</span>
+                            )}
+                            {digest.digest_date}
+                          </p>
                           {digest.priority_tickers?.length > 0 && (
                             <div className="flex flex-wrap items-center gap-1.5">
                               <span className="text-[10px] uppercase tracking-wide text-gray-500">Focus</span>

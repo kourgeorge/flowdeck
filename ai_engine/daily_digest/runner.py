@@ -8,15 +8,50 @@ Uses ai_engine.llm_provider for LLM access (same as chat and analysis services).
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 from ai_engine.llm_provider import get_config_from_env, get_llm
 
 from .context_builder import build_digest_context
 from .agents import run_focus_selector, run_ticker_interpreter, run_market_interpreter, run_narrative_writer
-from .state import DigestWorkflowState, DigestResult
+from .state import DigestWorkflowState, DigestResult, SpanType
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_date(s: str) -> datetime:
+    return datetime.strptime(s, "%Y-%m-%d")
+
+
+def _format_period_label(span_type: SpanType, start_date: Optional[str], end_date: str) -> str:
+    if span_type == "daily":
+        return "today"
+    if span_type == "weekly":
+        return "this week"
+    if span_type == "custom" and start_date and end_date:
+        try:
+            start_d = _parse_date(start_date)
+            end_d = _parse_date(end_date)
+            return f"{start_d.strftime('%b')} {start_d.day}–{end_d.strftime('%b')} {end_d.day}, {end_d.year}"
+        except ValueError:
+            return f"{start_date} to {end_date}"
+    return "this period"
+
+
+def _format_span_label(span_type: SpanType, start_date: Optional[str], end_date: str) -> str:
+    if span_type == "daily":
+        return "Daily"
+    if span_type == "weekly":
+        return "Weekly"
+    if span_type == "custom" and start_date and end_date:
+        try:
+            start_d = _parse_date(start_date)
+            end_d = _parse_date(end_date)
+            return f"{start_d.strftime('%b')} {start_d.day}–{end_d.strftime('%b')} {end_d.day}, {end_d.year}"
+        except ValueError:
+            return f"{start_date} – {end_date}"
+    return "Custom"
 
 
 def run_digest(
@@ -30,6 +65,9 @@ def run_digest(
     user_note: Optional[str] = None,
     narrative_style: Optional[str] = None,
     user_focus_tickers: Optional[list[str]] = None,
+    span_type: SpanType = "daily",
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
 ) -> DigestResult:
     """
     Run the full User Daily Brief pipeline and return a DigestResult.
@@ -43,22 +81,59 @@ def run_digest(
 
     Args:
         user_id: User ID for portfolio and preferences.
-        digest_date: Date for the brief (YYYY-MM-DD).
+        digest_date: Date for the brief (YYYY-MM-DD); for weekly/custom this is the end date.
         db: Database session (for loading subscriptions and report service).
         config: Optional config overrides (llm_provider, deep_think_llm, quick_think_llm, etc.).
         max_priority_tickers: Max number of tickers to analyze in depth (default 5).
         fetcher: Optional data fetcher (if None, backend get_info_fetcher() is used).
+        span_type: 'daily', 'weekly', or 'custom'. Weekly = 7 days ending digest_date.
+        start_date: Required for custom; for weekly computed from digest_date.
+        end_date: Required for custom; for weekly equals digest_date.
 
     Returns:
-        DigestResult with narrative, what_to_watch, digest_date, priority_tickers.
+        DigestResult with narrative, what_to_watch, digest_date, priority_tickers, span_type, span_label.
     """
     config = config or {}
-    # Env-first config (same as chat_service), then overrides from config
     cfg = {**get_config_from_env(), **config}
+
+    # Resolve start/end and labels for span
+    end_dt = _parse_date(digest_date)
+    if span_type == "weekly":
+        start_dt = end_dt - timedelta(days=7)
+        start_date = start_dt.strftime("%Y-%m-%d")
+        end_date = digest_date
+    elif span_type == "custom":
+        if not start_date or not end_date:
+            span_type = "daily"
+            start_date = None
+            end_date = digest_date
+        else:
+            end_date = end_date or digest_date
+    else:
+        start_date = None
+        end_date = digest_date
+
+    period_label = _format_period_label(span_type, start_date, end_date or digest_date)
+    span_label = _format_span_label(span_type, start_date, end_date or digest_date)
+
+    span_trading_days: Optional[int] = None
+    if span_type == "weekly":
+        span_trading_days = 7
+    elif span_type == "custom" and start_date and end_date:
+        try:
+            sd = _parse_date(start_date)
+            ed = _parse_date(end_date)
+            span_trading_days = max(1, (ed - sd).days)
+        except ValueError:
+            span_trading_days = None
 
     state = DigestWorkflowState(
         user_id=user_id,
         digest_date=digest_date,
+        span_type=span_type,
+        start_date=start_date,
+        end_date=end_date,
+        period_label=period_label,
         max_priority_tickers=max_priority_tickers,
         db=db,
         config=cfg,
@@ -68,7 +143,6 @@ def run_digest(
     if narrative_style:
         state.narrative_style = narrative_style
     if user_focus_tickers:
-        # Normalize to upper-case tickers and de-duplicate; leave final validation to focus selector.
         seen: set[str] = set()
         cleaned: list[str] = []
         for t in user_focus_tickers:
@@ -81,13 +155,16 @@ def run_digest(
         if cleaned:
             state.user_focus_tickers = cleaned
 
-    logger.info("Digest: building context for user_id=%s date=%s", user_id, digest_date)
+    logger.info("Digest: building context for user_id=%s date=%s span=%s", user_id, digest_date, span_type)
     ctx = build_digest_context(
         user_id=user_id,
         digest_date=digest_date,
         max_priority_tickers=max_priority_tickers,
         db=db,
         fetcher=fetcher,
+        start_date=start_date,
+        end_date=end_date,
+        span_trading_days=span_trading_days,
     )
     state.digest_context = ctx
 
@@ -96,14 +173,20 @@ def run_digest(
             narrative="You have no subscribed stocks. Subscribe to tickers on the platform to receive your User Daily Brief.",
             what_to_watch="Add tickers to your portfolio to get personalized insights.",
             digest_date=digest_date,
+            span_type=span_type,
+            span_label=span_label,
             priority_tickers=[],
         )
 
     if not ctx.priority_tickers:
         return DigestResult(
-            narrative="Your portfolio had no significant moves or news today. Check back tomorrow for updates.",
+            narrative=f"Your portfolio had no significant moves or news {period_label}. Check back later for updates."
+            if span_type != "daily"
+            else "Your portfolio had no significant moves or news today. Check back tomorrow for updates.",
             what_to_watch="Watch for earnings and macro events that may affect your holdings.",
             digest_date=digest_date,
+            span_type=span_type,
+            span_label=span_label,
             priority_tickers=[],
         )
 
@@ -167,6 +250,8 @@ def run_digest(
         narrative=state.digest_narrative,
         what_to_watch=state.what_to_watch,
         digest_date=digest_date,
+        span_type=span_type,
+        span_label=span_label,
         priority_tickers=ctx.priority_tickers,
         references=state.references,
         input_tokens=input_tokens,

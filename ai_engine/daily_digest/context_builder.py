@@ -56,27 +56,41 @@ def _get_user_context_snapshot(user_id: int, db: Any) -> Optional[str]:
 def _compute_returns_and_abnormal(
     fetcher: Any,
     tickers: List[str],
-) -> tuple[Dict[str, Optional[float]], Dict[str, Optional[float]], Dict[str, bool]]:
+    span_trading_days: Optional[int] = None,
+) -> tuple[
+    Dict[str, Optional[float]],
+    Dict[str, Optional[float]],
+    Dict[str, Optional[float]],
+    Dict[str, bool],
+]:
+    """Returns (returns_1d, returns_5d, returns_span, abnormal_signal). returns_span only set when span_trading_days is provided (e.g. 7 for weekly)."""
     returns_1d: Dict[str, Optional[float]] = {}
     returns_5d: Dict[str, Optional[float]] = {}
+    returns_span: Dict[str, Optional[float]] = {}
     abnormal_signal: Dict[str, bool] = {}
+    need_span = span_trading_days is not None and span_trading_days >= 1
+    min_bars = 6 if not need_span else max(6, span_trading_days + 1)
+
     for ticker in tickers:
         try:
             hist = fetcher.get_historical(ticker, period="1mo", interval="1d")
             data = (hist or {}).get("data") or []
-            if len(data) < 6:
+            if len(data) < min_bars:
                 returns_1d[ticker] = None
                 returns_5d[ticker] = None
+                if need_span:
+                    returns_span[ticker] = None
                 abnormal_signal[ticker] = False
                 continue
-            # data is newest first? Check: yfinance history often returns oldest first
+            # Assume ascending date (oldest first); last = latest
             closes = [float(d["close"]) for d in data if d.get("close") is not None]
             if not closes:
                 returns_1d[ticker] = None
                 returns_5d[ticker] = None
+                if need_span:
+                    returns_span[ticker] = None
                 abnormal_signal[ticker] = False
                 continue
-            # Assume ascending date (oldest first); last = latest
             c_now = closes[-1]
             c_1d = closes[-2] if len(closes) >= 2 else c_now
             c_5d = closes[-6] if len(closes) >= 6 else (closes[0] if closes else c_now)
@@ -84,13 +98,21 @@ def _compute_returns_and_abnormal(
             r5 = (c_now - c_5d) / c_5d * 100.0 if c_5d and c_5d != 0 else None
             returns_1d[ticker] = r1
             returns_5d[ticker] = r5
+            if need_span and len(closes) >= span_trading_days + 1:
+                c_start = closes[-(span_trading_days + 1)]
+                r_span = (c_now - c_start) / c_start * 100.0 if c_start and c_start != 0 else None
+                returns_span[ticker] = r_span
+            elif need_span:
+                returns_span[ticker] = None
             abnormal_signal[ticker] = r1 is not None and abs(r1) > ABNORMAL_THRESHOLD_PCT
         except Exception as e:
             logger.debug("Returns for %s: %s", ticker, e)
             returns_1d[ticker] = None
             returns_5d[ticker] = None
+            if need_span:
+                returns_span[ticker] = None
             abnormal_signal[ticker] = False
-    return returns_1d, returns_5d, abnormal_signal
+    return returns_1d, returns_5d, returns_span, abnormal_signal
 
 
 def _has_recent_news(fetcher: Any, tickers: List[str], lookback_days: int = 2) -> Dict[str, bool]:
@@ -115,21 +137,29 @@ def _rank_tickers(
     abnormal_signal: Dict[str, bool],
     has_news: Dict[str, bool],
     max_n: int,
+    returns_span: Optional[Dict[str, Optional[float]]] = None,
 ) -> tuple[Dict[str, float], List[str]]:
+    """When returns_span is provided (e.g. for weekly), rank by span return + news; otherwise use 1d/5d."""
     scores: Dict[str, float] = {}
-    for t in tickers:
-        r1 = returns_1d.get(t) or 0.0
-        r5 = returns_5d.get(t) or 0.0
-        sc = W1 * abs(r1) + W2 * abs(r5) + (W3 if abnormal_signal.get(t) else 0) + (W4 if has_news.get(t) else 0)
-        scores[t] = sc
+    if returns_span:
+        for t in tickers:
+            r_span = (returns_span.get(t) or 0.0) if returns_span else 0.0
+            sc = 0.5 * abs(r_span) + (0.5 if has_news.get(t) else 0)
+            scores[t] = sc
+    else:
+        for t in tickers:
+            r1 = returns_1d.get(t) or 0.0
+            r5 = returns_5d.get(t) or 0.0
+            sc = W1 * abs(r1) + W2 * abs(r5) + (W3 if abnormal_signal.get(t) else 0) + (W4 if has_news.get(t) else 0)
+            scores[t] = sc
     sorted_tickers = sorted(scores.keys(), key=lambda x: -scores[x])
     return scores, sorted_tickers[:max_n]
 
 
-def _fetch_global_news(digest_date: str) -> Any:
+def _fetch_global_news(digest_date: str, lookback_days: int = 7) -> Any:
     try:
         from ai_engine.tradingagents.dataflows.interface import route_to_vendor
-        return route_to_vendor("get_global_news", digest_date, 7, 10, None)
+        return route_to_vendor("get_global_news", digest_date, lookback_days, 10, None)
     except Exception as e:
         logger.debug("Global news: %s", e)
         return None
@@ -154,12 +184,19 @@ def build_digest_context(
     max_priority_tickers: int,
     db: Any,
     fetcher: Optional[Any] = None,
+    *,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    span_trading_days: Optional[int] = None,
 ) -> DigestContext:
     """
     Build the full DigestContext: portfolio, base data, ranking, evidence, reports, market context, sector/peer.
 
     If fetcher is None, backend is used (get_info_fetcher()). On partial failure for a ticker,
     that ticker's keys are left empty/None; agents can use tools to fill gaps.
+
+    When start_date/end_date or span_trading_days are set (e.g. for weekly brief), news lookback
+    and ranking use the span; returns_span is computed for the span period.
     """
     _ensure_backend_on_path()
     if fetcher is None:
@@ -178,18 +215,33 @@ def build_digest_context(
 
     user_context_snapshot = _get_user_context_snapshot(user_id, db)
 
-    # Base market data
-    quotes = fetcher.get_quotes_batch(tickers) or {}
-    returns_1d, returns_5d, abnormal_signal = _compute_returns_and_abnormal(fetcher, tickers)
+    # Span lookback for news: 2 days for daily, else span length (cap for sanity)
+    if span_trading_days is not None and span_trading_days > 0:
+        lookback_days = min(span_trading_days + 2, 31)
+    else:
+        lookback_days = 2
 
-    # Rank
-    has_news = _has_recent_news(fetcher, tickers, lookback_days=2)
+    # Base market data (returns_span when span_trading_days e.g. 7 for weekly)
+    quotes = fetcher.get_quotes_batch(tickers) or {}
+    returns_1d, returns_5d, returns_span, abnormal_signal = _compute_returns_and_abnormal(
+        fetcher, tickers, span_trading_days=span_trading_days
+    )
+
+    # Rank: use span return + news when span; else 1d/5d/abnormal/news
+    has_news = _has_recent_news(fetcher, tickers, lookback_days=lookback_days)
     attention_scores, priority_tickers = _rank_tickers(
-        tickers, returns_1d, returns_5d, abnormal_signal, has_news, max_priority_tickers
+        tickers,
+        returns_1d,
+        returns_5d,
+        abnormal_signal,
+        has_news,
+        max_priority_tickers,
+        returns_span=returns_span if returns_span else None,
     )
     logger.info("Digest: context built, %d priority tickers: %s", len(priority_tickers), priority_tickers)
 
-    # Per-priority evidence
+    # Per-priority evidence; news lookback matches span
+    news_lookback = min(lookback_days + 5, 31)  # slightly wider for per-ticker news
     news: Dict[str, Any] = {}
     fundamentals: Dict[str, Any] = {}
     analyst_rec: Dict[str, Any] = {}
@@ -198,7 +250,7 @@ def build_digest_context(
 
     for t in priority_tickers:
         try:
-            news[t] = fetcher.get_news(t, lookback_days=7)
+            news[t] = fetcher.get_news(t, lookback_days=news_lookback)
         except Exception:
             news[t] = {}
         try:
@@ -234,7 +286,7 @@ def build_digest_context(
         market_movers = fetcher.get_daily_market_movers(10)
     except Exception:
         market_movers = {}
-    global_news = _fetch_global_news(digest_date)
+    global_news = _fetch_global_news(digest_date, lookback_days=min(lookback_days + 5, 14))
     web_search_snippet = _fetch_web_snippet()
 
     # Sector/peer
@@ -285,6 +337,7 @@ def build_digest_context(
         quotes=quotes,
         returns_1d=returns_1d,
         returns_5d=returns_5d,
+        returns_span=returns_span or {},
         abnormal_signal=abnormal_signal,
         news=news,
         fundamentals=fundamentals,

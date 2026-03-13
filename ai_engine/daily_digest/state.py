@@ -11,6 +11,9 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+# Span type for the brief: daily (single day), weekly (7 days ending on digest_date), custom (explicit start/end).
+SpanType = Literal["daily", "weekly", "custom"]
+
 
 # ---------------------------------------------------------------------------
 # Interpretation outputs (agent-structured)
@@ -78,6 +81,10 @@ class DigestContext(BaseModel):
     quotes: Dict[str, Optional[Dict[str, Any]]] = Field(default_factory=dict)
     returns_1d: Dict[str, Optional[float]] = Field(default_factory=dict)
     returns_5d: Dict[str, Optional[float]] = Field(default_factory=dict)
+    returns_span: Dict[str, Optional[float]] = Field(
+        default_factory=dict,
+        description="Return over the full span (e.g. 7d for weekly). Used for ranking when span is not daily.",
+    )
     abnormal_signal: Dict[str, bool] = Field(default_factory=dict)
 
     news: Dict[str, Any] = Field(default_factory=dict)  # ticker -> news payload (e.g. list of articles or str)
@@ -116,7 +123,17 @@ class DigestWorkflowState(BaseModel):
     """State passed through the digest pipeline."""
 
     user_id: int = Field(description="User ID for portfolio and preferences.")
-    digest_date: str = Field(description="Date for the digest (YYYY-MM-DD).")
+    digest_date: str = Field(description="Date for the digest (YYYY-MM-DD); for weekly/custom this is the end date.")
+    span_type: SpanType = Field(
+        default="daily",
+        description="Time span: daily (single day), weekly (7 days ending digest_date), custom (start_date to end_date).",
+    )
+    start_date: Optional[str] = Field(default=None, description="Start of span (YYYY-MM-DD). Set for weekly/custom.")
+    end_date: Optional[str] = Field(default=None, description="End of span (YYYY-MM-DD). Set for weekly/custom.")
+    period_label: str = Field(
+        default="today",
+        description="Human-readable period for prompts, e.g. 'today', 'this week', 'Mar 6–12, 2025'.",
+    )
     max_priority_tickers: int = Field(default=5, ge=1, le=20, description="Max number of tickers to analyze in depth.")
     db: Any = Field(default=None, description="DB session (optional; required for portfolio load).")
     config: Dict[str, Any] = Field(default_factory=dict, description="LLM/config overrides.")
@@ -162,7 +179,12 @@ class DigestResult(BaseModel):
     """Final digest result returned by run_digest."""
     narrative: str = Field(description="Short portfolio-centered digest narrative.")
     what_to_watch: str = Field(description="Short 'what to watch' section.")
-    digest_date: str = Field(description="Date of the digest.")
+    digest_date: str = Field(description="Date of the digest (end date for weekly/custom).")
+    span_type: SpanType = Field(default="daily", description="Time span of the brief.")
+    span_label: str = Field(
+        default="Daily",
+        description="Human-readable span for UI, e.g. 'Daily', 'Weekly', 'Mar 6–12, 2025'.",
+    )
     priority_tickers: List[str] = Field(default_factory=list, description="Tickers that were analyzed in depth.")
     references: List[ReferenceItem] = Field(
         default_factory=list,

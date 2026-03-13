@@ -26,6 +26,8 @@ class DigestResponse(BaseModel):
     what_to_watch: str
     digest_date: str
     priority_tickers: list[str]
+    span_type: str = "daily"
+    span_label: str = "Daily"
     references: Optional[list[dict]] = None
     user_note: Optional[str] = None
     narrative_style: Optional[str] = None
@@ -44,6 +46,8 @@ class DigestBriefItem(BaseModel):
     narrative: str
     what_to_watch: str
     digest_date: str
+    span_type: str = "daily"
+    span_label: str = "Daily"
     priority_tickers: list[str]
     user_note: Optional[str] = None
     narrative_style: Optional[str] = None
@@ -57,11 +61,24 @@ class DigestListForDateResponse(BaseModel):
     briefs: list[DigestBriefItem]
 
 
+def _parse_span(span: Optional[str]) -> tuple[str, Optional[str], Optional[str]]:
+    """Return (span_type, start_date, end_date). span in ('daily', 'weekly'). Custom not yet supported via API."""
+    if not span or span == "daily":
+        return "daily", None, None
+    if span == "weekly":
+        return "weekly", None, None
+    return "daily", None, None
+
+
 @router.get("/digest", response_model=DigestResponse)
 async def get_digest(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
-    date: Optional[str] = Query(None, description="Date for the digest (YYYY-MM-DD). Default: today."),
+    date: Optional[str] = Query(None, description="Date for the digest (YYYY-MM-DD). Default: today. For weekly, end date."),
+    span: Optional[str] = Query(
+        "daily",
+        description="Time span: 'daily' (single day) or 'weekly' (7 days ending on date).",
+    ),
     max_priority_tickers: int = Query(5, ge=1, le=20, description="Max tickers to analyze in depth"),
     user_note: Optional[str] = Query(
         None,
@@ -89,9 +106,10 @@ async def get_digest(
 
     Uses the user's subscribed tickers, ranks them by attention (moves, news), fetches
     evidence and platform reports, then runs interpretation agents to produce a
-    narrative brief and a "what to watch" section.
+    narrative brief and a "what to watch" section. Use span=daily (default) or span=weekly.
     """
     digest_date = date or datetime.utcnow().strftime("%Y-%m-%d")
+    span_type, start_date, end_date = _parse_span(span)
 
     try:
         from ai_engine.daily_digest import run_digest
@@ -110,14 +128,19 @@ async def get_digest(
             user_note=user_note,
             narrative_style=narrative_style,
             user_focus_tickers=user_focus_tickers,
+            span_type=span_type,
+            start_date=start_date,
+            end_date=end_date,
         )
     except Exception as e:
         logger.exception("Digest generation failed for user_id=%s: %s", current_user.id, e)
         raise HTTPException(status_code=500, detail=f"Digest generation failed: {e}")
 
-    # Persist the digest as a generic Execution + Report (best-effort; failures don't break the API).
+    # subject_id: daily = "uid:YYYY-MM-DD", weekly = "uid:w:YYYY-MM-DD"
+    slot = digest_date if span_type == "daily" else f"w:{digest_date}"
+    subject_id = f"{current_user.id}:{slot}"
+    metadata: dict = {}
     try:
-        subject_id = f"{current_user.id}:{digest_date}"
         execution_id = token_service.record_execution(
             creator_id=current_user.id,
             execution_type="daily_digest",
@@ -127,6 +150,8 @@ async def get_digest(
         )
         metadata = {
             "digest_date": result.digest_date,
+            "span_type": getattr(result, "span_type", "daily"),
+            "span_label": getattr(result, "span_label", "Daily"),
             "priority_tickers": result.priority_tickers,
             "what_to_watch": result.what_to_watch,
         }
@@ -159,10 +184,10 @@ async def get_digest(
             metadata=metadata,
         )
         logger.info(
-            "Persisted daily digest execution_id=%s user_id=%s date=%s",
+            "Persisted digest execution_id=%s user_id=%s slot=%s",
             execution_id,
             current_user.id,
-            digest_date,
+            slot,
         )
     except Exception as e:
         logger.exception(
@@ -177,6 +202,8 @@ async def get_digest(
         what_to_watch=result.what_to_watch,
         digest_date=result.digest_date,
         priority_tickers=result.priority_tickers,
+        span_type=getattr(result, "span_type", "daily"),
+        span_label=getattr(result, "span_label", "Daily"),
         references=[r.model_dump() for r in (result.references or [])] if hasattr(result, "references") else None,
         user_note=user_note,
         narrative_style=narrative_style,
@@ -206,21 +233,23 @@ def get_digest_dates(
         )
         .all()
     )
+    # subject_id is "uid:YYYY-MM-DD" (daily) or "uid:w:YYYY-MM-DD" (weekly); date_str is the slot key
     count_by_date: dict[str, int] = {}
     for (subject_id,) in rows:
         if not subject_id:
             continue
-        parts = str(subject_id).split(":", 1)
-        if len(parts) != 2:
+        parts = str(subject_id).split(":", 2)
+        if len(parts) < 2:
             continue
-        _uid, date_str = parts
+        # uid:date or uid:w:date
+        date_str = parts[1] if len(parts) == 2 else f"{parts[1]}:{parts[2]}"
         if date_str:
             count_by_date[date_str] = count_by_date.get(date_str, 0) + 1
     dates = sorted(count_by_date.keys())
     return DigestDatesResponse(dates=dates, count_by_date=count_by_date)
 
 
-def _report_to_brief_item(ex: Execution, report: Report, date: str) -> DigestBriefItem:
+def _report_to_brief_item(ex: Execution, report: Report, slot: str) -> DigestBriefItem:
     meta: dict = {}
     if report.metadata_json:
         try:
@@ -229,7 +258,9 @@ def _report_to_brief_item(ex: Execution, report: Report, date: str) -> DigestBri
             meta = {}
     narrative = report.content or ""
     what_to_watch = str(meta.get("what_to_watch") or "")
-    digest_date = str(meta.get("digest_date") or date)
+    digest_date = str(meta.get("digest_date") or slot)
+    span_type = str(meta.get("span_type") or "daily")
+    span_label = str(meta.get("span_label") or "Daily")
     priority_tickers = meta.get("priority_tickers") or []
     if not isinstance(priority_tickers, list):
         priority_tickers = []
@@ -248,6 +279,8 @@ def _report_to_brief_item(ex: Execution, report: Report, date: str) -> DigestBri
         narrative=narrative,
         what_to_watch=what_to_watch,
         digest_date=digest_date,
+        span_type=span_type,
+        span_label=span_label,
         priority_tickers=[str(t) for t in priority_tickers],
         user_note=str(user_note) if user_note is not None else None,
         narrative_style=str(narrative_style) if narrative_style is not None else None,
@@ -257,6 +290,14 @@ def _report_to_brief_item(ex: Execution, report: Report, date: str) -> DigestBri
     )
 
 
+def _validate_slot(slot: str) -> None:
+    """Slot is YYYY-MM-DD (daily) or w:YYYY-MM-DD (weekly)."""
+    if slot.startswith("w:"):
+        datetime.strptime(slot[2:], "%Y-%m-%d")
+    else:
+        datetime.strptime(slot, "%Y-%m-%d")
+
+
 @router.get("/digest/history/{date}", response_model=DigestListForDateResponse)
 def get_digests_for_date(
     date: str,
@@ -264,13 +305,13 @@ def get_digests_for_date(
     db: Session = Depends(get_db),
 ):
     """
-    Return all stored daily briefs for the given date (YYYY-MM-DD) for the current user,
-    newest first. Does not re-run the digest workflow.
+    Return all stored briefs for the given slot for the current user, newest first.
+    Slot: YYYY-MM-DD (daily) or w:YYYY-MM-DD (weekly ending that date). Does not re-run the digest workflow.
     """
     try:
-        datetime.strptime(date, "%Y-%m-%d")
+        _validate_slot(date)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format, expected YYYY-MM-DD")
+        raise HTTPException(status_code=400, detail="Invalid slot format, expected YYYY-MM-DD or w:YYYY-MM-DD")
 
     subject_id = f"{current_user.id}:{date}"
     executions = (
@@ -300,4 +341,4 @@ def get_digests_for_date(
         if report:
             briefs.append(_report_to_brief_item(ex, report, date))
 
-    return DigestListForDateResponse(date=date, briefs=briefs)
+    return DigestListForDateResponse(date=date, briefs=briefs)  # date is the slot (YYYY-MM-DD or w:YYYY-MM-DD)

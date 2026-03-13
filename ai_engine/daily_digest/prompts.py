@@ -10,9 +10,9 @@ from typing import Dict, Optional
 TICKER_INTERPRETER_SYSTEM = """You are a market analyst for the User Daily Brief. For the given ticker you receive prepared context: quote, returns, news, fundamentals, analyst recommendations, insider activity, technical indicators (if any), and the latest FlowDeck platform report (thesis and key takeaways). You may call the provided tools to fetch additional or fresher data if something is missing or you need to verify.
 
 Your tasks:
-1. Explain what happened for this ticker recently (price move, key news, and why it matters).
+1. Explain what happened for this ticker in the period (price move, key news, and why it matters).
 2. Classify the main driver of the move as exactly one of: company (company-specific news/events), sector (sector-wide or industry trend), macro (broad market or macro driver), unclear (cannot determine or mixed).
-3. Compare today's developments to the latest FlowDeck thesis from the platform reports: does the thesis still hold, or has something changed?
+3. Compare developments in the period to the latest FlowDeck thesis from the platform reports: does the thesis still hold, or has something changed?
 
 Respond in the structured format required (explanation, driver, thesis_comparison). Be concise and evidence-based."""
 
@@ -21,8 +21,12 @@ def build_ticker_interpreter_prompt(
     ticker: str,
     context_text: str,
     tool_names: list[str],
+    period_label: str = "today",
 ) -> str:
     return f"""## Ticker: {ticker}
+
+### Period
+This brief is for **{period_label}**.
 
 ### Prepared context
 {context_text}
@@ -32,10 +36,10 @@ You have access to these tools to fetch more data if needed: {', '.join(tool_nam
 Provide your interpretation: explanation, driver (company/sector/macro/unclear), and thesis_comparison."""
 
 
-MARKET_INTERPRETER_SYSTEM = """You are a market strategist for the User Daily Brief. You receive the day's market movers (top gainers/losers), global/macro news, and an optional web snippet. You also know the user's portfolio tickers and which ones were prioritized for analysis (with optional one-line summaries per ticker).
+MARKET_INTERPRETER_SYSTEM = """You are a market strategist for the User Daily Brief. You receive market movers (top gainers/losers), global/macro news, and an optional web snippet. You also know the user's portfolio tickers and which ones were prioritized for analysis (with optional one-line summaries per ticker).
 
 Your tasks:
-1. Summarize the overall market backdrop in a few sentences (what drove the market today, key themes, risk-on/risk-off).
+1. Summarize the overall market backdrop in a few sentences (what drove the market in the period, key themes, risk-on/risk-off).
 2. Explain why this context matters for the user's portfolio (sector exposure, holdings that may be affected, what to watch).
 
 Respond in the structured format required (summary, relevance_to_portfolio). Be concise."""
@@ -49,8 +53,11 @@ def build_market_interpreter_prompt(
     priority_tickers: list[str],
     ticker_one_liners: Optional[dict[str, str]],
     tool_names: list[str],
+    period_label: str = "today",
 ) -> str:
     lines = [
+        f"## Period: {period_label}",
+        "",
         "## Market context",
         "### Top gainers / losers",
         market_movers_text,
@@ -96,18 +103,21 @@ def build_narrative_writer_prompt(
     user_note: Optional[str] = None,
     narrative_style: Optional[str] = None,
     resources_text: Optional[str] = None,
+    period_label: str = "today",
 ) -> str:
     user_note_block = ""
     if user_note:
-        user_note_block = f"\n\n## User note for today\n{user_note[:1500]}"
+        user_note_block = f"\n\n## User note for this brief\n{user_note[:1500]}"
 
     style_block = ""
     if narrative_style:
         style_block = (
             "\n\n## Desired writing style\n"
-            f"The user requested this style for today's brief: '{narrative_style}'. "
+            f"The user requested this style for this brief: '{narrative_style}'. "
             "Follow this style while writing the narrative and the 'What to watch' section."
         )
+
+    period_block = f"\n\n## Period\nThis brief covers **{period_label}**."
 
     resources_block = ""
     if resources_text:
@@ -117,7 +127,7 @@ def build_narrative_writer_prompt(
 {ticker_interpretations_text}
 
 ## Market interpretation
-{market_interpretation_text}{user_note_block}{style_block}{resources_block}
+{market_interpretation_text}{period_block}{user_note_block}{style_block}{resources_block}
 
 You may use these tools to insert exact prices or report dates if needed: {', '.join(tool_names)}.
 
@@ -128,9 +138,9 @@ FOCUS_SELECTOR_SYSTEM = """You are a portfolio assistant helping choose which ti
 
 You receive:
 - The user's full portfolio tickers.
-- A deterministic attention score per ticker based on: 1-day move, 5-day move, abnormal move flag, and recent news.
+- A deterministic attention score per ticker (based on moves and news in the period).
 - The current default top-N tickers ranked by this attention score.
-- An optional free-form note from the user describing what they care about today.
+- An optional free-form note from the user describing what they care about for this brief.
 
 Your job:
 1. Start from the attention-score ranking as the baseline.
@@ -147,6 +157,7 @@ def build_focus_selector_prompt(
     default_priority_tickers: list[str],
     max_priority_tickers: int,
     user_note: Optional[str],
+    period_label: str = "today",
 ) -> str:
     sorted_by_score = sorted(
         attention_scores.items(),
@@ -171,14 +182,16 @@ def build_focus_selector_prompt(
         lines.extend(
             [
                 "",
-                "## User note for today",
+                "## User note for this brief",
                 user_note[:1500],
             ]
         )
     lines.extend(
         [
             "",
-            f"Choose up to {max_priority_tickers} tickers from the portfolio as today's focus_tickers.",
+            f"Period for this brief: {period_label}.",
+            "",
+            f"Choose up to {max_priority_tickers} tickers from the portfolio as focus_tickers for this brief.",
             "Return ONLY the final ordered list of focus_tickers in structured form.",
         ]
     )

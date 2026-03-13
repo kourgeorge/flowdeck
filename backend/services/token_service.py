@@ -5,6 +5,7 @@ from typing import Optional, Tuple
 
 from sqlalchemy.orm import Session
 
+from config import LLM_TOKENS_PER_PLATFORM_TOKEN
 from models.db_models import User, Execution, ReportView
 
 INITIAL_BALANCE = 1000
@@ -207,14 +208,23 @@ def refund_for_analysis(user_id: int, execution_id: int, db: Session) -> None:
     refund_for_execution(user_id, execution_id, db)
 
 
-def deduct_for_chat(user_id: int, tokens_used: int, db: Session) -> bool:
+def llm_tokens_to_platform_tokens(llm_tokens: int) -> int:
+    """Convert LLM token count to platform tokens using configured ratio. Minimum 1."""
+    if llm_tokens < 1:
+        llm_tokens = 1
+    # ceil(llm_tokens / ratio) without floating point
+    platform = (llm_tokens + LLM_TOKENS_PER_PLATFORM_TOKEN - 1) // LLM_TOKENS_PER_PLATFORM_TOKEN
+    return max(1, platform)
+
+
+def deduct_for_chat(user_id: int, llm_tokens: int, db: Session) -> bool:
     """
-    Deduct tokens_used from user's token_balance for a chat exchange.
-    Returns False if the user has insufficient balance (< 1).
-    Deducts at least 1 token; floors balance at 0.
+    Deduct chat cost from user's token_balance. llm_tokens is the raw LLM token count
+    for the exchange; it is converted to platform tokens using LLM_TOKENS_PER_PLATFORM_TOKEN
+    (e.g. 10000 LLM tokens = 1 platform token). Returns False if insufficient balance.
+    Deducts at least 1 platform token; floors balance at 0.
     """
-    if tokens_used < 1:
-        tokens_used = 1
+    platform_tokens = llm_tokens_to_platform_tokens(llm_tokens)
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         return False
@@ -226,7 +236,7 @@ def deduct_for_chat(user_id: int, tokens_used: int, db: Session) -> bool:
     if balance < 1:
         return False
     try:
-        user.token_balance = max(0, balance - tokens_used)
+        user.token_balance = max(0, balance - platform_tokens)
         db.commit()
         return True
     except Exception:

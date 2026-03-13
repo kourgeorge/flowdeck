@@ -725,16 +725,20 @@ export const contactApi = {
   },
 };
 
-/** User Daily Brief: narrative + what to watch (no persistence, for testing). Requires auth. */
+/** User Daily Brief: narrative + what to watch. Requires auth. */
+export type DigestSpan = 'daily' | 'weekly';
+
 export interface DigestResponse {
   narrative: string;
   what_to_watch: string;
   digest_date: string;
   priority_tickers: string[];
+  span_type?: string;
+  span_label?: string;
   user_note?: string | null;
   narrative_style?: string | null;
   user_focus_tickers?: string[] | null;
-   raw_metadata?: Record<string, unknown> | null;
+  raw_metadata?: Record<string, unknown> | null;
   references?: {
     label: string;
     url?: string | null;
@@ -754,6 +758,8 @@ export interface DigestBriefItem {
   narrative: string;
   what_to_watch: string;
   digest_date: string;
+  span_type?: string;
+  span_label?: string;
   priority_tickers: string[];
   user_note?: string | null;
   narrative_style?: string | null;
@@ -768,13 +774,13 @@ export interface DigestListForDateResponse {
 }
 
 export const digestApi = {
-  getDigest: async (params?: { date?: string; max_priority_tickers?: number; user_note?: string; narrative_style?: string; user_focus_tickers?: string[] }): Promise<DigestResponse> => {
+  getDigest: async (params?: { date?: string; span?: DigestSpan; max_priority_tickers?: number; user_note?: string; narrative_style?: string; user_focus_tickers?: string[] }): Promise<DigestResponse> => {
     const token = getStoredToken();
     if (!token) throw new Error('Sign in to get your User Daily Brief');
-    // Build query so array is sent as repeated keys (user_focus_tickers=A&user_focus_tickers=B); axios default would send [] brackets which FastAPI does not parse as list.
     const searchParams = new URLSearchParams();
     if (params) {
       if (params.date != null) searchParams.set('date', params.date);
+      if (params.span != null && params.span !== 'daily') searchParams.set('span', params.span);
       if (params.max_priority_tickers != null) searchParams.set('max_priority_tickers', String(params.max_priority_tickers));
       if (params.user_note != null && params.user_note !== '') searchParams.set('user_note', params.user_note);
       if (params.narrative_style != null && params.narrative_style !== '') searchParams.set('narrative_style', params.narrative_style);
@@ -819,6 +825,8 @@ export interface ChatMessage {
 export interface ChatResponse {
   reply: string;
   tokens_used: number;
+  /** Platform tokens deducted (shown in UI) */
+  platform_tokens_used: number;
   balance: number;
   follow_up_questions?: string[];
 }
@@ -859,6 +867,8 @@ export interface ChatStreamEvent {
   type: 'token' | 'done' | 'error' | 'thinking' | 'tool_call' | 'chart' | 'skill_start' | 'skill_step' | 'skill_done';
   content?: string;
   tokens_used?: number;
+  /** Platform tokens deducted (shown in UI) */
+  platform_tokens_used?: number;
   tools_called?: number;
   balance?: number;
   follow_up_questions?: string[];
@@ -890,6 +900,8 @@ export interface ChatMessageWithMetaApi {
   content: string;
   sort_order: number;
   tokens_used?: number | null;
+  /** Platform tokens (for UI display) */
+  platform_tokens_used?: number | null;
   tools_called?: number | null;
   tool_call_events?: ToolCallEvent[] | null;
   skill_activation_events?: SkillActivationEvent[] | null;
@@ -970,7 +982,7 @@ export const chatApi = {
   streamMessage: (
     messages: ChatMessage[],
     onToken: (chunk: string) => void,
-    onDone: (tokensUsed: number, balance: number, toolsCalled: number, followUpQuestions?: string[], sessionId?: number) => void,
+    onDone: (tokensUsed: number, balance: number, toolsCalled: number, followUpQuestions?: string[], sessionId?: number, platformTokensUsed?: number) => void,
     onError: (message: string) => void,
     onThinking?: (status: string) => void,
     onToolCall?: (toolCall: ToolCallEvent) => void,
@@ -1058,6 +1070,7 @@ export const chatApi = {
                   event.tools_called ?? 0,
                   event.follow_up_questions,
                   event.session_id,
+                  event.platform_tokens_used,
                 );
               } else if (event.type === 'error') {
                 onError(event.content ?? 'Unknown error');
