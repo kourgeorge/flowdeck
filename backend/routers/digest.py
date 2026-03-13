@@ -30,6 +30,21 @@ class DigestResponse(BaseModel):
 
 class DigestDatesResponse(BaseModel):
     dates: list[str]
+    count_by_date: dict[str, int]  # date (YYYY-MM-DD) -> number of briefs that day
+
+
+class DigestBriefItem(BaseModel):
+    execution_id: int
+    created_at: str  # ISO format
+    narrative: str
+    what_to_watch: str
+    digest_date: str
+    priority_tickers: list[str]
+
+
+class DigestListForDateResponse(BaseModel):
+    date: str
+    briefs: list[DigestBriefItem]
 
 
 @router.get("/digest", response_model=DigestResponse)
@@ -82,6 +97,17 @@ async def get_digest(
             "priority_tickers": result.priority_tickers,
             "what_to_watch": result.what_to_watch,
         }
+        # Attach LLM usage metadata when available
+        if result.input_tokens is not None:
+            metadata["input_tokens"] = result.input_tokens
+        if result.output_tokens is not None:
+            metadata["output_tokens"] = result.output_tokens
+        if result.total_tokens is not None:
+            metadata["total_tokens"] = result.total_tokens
+        if result.cost_usd is not None:
+            metadata["cost_usd"] = result.cost_usd
+        if result.models_used is not None:
+            metadata["models_used"] = result.models_used
         save_report(
             execution_id,
             "daily_digest",
@@ -117,7 +143,7 @@ def get_digest_dates(
     days: int = Query(90, ge=1, le=365, description="Look back this many days from today for digest history"),
 ):
     """
-    Return dates (YYYY-MM-DD) for which the current user has a stored daily digest in the recent window.
+    Return dates (YYYY-MM-DD) that have at least one digest, and how many briefs per date.
     """
     now = datetime.now(timezone.utc)
     since = now - timedelta(days=days - 1)
@@ -129,10 +155,9 @@ def get_digest_dates(
             Execution.creator_id == current_user.id,
             Execution.created_at >= since,
         )
-        .order_by(Execution.created_at.desc())
         .all()
     )
-    dates: set[str] = set()
+    count_by_date: dict[str, int] = {}
     for (subject_id,) in rows:
         if not subject_id:
             continue
@@ -141,28 +166,52 @@ def get_digest_dates(
             continue
         _uid, date_str = parts
         if date_str:
-            dates.add(date_str)
-    return DigestDatesResponse(dates=sorted(dates))
+            count_by_date[date_str] = count_by_date.get(date_str, 0) + 1
+    dates = sorted(count_by_date.keys())
+    return DigestDatesResponse(dates=dates, count_by_date=count_by_date)
 
 
-@router.get("/digest/history/{date}", response_model=DigestResponse)
-def get_digest_for_date(
+def _report_to_brief_item(ex: Execution, report: Report, date: str) -> DigestBriefItem:
+    meta: dict = {}
+    if report.metadata_json:
+        try:
+            meta = json.loads(report.metadata_json) or {}
+        except Exception:
+            meta = {}
+    narrative = report.content or ""
+    what_to_watch = str(meta.get("what_to_watch") or "")
+    digest_date = str(meta.get("digest_date") or date)
+    priority_tickers = meta.get("priority_tickers") or []
+    if not isinstance(priority_tickers, list):
+        priority_tickers = []
+    created_at = ex.created_at.isoformat() if ex.created_at else ""
+    return DigestBriefItem(
+        execution_id=ex.id,
+        created_at=created_at,
+        narrative=narrative,
+        what_to_watch=what_to_watch,
+        digest_date=digest_date,
+        priority_tickers=[str(t) for t in priority_tickers],
+    )
+
+
+@router.get("/digest/history/{date}", response_model=DigestListForDateResponse)
+def get_digests_for_date(
     date: str,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Return a previously stored daily digest for the given date (YYYY-MM-DD) for the current user.
-    Does not re-run the digest workflow.
+    Return all stored daily briefs for the given date (YYYY-MM-DD) for the current user,
+    newest first. Does not re-run the digest workflow.
     """
-    # Validate date format
     try:
         datetime.strptime(date, "%Y-%m-%d")
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format, expected YYYY-MM-DD")
 
     subject_id = f"{current_user.id}:{date}"
-    ex = (
+    executions = (
         db.query(Execution)
         .filter(
             Execution.execution_type == "daily_digest",
@@ -171,40 +220,22 @@ def get_digest_for_date(
             Execution.creator_id == current_user.id,
         )
         .order_by(Execution.created_at.desc())
-        .first()
+        .all()
     )
-    if not ex:
-        raise HTTPException(status_code=404, detail="No digest found for this date")
+    if not executions:
+        return DigestListForDateResponse(date=date, briefs=[])
 
-    report = (
-        db.query(Report)
-        .filter(
-            Report.execution_id == ex.id,
-            Report.report_type == "daily_digest",
+    briefs: list[DigestBriefItem] = []
+    for ex in executions:
+        report = (
+            db.query(Report)
+            .filter(
+                Report.execution_id == ex.id,
+                Report.report_type == "daily_digest",
+            )
+            .first()
         )
-        .first()
-    )
-    if not report:
-        raise HTTPException(status_code=404, detail="No digest content found for this date")
+        if report:
+            briefs.append(_report_to_brief_item(ex, report, date))
 
-    meta: dict = {}
-    if report.metadata_json:
-        try:
-            meta = json.loads(report.metadata_json) or {}
-        except Exception:
-            meta = {}
-
-    narrative = report.content or ""
-    what_to_watch = str(meta.get("what_to_watch") or "")
-    digest_date = str(meta.get("digest_date") or date)
-    priority_tickers = meta.get("priority_tickers") or []
-
-    if not isinstance(priority_tickers, list):
-        priority_tickers = []
-
-    return DigestResponse(
-        narrative=narrative,
-        what_to_watch=what_to_watch,
-        digest_date=digest_date,
-        priority_tickers=[str(t) for t in priority_tickers],
-    )
+    return DigestListForDateResponse(date=date, briefs=briefs)

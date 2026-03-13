@@ -89,20 +89,58 @@ def run_digest(
 
     llm = get_llm("quick", cfg)
 
-    logger.info("Digest: running ticker interpreter for %d tickers", len(ctx.priority_tickers))
-    state.ticker_interpretations = run_ticker_interpreter(state, llm)
+    # Track token usage where supported (OpenAI/Azure via LangChain callbacks).
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    total_tokens: Optional[int] = None
+    cost_usd: Optional[float] = None
 
-    logger.info("Digest: running market interpreter")
-    state.market_interpretation = run_market_interpreter(state, llm)
+    try:
+        from langchain_community.callbacks import get_openai_callback  # type: ignore[import]
+    except Exception:  # pragma: no cover - callback lib may be missing
+        get_openai_callback = None  # type: ignore[assignment]
 
-    logger.info("Digest: running narrative writer")
-    narrative, what_to_watch = run_narrative_writer(state, llm)
+    if get_openai_callback is not None:
+        with get_openai_callback() as cb:  # type: ignore[misc]
+            logger.info("Digest: running ticker interpreter for %d tickers", len(ctx.priority_tickers))
+            state.ticker_interpretations = run_ticker_interpreter(state, llm)
+
+            logger.info("Digest: running market interpreter")
+            state.market_interpretation = run_market_interpreter(state, llm)
+
+            logger.info("Digest: running narrative writer")
+            narrative, what_to_watch = run_narrative_writer(state, llm)
+
+        input_tokens = getattr(cb, "prompt_tokens", None)
+        output_tokens = getattr(cb, "completion_tokens", None)
+        total_tokens = getattr(cb, "total_tokens", None)
+        cost_usd = getattr(cb, "total_cost", None)
+    else:
+        logger.info("Digest: running ticker interpreter for %d tickers", len(ctx.priority_tickers))
+        state.ticker_interpretations = run_ticker_interpreter(state, llm)
+
+        logger.info("Digest: running market interpreter")
+        state.market_interpretation = run_market_interpreter(state, llm)
+
+        logger.info("Digest: running narrative writer")
+        narrative, what_to_watch = run_narrative_writer(state, llm)
+
     state.digest_narrative = narrative
     state.what_to_watch = what_to_watch
+
+    models_used = {
+        "provider": cfg.get("llm_provider"),
+        "quick_think": cfg.get("quick_think_llm"),
+    }
 
     return DigestResult(
         narrative=state.digest_narrative,
         what_to_watch=state.what_to_watch,
         digest_date=digest_date,
         priority_tickers=ctx.priority_tickers,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        total_tokens=total_tokens,
+        cost_usd=cost_usd,
+        models_used=models_used,
     )

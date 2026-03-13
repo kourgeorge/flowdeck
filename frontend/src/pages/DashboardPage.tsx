@@ -11,7 +11,7 @@ import DashboardPriceTrendsChart from '../components/DashboardPriceTrendsChart';
 import OverviewStatsPanel, { ByMarketSection, SubscribedChangeColumnsChart } from '../components/OverviewStatsPanel';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useAuth } from '../contexts/AuthContext';
-import { digestApi, type DigestResponse } from '../services/api';
+import { digestApi, type DigestResponse, type DigestBriefItem } from '../services/api';
 
 type DashboardTab = 'overview' | 'portfolio' | 'stock-view' | 'news' | 'digest';
 type StockListTab = 'subscribed' | 'recent';
@@ -28,7 +28,10 @@ export default function DashboardPage() {
   const [digestLoading, setDigestLoading] = useState(false);
   const [digestError, setDigestError] = useState<string | null>(null);
   const [digestDates, setDigestDates] = useState<string[]>([]);
+  const [digestCountByDate, setDigestCountByDate] = useState<Record<string, number>>({});
   const [selectedDigestDate, setSelectedDigestDate] = useState<string | null>(null);
+  const [digestBriefsForDay, setDigestBriefsForDay] = useState<DigestBriefItem[]>([]);
+  const [selectedBrief, setSelectedBrief] = useState<DigestBriefItem | null>(null);
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
 
   const {
@@ -64,6 +67,14 @@ export default function DashboardPage() {
       setDigestDates((prev) =>
         prev.includes(data.digest_date) ? prev : [...prev, data.digest_date].sort()
       );
+      setDigestCountByDate((prev) => ({
+        ...prev,
+        [data.digest_date]: (prev[data.digest_date] ?? 0) + 1,
+      }));
+      // Refresh list for today so the new brief appears
+      const listRes = await digestApi.getDigestsForDate(data.digest_date);
+      setDigestBriefsForDay(listRes.briefs);
+      setSelectedBrief(listRes.briefs[0] ?? null);
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       setDigestError(message);
@@ -72,7 +83,7 @@ export default function DashboardPage() {
     }
   };
 
-  // Load digest history dates when opening the digest tab (once per session)
+  // Load digest history dates and counts when opening the digest tab (once per session)
   useEffect(() => {
     if (dashboardTab !== 'digest') return;
     if (digestDates.length > 0) return;
@@ -80,6 +91,7 @@ export default function DashboardPage() {
       try {
         const res = await digestApi.getDigestDates(90);
         setDigestDates(res.dates ?? []);
+        setDigestCountByDate(res.count_by_date ?? {});
       } catch {
         // history is best-effort; ignore errors
       }
@@ -89,13 +101,17 @@ export default function DashboardPage() {
   const handleSelectDigestDate = async (date: string) => {
     setDigestError(null);
     setDigestLoading(true);
+    setSelectedDigestDate(date);
     try {
-      const data = await digestApi.getDigestForDate(date);
-      setDigest(data);
-      setSelectedDigestDate(data.digest_date);
+      const res = await digestApi.getDigestsForDate(date);
+      setDigestBriefsForDay(res.briefs);
+      setSelectedBrief(res.briefs[0] ?? null);
+      setDigest(null); // use selectedBrief for display
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       setDigestError(message);
+      setDigestBriefsForDay([]);
+      setSelectedBrief(null);
     } finally {
       setDigestLoading(false);
     }
@@ -123,6 +139,15 @@ export default function DashboardPage() {
   };
 
   const digestDateSet = new Set(digestDates);
+
+  const formatBriefTime = (iso: string) => {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
+    }
+  };
 
   if (!user) {
     return (
@@ -616,6 +641,7 @@ export default function DashboardPage() {
                         const day = idx + 1;
                         const dateStr = formatDate(calendarYear, calendarMonthIndex, day);
                         const hasDigest = digestDateSet.has(dateStr);
+                        const count = digestCountByDate[dateStr] ?? 0;
                         const isSelected = selectedDigestDate === dateStr;
                         const baseClasses =
                           'h-7 flex items-center justify-center rounded cursor-pointer border text-xs';
@@ -631,24 +657,27 @@ export default function DashboardPage() {
                             className={`${baseClasses} ${variant}`}
                             disabled={!hasDigest}
                             onClick={() => hasDigest && handleSelectDigestDate(dateStr)}
-                            title={hasDigest ? `View brief for ${dateStr}` : 'No brief for this day'}
+                            title={hasDigest ? `${count} brief${count !== 1 ? 's' : ''} on ${dateStr}` : 'No brief for this day'}
                           >
                             {day}
+                            {hasDigest && count > 1 && (
+                              <span className="ml-0.5 text-[10px] opacity-90">×{count}</span>
+                            )}
                           </button>
                         );
                       })}
                     </div>
                     <p className="mt-2 text-[10px] text-gray-500">
-                      Green days have a saved User Daily Brief. Click a day to load that brief.
+                      Green days have saved briefs; number is how many that day. Click a day to view.
                     </p>
                   </div>
 
-                  {/* Digest content */}
+                  {/* Digest content: list of briefs for selected day + selected brief body */}
                   <div className="space-y-3">
                     {digestLoading && (
                       <div className="flex items-center gap-2 text-xs text-gray-300">
                         <span className="inline-block w-4 h-4 border-2 border-gray-500 border-t-blue-400 rounded-full animate-spin" />
-                        <span>Loading your User Daily Brief…</span>
+                        <span>Loading briefs…</span>
                       </div>
                     )}
 
@@ -658,15 +687,64 @@ export default function DashboardPage() {
                       </p>
                     )}
 
-                    {!digestLoading && digest && (
+                    {!digestLoading && selectedDigestDate && digestBriefsForDay.length > 0 && (
+                      <>
+                        <div className="flex flex-wrap gap-1.5">
+                          {digestBriefsForDay.map((brief, i) => (
+                            <button
+                              key={brief.execution_id}
+                              type="button"
+                              onClick={() => setSelectedBrief(brief)}
+                              className={`px-2 py-1 text-xs rounded border transition-colors ${
+                                selectedBrief?.execution_id === brief.execution_id
+                                  ? 'bg-emerald-600 border-emerald-500 text-white'
+                                  : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
+                              }`}
+                              title={brief.created_at}
+                            >
+                              {formatBriefTime(brief.created_at) || `Brief ${i + 1}`}
+                            </button>
+                          ))}
+                        </div>
+                        {selectedBrief && (
+                          <div className="space-y-3 pt-2 border-t border-gray-700">
+                            <p className="text-xs text-gray-500">
+                              {selectedBrief.digest_date}
+                              {selectedBrief.created_at && (
+                                <span className="ml-2">
+                                  · {formatBriefTime(selectedBrief.created_at)}
+                                </span>
+                              )}
+                              {selectedBrief.priority_tickers?.length > 0 && (
+                                <span className="ml-2">
+                                  · Focus: {selectedBrief.priority_tickers.join(', ')}
+                                </span>
+                              )}
+                            </p>
+                            <div className="prose prose-invert prose-sm max-w-none">
+                              <p className="text-gray-200 whitespace-pre-wrap leading-relaxed">
+                                {selectedBrief.narrative}
+                              </p>
+                            </div>
+                            {selectedBrief.what_to_watch && (
+                              <div className="pt-2 border-t border-gray-700">
+                                <h3 className="text-xs font-semibold text-white mb-1">What to watch</h3>
+                                <p className="text-gray-200 text-xs whitespace-pre-wrap leading-relaxed">
+                                  {selectedBrief.what_to_watch}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {!digestLoading && digest && !selectedDigestDate && (
                       <div className="space-y-3">
                         <p className="text-xs text-gray-500">
                           {digest.digest_date}
                           {digest.priority_tickers?.length > 0 && (
-                            <span className="ml-2">
-                              · Focus:&nbsp;
-                              {digest.priority_tickers.join(', ')}
-                            </span>
+                            <span className="ml-2">· Focus: {digest.priority_tickers.join(', ')}</span>
                           )}
                         </p>
                         <div className="prose prose-invert prose-sm max-w-none">
@@ -685,10 +763,10 @@ export default function DashboardPage() {
                       </div>
                     )}
 
-                    {!digestLoading && !digest && !digestError && (
+                    {!digestLoading && !digestError && !digest && (!selectedDigestDate || digestBriefsForDay.length === 0) && (
                       <p className="text-xs text-gray-400">
-                        Click &ldquo;Run digest&rdquo; to generate today&apos;s summary for your portfolio,
-                        or select a highlighted day in the calendar to view a previous brief.
+                        Click &ldquo;Run digest&rdquo; to generate today&apos;s summary, or select a
+                        highlighted day in the calendar to view that day&apos;s briefs.
                       </p>
                     )}
                   </div>

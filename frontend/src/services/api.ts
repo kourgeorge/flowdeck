@@ -735,6 +735,21 @@ export interface DigestResponse {
 
 export interface DigestDatesResponse {
   dates: string[];
+  count_by_date: Record<string, number>;
+}
+
+export interface DigestBriefItem {
+  execution_id: number;
+  created_at: string;
+  narrative: string;
+  what_to_watch: string;
+  digest_date: string;
+  priority_tickers: string[];
+}
+
+export interface DigestListForDateResponse {
+  date: string;
+  briefs: DigestBriefItem[];
 }
 
 export const digestApi = {
@@ -758,10 +773,10 @@ export const digestApi = {
     return response.data;
   },
 
-  getDigestForDate: async (date: string): Promise<DigestResponse> => {
+  getDigestsForDate: async (date: string): Promise<DigestListForDateResponse> => {
     const token = getStoredToken();
     if (!token) throw new Error('Sign in to view your User Daily Brief history');
-    const response = await api.get<DigestResponse>(`/api/digest/history/${date}`, {
+    const response = await api.get<DigestListForDateResponse>(`/api/digest/history/${date}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data;
