@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from auth import get_current_user
-from database import get_db
+from database import get_db, SessionLocal
 from models.db_models import ChatMessage, ChatSession
 from services import token_service
 from services.chat_persistence import save_assistant_message, save_user_message, update_session_after_messages
@@ -142,6 +142,65 @@ def _get_session_for_user(db: Session, session_id: int, user_id: int) -> Optiona
     if session is None or session.user_id != user_id:
         return None
     return session
+
+
+def _persist_turn_on_done(
+    db: Session,
+    user_id: int,
+    session_id_for_persist: Optional[int],
+    existing_message_count: int,
+    body_messages: List[ChatMessageIn],
+    acc_content: List[str],
+    acc_tool_calls: List[Dict[str, Any]],
+    acc_skill_events: List[Dict[str, Any]],
+    acc_charts: List[Dict[str, Any]],
+    tokens_used: int,
+    tools_called: Optional[int] = None,
+    follow_up_questions: Optional[List[str]] = None,
+) -> Optional[int]:
+    """
+    Deduct tokens, create session if needed, save user + assistant messages, update session.
+    Returns session id (new or existing) or None.
+    """
+    try:
+        token_service.deduct_for_chat(user_id, tokens_used, db)
+    except Exception as deduct_err:
+        logger.warning("Failed to deduct tokens for user_id=%s: %s", user_id, deduct_err)
+    sid: Optional[int] = session_id_for_persist
+    if not body_messages:
+        return sid
+    try:
+        if sid is None:
+            new_session = ChatSession(user_id=user_id)
+            db.add(new_session)
+            db.flush()
+            sid = new_session.id
+        base_order = existing_message_count if session_id_for_persist is not None else 0
+        for i, um in enumerate(body_messages):
+            save_user_message(db, sid, um.content, base_order + i)
+        assistant_content = "".join(acc_content)
+        save_assistant_message(
+            db,
+            sid,
+            assistant_content,
+            base_order + len(body_messages),
+            tokens_used=tokens_used,
+            tools_called=tools_called,
+            tool_calls=acc_tool_calls if acc_tool_calls else None,
+            skill_events=acc_skill_events if acc_skill_events else None,
+            charts=acc_charts if acc_charts else None,
+            follow_up_questions=follow_up_questions,
+        )
+        update_session_after_messages(
+            db,
+            sid,
+            first_user_content=body_messages[0].content if body_messages else None,
+        )
+        db.commit()
+    except Exception as persist_err:
+        logger.exception("Failed to persist chat turn: %s", persist_err)
+        db.rollback()
+    return sid
 
 
 @router.get("/chat/sessions", response_model=SessionListResponse)
@@ -393,6 +452,7 @@ async def chat_stream(
                     loop.call_soon_threadsafe(queue.put_nowait, None)
 
             thread_task = asyncio.get_event_loop().run_in_executor(None, run_generator)
+            client_disconnected = False
 
             while True:
                 item = await queue.get()
@@ -404,7 +464,11 @@ async def chat_stream(
                     raw = item.removeprefix("data: ").strip()
                     payload = json.loads(raw)
                 except Exception:
-                    yield item
+                    try:
+                        yield item
+                    except (asyncio.CancelledError, Exception):
+                        client_disconnected = True
+                        break
                     continue
 
                 typ = payload.get("type")
@@ -434,55 +498,95 @@ async def chat_stream(
                 if typ == "done":
                     tokens_used = payload.get("tokens_used", 1)
                     platform_tokens_used = token_service.llm_tokens_to_platform_tokens(tokens_used)
-                    try:
-                        token_service.deduct_for_chat(user_id, tokens_used, db)
-                    except Exception as deduct_err:
-                        logger.warning("Failed to deduct tokens for user_id=%s: %s", user_id, deduct_err)
+                    if "follow_up_questions" not in payload:
+                        payload["follow_up_questions"] = []
+                    sid = _persist_turn_on_done(
+                        db,
+                        user_id,
+                        session_id_for_persist,
+                        existing_message_count,
+                        body.messages,
+                        acc_content,
+                        acc_tool_calls,
+                        acc_skill_events,
+                        acc_charts,
+                        tokens_used,
+                        tools_called=payload.get("tools_called"),
+                        follow_up_questions=payload.get("follow_up_questions"),
+                    )
                     new_balance = token_service.get_balance(user_id, db)
                     payload["balance"] = new_balance
                     payload["platform_tokens_used"] = platform_tokens_used
-                    if "follow_up_questions" not in payload:
-                        payload["follow_up_questions"] = []
-                    sid: Optional[int] = session_id_for_persist
-                    if body.messages:
-                        try:
-                            if sid is None:
-                                new_session = ChatSession(user_id=user_id)
-                                db.add(new_session)
-                                db.flush()
-                                sid = new_session.id
-                            base_order = existing_message_count if session_id_for_persist is not None else 0
-                            for i, um in enumerate(body.messages):
-                                save_user_message(db, sid, um.content, base_order + i)
-                            assistant_content = "".join(acc_content)
-                            save_assistant_message(
-                                db,
-                                sid,
-                                assistant_content,
-                                base_order + len(body.messages),
-                                tokens_used=tokens_used,
-                                tools_called=payload.get("tools_called"),
-                                tool_calls=acc_tool_calls if acc_tool_calls else None,
-                                skill_events=acc_skill_events if acc_skill_events else None,
-                                charts=acc_charts if acc_charts else None,
-                                follow_up_questions=payload.get("follow_up_questions"),
-                            )
-                            update_session_after_messages(
-                                db,
-                                sid,
-                                first_user_content=body.messages[0].content if body.messages else None,
-                            )
-                            db.commit()
-                        except Exception as persist_err:
-                            logger.exception("Failed to persist chat turn: %s", persist_err)
-                            db.rollback()
-                        if sid is not None:
-                            payload["session_id"] = sid
-                    yield f"data: {json.dumps(payload)}\n\n"
-                    tokens_used = 0
+                    if sid is not None:
+                        payload["session_id"] = sid
+                    tokens_used = 0  # so finally does not deduct again if yield fails
+                    try:
+                        yield f"data: {json.dumps(payload)}\n\n"
+                    except (asyncio.CancelledError, Exception):
+                        client_disconnected = True
+                        break
                     continue
 
-                yield item
+                try:
+                    yield item
+                except (asyncio.CancelledError, Exception):
+                    client_disconnected = True
+                    break
+
+            # After client disconnect, drain queue and persist on "done" so user sees reply when they reload
+            if client_disconnected:
+                while True:
+                    item = await queue.get()
+                    if item is None:
+                        break
+                    try:
+                        raw = item.removeprefix("data: ").strip()
+                        payload = json.loads(raw)
+                    except Exception:
+                        continue
+                    typ = payload.get("type")
+                    if typ == "token" and payload.get("content"):
+                        acc_content.append(payload["content"])
+                    elif typ == "tool_call" and payload.get("name"):
+                        acc_tool_calls.append({
+                            "name": payload.get("name", ""),
+                            "input": payload.get("input", ""),
+                            "output": payload.get("output", ""),
+                        })
+                    elif typ == "chart" and payload.get("spec"):
+                        acc_charts.append(payload["spec"])
+                    elif typ == "skill_step":
+                        pending_skill_steps.append({
+                            "tool": payload.get("tool", ""),
+                            "input": payload.get("input", ""),
+                            "output": payload.get("output", ""),
+                            "ok": payload.get("ok", True),
+                        })
+                    elif typ == "skill_done" and payload.get("name"):
+                        acc_skill_events.append({"name": payload.get("name"), "steps": list(pending_skill_steps)})
+                        pending_skill_steps = []
+                    if typ == "done":
+                        tokens_used_val = payload.get("tokens_used", 1)
+                        db_bg = SessionLocal()
+                        try:
+                            _persist_turn_on_done(
+                                db_bg,
+                                user_id,
+                                session_id_for_persist,
+                                existing_message_count,
+                                body.messages,
+                                acc_content,
+                                acc_tool_calls,
+                                acc_skill_events,
+                                acc_charts,
+                                tokens_used_val,
+                                tools_called=payload.get("tools_called"),
+                                follow_up_questions=payload.get("follow_up_questions"),
+                            )
+                            tokens_used = 0
+                        finally:
+                            db_bg.close()
+                        break
 
             await thread_task
 
