@@ -8,6 +8,7 @@ import StockDetailPanel from '../components/TickerDetailPanel';
 import TickerListView from '../components/StockListView';
 import DashboardNewsSection from '../components/DashboardNewsSection';
 import DashboardPriceTrendsChart from '../components/DashboardPriceTrendsChart';
+import DailyDigestRunPanel from '../components/DailyDigestRunPanel';
 import OverviewStatsPanel, { ByMarketSection, SubscribedChangeColumnsChart } from '../components/OverviewStatsPanel';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useAuth } from '../contexts/AuthContext';
@@ -35,11 +36,11 @@ export default function DashboardPage() {
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
   const [digestUserNote, setDigestUserNote] = useState<string>('');
   const [digestNarrativeStyle, setDigestNarrativeStyle] = useState<'default' | 'concise' | 'professional' | 'technical'>('default');
-  const [showDigestOptions, setShowDigestOptions] = useState<boolean>(false);
   const [selectedFocusTickers, setSelectedFocusTickers] = useState<string[]>([]);
   const [showReferences, setShowReferences] = useState<boolean>(false);
   const [showDigestHistory, setShowDigestHistory] = useState<boolean>(true);
   const [showRawDigest, setShowRawDigest] = useState<boolean>(false);
+  const [digestInputExpanded, setDigestInputExpanded] = useState<boolean>(false);
 
   const {
     widgets,
@@ -67,7 +68,6 @@ export default function DashboardPage() {
     setDigestError(null);
     setDigest(null);
     setDigestLoading(true);
-    setShowDigestOptions(false);
     try {
       const trimmedNote = digestUserNote.trim();
       const styleParam = digestNarrativeStyle === 'default' ? undefined : digestNarrativeStyle;
@@ -102,15 +102,32 @@ export default function DashboardPage() {
     }
   };
 
-  // Load digest history dates and counts when opening the digest tab (once per session)
+  // Load digest history dates and show last digest when opening the digest tab (once per session)
   useEffect(() => {
     if (dashboardTab !== 'digest') return;
     if (digestDates.length > 0) return;
     (async () => {
       try {
         const res = await digestApi.getDigestDates(90);
-        setDigestDates(res.dates ?? []);
+        const dates = res.dates ?? [];
+        setDigestDates(dates);
         setDigestCountByDate(res.count_by_date ?? {});
+        if (dates.length > 0) {
+          const latestDate = dates[dates.length - 1];
+          setSelectedDigestDate(latestDate);
+          setDigest(null);
+          setDigestLoading(true);
+          try {
+            const listRes = await digestApi.getDigestsForDate(latestDate);
+            setDigestBriefsForDay(listRes.briefs);
+            setSelectedBrief(listRes.briefs[0] ?? null);
+          } catch {
+            setDigestBriefsForDay([]);
+            setSelectedBrief(null);
+          } finally {
+            setDigestLoading(false);
+          }
+        }
       } catch {
         // history is best-effort; ignore errors
       }
@@ -651,38 +668,40 @@ export default function DashboardPage() {
         <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="px-4 py-6 sm:p-6 lg:p-8">
             <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden space-y-4">
-              {/* Digest history calendar */}
-              <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="space-y-0.5">
-                    <p className="text-xs font-semibold text-gray-200">Brief history</p>
-                    <p className="text-[10px] text-gray-500">View and open saved briefs from past days.</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowDigestHistory((v) => !v)}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
-                      showDigestHistory
-                        ? 'border-emerald-400/70 text-emerald-200 bg-emerald-900/40'
-                        : 'border-gray-600 text-gray-300 bg-gray-900/70 hover:border-emerald-400/80 hover:text-emerald-200'
-                    }`}
-                  >
-                    <svg
-                      className={`w-3 h-3 transition-transform ${
-                        showDigestHistory ? 'rotate-90 text-emerald-300' : 'text-gray-400'
-                      }`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                    <span>{showDigestHistory ? 'Hide calendar' : 'Show calendar'}</span>
-                  </button>
-                </div>
+              {/* Run panel: brief options + Run digest button (above Brief history) */}
+              <DailyDigestRunPanel
+                digestUserNote={digestUserNote}
+                onDigestUserNoteChange={setDigestUserNote}
+                digestNarrativeStyle={digestNarrativeStyle}
+                onDigestNarrativeStyleChange={setDigestNarrativeStyle}
+                digestInputExpanded={digestInputExpanded}
+                onDigestInputExpandedChange={setDigestInputExpanded}
+                selectedFocusTickers={selectedFocusTickers}
+                onSelectedFocusTickersChange={setSelectedFocusTickers}
+                subscribedTickers={subscribedTickers}
+                onRunDigest={handleRunDigest}
+                digestLoading={digestLoading}
+              />
 
+              {/* Brief history calendar */}
+              <div className="border border-gray-700/80 rounded-md bg-gray-900/60 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowDigestHistory((v) => !v)}
+                  className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-[11px] font-medium text-gray-300 hover:text-white hover:bg-gray-800/60 transition-colors"
+                >
+                  <span>Brief history</span>
+                  <svg
+                    className={`w-3.5 h-3.5 transition-transform ${showDigestHistory ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
                 {showDigestHistory && (
-                  <div className="border border-gray-700 rounded-lg bg-gray-900/60 p-3">
+                  <div className="px-3 pb-3 pt-0">
                     <div className="flex items-center justify-between mb-2">
                       <button
                         type="button"
@@ -754,165 +773,34 @@ export default function DashboardPage() {
                     <p className="mt-2 text-[10px] text-gray-500">
                       Green days have saved briefs; number is how many that day. Click a day to view.
                     </p>
+                    {selectedDigestDate && digestBriefsForDay.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-gray-700">
+                        <p className="text-[10px] font-medium text-gray-500 mb-1.5">Briefs on this day</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {digestBriefsForDay.map((brief, i) => (
+                            <button
+                              key={brief.execution_id}
+                              type="button"
+                              onClick={() => setSelectedBrief(brief)}
+                              className={`px-2 py-1 text-xs rounded border transition-colors ${
+                                selectedBrief?.execution_id === brief.execution_id
+                                  ? 'bg-emerald-600 border-emerald-500 text-white'
+                                  : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
+                              }`}
+                              title={brief.created_at}
+                            >
+                              {formatBriefTime(brief.created_at) || `Brief ${i + 1}`}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
 
-              {/* Run panel */}
-              <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h2 className="text-sm font-semibold text-white mb-1">User Daily Brief (beta)</h2>
-                      <p className="text-xs text-gray-400">
-                        Generate a short narrative summary of today&apos;s market and your subscribed tickers.
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <button
-                        type="button"
-                        onClick={handleRunDigest}
-                        disabled={digestLoading}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-gray-900"
-                      >
-                        {digestLoading ? (
-                          <>
-                            <span
-                              className="inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"
-                              aria-hidden
-                            />
-                            Building…
-                          </>
-                        ) : (
-                          <>
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                              />
-                            </svg>
-                            Run digest
-                          </>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowDigestOptions((v) => !v)}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
-                          showDigestOptions
-                            ? 'border-emerald-400/70 text-emerald-200 bg-emerald-900/30'
-                            : 'border-gray-600 text-gray-300 bg-gray-800/60 hover:border-emerald-400/80 hover:text-emerald-200'
-                        }`}
-                      >
-                        <svg
-                          className={`w-3 h-3 transition-transform ${
-                            showDigestOptions ? 'rotate-90 text-emerald-300' : 'text-gray-400'
-                          }`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                        <span>{showDigestOptions ? 'Hide brief options' : 'Show brief options'}</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {showDigestOptions && (
-                    <div className="space-y-3 border border-gray-700/80 rounded-md bg-gray-900/60 px-3 py-2.5">
-                      <div className="space-y-1">
-                        <label htmlFor="digest-style" className="block text-[11px] font-medium text-gray-300">
-                          Brief style
-                        </label>
-                        <select
-                          id="digest-style"
-                          value={digestNarrativeStyle}
-                          onChange={(e) => setDigestNarrativeStyle(e.target.value as any)}
-                          className="w-full max-w-xs rounded-md border border-gray-700 bg-gray-950/60 px-2.5 py-1.5 text-xs text-gray-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
-                        >
-                          <option value="default">Balanced (default)</option>
-                          <option value="concise">Concise</option>
-                          <option value="professional">Professional</option>
-                          <option value="technical">Technical (more detail)</option>
-                        </select>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label htmlFor="digest-user-note" className="block text-[11px] font-medium text-gray-300">
-                          Optional note for today&apos;s brief
-                        </label>
-                        <textarea
-                          id="digest-user-note"
-                          rows={2}
-                          value={digestUserNote}
-                          onChange={(e) => setDigestUserNote(e.target.value)}
-                          maxLength={2000}
-                          placeholder="E.g. Focus on earnings next week, I’m worried about tech exposure, cash needs in 3 months…"
-                          className="w-full rounded-md border border-gray-700 bg-gray-950/60 px-2.5 py-1.5 text-xs text-gray-100 placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
-                        />
-                        <p className="text-[10px] text-gray-500">
-                          Style and note apply only to the next run and are considered when writing the narrative and
-                          &quot;What to watch&quot;.
-                        </p>
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between">
-                          <label className="block text-[11px] font-medium text-gray-300">
-                            Focus tickers (optional)
-                          </label>
-                          {selectedFocusTickers.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => setSelectedFocusTickers([])}
-                              className="text-[10px] text-emerald-300 hover:text-emerald-200 underline-offset-2 hover:underline"
-                            >
-                              Clear
-                            </button>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-gray-500 mb-0.5">
-                          Choose a subset of your portfolio to highlight. Leave empty to let the system pick based on
-                          moves and news.
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {subscribedTickers.map((t) => {
-                            const selected = selectedFocusTickers.includes(t);
-                            return (
-                              <button
-                                key={t}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedFocusTickers((prev) =>
-                                    prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
-                                  );
-                                }}
-                                className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] transition-colors ${
-                                  selected
-                                    ? 'bg-emerald-900/50 border-emerald-500 text-emerald-100'
-                                    : 'bg-gray-900 border-gray-700 text-gray-300 hover:border-emerald-500 hover:text-emerald-100'
-                                }`}
-                              >
-                                {t}
-                              </button>
-                            );
-                          })}
-                          {subscribedTickers.length === 0 && (
-                            <span className="text-[10px] text-gray-500">
-                              Subscribe to tickers on your dashboard to choose a manual focus set.
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Digest content */}
-                <div className="pt-2 space-y-3">
+              {/* Digest content */}
+              <div className="space-y-3">
                   {digestLoading && (
                     <div className="flex items-center gap-2 text-xs text-gray-300">
                       <span className="inline-block w-4 h-4 border-2 border-gray-500 border-t-blue-400 rounded-full animate-spin" />
@@ -922,28 +810,9 @@ export default function DashboardPage() {
 
                   {digestError && <p className="text-xs text-red-400">{digestError}</p>}
 
-                  {/* Selected day briefs list */}
-                  {!digestLoading && selectedDigestDate && digestBriefsForDay.length > 0 && (
+                  {/* Selected day brief content (hours list is in Brief history panel) */}
+                  {!digestLoading && selectedDigestDate && digestBriefsForDay.length > 0 && selectedBrief && (
                     <>
-                      <div className="flex flex-wrap gap-1.5">
-                        {digestBriefsForDay.map((brief, i) => (
-                          <button
-                            key={brief.execution_id}
-                            type="button"
-                            onClick={() => setSelectedBrief(brief)}
-                            className={`px-2 py-1 text-xs rounded border transition-colors ${
-                              selectedBrief?.execution_id === brief.execution_id
-                                ? 'bg-emerald-600 border-emerald-500 text-white'
-                                : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
-                            }`}
-                            title={brief.created_at}
-                          >
-                            {formatBriefTime(brief.created_at) || `Brief ${i + 1}`}
-                          </button>
-                        ))}
-                      </div>
-
-                      {selectedBrief && (
                         <div className="space-y-3 pt-2 border-top border-gray-700">
                           <div className="flex items-start justify-between gap-3">
                             <div className="space-y-1">
@@ -1087,7 +956,6 @@ export default function DashboardPage() {
                             </div>
                           )}
                         </div>
-                      )}
                     </>
                   )}
 
@@ -1245,7 +1113,6 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-        </div>
       )}
 
     </div>
