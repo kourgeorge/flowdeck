@@ -811,10 +811,15 @@ export function useChatState(
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const lastHiddenAtRef = useRef<number>(0);
+  /** When true, ignore any stream callbacks (e.g. after switching conversation). */
+  const ignoreStreamRef = useRef(false);
 
   // Cancel stream on unmount
   useEffect(() => {
-    return () => { abortRef.current?.abort(); };
+    return () => {
+      ignoreStreamRef.current = true;
+      abortRef.current?.abort();
+    };
   }, []);
 
   // When leaving the app (e.g. switching tabs on mobile), abort the stream so we don't
@@ -824,6 +829,7 @@ export function useChatState(
       if (document.hidden) {
         lastHiddenAtRef.current = Date.now();
         if (abortRef.current) {
+          ignoreStreamRef.current = true;
           abortRef.current.abort();
           abortRef.current = null;
           setIsLoading(false);
@@ -845,6 +851,7 @@ export function useChatState(
     const trimmed = text.trim();
     if (!trimmed || isLoading || isStreaming) return;
 
+    ignoreStreamRef.current = false;
     const userMessage: ChatMessage = { role: 'user', content: trimmed };
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
@@ -872,6 +879,7 @@ export function useChatState(
     abortRef.current = chatApi.streamMessage(
       apiMessages,
       (chunk) => {
+        if (ignoreStreamRef.current) return;
         setIsLoading(false);
         setIsStreaming(true);
         setThinkingStatus(null);
@@ -889,6 +897,7 @@ export function useChatState(
         });
       },
       (tokensUsed, balance, toolsCalled, followUpQuestions, newSessionId, platformTokensUsed, costUsd) => {
+        if (ignoreStreamRef.current) return;
         setIsStreaming(false);
         setIsLoading(false);
         setThinkingStatus(null);
@@ -913,6 +922,7 @@ export function useChatState(
         });
       },
       (message) => {
+        if (ignoreStreamRef.current) return;
         setIsStreaming(false);
         setIsLoading(false);
         setThinkingStatus(null);
@@ -931,9 +941,11 @@ export function useChatState(
         }
       },
       (status) => {
+        if (ignoreStreamRef.current) return;
         setThinkingStatus(status);
       },
       (toolCall) => {
+        if (ignoreStreamRef.current) return;
         // Tool completed — clear the thinking status so the UI doesn't keep
         // showing the stale tool name while the LLM reasons over the results
         setThinkingStatus(null);
@@ -957,6 +969,7 @@ export function useChatState(
       },
       mergedContext,
       (chartSpec) => {
+        if (ignoreStreamRef.current) return;
         // Chart emitted by execute_python — attach to the assistant message
         setMessages((prev) => {
           const updated = [...prev];
@@ -977,6 +990,7 @@ export function useChatState(
         });
       },
       (skillEvent) => {
+        if (ignoreStreamRef.current) return;
         // Skill workflow completed — attach to the assistant message
         setThinkingStatus(null);
         setMessages((prev) => {
@@ -1012,6 +1026,7 @@ export function useChatState(
   };
 
   const clearLoadingState = () => {
+    ignoreStreamRef.current = true;
     abortRef.current?.abort();
     abortRef.current = null;
     setIsLoading(false);
