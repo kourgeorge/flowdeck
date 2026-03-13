@@ -758,6 +758,7 @@ export interface DigestBriefItem {
   user_note?: string | null;
   narrative_style?: string | null;
   user_focus_tickers?: string[] | null;
+  references?: { label: string; url?: string | null; source?: string | null; tickers?: string[] | null }[] | null;
   raw_metadata?: Record<string, unknown> | null;
 }
 

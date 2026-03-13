@@ -1039,6 +1039,53 @@ export default function DashboardPage() {
                               </div>
                             </div>
                           )}
+                          {selectedBrief.references && selectedBrief.references.length > 0 && (
+                            <div className="pt-3 border-t border-gray-700">
+                              <button
+                                type="button"
+                                onClick={() => setShowReferences((v) => !v)}
+                                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-300 hover:text-white"
+                              >
+                                <svg
+                                  className={`w-3 h-3 transition-transform ${
+                                    showReferences ? 'rotate-90 text-emerald-300' : 'text-gray-400'
+                                  }`}
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                                <span>References</span>
+                                <span className="text-[10px] text-gray-500">({selectedBrief.references.length})</span>
+                              </button>
+                              {showReferences && (
+                                <ul className="mt-1.5 space-y-1.5 text-[11px] text-gray-300">
+                                  {selectedBrief.references.map((ref, idx) => (
+                                    <li key={idx} className="flex flex-col">
+                                      <span className="font-medium">{ref.label}</span>
+                                      <div className="flex flex-wrap gap-2 text-[10px] text-gray-500">
+                                        {ref.source && <span>{ref.source}</span>}
+                                        {ref.url && (
+                                          <a
+                                            href={ref.url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="underline underline-offset-2 text-emerald-300 hover:text-emerald-200"
+                                          >
+                                            Link
+                                          </a>
+                                        )}
+                                        {ref.tickers && ref.tickers.length > 0 && (
+                                          <span>Tickers: {ref.tickers.join(', ')}</span>
+                                        )}
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
                     </>

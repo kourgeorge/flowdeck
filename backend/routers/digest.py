@@ -48,6 +48,7 @@ class DigestBriefItem(BaseModel):
     user_note: Optional[str] = None
     narrative_style: Optional[str] = None
     user_focus_tickers: Optional[list[str]] = None
+    references: Optional[list[dict]] = None
     raw_metadata: Optional[dict] = None
 
 
@@ -135,6 +136,11 @@ async def get_digest(
             metadata["narrative_style"] = narrative_style
         if user_focus_tickers:
             metadata["user_focus_tickers"] = user_focus_tickers
+        if getattr(result, "references", None):
+            metadata["references"] = [
+                r.model_dump() if hasattr(r, "model_dump") else r
+                for r in (result.references or [])
+            ]
         # Attach LLM usage metadata when available
         if result.input_tokens is not None:
             metadata["input_tokens"] = result.input_tokens
@@ -232,6 +238,9 @@ def _report_to_brief_item(ex: Execution, report: Report, date: str) -> DigestBri
     user_focus_tickers = meta.get("user_focus_tickers") or None
     if user_focus_tickers is not None and not isinstance(user_focus_tickers, list):
         user_focus_tickers = None
+    refs = meta.get("references")
+    if refs is not None and not isinstance(refs, list):
+        refs = None
     created_at = ex.created_at.isoformat() if ex.created_at else ""
     return DigestBriefItem(
         execution_id=ex.id,
@@ -243,6 +252,7 @@ def _report_to_brief_item(ex: Execution, report: Report, date: str) -> DigestBri
         user_note=str(user_note) if user_note is not None else None,
         narrative_style=str(narrative_style) if narrative_style is not None else None,
         user_focus_tickers=[str(t) for t in (user_focus_tickers or [])] or None,
+        references=refs,
         raw_metadata=meta or None,
     )
 
