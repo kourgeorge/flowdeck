@@ -181,7 +181,7 @@ def _fetch_platform_reports(
 
     # --- Fetch specific report ---
     if canonical_type:
-        content = svc.get_report_content(ticker, analysis_run_id, canonical_type)
+        content = svc.get_report_content(analysis_run_id, canonical_type)
         if not content:
             return (
                 f"The '{_REPORT_LABELS.get(canonical_type, canonical_type)}' report "
@@ -191,7 +191,7 @@ def _fetch_platform_reports(
         return f"# FlowDeck {label} for {ticker}\n*(Analysis date: {date_display})*\n\n{content}"
 
     # --- Fetch all reports summary ---
-    reports = svc.get_reports_with_scores(ticker, analysis_run_id)
+    reports = svc.get_reports_with_scores(analysis_run_id)
     if not reports:
         return f"No report data found for {ticker} (run: {date_display})."
 

@@ -127,11 +127,19 @@ export default function CopilotChatPanel({
     [setSessionId, refreshSessions],
   );
 
+  const createSessionIfNeeded = useCallback(async () => {
+    const { id } = await chatApi.createChatSession();
+    setSessionId(id);
+    refreshSessions();
+    return id;
+  }, [setSessionId, refreshSessions]);
+
   const internalChat = useChatState(
     undefined,
     context,
     useInternalSession ? sessionId : undefined,
     useInternalSession ? onStreamDone : undefined,
+    useInternalSession ? createSessionIfNeeded : undefined,
   );
   const chat = externalChatState ?? internalChat;
 

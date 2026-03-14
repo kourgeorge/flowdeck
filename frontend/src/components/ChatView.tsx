@@ -799,6 +799,8 @@ export function useChatState(
   context?: Record<string, unknown>,
   sessionId?: number | null,
   onStreamDone?: (newSessionId?: number) => void,
+  /** When provided and sessionId is null, called before send to create a session and show it in history immediately. */
+  createSessionIfNeeded?: () => Promise<number | null>,
 ): UseChatStateReturn {
   const [messages, setMessages] = useState<ChatMessageWithMeta[]>([]);
   const [input, setInput] = useState('');
@@ -851,32 +853,41 @@ export function useChatState(
     const trimmed = text.trim();
     if (!trimmed || isLoading || isStreaming) return;
 
-    ignoreStreamRef.current = false;
-    const userMessage: ChatMessage = { role: 'user', content: trimmed };
-    const newMessages = [...messages, userMessage];
-    setMessages(newMessages);
-    setInput('');
-    setIsLoading(true);
-    setThinkingStatus(null);
-    setError(null);
+    const doSend = async () => {
+      ignoreStreamRef.current = false;
+      const userMessage: ChatMessage = { role: 'user', content: trimmed };
+      const newMessages = [...messages, userMessage];
+      setMessages(newMessages);
+      setInput('');
+      setIsLoading(true);
+      setThinkingStatus(null);
+      setError(null);
 
-    const assistantIndex = newMessages.length;
-    // When sessionId is set, backend loads history from DB; send only the new user message
-    const apiMessages =
-      sessionId != null ? [userMessage] : newMessages.map((m) => ({ role: m.role, content: m.content }));
+      const assistantIndex = newMessages.length;
 
-    // Extract @TICKER mentions from the user's message and merge into context
-    const mentionedTickers = extractMentionedTickers(trimmed);
-    const existingTickers: string[] = (context?.tickers as string[]) ?? [];
-    const mergedTickers = mentionedTickers.length > 0
-      ? [...new Set([...existingTickers, ...mentionedTickers])]
-      : existingTickers;
-    const mergedContext: Record<string, unknown> = {
-      ...(context ?? {}),
-      ...(mergedTickers.length > 0 ? { tickers: mergedTickers } : {}),
-    };
+      // Create session upfront when starting a new conversation so it appears in history immediately
+      let effectiveSessionId = sessionId ?? undefined;
+      if (effectiveSessionId == null && createSessionIfNeeded) {
+        const newId = await createSessionIfNeeded();
+        if (newId != null) effectiveSessionId = newId;
+      }
 
-    abortRef.current = chatApi.streamMessage(
+      // When sessionId is set, backend loads history from DB; send only the new user message
+      const apiMessages =
+        effectiveSessionId != null ? [userMessage] : newMessages.map((m) => ({ role: m.role, content: m.content }));
+
+      // Extract @TICKER mentions from the user's message and merge into context
+      const mentionedTickers = extractMentionedTickers(trimmed);
+      const existingTickers: string[] = (context?.tickers as string[]) ?? [];
+      const mergedTickers = mentionedTickers.length > 0
+        ? [...new Set([...existingTickers, ...mentionedTickers])]
+        : existingTickers;
+      const mergedContext: Record<string, unknown> = {
+        ...(context ?? {}),
+        ...(mergedTickers.length > 0 ? { tickers: mergedTickers } : {}),
+      };
+
+      abortRef.current = chatApi.streamMessage(
       apiMessages,
       (chunk) => {
         if (ignoreStreamRef.current) return;
@@ -1011,8 +1022,16 @@ export function useChatState(
           return updated;
         });
       },
-      sessionId ?? undefined,
+      effectiveSessionId ?? undefined,
     );
+    };
+
+    doSend().catch((err) => {
+      setIsLoading(false);
+      setIsStreaming(false);
+      setThinkingStatus(null);
+      setError(err?.message ?? 'Failed to create conversation');
+    });
   };
 
   const clearChat = () => {

@@ -53,7 +53,14 @@ export default function ChatPage() {
     [refreshSessions],
   );
 
-  const chat = useChatState(undefined, undefined, sessionId, onStreamDone);
+  const createSessionIfNeeded = useCallback(async () => {
+    const { id } = await chatApi.createChatSession();
+    setSessionId(id);
+    refreshSessions();
+    return id;
+  }, [refreshSessions]);
+
+  const chat = useChatState(undefined, undefined, sessionId, onStreamDone, createSessionIfNeeded);
 
   // Fetch initial token balance and display name when user is logged in
   useEffect(() => {

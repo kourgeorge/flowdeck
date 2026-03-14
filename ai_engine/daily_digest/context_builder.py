@@ -275,7 +275,7 @@ def build_digest_context(
             latest = report_svc.get_latest_analysis_run(t)
             if latest:
                 ar_id, _ = latest
-                platform_reports[t] = report_svc.get_reports_with_scores(t, ar_id)
+                platform_reports[t] = report_svc.get_reports_with_scores(ar_id)
             else:
                 platform_reports[t] = {}
         except Exception:

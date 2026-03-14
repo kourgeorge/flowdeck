@@ -135,7 +135,7 @@ def build_payload(
                 if latest:
                     ar_id, latest_date = latest
                     entry["report_date"] = latest_date
-                    scores_raw = rs.get_reports_with_scores(ticker, ar_id)
+                    scores_raw = rs.get_reports_with_scores(ar_id)
                     if scores_raw:
                         for k, v in scores_raw.items():
                             if v.get("score") is not None or v.get("score_label"):

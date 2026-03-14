@@ -232,7 +232,7 @@ def _get_portfolio_overview(user_id: int, db: Any) -> str:
             latest = svc.get_latest_analysis_run(ticker)
             if latest:
                 ar_id, latest_date = latest
-                reports = svc.get_reports_with_scores(ticker, ar_id)
+                reports = svc.get_reports_with_scores(ar_id)
                 tip = reports.get("trader_investment_plan") or {}
                 ftd = reports.get("final_trade_decision") or {}
                 rec = tip.get("recommendation") or ftd.get("recommendation")

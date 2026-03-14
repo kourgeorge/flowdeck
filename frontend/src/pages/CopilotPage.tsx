@@ -8,6 +8,7 @@ import { useSubscribedStocks } from '../hooks/useSubscribedStocks';
 import { useAuth } from '../contexts/AuthContext';
 import { COPILOT_NAME } from '../config';
 import type { TickerPageData, TickerWidget } from '../services/types';
+import { chatApi } from '../services/api';
 import { useChatState } from '../components/ChatView';
 
 /** Desktop (md and up): tickers pane open by default. Mobile: collapsed by default. */
@@ -65,8 +66,15 @@ export default function CopilotPage() {
     chatRefreshSessionsRef.current?.();
   }, []);
 
+  const createSessionIfNeeded = useCallback(async () => {
+    const { id } = await chatApi.createChatSession();
+    setSessionId(id);
+    chatRefreshSessionsRef.current?.();
+    return id;
+  }, []);
+
   // Lift chat state to parent component so it persists across tab switches in mobile mode
-  const chatState = useChatState(undefined, context, sessionId, onStreamDone);
+  const chatState = useChatState(undefined, context, sessionId, onStreamDone, createSessionIfNeeded);
 
   const onResizeStart = useCallback((e: React.MouseEvent) => {
     isResizing.current = true;
