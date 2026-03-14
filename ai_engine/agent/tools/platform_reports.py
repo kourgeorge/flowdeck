@@ -136,12 +136,12 @@ def _fetch_platform_reports(
 ) -> str:
     _ensure_backend_importable()
     try:
-        from services.report_service import ReportService
-    except ImportError:
-        return f"Platform reports unavailable: backend not importable."
+        from data_layer import get_data_gateway
+        gw = get_data_gateway()
+    except (ImportError, RuntimeError):
+        return f"Platform reports unavailable: backend data gateway not initialized."
 
     ticker = ticker.strip().upper()
-    svc = ReportService()
 
     # Resolve report_type alias
     canonical_type: str | None = None
@@ -161,9 +161,9 @@ def _fetch_platform_reports(
     date_display: str = ""
     if date:
         date = date.strip()
-        resolved = svc.get_analysis_run_for_date(ticker, date)
+        resolved = gw.get_analysis_run_for_date(ticker, date)
         if not resolved:
-            all_dates = svc.list_report_dates(ticker)
+            all_dates = gw.list_report_dates(ticker)
             return (
                 f"No reports found for {ticker} on date '{date}'. "
                 f"Available dates: {', '.join(all_dates[:10])}."
@@ -171,7 +171,7 @@ def _fetch_platform_reports(
         analysis_run_id, date_display = resolved
 
     if analysis_run_id is None:
-        latest = svc.get_latest_execution_for_ticker(ticker)
+        latest = gw.get_latest_execution_for_ticker(ticker)
         if not latest:
             return (
                 f"No AI analysis reports found for **{ticker}** on FlowDeck. "
@@ -181,7 +181,8 @@ def _fetch_platform_reports(
 
     # --- Fetch specific report ---
     if canonical_type:
-        content = svc.get_report_content(analysis_run_id, canonical_type)
+        reports_with_scores = gw.get_reports_with_scores(analysis_run_id)
+        content = (reports_with_scores.get(canonical_type) or {}).get("content") or ""
         if not content:
             return (
                 f"The '{_REPORT_LABELS.get(canonical_type, canonical_type)}' report "
@@ -191,7 +192,7 @@ def _fetch_platform_reports(
         return f"# FlowDeck {label} for {ticker}\n*(Analysis date: {date_display})*\n\n{content}"
 
     # --- Fetch all reports summary ---
-    reports = svc.get_reports_with_scores(analysis_run_id)
+    reports = gw.get_reports_with_scores(analysis_run_id)
     if not reports:
         return f"No report data found for {ticker} (run: {date_display})."
 
@@ -320,13 +321,13 @@ class HistoricalReportDatesTool(BaseTool):
 def _fetch_historical_dates(ticker: str) -> str:
     _ensure_backend_importable()
     try:
-        from services.report_service import ReportService
-    except ImportError:
-        return "Platform reports unavailable: backend not importable."
+        from data_layer import get_data_gateway
+        gw = get_data_gateway()
+    except (ImportError, RuntimeError):
+        return "Platform reports unavailable: backend data gateway not initialized."
 
     ticker = ticker.strip().upper()
-    svc = ReportService()
-    dates = svc.list_report_dates(ticker)
+    dates = gw.list_report_dates(ticker)
 
     if not dates:
         return f"No historical reports found for {ticker} on FlowDeck."

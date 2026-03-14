@@ -21,8 +21,7 @@ from models.schemas import (
     Recommendation,
     HistoricalAnalysis,
 )
-import app_services
-from services.info_fetcher import get_info_fetcher
+from data_layer import get_data_gateway
 from services import token_service
 from services.share_service import get_share_url
 
@@ -72,7 +71,7 @@ def _get_ticker_widgets_sync(
     recent_days: Optional[int] = None,
 ) -> WidgetsResponse:
     """Sync implementation of widget data (runs in thread pool to avoid blocking event loop)."""
-    report_service = app_services.get_report_service()
+    gw = get_data_gateway()
     use_major_split = False
     major_set: set[str] = set()
     total_count: Optional[int] = None
@@ -83,21 +82,21 @@ def _get_ticker_widgets_sync(
         recent_window_days = recent_days if recent_days and recent_days > 1 else None
         if only_date and limit is not None:
             if recent_window_days:
-                ticker_list, total_count = report_service.get_tickers_with_reports_for_recent_days_paginated(
+                ticker_list, total_count = gw.get_tickers_with_reports_for_recent_days_paginated(
                     report_date, recent_window_days, limit, offset
                 )
             else:
-                ticker_list, total_count = report_service.get_tickers_with_reports_for_date_paginated(
+                ticker_list, total_count = gw.get_tickers_with_reports_for_date_paginated(
                     report_date, limit, offset
                 )
         else:
             if only_date:
                 if recent_window_days:
-                    tickers_for_date = report_service.get_tickers_with_reports_for_recent_days(
+                    tickers_for_date = gw.get_tickers_with_reports_for_recent_days(
                         report_date, recent_window_days
                     )
                 else:
-                    tickers_for_date = report_service.get_tickers_with_reports_for_date(report_date)
+                    tickers_for_date = gw.get_tickers_with_reports_for_date(report_date)
                 ticker_list = [t.upper() for t in tickers_for_date]
             else:
                 major_set = {t.upper() for t in MAJOR_TICKERS}
@@ -105,16 +104,15 @@ def _get_ticker_widgets_sync(
                 use_major_split = True
 
     widgets = []
-    cached_fetcher = get_info_fetcher()
     quotes_dict = {}
     try:
-        quotes_dict = cached_fetcher.get_quotes_batch(ticker_list)
+        quotes_dict = gw.get_quotes_batch(ticker_list)
     except Exception as e:
         print(f"Warning: Failed to fetch market quotes: {e}")
 
     company_names: dict[str, Optional[str]] = {}
     try:
-        company_infos = cached_fetcher.get_company_info_batch(ticker_list)
+        company_infos = gw.get_company_info_batch(ticker_list)
         company_names = {
             t: (company_infos.get(t) or {}).get("name") or None
             for t in ticker_list
@@ -132,7 +130,7 @@ def _get_ticker_widgets_sync(
                 quote = None
         if quote is None:
             try:
-                quote_data = cached_fetcher.get_quote(ticker)
+                quote_data = gw.get_quote(ticker)
                 if quote_data and isinstance(quote_data, dict):
                     quote = TickerQuote(**quote_data)
             except Exception:
@@ -144,10 +142,10 @@ def _get_ticker_widgets_sync(
         report_scores = None
 
         try:
-            latest_run = report_service.get_latest_execution_for_ticker(ticker)
+            latest_run = gw.get_latest_execution_for_ticker(ticker)
             if latest_run:
                 latest_ar_id, latest_date = latest_run
-                scores_raw = report_service.get_reports_with_scores(latest_ar_id)
+                scores_raw = gw.get_reports_with_scores(latest_ar_id)
                 if scores_raw:
                     report_scores = {
                         k: ReportScoreSummary(score=v.get("score"), score_label=v.get("score_label"))
@@ -206,10 +204,9 @@ def _get_ticker_widgets_sync(
 
 def _get_ticker_page_sync(ticker: str) -> TickerPageData:
     """Sync implementation of ticker page data (runs in thread pool to avoid blocking event loop)."""
-    report_service = app_services.get_report_service()
-    cached_fetcher = get_info_fetcher()
+    gw = get_data_gateway()
 
-    quote_data = cached_fetcher.get_quote(ticker)
+    quote_data = gw.get_quote(ticker)
     if not quote_data or not isinstance(quote_data, dict):
         raise HTTPException(
             status_code=404,
@@ -227,7 +224,7 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
     except Exception as e:
         logging.getLogger(__name__).warning("Error checking cache for running analysis: %s", e)
 
-    latest_run = report_service.get_latest_execution_for_ticker(ticker)
+    latest_run = gw.get_latest_execution_for_ticker(ticker)
     if is_generating and generation_analysis_run_id is not None:
         latest_analysis_run_id = generation_analysis_run_id
         latest_date = latest_run[1] if latest_run else None
@@ -245,8 +242,8 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
     report_days_ago = None
 
     if latest_analysis_run_id is not None:
-        latest_reports = report_service.get_reports_for_run(latest_analysis_run_id)
-        latest_reports_with_scores_raw = report_service.get_reports_with_scores(latest_analysis_run_id)
+        latest_reports = gw.get_reports_for_run(latest_analysis_run_id)
+        latest_reports_with_scores_raw = gw.get_reports_with_scores(latest_analysis_run_id)
         latest_reports_with_scores = {
             k: ReportData(
                 content=v.get('content'),
@@ -286,10 +283,10 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
                 date=latest_date or ""
             )
 
-    historical = report_service.get_historical_analyses(ticker)
+    historical = gw.get_historical_analyses(ticker)
     historical_analyses = []
     for h in historical:
-        reports_with_scores = report_service.get_reports_with_scores(h["analysis_run_id"])
+        reports_with_scores = gw.get_reports_with_scores(h["analysis_run_id"])
         rec = None
         if (reports_with_scores.get("final_trade_decision") or {}).get("recommendation"):
             rec = reports_with_scores["final_trade_decision"]["recommendation"]
@@ -356,10 +353,10 @@ async def get_ticker_reports_for_run(
 ):
     """Get reports_with_scores for a specific historical run by analysis_run_id. Experimental."""
     ticker = ticker.upper()
-    report_service = app_services.get_report_service()
+    gw = get_data_gateway()
 
     def _fetch():
-        scores_raw = report_service.get_reports_with_scores(analysis_run_id)
+        scores_raw = gw.get_reports_with_scores(analysis_run_id)
         if not scores_raw:
             return None
         return {

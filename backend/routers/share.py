@@ -12,8 +12,8 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy.orm import Session
 
 from database import SessionLocal
+from data_layer import get_data_gateway
 from models.db_models import Execution, Report
-from services.report_service import ReportService
 from services.share_service import decode_share_token
 
 router = APIRouter(prefix="/api/share", tags=["share"])
@@ -21,16 +21,15 @@ router = APIRouter(prefix="/api/share", tags=["share"])
 
 def _resolve_ticker(db: Session, ex: Execution) -> Dict[str, Any]:
     """Build shared response for execution_type=ticker (stock analysis run)."""
-    report_svc = ReportService()
-    reports = report_svc.get_reports_with_scores(ex.id)
+    gw = get_data_gateway()
+    reports = gw.get_reports_with_scores(ex.id)
     if not reports:
         raise HTTPException(status_code=404, detail="Report not found")
     ticker = (ex.subject_id or "").upper()
     report_date = ex.created_at.strftime("%Y-%m-%d") if ex.created_at else None
     company_name: str | None = None
     try:
-        from services.info_fetcher import get_info_fetcher
-        info = get_info_fetcher().get_company_info(ticker)
+        info = gw.get_company_info(ticker)
         if info and isinstance(info, dict):
             company_name = info.get("name") or None
     except Exception:

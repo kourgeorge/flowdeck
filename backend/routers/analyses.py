@@ -15,7 +15,7 @@ from database import get_db, SessionLocal
 from models.db_models import User as UserModel
 from services.analysis_service import AnalysisService
 from services import token_service
-from services.info_fetcher import get_info_fetcher
+from data_layer import get_data_gateway
 from sync_major_stocks import get_missing_and_skipped, run_analyses_for_tickers
 
 router = APIRouter(prefix="/api", tags=["analyses"])
@@ -64,8 +64,8 @@ async def start_analysis(
         if not ticker:
             raise HTTPException(status_code=400, detail="Ticker is required")
 
-        # Use cached fetcher so quote check goes through cache (same as data API)
-        quote = await asyncio.to_thread(get_info_fetcher().get_quote, ticker)
+        # Use data gateway for quote check (same as data API)
+        quote = await asyncio.to_thread(get_data_gateway().get_quote, ticker)
         if quote is None:
             raise HTTPException(
                 status_code=404,

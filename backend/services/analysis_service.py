@@ -43,8 +43,8 @@ from ai_engine.llm_provider import get_config_from_env
 def _has_sec_data(ticker: str) -> bool:
     """Return True only if the ticker has SEC EDGAR data (10-K/10-Q filings). Run SEC analyst only then."""
     try:
-        from services.edgar_service import get_edgar_service
-        result = get_edgar_service().get_filings(ticker)
+        from data_layer import get_data_gateway
+        result = get_data_gateway().get_edgar_filings(ticker)
         if result.get("error"):
             return False
         filings = result.get("filings") or []
@@ -63,8 +63,8 @@ _FUNDAMENTALS_MEANINGFUL_KEYS = frozenset({
 def _has_fundamental_data(ticker: str) -> bool:
     """Return True only if the ticker has fetchable company fundamental data (run fundamentals analyst only then)."""
     try:
-        from services.info_fetcher import get_info_fetcher
-        result = get_info_fetcher().get_fundamentals(ticker)
+        from data_layer import get_data_gateway
+        result = get_data_gateway().get_fundamentals(ticker)
         fundamentals = result.get("fundamentals") or {}
         if not isinstance(fundamentals, dict) or not fundamentals:
             return False

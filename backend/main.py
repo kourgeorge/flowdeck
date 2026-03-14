@@ -34,11 +34,17 @@ from routers.me import router as me_router
 from routers.digest import router as digest_router
 from routers.public import router as public_router
 from routers.share import router as share_router
+from data_layer import init_data_gateway
+from data_layer.sources.market import CachedMarketSource
+from data_layer.sources.reports import ReportDataSource
+from data_layer.sources.user import UserPortfolioSource
+from data_layer.sources.edgar import EdgarDataSource
 from services.analysis_service import AnalysisService
 from services.market_data_service import MarketDataService
 from services.news_service import NewsService
 from services.report_service import ReportService
 from services.info_fetcher import get_info_fetcher
+from services.edgar_service import get_edgar_service
 
 
 @asynccontextmanager
@@ -73,13 +79,13 @@ async def lifespan(app: FastAPI):
                 from apscheduler.schedulers.background import BackgroundScheduler
                 scheduler = BackgroundScheduler()
             import threading
-            from services.info_fetcher import get_info_fetcher
 
             def _run_refresh(fn):
                 try:
-                    engine = get_info_fetcher()
-                    if hasattr(engine, fn):
-                        getattr(engine, fn)()
+                    from data_layer import get_data_gateway
+                    gateway = get_data_gateway()
+                    if hasattr(gateway, fn):
+                        getattr(gateway, fn)()
                 except Exception as e:
                     print(f"Market cache refresh ({fn}) failed: {e}")
 
@@ -105,9 +111,10 @@ async def lifespan(app: FastAPI):
 
     def _warm_homepage_cache():
         try:
-            engine = get_info_fetcher()
-            engine.get_quotes_batch(list(MAJOR_TICKERS))
-            engine.get_company_info_batch(list(MAJOR_TICKERS))
+            from data_layer import get_data_gateway
+            gateway = get_data_gateway()
+            gateway.get_quotes_batch(list(MAJOR_TICKERS))
+            gateway.get_company_info_batch(list(MAJOR_TICKERS))
         except Exception as e:
             print(f"Homepage cache warm failed: {e}")
 
@@ -138,7 +145,21 @@ market_data_service = MarketDataService()
 report_service = ReportService()
 analysis_service = AnalysisService()
 news_service = NewsService()
-get_info_fetcher(market_data_service=market_data_service, news_service=news_service)
+cached_info_fetcher = get_info_fetcher(
+    market_data_service=market_data_service, news_service=news_service
+)
+
+# Initialize data layer (single entry point for all data access)
+market_source = CachedMarketSource(cached_info_fetcher)
+report_source = ReportDataSource(report_service)
+user_source = UserPortfolioSource()
+edgar_source = EdgarDataSource(get_edgar_service())
+init_data_gateway(
+    market=market_source,
+    reports=report_source,
+    user=user_source,
+    edgar=edgar_source,
+)
 
 # Shared services for routers that need them (tickers, analyses)
 app_services.set_services(report_service, market_data_service, analysis_service)

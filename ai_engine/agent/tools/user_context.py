@@ -66,24 +66,29 @@ def _get_user_context(user_id: int, db: Any) -> str:
     if _backend_dir not in sys.path:
         sys.path.insert(0, os.path.abspath(_backend_dir))
 
-    from models.db_models import User  # type: ignore[import]
-    from services import token_service  # type: ignore[import]
+    try:
+        from data_layer import get_data_gateway
+        return get_data_gateway().get_user_context(user_id, db)
+    except (ImportError, RuntimeError):
+        # Fallback when gateway not initialized (e.g. standalone agent)
+        from models.db_models import User  # type: ignore[import]
+        from services import token_service  # type: ignore[import]
 
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        return "User not found."
-    balance = token_service.get_balance(user_id, db)
-    member_since = user.created_at.strftime("%B %d, %Y") if user.created_at else "Unknown"
-    name_str = f"Name: {user.name}" if user.name else "Name: (not set)"
-    lines = [
-        "# Your FlowDeck Profile",
-        f"Email: {user.email}",
-        name_str,
-        f"Token Balance: {balance:,} tokens",
-        f"Member Since: {member_since}",
-        f"Account Type: {'Admin' if user.is_admin else 'Standard'}",
-    ]
-    return "\n".join(lines)
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return "User not found."
+        balance = token_service.get_balance(user_id, db)
+        member_since = user.created_at.strftime("%B %d, %Y") if user.created_at else "Unknown"
+        name_str = f"Name: {user.name}" if user.name else "Name: (not set)"
+        lines = [
+            "# Your FlowDeck Profile",
+            f"Email: {user.email}",
+            name_str,
+            f"Token Balance: {balance:,} tokens",
+            f"Member Since: {member_since}",
+            f"Account Type: {'Admin' if user.is_admin else 'Standard'}",
+        ]
+        return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -201,8 +206,14 @@ def _get_portfolio_overview(user_id: int, db: Any) -> str:
         sys.path.insert(0, os.path.abspath(_backend_dir))
 
     from models.db_models import Subscription  # type: ignore[import]
-    from services.report_service import ReportService  # type: ignore[import]
     from ai_engine.tradingagents.agents.utils.core_stock_tools import get_ticker_quote
+
+    try:
+        from data_layer import get_data_gateway
+        report_svc = get_data_gateway()
+    except (ImportError, RuntimeError):
+        from services.report_service import ReportService  # type: ignore[import]
+        report_svc = ReportService()
 
     subs = (
         db.query(Subscription)
@@ -212,8 +223,6 @@ def _get_portfolio_overview(user_id: int, db: Any) -> str:
     )
     if not subs:
         return "You have no subscribed stocks. Subscribe to tickers on the platform to build your portfolio."
-
-    svc = ReportService()
     lines = ["# Your Portfolio Overview", ""]
 
     for s in subs:
@@ -229,10 +238,10 @@ def _get_portfolio_overview(user_id: int, db: Any) -> str:
 
         # Latest AI recommendation
         try:
-            latest = svc.get_latest_execution_for_ticker(ticker)
+            latest = report_svc.get_latest_execution_for_ticker(ticker)
             if latest:
                 ar_id, latest_date = latest
-                reports = svc.get_reports_with_scores(ar_id)
+                reports = report_svc.get_reports_with_scores(ar_id)
                 tip = reports.get("trader_investment_plan") or {}
                 ftd = reports.get("final_trade_decision") or {}
                 rec = tip.get("recommendation") or ftd.get("recommendation")
