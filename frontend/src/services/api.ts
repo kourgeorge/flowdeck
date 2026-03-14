@@ -343,6 +343,66 @@ export const tickerApi = {
     return response.data;
   },
 
+  // Get reports for a ticker via /api/data/reports (auth required)
+  getReports: async (
+    ticker: string,
+    date?: string | null
+  ): Promise<{
+    report_run_id: number | null;
+    report_date: string | null;
+    reports: Record<string, { content?: string; score?: number; key_takeaways?: string[]; recommendation?: string; [key: string]: unknown }>;
+  }> => {
+    const token = getStoredToken();
+    const params = date ? { date } : {};
+    const response = await api.get(`/api/data/reports/${ticker.toUpperCase()}`, {
+      params,
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    return response.data;
+  },
+
+  // Batch fetch reports for multiple tickers (auth required)
+  getReportsBatch: async (
+    tickers: string[]
+  ): Promise<{
+    tickers: Record<
+      string,
+      {
+        report_run_id: number | null;
+        report_date: string | null;
+        reports: Record<string, { content?: string; score?: number; key_takeaways?: string[]; recommendation?: string; [key: string]: unknown }>;
+      }
+    >;
+  }> => {
+    const token = getStoredToken();
+    const response = await api.post(
+      '/api/data/reports/batch',
+      { tickers: tickers.map((t) => t.toUpperCase()) },
+      {
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      }
+    );
+    return response.data;
+  },
+
+  // List available report dates for a ticker (auth required)
+  getReportDates: async (ticker: string): Promise<string[]> => {
+    const token = getStoredToken();
+    const response = await api.get<{ ticker: string; dates: string[] }>(
+      `/api/data/reports/${ticker.toUpperCase()}/dates`,
+      {
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      }
+    );
+    return response.data.dates ?? [];
+  },
+
   // Get ticker quote (raw market data via /api/data)
   getQuote: async (ticker: string): Promise<TickerQuote> => {
     const response = await api.get<TickerQuote>(`/api/data/quote/${ticker}`);

@@ -272,7 +272,7 @@ def build_digest_context(
     platform_reports: Dict[str, Dict[str, Any]] = {}
     for t in priority_tickers:
         try:
-            latest = report_svc.get_latest_analysis_run(t)
+            latest = report_svc.get_latest_execution_for_ticker(t)
             if latest:
                 ar_id, _ = latest
                 platform_reports[t] = report_svc.get_reports_with_scores(ar_id)

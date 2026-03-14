@@ -357,17 +357,42 @@ def _get_report_service() -> ReportService:
 @router.get("/reports/{ticker}")
 async def data_reports_ticker(
     ticker: str,
+    date: Optional[str] = Query(
+        None,
+        description="Optional. YYYY-MM-DD or analysis_run_id to fetch a specific run. Omit for latest.",
+    ),
     _current_user=Depends(get_current_user),
 ):
-    """Get latest reports for one ticker. Requires authentication. Returns report_date and reports dict (report_type -> content, score, key_takeaways, etc.)."""
+    """Get reports for one ticker. Requires authentication. Use ?date= to fetch a specific run (YYYY-MM-DD or run_id). Omit for latest."""
     await _ensure_ticker_exists(ticker)
     svc = _get_report_service()
-    latest = await asyncio.to_thread(svc.get_latest_execution_for_ticker, ticker.upper())
-    if not latest:
+    t = ticker.upper()
+    ar_id: Optional[int] = None
+    date_display: str = ""
+    if date and date.strip():
+        resolved = await asyncio.to_thread(svc.get_analysis_run_for_date, t, date.strip())
+        if resolved:
+            ar_id, date_display = resolved
+    if ar_id is None:
+        latest = await asyncio.to_thread(svc.get_latest_execution_for_ticker, t)
+        if latest:
+            ar_id, date_display = latest
+    if ar_id is None:
         return {"report_run_id": None, "report_date": None, "reports": {}}
-    ar_id, date_display = latest
     reports = await asyncio.to_thread(svc.get_reports_with_scores, ar_id)
     return {"report_run_id": ar_id, "report_date": date_display, "reports": reports}
+
+
+@router.get("/reports/{ticker}/dates")
+async def data_reports_ticker_dates(
+    ticker: str,
+    _current_user=Depends(get_current_user),
+):
+    """List available report dates for a ticker (newest first). Requires authentication."""
+    await _ensure_ticker_exists(ticker)
+    svc = _get_report_service()
+    dates = await asyncio.to_thread(svc.list_report_dates, ticker.upper())
+    return {"ticker": ticker.upper(), "dates": dates}
 
 
 @router.post("/reports/batch")

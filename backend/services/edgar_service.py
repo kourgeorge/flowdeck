@@ -10,6 +10,7 @@ structured sections (Risk Factors, MD&A, Competition) for the SEC analyst.
 
 import logging
 import os
+import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -76,6 +77,35 @@ def _truncate(s: str, max_len: int) -> str:
     return s[: max_len - 3].rstrip() + "..."
 
 
+def _strip_xbrl_markup(text: str) -> str:
+    """Remove XBRL/XML namespaced tags (e.g. <xbrli:context>, <ix:nonNumeric>) so narrative text is readable. Leaves HTML like <p>, <div>."""
+    if not text:
+        return ""
+    # Remove tags whose name contains a colon (XML namespaces: xbrli:, ix:, us-gaap:, dei:, etc.)
+    text = re.sub(r"<[^>]*:[^>]*>", "", text)
+    # Collapse repeated whitespace and blank lines
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _skip_to_narrative(text: str) -> str:
+    """Skip SEC header and XBRL hidden block; start at the form title (e.g. UNITED STATES / FORM 10-K) so LLM sees narrative first."""
+    if not text:
+        return text
+    markers = (
+        "UNITED STATES\nSECURITIES AND EXCHANGE COMMISSION",
+        "SECURITIES AND EXCHANGE COMMISSION\nWashington",
+        "FORM 10-K",
+        "ANNUAL REPORT PURSUANT TO SECTION 13",
+    )
+    for marker in markers:
+        idx = text.find(marker)
+        if idx != -1:
+            return text[idx:]
+    return text
+
+
 class EdgarService:
     def __init__(self) -> None:
         self._ticker_map: Optional[Dict[str, Any]] = None
@@ -99,19 +129,22 @@ class EdgarService:
         return {"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml"}
 
     def _fetch_document_text(self, url: str) -> str:
-        """Fetch document at URL, parse HTML to text, truncate. Returns empty string on failure."""
+        """Fetch document at URL, strip XBRL markup, extract text with BeautifulSoup, skip to narrative, truncate. Returns empty string on failure."""
         if not url:
             return ""
         self._throttle()
         try:
             r = requests.get(url, headers=self._get_headers_html(), timeout=30)
             r.raise_for_status()
-            soup = BeautifulSoup(r.text, "html.parser")
-            text = soup.get_text(separator="\n", strip=True)
-            return _truncate(text, MAX_DOCUMENT_TEXT_CHARS)
+            raw = r.text
         except Exception as e:
-            logger.warning("Failed to fetch or parse SEC document %s: %s", url[:80], e)
+            logger.warning("Failed to fetch SEC document %s: %s", url[:80], e)
             return ""
+        raw = _strip_xbrl_markup(raw)
+        soup = BeautifulSoup(raw, "html.parser")
+        text = soup.get_text(separator="\n", strip=True)
+        text = _skip_to_narrative(text)
+        return _truncate(text, MAX_DOCUMENT_TEXT_CHARS)
 
     def _get_extraction_llm(self):
         """Lazy-init LLM for section extraction (Azure or OpenAI from env)."""

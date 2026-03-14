@@ -171,7 +171,7 @@ def _fetch_platform_reports(
         analysis_run_id, date_display = resolved
 
     if analysis_run_id is None:
-        latest = svc.get_latest_analysis_run(ticker)
+        latest = svc.get_latest_execution_for_ticker(ticker)
         if not latest:
             return (
                 f"No AI analysis reports found for **{ticker}** on FlowDeck. "

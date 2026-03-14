@@ -131,7 +131,7 @@ def build_payload(
 
             # Latest report
             try:
-                latest = rs.get_latest_analysis_run(ticker)
+                latest = rs.get_latest_execution_for_ticker(ticker)
                 if latest:
                     ar_id, latest_date = latest
                     entry["report_date"] = latest_date

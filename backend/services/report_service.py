@@ -178,10 +178,6 @@ class ReportService:
         """Return (execution_id, date_display) for the latest ticker run, or None."""
         return self.get_latest_execution("ticker", "ticker", ticker.upper())
 
-    def get_latest_analysis_run(self, ticker: str) -> Optional[tuple[int, str]]:
-        """Alias for get_latest_execution_for_ticker. Return (execution_id, date_display) or None."""
-        return self.get_latest_execution_for_ticker(ticker)
-
     def has_report_for_date(self, ticker: str, date: str) -> bool:
         """date is YYYY-MM-DD; matches any run where date(created_at) = date."""
         db = SessionLocal()

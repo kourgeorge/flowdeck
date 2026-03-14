@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
 
 try:
@@ -226,6 +226,62 @@ def get_market_movers(count: int = 8, base_url: Optional[str] = None) -> Dict[st
     if isinstance(data, dict):
         return data
     return {"gainers": [], "losers": []}
+
+
+def get_reports(
+    ticker: str,
+    date: Optional[str] = None,
+    base_url: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Fetch reports for a ticker from /api/data/reports/{ticker}. Auth required.
+    Returns dict with report_run_id, report_date, reports (or None if not found)."""
+    base_url = base_url or _get_info_service_base_url()
+    if not base_url:
+        return None
+    try:
+        params: Dict[str, str] = {}
+        if date:
+            params["date"] = date
+        path = f"/api/data/reports/{ticker.upper()}"
+        return _get(None, base_url, path, params=params if params else None)
+    except Exception:
+        return None
+
+
+def get_reports_batch(
+    tickers: List[str],
+    base_url: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Fetch latest reports for multiple tickers via POST /api/data/reports/batch.
+    Auth required. Returns {tickers: {ticker: {report_run_id, report_date, reports}}}."""
+    base_url = base_url or _get_info_service_base_url()
+    if not base_url:
+        raise ValueError("Info service URL not configured (set INFO_SERVICE_URL or config info_service_url)")
+    if requests is None:
+        raise RuntimeError("requests is required; install with: pip install requests")
+    ticker_list = [str(t).strip().upper() for t in tickers if t][:50]
+    if not ticker_list:
+        return {"tickers": {}}
+    url = urljoin(base_url.rstrip("/") + "/", "api/data/reports/batch")
+    r = requests.post(url, json={"tickers": ticker_list}, timeout=30)
+    r.raise_for_status()
+    out = r.json()
+    return out if isinstance(out, dict) else {"tickers": {}}
+
+
+def get_report_dates(ticker: str, base_url: Optional[str] = None) -> List[str]:
+    """List report dates for a ticker from /api/data/reports/{ticker}/dates.
+    Auth required. Returns list of date strings (newest first)."""
+    base_url = base_url or _get_info_service_base_url()
+    if not base_url:
+        return []
+    try:
+        data = _get(None, base_url, f"/api/data/reports/{ticker.upper()}/dates")
+        if isinstance(data, dict) and "dates" in data:
+            return data["dates"] or []
+        return []
+    except Exception:
+        return []
 
 
 def is_configured() -> bool:

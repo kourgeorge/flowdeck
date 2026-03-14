@@ -58,7 +58,7 @@ Define all in `ai_engine/daily_digest/state.py`.
 1. Load portfolio tickers from `Subscription` by `user_id`; optionally `get_user_context`. If no tickers, return a minimal context or short-circuit the workflow with a "no portfolio" brief.
 2. Fetch base market data for all portfolio tickers: `get_quotes_batch`, `get_historical` per ticker; compute 1d/5d returns and a simple abnormal-move signal (e.g. |1d return| > 2× recent vol or ±3%).
 3. Rank tickers: lightweight `get_news_batch(tickers, lookback_days=2)` for has_recent_news; score = f(|returns_1d|, |returns_5d|, abnormal_flag, has_recent_news); sort and take top `max_priority_tickers`.
-4. For priority tickers only: fetch news (e.g. 5–7 days), fundamentals/company info (sector/industry), analyst recommendations, insider transactions/sentiment, technical indicators; fetch platform reports via `ReportService.get_latest_analysis_run` + `get_reports_with_scores` (or batch API).
+4. For priority tickers only: fetch news (e.g. 5–7 days), fundamentals/company info (sector/industry), analyst recommendations, insider transactions/sentiment, technical indicators; fetch platform reports via `ReportService.get_latest_execution_for_ticker` + `get_reports_with_scores` (or batch API).
 5. Fetch market context: `get_daily_market_movers`, `get_global_news`; optionally one `web_search` for macro/sector and store a short snippet.
 6. Build sector/peer context: from company info get sector/industry per priority ticker; deterministic peer set (e.g. same sector from portfolio + market movers); `get_quotes_batch(peer_tickers)` for peer moves.
 

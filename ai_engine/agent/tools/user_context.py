@@ -229,7 +229,7 @@ def _get_portfolio_overview(user_id: int, db: Any) -> str:
 
         # Latest AI recommendation
         try:
-            latest = svc.get_latest_analysis_run(ticker)
+            latest = svc.get_latest_execution_for_ticker(ticker)
             if latest:
                 ar_id, latest_date = latest
                 reports = svc.get_reports_with_scores(ar_id)
