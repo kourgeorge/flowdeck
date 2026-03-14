@@ -114,7 +114,7 @@ class ChatMessage(Base):
     role = Column(String(32), nullable=False)  # user | assistant
     content = Column(Text, nullable=False, default="")
     sort_order = Column(Integer, nullable=False, default=0)
-    tokens_used = Column(Integer, nullable=True)
+    model_metadata_json = Column(Text, nullable=True)  # JSON: provider, input_tokens, output_tokens, total_tokens, cost_usd, per_call
     tools_called = Column(Integer, nullable=True)
     tool_calls_json = Column(Text, nullable=True)  # JSON array of {name, input, output}
     skill_events_json = Column(Text, nullable=True)

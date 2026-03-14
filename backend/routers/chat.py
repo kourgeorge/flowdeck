@@ -24,6 +24,15 @@ from services import token_service
 from services.chat_persistence import save_assistant_message, save_user_message, update_session_after_messages
 from services.chat_service import get_chat_service
 
+
+def _build_model_metadata(llm_usage: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Build model_metadata dict from agent llm_usage + provider for storage."""
+    if not llm_usage:
+        return None
+    from ai_engine.llm_provider import get_config_from_env
+    provider = get_config_from_env().get("llm_provider", "openai")
+    return {**llm_usage, "provider": provider}
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Chat"])
@@ -57,8 +66,10 @@ class ChatMessageOut(BaseModel):
     role: str
     content: str
     sort_order: int
-    tokens_used: Optional[int] = None  # LLM token count (stored in DB)
+    tokens_used: Optional[int] = None  # derived from model_metadata.total_tokens
     platform_tokens_used: Optional[int] = None  # tokens deducted from balance (for UI display)
+    model_metadata: Optional[Dict[str, Any]] = None  # provider, input_tokens, output_tokens, total_tokens, cost_usd, per_call
+    cost_usd: Optional[float] = None  # derived from model_metadata.cost_usd (for UI)
     tools_called: Optional[int] = None
     tool_call_events: Optional[List[Dict[str, Any]]] = None
     skill_activation_events: Optional[List[Dict[str, Any]]] = None
@@ -118,15 +129,28 @@ def _message_to_out(m: ChatMessage) -> ChatMessageOut:
             follow_up_questions = json.loads(m.follow_up_questions_json)
         except Exception as e:
             logger.warning("Failed to parse follow_up_questions_json for message id=%s: %s", getattr(m, "id", None), e)
+    model_metadata = None
+    tokens_used = None
     platform_tokens_used = None
-    if m.tokens_used is not None:
-        platform_tokens_used = token_service.llm_tokens_to_platform_tokens(m.tokens_used)
+    cost_usd = None
+    if getattr(m, "model_metadata_json", None):
+        try:
+            model_metadata = json.loads(m.model_metadata_json)
+            total = model_metadata.get("total_tokens")
+            if total is not None:
+                tokens_used = int(total)
+                platform_tokens_used = token_service.llm_tokens_to_platform_tokens(tokens_used)
+            cost_usd = model_metadata.get("cost_usd")
+        except Exception as e:
+            logger.warning("Failed to parse model_metadata_json for message id=%s: %s", getattr(m, "id", None), e)
     return ChatMessageOut(
         role=m.role,
         content=m.content or "",
         sort_order=m.sort_order,
-        tokens_used=m.tokens_used,
+        tokens_used=tokens_used,
         platform_tokens_used=platform_tokens_used,
+        model_metadata=model_metadata,
+        cost_usd=cost_usd,
         tools_called=m.tools_called,
         tool_call_events=tool_call_events,
         skill_activation_events=skill_activation_events,
@@ -155,6 +179,7 @@ def _persist_turn_on_done(
     acc_skill_events: List[Dict[str, Any]],
     acc_charts: List[Dict[str, Any]],
     tokens_used: int,
+    model_metadata: Optional[Dict[str, Any]] = None,
     tools_called: Optional[int] = None,
     follow_up_questions: Optional[List[str]] = None,
 ) -> Optional[int]:
@@ -184,7 +209,7 @@ def _persist_turn_on_done(
             sid,
             assistant_content,
             base_order + len(body_messages),
-            tokens_used=tokens_used,
+            model_metadata=model_metadata,
             tools_called=tools_called,
             tool_calls=acc_tool_calls if acc_tool_calls else None,
             skill_events=acc_skill_events if acc_skill_events else None,
@@ -361,7 +386,7 @@ async def chat(
                 sid,
                 reply,
                 base_order + len(body.messages),
-                tokens_used=tokens_used,
+                model_metadata=_build_model_metadata(result.get("llm_usage")),
                 tools_called=result.get("tools_called"),
                 follow_up_questions=follow_up_questions,
             )
@@ -511,6 +536,7 @@ async def chat_stream(
                         acc_skill_events,
                         acc_charts,
                         tokens_used,
+                        model_metadata=_build_model_metadata(payload.get("llm_usage")),
                         tools_called=payload.get("tools_called"),
                         follow_up_questions=payload.get("follow_up_questions"),
                     )
@@ -580,6 +606,7 @@ async def chat_stream(
                                 acc_skill_events,
                                 acc_charts,
                                 tokens_used_val,
+                                model_metadata=_build_model_metadata(payload.get("llm_usage")),
                                 tools_called=payload.get("tools_called"),
                                 follow_up_questions=payload.get("follow_up_questions"),
                             )

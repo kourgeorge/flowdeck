@@ -957,6 +957,17 @@ export interface ChatSessionListItem {
   updated_at: string;
 }
 
+/** Model metadata stored per assistant message (provider, tokens, cost) */
+export interface ModelMetadataApi {
+  provider?: string;
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
+  cost_usd?: number;
+  calls?: number;
+  per_call?: Array<{ model?: string; input_tokens?: number; output_tokens?: number; cost_usd?: number }>;
+}
+
 /** Message as returned from GET /api/chat/sessions/:id (with meta) */
 export interface ChatMessageWithMetaApi {
   role: string;
@@ -965,6 +976,8 @@ export interface ChatMessageWithMetaApi {
   tokens_used?: number | null;
   /** Platform tokens deducted (show this in the UI) */
   platform_tokens_used?: number | null;
+  /** LLM provider, token counts, cost (from DB) */
+  model_metadata?: ModelMetadataApi | null;
   tools_called?: number | null;
   tool_call_events?: ToolCallEvent[] | null;
   skill_activation_events?: SkillActivationEvent[] | null;

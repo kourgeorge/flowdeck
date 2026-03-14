@@ -11,6 +11,7 @@ function apiMessageToChatMessageWithMeta(m: ChatMessageWithMetaApi): ChatMessage
     content: m.content,
     tokens_used: m.tokens_used ?? undefined,
     platform_tokens_used: m.platform_tokens_used ?? undefined,
+    model_metadata: m.model_metadata ?? undefined,
     cost_usd: m.cost_usd ?? undefined,
     tools_called: m.tools_called ?? undefined,
     tool_call_events: m.tool_call_events ?? undefined,

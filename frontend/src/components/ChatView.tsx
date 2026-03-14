@@ -5,7 +5,7 @@ import {
   AreaChart, Area, BarChart, Bar, LineChart, Line, ScatterChart, Scatter,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { chatApi, type ChatMessage, type ToolCallEvent, type ChartSpec, type SkillActivationEvent } from '../services/api';
+import { chatApi, type ChatMessage, type ModelMetadataApi, type ToolCallEvent, type ChartSpec, type SkillActivationEvent } from '../services/api';
 import { convertAsciiTableToMarkdown } from '../utils/chatMarkdown';
 import TickerMentionInput from './TickerMentionInput';
 
@@ -323,6 +323,8 @@ export type ChatMessageWithMeta = ChatMessage & {
   tokens_used?: number;
   /** Platform tokens deducted (prefer this for display) */
   platform_tokens_used?: number;
+  /** LLM provider, tokens, cost (from API/DB) */
+  model_metadata?: ModelMetadataApi;
   cost_usd?: number;
   tools_called?: number;
   tool_call_events?: ToolCallEvent[];

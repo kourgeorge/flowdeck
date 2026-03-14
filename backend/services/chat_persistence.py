@@ -1,14 +1,14 @@
 """
 Persistence for chat sessions and messages.
 
-Saves user and assistant messages with metadata (tokens_used, tool_calls, etc.)
+Saves user and assistant messages with metadata (model_metadata, tool_calls, etc.)
 and updates session updated_at / title.
 """
 
 import json
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -44,7 +44,7 @@ def save_assistant_message(
     content: str,
     sort_order: int,
     *,
-    tokens_used: Optional[int] = None,
+    model_metadata: Optional[Dict[str, Any]] = None,
     tools_called: Optional[int] = None,
     tool_calls: Optional[List[dict]] = None,
     skill_events: Optional[List[dict]] = None,
@@ -57,7 +57,7 @@ def save_assistant_message(
         role="assistant",
         content=content or "",
         sort_order=sort_order,
-        tokens_used=tokens_used,
+        model_metadata_json=json.dumps(model_metadata) if model_metadata else None,
         tools_called=tools_called,
         tool_calls_json=json.dumps(tool_calls) if tool_calls else None,
         skill_events_json=json.dumps(skill_events) if skill_events else None,
