@@ -38,6 +38,7 @@ export default function DashboardPage() {
   const [showDigestHistory, setShowDigestHistory] = useState<boolean>(false);
   const [showRawDigest, setShowRawDigest] = useState<boolean>(false);
   const [digestInputExpanded, setDigestInputExpanded] = useState<boolean>(false);
+  const [shareLinkCopied, setShareLinkCopied] = useState<boolean>(false);
 
   const {
     widgets,
@@ -247,6 +248,14 @@ export default function DashboardPage() {
       navigator.clipboard.writeText(text).catch(() => {
         // best-effort; ignore copy failures
       });
+    }
+  };
+
+  const handleCopyShareLink = (shareUrl: string) => {
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(shareUrl);
+      setShareLinkCopied(true);
+      setTimeout(() => setShareLinkCopied(false), 2000);
     }
   };
 
@@ -750,6 +759,25 @@ export default function DashboardPage() {
                                 </svg>
                                 Copy brief
                               </button>
+                              {selectedBrief.share_url && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyShareLink(selectedBrief.share_url!)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium rounded border border-gray-500 text-gray-300 hover:bg-gray-800/80"
+                                  title="Copy link — anyone can view this brief without signing in"
+                                >
+                                  {shareLinkCopied ? (
+                                    <span className="text-green-400">Link copied!</span>
+                                  ) : (
+                                    <>
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                      </svg>
+                                      Copy share link
+                                    </>
+                                  )}
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => setShowRawDigest((v) => !v)}
@@ -885,6 +913,25 @@ export default function DashboardPage() {
                             </svg>
                             Copy brief
                           </button>
+                          {digest.share_url && (
+                            <button
+                              type="button"
+                              onClick={() => handleCopyShareLink(digest.share_url!)}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium rounded border border-gray-500 text-gray-300 hover:bg-gray-800/80"
+                              title="Copy link — anyone can view this brief without signing in"
+                            >
+                              {shareLinkCopied ? (
+                                <span className="text-green-400">Link copied!</span>
+                              ) : (
+                                <>
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                  </svg>
+                                  Copy share link
+                                </>
+                              )}
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => setShowRawDigest((v) => !v)}

@@ -14,6 +14,7 @@ from database import get_db
 from services import token_service
 from services.digest_service import get_digest_dates as svc_get_digest_dates, get_digests_for_date as svc_get_digests_for_date
 from services.report_service import save_report
+from services.share_service import get_share_url
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ class DigestResponse(BaseModel):
     narrative_style: Optional[str] = None
     user_focus_tickers: Optional[list[str]] = None
     raw_metadata: Optional[dict] = None
+    share_url: Optional[str] = None
 
 
 class DigestDatesResponse(BaseModel):
@@ -53,6 +55,7 @@ class DigestBriefItem(BaseModel):
     user_focus_tickers: Optional[list[str]] = None
     references: Optional[list[dict]] = None
     raw_metadata: Optional[dict] = None
+    share_url: Optional[str] = None
 
 
 class DigestListForDateResponse(BaseModel):
@@ -196,6 +199,7 @@ async def get_digest(
             e,
         )
 
+    share_url = get_share_url(execution_id) if execution_id else None
     return DigestResponse(
         narrative=result.narrative,
         what_to_watch=result.what_to_watch,
@@ -208,6 +212,7 @@ async def get_digest(
         narrative_style=narrative_style,
         user_focus_tickers=user_focus_tickers,
         raw_metadata=metadata,
+        share_url=share_url,
     )
 
 
@@ -234,6 +239,7 @@ def _validate_slot(slot: str) -> None:
 
 def _brief_item_to_response(b) -> DigestBriefItem:
     """Map service DigestBriefItem to Pydantic DigestBriefItem."""
+    share_url = get_share_url(b.execution_id)
     return DigestBriefItem(
         execution_id=b.execution_id,
         created_at=b.created_at,
@@ -248,6 +254,7 @@ def _brief_item_to_response(b) -> DigestBriefItem:
         user_focus_tickers=b.user_focus_tickers,
         references=b.references,
         raw_metadata=b.raw_metadata,
+        share_url=share_url,
     )
 
 

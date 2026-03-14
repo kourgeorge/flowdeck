@@ -381,7 +381,7 @@ async def data_reports_ticker(
     if ar_id is None:
         return {"report_run_id": None, "report_date": None, "reports": {}, "share_url": None}
     reports = await asyncio.to_thread(svc.get_reports_with_scores, ar_id)
-    share_url = get_share_url(t, ar_id)
+    share_url = get_share_url(ar_id)
     return {"report_run_id": ar_id, "report_date": date_display, "reports": reports, "share_url": share_url}
 
 
@@ -415,6 +415,6 @@ async def data_reports_batch(
         else:
             ar_id, date_display = latest
             reports = await asyncio.to_thread(svc.get_reports_with_scores, ar_id)
-            share_url = get_share_url(t, ar_id)
+            share_url = get_share_url(ar_id)
             result[t] = {"report_run_id": ar_id, "report_date": date_display, "reports": reports, "share_url": share_url}
     return {"tickers": result}

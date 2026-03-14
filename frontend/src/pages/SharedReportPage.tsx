@@ -2,21 +2,32 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import ReportTabs from '../components/ReportTabs';
 import ReportViewer from '../components/ReportViewer';
+import AspectSpiderChart, { getAnalysisScoreEntries } from '../components/AspectSpiderChart';
+import ReturnScenarioBar from '../components/ReturnScenarioBar';
 import { API_BASE_URL } from '../services/api';
+import { LOGO_PATH } from '../config';
+import { parseReportDate } from '../utils/date';
 
 const REPORT_ORDER = [
   'market_report', 'sentiment_report', 'news_report', 'technical_report',
   'fundamentals_report', 'sec_report', 'investment_plan', 'trader_investment_plan', 'final_trade_decision',
 ];
 
-interface SharedReportData {
+interface SharedTickerReport {
+  type: 'ticker';
   ticker: string;
+  company_name?: string | null;
   execution_id: number;
   report_date: string | null;
   reports: Record<string, {
     content?: string | null;
     score?: number | null;
     score_label?: string | null;
+    recommendation?: string | null;
+    confidence?: number | null;
+    expected_return_pct?: number | null;
+    bear_case_return_pct?: number | null;
+    bull_case_return_pct?: number | null;
     key_takeaways?: string[];
     bull_viewpoint?: string[] | null;
     bear_viewpoint?: string[] | null;
@@ -27,6 +38,20 @@ interface SharedReportData {
     [key: string]: unknown;
   }>;
 }
+
+interface SharedDigestReport {
+  type: 'digest';
+  execution_id: number;
+  narrative: string;
+  what_to_watch: string;
+  digest_date: string;
+  span_type: string;
+  span_label: string;
+  priority_tickers: string[];
+  references?: unknown[] | null;
+}
+
+type SharedReportData = SharedTickerReport | SharedDigestReport;
 
 export default function SharedReportPage() {
   const { token } = useParams<{ token: string }>();
@@ -52,18 +77,20 @@ export default function SharedReportPage() {
       })
       .then((json: SharedReportData) => {
         setData(json);
-        const keys = Object.keys(json.reports || {});
-        const sorted = [...keys].sort((a, b) => {
-          const idxA = REPORT_ORDER.indexOf(a);
-          const idxB = REPORT_ORDER.indexOf(b);
-          if (idxA === -1 && idxB === -1) return a.localeCompare(b);
-          if (idxA === -1) return 1;
-          if (idxB === -1) return -1;
-          return idxA - idxB;
-        });
-        setSelectedReport(
-          sorted.includes('final_trade_decision') ? 'final_trade_decision' : sorted[0] ?? null
-        );
+        if (json.type === 'ticker' && json.reports) {
+          const keys = Object.keys(json.reports);
+          const sorted = [...keys].sort((a, b) => {
+            const idxA = REPORT_ORDER.indexOf(a);
+            const idxB = REPORT_ORDER.indexOf(b);
+            if (idxA === -1 && idxB === -1) return a.localeCompare(b);
+            if (idxA === -1) return 1;
+            if (idxB === -1) return -1;
+            return idxA - idxB;
+          });
+          setSelectedReport(
+            sorted.includes('final_trade_decision') ? 'final_trade_decision' : sorted[0] ?? null
+          );
+        }
       })
       .catch((e: Error) => setError(e.message || 'Invalid or expired link'))
       .finally(() => setLoading(false));
@@ -88,6 +115,67 @@ export default function SharedReportPage() {
     );
   }
 
+  if (data.type === 'digest') {
+    return (
+      <div className="min-h-screen bg-gray-900 text-gray-100">
+        <header className="border-b border-gray-700 bg-gray-800/80 px-4 py-4">
+          <div className="max-w-4xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <Link to="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
+              <img src={LOGO_PATH} alt="" className="w-10 h-10 sm:w-12 sm:h-12 object-contain shrink-0" />
+              <span className="text-xl font-bold text-white tracking-wide">Flowdeck</span>
+            </Link>
+            <span className="text-gray-400 text-sm">
+              Shared brief · {data.span_label !== 'Daily' ? `${data.span_label} · ` : ''}{data.digest_date}
+            </span>
+          </div>
+        </header>
+        <main className="max-w-4xl mx-auto px-4 py-6">
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 sm:p-6">
+            <h1 className="text-lg font-semibold text-white mb-1">
+              User Daily Brief
+              {data.digest_date && (
+                <span className="text-gray-400 font-normal ml-2">{data.digest_date}</span>
+              )}
+            </h1>
+            {data.priority_tickers?.length > 0 && (
+              <p className="text-sm text-gray-400 mb-4">
+                Focus: {data.priority_tickers.join(', ')}
+              </p>
+            )}
+            <div className="prose prose-invert prose-sm max-w-none">
+              <p className="text-gray-200 whitespace-pre-wrap leading-relaxed">{data.narrative}</p>
+            </div>
+            {data.what_to_watch && (
+              <div className="mt-6 pt-4 border-t border-gray-700">
+                <h2 className="text-sm font-semibold text-white mb-2">What to watch</h2>
+                <p className="text-gray-300 text-sm whitespace-pre-wrap">{data.what_to_watch}</p>
+              </div>
+            )}
+            {data.references && data.references.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-700">
+                <h2 className="text-sm font-semibold text-white mb-2">References</h2>
+                <ul className="text-sm text-gray-400 space-y-1">
+                  {data.references.map((ref: unknown, idx: number) => {
+                    const r = ref as { label?: string; url?: string };
+                    return (
+                      <li key={idx}>
+                        {r.label}
+                        {r.url && <span className="ml-1">· {r.url}</span>}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-gray-500 mt-4 text-center">
+            For informational purposes only. Not investment advice.
+          </p>
+        </main>
+      </div>
+    );
+  }
+
   const reports = data.reports || {};
   const availableReports = Object.keys(reports).sort((a, b) => {
     const idxA = REPORT_ORDER.indexOf(a);
@@ -103,12 +191,28 @@ export default function SharedReportPage() {
     reportScores[k] = { score: v.score ?? null, score_label: v.score_label ?? null };
   });
 
+  const ftd = reports.final_trade_decision;
+  const tip = reports.trader_investment_plan;
+  const plan = reports.investment_plan;
+  const recommendation = (ftd?.recommendation ?? tip?.recommendation) ?? null;
+  const confidence = (ftd?.confidence ?? tip?.confidence) ?? null;
+  const normalizedConfidence = confidence != null && confidence <= 1 ? confidence : (confidence != null ? confidence / 10 : null);
+  const expectedPct = plan?.expected_return_pct ?? null;
+  const bearPct = plan?.bear_case_return_pct ?? null;
+  const bullPct = plan?.bull_case_return_pct ?? null;
+  const hasReturnScenarios = expectedPct != null || bearPct != null || bullPct != null;
+  const summaryScoreEntries = getAnalysisScoreEntries(reportScores);
+  const reportDateFormatted = data.report_date
+    ? parseReportDate(data.report_date)?.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) ?? data.report_date
+    : null;
+
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100">
-      <header className="border-b border-gray-700 bg-gray-800/80 px-4 py-3">
-        <div className="max-w-4xl mx-auto flex flex-wrap items-center justify-between gap-2">
-          <Link to="/" className="text-lg font-semibold text-white hover:text-blue-400 transition-colors">
-            Flowdeck
+      <header className="border-b border-gray-700 bg-gray-800/80 px-4 py-4">
+        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <Link to="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
+            <img src={LOGO_PATH} alt="" className="w-10 h-10 sm:w-12 sm:h-12 object-contain shrink-0" />
+            <span className="text-xl font-bold text-white tracking-wide">Flowdeck</span>
           </Link>
           <span className="text-gray-400 text-sm">
             Shared report · {data.ticker}
@@ -116,7 +220,42 @@ export default function SharedReportPage() {
           </span>
         </div>
       </header>
-      <main className="max-w-4xl mx-auto px-4 py-6">
+      <main className="max-w-4xl mx-auto px-4 py-6 space-y-4">
+        {/* AI analysis header (gradient block with company, date, radar, decision, return scenarios) */}
+        <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 rounded-lg border border-blue-700/50 p-5">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div className="flex-1">
+              <h2 className="text-lg font-semibold text-white mb-1">
+                {data.company_name || data.ticker}
+                <span className="text-gray-400 font-normal ml-2">({data.ticker})</span>
+              </h2>
+              <div className="text-sm text-gray-400 mb-0.5">Last Analysis Date</div>
+              <div className="text-lg font-semibold text-white">
+                {reportDateFormatted ?? data.report_date ?? 'N/A'}
+              </div>
+            </div>
+            <div className="flex items-center gap-4 shrink-0">
+              {summaryScoreEntries.length >= 3 && (
+                <AspectSpiderChart scoreEntries={summaryScoreEntries} size={80} />
+              )}
+              <div className="text-right">
+                <div className="text-sm text-gray-400 mb-0.5">AI Decision</div>
+                <div className={`text-2xl font-bold ${recommendation === 'BUY' ? 'text-green-400' : recommendation === 'SELL' ? 'text-red-400' : recommendation === 'HOLD' ? 'text-yellow-400' : 'text-white'}`}>
+                  {recommendation ?? 'N/A'}
+                </div>
+                {normalizedConfidence != null && (
+                  <div className="text-sm text-gray-400 mt-0.5">Confidence: {(normalizedConfidence * 100).toFixed(0)}%</div>
+                )}
+              </div>
+            </div>
+          </div>
+          {hasReturnScenarios && (
+            <div className="mt-3 pt-3 border-t border-gray-600/50">
+              <ReturnScenarioBar expected={expectedPct} bear={bearPct} bull={bullPct} compact />
+            </div>
+          )}
+        </div>
+
         <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
           <ReportTabs
             availableReports={availableReports}
@@ -140,6 +279,7 @@ export default function SharedReportPage() {
             />
           </div>
         </div>
+
         <p className="text-xs text-gray-500 mt-4 text-center">
           For informational purposes only. Not investment advice.
         </p>

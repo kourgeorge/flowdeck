@@ -806,6 +806,7 @@ export interface DigestResponse {
     source?: string | null;
     tickers?: string[] | null;
   }[] | null;
+  share_url?: string | null;
 }
 
 export interface DigestDatesResponse {
@@ -827,6 +828,7 @@ export interface DigestBriefItem {
   user_focus_tickers?: string[] | null;
   references?: { label: string; url?: string | null; source?: string | null; tickers?: string[] | null }[] | null;
   raw_metadata?: Record<string, unknown> | null;
+  share_url?: string | null;
 }
 
 export interface DigestListForDateResponse {

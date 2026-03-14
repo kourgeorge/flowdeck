@@ -278,7 +278,7 @@ def build_digest_context(
             if latest:
                 ar_id, _ = latest
                 platform_reports[t] = report_svc.get_reports_with_scores(ar_id)
-                url = get_share_url(t, ar_id)
+                url = get_share_url(ar_id)
                 if url:
                     share_urls[t] = url
             else:

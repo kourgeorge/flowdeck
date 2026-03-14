@@ -307,7 +307,7 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
     bear_case_return_pct = investment_plan_meta.get("bear_case_return_pct")
     bull_case_return_pct = investment_plan_meta.get("bull_case_return_pct")
 
-    share_url = get_share_url(ticker, latest_analysis_run_id) if latest_analysis_run_id else None
+    share_url = get_share_url(latest_analysis_run_id) if latest_analysis_run_id else None
 
     return TickerPageData(
         ticker=ticker,
