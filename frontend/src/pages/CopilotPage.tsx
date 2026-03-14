@@ -18,14 +18,22 @@ function getInitialSidebarCollapsed(): boolean {
   return !window.matchMedia('(min-width: 768px)').matches;
 }
 
+const SIDEBAR_WIDTH_MIN = 180;
+const SIDEBAR_WIDTH_MAX = 480;
+const SIDEBAR_WIDTH_DEFAULT = 256; // w-64
+
 export default function CopilotPage() {
   const { user } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarCollapsed);
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_WIDTH_DEFAULT);
   const [chatCollapsed, setChatCollapsed] = useState(false);
   const [chatWidth, setChatWidth] = useState(384); // default w-96
   const isResizing = useRef(false);
   const startX = useRef(0);
   const startWidth = useRef(0);
+  const isSidebarResizing = useRef(false);
+  const startSidebarX = useRef(0);
+  const startSidebarWidth = useRef(0);
 
   const {
     widgets,
@@ -103,6 +111,32 @@ export default function CopilotPage() {
     window.addEventListener('mouseup', onMouseUp);
   }, [chatWidth]);
 
+  const onSidebarResizeStart = useCallback((e: React.MouseEvent) => {
+    isSidebarResizing.current = true;
+    startSidebarX.current = e.clientX;
+    startSidebarWidth.current = sidebarWidth;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isSidebarResizing.current) return;
+      const delta = ev.clientX - startSidebarX.current;
+      const newWidth = Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, startSidebarWidth.current + delta));
+      setSidebarWidth(newWidth);
+    };
+
+    const onMouseUp = () => {
+      isSidebarResizing.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [sidebarWidth]);
+
   // ── Not logged in ──
   if (!user) {
     return (
@@ -173,40 +207,60 @@ export default function CopilotPage() {
       {/* ── Three-column layout (desktop) ── */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
-        {/* ── Left: Ticker Sidebar ── */}
+        {/* ── Tickers pane: collapse chevron next to title, resizable ── */}
         <aside
-          className={`shrink-0 border-r border-gray-700 bg-gray-800/50 hidden md:flex flex-row min-h-0 transition-all duration-200 ${
-            sidebarCollapsed ? 'w-4' : 'w-64'
-          }`}
+          className="shrink-0 border-r border-gray-700 bg-gray-800/50 hidden md:flex flex-col min-h-0"
+          style={{ width: sidebarCollapsed ? 32 : sidebarWidth }}
         >
-          {!sidebarCollapsed && (
-            <div className="flex-1 min-w-0 min-h-0 overflow-y-auto">
-              <DashboardTickerSidebar
-                subscribedWidgets={widgets}
-                recentWidgets={[]}
-                tickerToName={tickerToName}
-                selectedTicker={selectedTicker}
-                onSelect={setSelectedTicker}
-                onAdd={addTicker}
-                onRemove={removeTicker}
-              />
+          {sidebarCollapsed ? (
+            <div className="flex flex-col items-center w-8 py-3 flex-1">
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed(false)}
+                title="Expand tickers"
+                className="flex items-center justify-center w-6 h-6 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
             </div>
+          ) : (
+            <>
+              <div className="shrink-0 flex items-center gap-2 border-b border-gray-700 bg-gray-800/80 px-2 py-2">
+                <button
+                  type="button"
+                  onClick={() => setSidebarCollapsed(true)}
+                  title="Collapse tickers"
+                  className="flex items-center justify-center w-6 h-6 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded transition-colors shrink-0"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <span className="text-sm font-medium text-yellow-400 truncate">Focus tickers</span>
+              </div>
+              <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+                <DashboardTickerSidebar
+                  subscribedWidgets={widgets}
+                  recentWidgets={[]}
+                  tickerToName={tickerToName}
+                  selectedTicker={selectedTicker}
+                  onSelect={setSelectedTicker}
+                  onAdd={addTicker}
+                  onRemove={removeTicker}
+                />
+              </div>
+            </>
           )}
-          {/* Collapse toggle strip */}
-          <button
-            type="button"
-            onClick={() => setSidebarCollapsed((c) => !c)}
-            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="shrink-0 flex items-center justify-center w-4 self-stretch border-l border-gray-700 text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors"
-          >
-            <svg
-              className={`w-3.5 h-3.5 transition-transform duration-200 ${sidebarCollapsed ? 'rotate-180' : ''}`}
-              fill="none" stroke="currentColor" viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
         </aside>
+        {!sidebarCollapsed && (
+          <div
+            onMouseDown={onSidebarResizeStart}
+            className="hidden md:block shrink-0 w-1 self-stretch cursor-col-resize bg-gray-700 hover:bg-blue-500 transition-colors"
+            title="Drag to resize tickers pane"
+          />
+        )}
 
         {/* ── Middle: Stock Detail Panel ── */}
         <main className="flex-1 min-w-0 min-h-0 bg-gray-900 hidden md:flex flex-col">
@@ -269,7 +323,7 @@ export default function CopilotPage() {
               onClick={() => setSidebarCollapsed((c) => !c)}
               className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-gray-300 hover:text-white bg-blue-900/20 hover:bg-blue-800/30 transition-colors"
             >
-              <span className="font-medium">Focus Tickers</span>
+              <span className="font-medium text-yellow-400">Focus tickers</span>
               <svg
                 className={`w-4 h-4 transition-transform duration-200 ${sidebarCollapsed ? '' : 'rotate-180'}`}
                 fill="none" stroke="currentColor" viewBox="0 0 24 24"

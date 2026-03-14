@@ -298,9 +298,11 @@ export default function DashboardTickerSidebar({
 
   if (!hasSubscribed && !hasRecent) {
     return (
-      <div className="flex flex-col">
-        <SidebarTickerSearch onSelect={handleSearchSelect} />
-        <div className="p-4 text-center text-gray-500 text-sm">
+      <div className="flex flex-col min-h-0">
+        <div className="shrink-0">
+          <SidebarTickerSearch onSelect={handleSearchSelect} />
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 text-center text-gray-500 text-sm">
           No tickers yet. Search above to add tickers.
         </div>
       </div>
@@ -308,40 +310,41 @@ export default function DashboardTickerSidebar({
   }
 
   return (
-    <div className="flex flex-col min-h-0 overflow-y-auto">
-      <SidebarTickerSearch onSelect={handleSearchSelect} />
-      {hasSubscribed && (
-        <div>
-          <div className="px-3 py-2 text-xs font-semibold text-amber-400/80 uppercase tracking-wider bg-gray-800/60 border-b border-gray-700 sticky top-0 z-10">
-            Tickers
+    <div className="flex flex-col min-h-0">
+      <div className="shrink-0">
+        <SidebarTickerSearch onSelect={handleSearchSelect} />
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        {hasSubscribed && (
+          <div>
+            {subscribedItems.map((item) => (
+              <SidebarRow
+                key={item.ticker}
+                item={item}
+                isSelected={selectedTicker === item.ticker}
+                onSelect={onSelect}
+                onRemove={onRemove}
+              />
+            ))}
           </div>
-          {subscribedItems.map((item) => (
-            <SidebarRow
-              key={item.ticker}
-              item={item}
-              isSelected={selectedTicker === item.ticker}
-              onSelect={onSelect}
-              onRemove={onRemove}
-            />
-          ))}
-        </div>
-      )}
-      {hasRecent && (
-        <div>
-          <div className="px-3 py-2 text-xs font-semibold text-blue-400/80 uppercase tracking-wider bg-gray-800/60 border-b border-gray-700 sticky top-0 z-10">
-            Recently Analyzed
+        )}
+        {hasRecent && (
+          <div>
+            <div className="px-3 py-2 text-xs font-semibold text-blue-400/80 uppercase tracking-wider bg-gray-800/60 border-b border-gray-700 sticky top-0 z-10">
+              Recently Analyzed
+            </div>
+            {recentItems.map((item) => (
+              <SidebarRow
+                key={item.ticker}
+                item={item}
+                isSelected={selectedTicker === item.ticker}
+                onSelect={onSelect}
+                onRemove={onRemove}
+              />
+            ))}
           </div>
-          {recentItems.map((item) => (
-            <SidebarRow
-              key={item.ticker}
-              item={item}
-              isSelected={selectedTicker === item.ticker}
-              onSelect={onSelect}
-              onRemove={onRemove}
-            />
-          ))}
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
