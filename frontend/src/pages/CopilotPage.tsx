@@ -85,20 +85,22 @@ export default function CopilotPage() {
   // Lift chat state to parent component so it persists across tab switches in mobile mode
   const chatState = useChatState(undefined, context, sessionId, onStreamDone, createSessionIfNeeded);
 
-  const onResizeStart = useCallback((e: React.MouseEvent) => {
+  const startChatResize = useCallback((clientX: number) => {
     isResizing.current = true;
-    startX.current = e.clientX;
+    startX.current = clientX;
     startWidth.current = chatWidth;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
+  }, [chatWidth]);
 
+  const onResizeStart = useCallback((e: React.MouseEvent) => {
+    startChatResize(e.clientX);
     const onMouseMove = (ev: MouseEvent) => {
       if (!isResizing.current) return;
       const delta = startX.current - ev.clientX; // dragging left increases width
       const newWidth = Math.min(800, Math.max(240, startWidth.current + delta));
       setChatWidth(newWidth);
     };
-
     const onMouseUp = () => {
       isResizing.current = false;
       document.body.style.cursor = '';
@@ -106,25 +108,45 @@ export default function CopilotPage() {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
-
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
-  }, [chatWidth]);
+  }, [startChatResize]);
 
-  const onSidebarResizeStart = useCallback((e: React.MouseEvent) => {
+  const onResizeStartTouch = useCallback((e: React.TouchEvent) => {
+    startChatResize(e.touches[0].clientX);
+    const onTouchMove = (ev: TouchEvent) => {
+      if (!isResizing.current) return;
+      ev.preventDefault();
+      const delta = startX.current - ev.touches[0].clientX;
+      const newWidth = Math.min(800, Math.max(240, startWidth.current + delta));
+      setChatWidth(newWidth);
+    };
+    const onTouchEnd = () => {
+      isResizing.current = false;
+      document.body.style.userSelect = '';
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+    };
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd);
+  }, [startChatResize]);
+
+  const startSidebarResize = useCallback((clientX: number) => {
     isSidebarResizing.current = true;
-    startSidebarX.current = e.clientX;
+    startSidebarX.current = clientX;
     startSidebarWidth.current = sidebarWidth;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
+  }, [sidebarWidth]);
 
+  const onSidebarResizeStart = useCallback((e: React.MouseEvent) => {
+    startSidebarResize(e.clientX);
     const onMouseMove = (ev: MouseEvent) => {
       if (!isSidebarResizing.current) return;
       const delta = ev.clientX - startSidebarX.current;
       const newWidth = Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, startSidebarWidth.current + delta));
       setSidebarWidth(newWidth);
     };
-
     const onMouseUp = () => {
       isSidebarResizing.current = false;
       document.body.style.cursor = '';
@@ -132,10 +154,28 @@ export default function CopilotPage() {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
-
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
-  }, [sidebarWidth]);
+  }, [startSidebarResize]);
+
+  const onSidebarResizeStartTouch = useCallback((e: React.TouchEvent) => {
+    startSidebarResize(e.touches[0].clientX);
+    const onTouchMove = (ev: TouchEvent) => {
+      if (!isSidebarResizing.current) return;
+      ev.preventDefault();
+      const delta = ev.touches[0].clientX - startSidebarX.current;
+      const newWidth = Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, startSidebarWidth.current + delta));
+      setSidebarWidth(newWidth);
+    };
+    const onTouchEnd = () => {
+      isSidebarResizing.current = false;
+      document.body.style.userSelect = '';
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+    };
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd);
+  }, [startSidebarResize]);
 
   // ── Not logged in ──
   if (!user) {
@@ -256,8 +296,11 @@ export default function CopilotPage() {
         </aside>
         {!sidebarCollapsed && (
           <div
+            role="separator"
+            aria-orientation="vertical"
             onMouseDown={onSidebarResizeStart}
-            className="hidden md:block shrink-0 w-1 self-stretch cursor-col-resize bg-gray-700 hover:bg-blue-500 transition-colors"
+            onTouchStart={onSidebarResizeStartTouch}
+            className="hidden md:block shrink-0 w-1 self-stretch cursor-col-resize bg-gray-700 hover:bg-blue-500 transition-colors touch-none"
             title="Drag to resize tickers pane"
           />
         )}
@@ -295,8 +338,11 @@ export default function CopilotPage() {
           {/* Resize handle */}
           {!chatCollapsed && (
             <div
+              role="separator"
+              aria-orientation="vertical"
               onMouseDown={onResizeStart}
-              className="shrink-0 w-1 self-stretch cursor-col-resize bg-gray-700 hover:bg-blue-500 transition-colors"
+              onTouchStart={onResizeStartTouch}
+              className="shrink-0 w-1 self-stretch cursor-col-resize bg-gray-700 hover:bg-blue-500 transition-colors touch-none"
               title="Drag to resize chat panel"
             />
           )}
