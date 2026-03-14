@@ -371,7 +371,7 @@ def get_running_analyses_list(
     items = list_running_analyses("ticker")
     return [
         RunningAnalysisItem(
-            analysis_run_id=it.get("analysis_run_id") or it.get("run_id", 0),
+            analysis_run_id=it.get("analysis_run_id", 0),
             ticker=str(it.get("ticker") or ""),
             date=it.get("date"),
             status=str(it.get("status") or "running"),
@@ -894,7 +894,7 @@ def run_mission_control(
             )
             if existing:
                 # Race: another run started; remove the AnalysisRun we just created so it is not counted
-                token_service.delete_analysis_run(analysis_run_id, db)
+                token_service.delete_execution(analysis_run_id, db)
                 already_running.append(MissionControlRunItem(ticker=ticker, analysis_run_id=returned_run_id))
             else:
                 triggered.append(MissionControlRunItem(ticker=ticker, analysis_run_id=returned_run_id))

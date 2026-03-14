@@ -159,7 +159,7 @@ async def start_analysis(
             analysis_run_id=analysis_run_id,
         )
         if existing:
-            token_service.refund_for_analysis(current_user.id, analysis_run_id, db)
+            token_service.refund_for_execution(current_user.id, analysis_run_id, db)
 
         return {"analysis_run_id": returned_run_id, "ticker": ticker, "date": analysis_date, "existing": existing}
     except json.JSONDecodeError:

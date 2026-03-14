@@ -67,7 +67,7 @@ def run_analyses_for_tickers(
             analysis_run_id=analysis_run_id,
         )
         if existing:
-            token_service.delete_analysis_run(analysis_run_id, db)
+            token_service.delete_execution(analysis_run_id, db)
         if wait_for_completion:
             _wait_for_analysis(
                 analysis_service,

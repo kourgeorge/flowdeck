@@ -180,11 +180,6 @@ def delete_execution(execution_id: int, db: Session) -> None:
         db.commit()
 
 
-def delete_analysis_run(execution_id: int, db: Session) -> None:
-    """Backward-compat alias for delete_execution."""
-    delete_execution(execution_id, db)
-
-
 def refund_for_execution(user_id: int, execution_id: int, db: Session) -> None:
     """Refund COST_PER_ANALYSIS and remove Execution (e.g. when analysis was already running)."""
     ex = (
@@ -201,11 +196,6 @@ def refund_for_execution(user_id: int, execution_id: int, db: Session) -> None:
             user.token_balance = getattr(user, "token_balance", 0) + COST_PER_ANALYSIS
         db.delete(ex)
         db.commit()
-
-
-def refund_for_analysis(user_id: int, execution_id: int, db: Session) -> None:
-    """Backward-compat alias for refund_for_execution."""
-    refund_for_execution(user_id, execution_id, db)
 
 
 def llm_tokens_to_platform_tokens(llm_tokens: int) -> int:

@@ -244,7 +244,6 @@ class _SQLiteTTLStore:
                     continue
                 out = dict(data)
                 out["analysis_run_id"] = run_id
-                out["run_id"] = run_id
                 result.append(out)
             return result
 
