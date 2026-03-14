@@ -824,20 +824,13 @@ export function useChatState(
     };
   }, []);
 
-  // When leaving the app (e.g. switching tabs on mobile), abort the stream so we don't
-  // surface a "network error" when the browser suspends the connection.
+  // Track when the tab is hidden so we can suppress spurious network errors if the user
+  // returns within a few seconds. We do not abort the stream on tab switch so the agent
+  // keeps thinking/streaming while the user is in another tab.
   useEffect(() => {
     const handleVisibility = () => {
       if (document.hidden) {
         lastHiddenAtRef.current = Date.now();
-        if (abortRef.current) {
-          ignoreStreamRef.current = true;
-          abortRef.current.abort();
-          abortRef.current = null;
-          setIsLoading(false);
-          setIsStreaming(false);
-          setThinkingStatus(null);
-        }
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
