@@ -1584,6 +1584,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                                 companyName={companyInfo?.name ?? null}
                                 recommendation={activeRecommendation}
                                 reports={activeReportsSource ?? {}}
+                                onOpenReport={setSelectedReport}
                               />
                             ) : (
                               <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 text-center">

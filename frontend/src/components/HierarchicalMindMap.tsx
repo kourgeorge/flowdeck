@@ -23,6 +23,8 @@ export interface HierarchicalMindMapProps {
   companyName?: string | null;
   recommendation: string | null;
   reports: Record<string, ReportData>;
+  /** When provided, the modal shows a "Read full report" link that opens this report tab */
+  onOpenReport?: (reportKey: string) => void;
 }
 
 function getScoreClass(score: number | null | undefined): string {
@@ -39,7 +41,7 @@ function getRecommendationClass(rec: string | null): string {
   return 'text-white';
 }
 
-export default function HierarchicalMindMap({ ticker, companyName, recommendation, reports }: HierarchicalMindMapProps) {
+export default function HierarchicalMindMap({ ticker, companyName, recommendation, reports, onOpenReport }: HierarchicalMindMapProps) {
   const [selectedReportKey, setSelectedReportKey] = useState<string | null>(null);
 
   if (!reports || Object.keys(reports).length === 0) {
@@ -72,7 +74,7 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
         key={reportKey}
         type="button"
         onClick={() => setSelectedReportKey((prev) => (prev === reportKey ? null : reportKey))}
-        className={`w-full text-left bg-gray-800 border rounded-md p-2.5 mb-1.5 last:mb-0 transition-colors min-h-[4rem] flex flex-col gap-1.5 min-w-0 ${
+        className={`w-full h-[8rem] text-left bg-gray-800 border rounded-md p-2.5 mb-1.5 last:mb-0 transition-colors flex flex-col gap-1.5 min-w-0 ${
           isSelected ? 'border-blue-500 ring-1 ring-blue-500/50' : 'border-gray-700 hover:border-gray-600'
         }`}
       >
@@ -82,15 +84,15 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
         </div>
         {keyPoints.length > 0 && (
           <>
-            <ul className="w-full min-w-0 list-none pl-0 space-y-1">
+            <ul className="w-full min-w-0 list-none pl-0 space-y-1 shrink-0">
               {keyPoints.map((item, i) => (
                 <li key={i} className="w-full min-w-0">
-                  <span className="text-xs text-slate-300 leading-snug line-clamp-2 break-words block">{item}</span>
+                  <span className="text-xs text-slate-300 leading-snug line-clamp-3 break-words block">{item}</span>
                 </li>
               ))}
             </ul>
             {moreCount > 0 && (
-              <span className="text-[0.65rem] text-slate-500 italic">+{moreCount} more</span>
+              <span className="text-[0.65rem] text-slate-500 italic mt-auto shrink-0">+{moreCount} more</span>
             )}
           </>
         )}
@@ -147,22 +149,13 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
             <div className="flex-1 min-w-0" />
             <div className="connector w-0.5 h-5 bg-slate-500 shrink-0 rounded-full" aria-hidden />
             <div className="flex-1 min-w-0 flex items-center justify-start pl-2">
-              <span className="level-label text-[0.7rem] font-bold uppercase tracking-wider text-slate-400">Decision</span>
+              <span className="level-label text-[0.7rem] font-bold uppercase tracking-wider text-slate-400">Risk</span>
             </div>
           </div>
           <div className="flex flex-wrap justify-center gap-2 w-full">
             {decisionNodes.map(({ key, data }) => (
               <div key={key} className="min-w-[220px] flex-1 max-w-[280px]">{renderNode(key, data)}</div>
             ))}
-            <div className="min-w-[220px] flex-1 max-w-[280px]">
-              <div className="bg-slate-900 border border-gray-700 rounded-md p-2.5 min-h-[4rem] flex flex-col justify-center">
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <span className="text-sm font-semibold text-slate-400">Final</span>
-                  <span className={`text-xs font-bold flex-shrink-0 ${getRecommendationClass(recommendation)}`}>{recommendation ?? '—'}</span>
-                </div>
-                <div className="text-xs text-slate-400 leading-snug">Recommendation after full pipeline.</div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -179,20 +172,34 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
             className="bg-gray-800 border border-gray-700 rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between shrink-0 px-4 py-3 border-b border-gray-700">
+            <div className="flex items-center justify-between shrink-0 px-4 py-3 border-b border-gray-700 gap-3">
               <h2 id="mindmap-modal-title" className="text-[0.72rem] font-bold uppercase tracking-wide text-slate-500">
                 {selectedLabel} — Key Takeaways
               </h2>
-              <button
-                type="button"
-                onClick={() => setSelectedReportKey(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-gray-700 transition-colors"
-                aria-label="Close"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-2">
+                {onOpenReport && selectedReportKey && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenReport(selectedReportKey);
+                      setSelectedReportKey(null);
+                    }}
+                    className="text-xs font-medium text-blue-400 hover:text-blue-300 underline underline-offset-2"
+                  >
+                    Read full report
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setSelectedReportKey(null)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-gray-700 transition-colors"
+                  aria-label="Close"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
             <div className="overflow-y-auto p-4 space-y-4">
               {selectedData.key_takeaways && selectedData.key_takeaways.length > 0 ? (
@@ -207,7 +214,7 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
 
               {selectedReportKey === 'investment_plan' && (
                 <div className="space-y-3 pt-2 border-t border-gray-700">
-                  <h4 className="text-[0.72rem] font-bold uppercase tracking-wide text-slate-500">Bullish &amp; bearish</h4>
+                  <h4 className="text-[0.72rem] font-bold uppercase tracking-wide text-slate-500">Researcher Viewpoints</h4>
                   {selectedData.bull_viewpoint && selectedData.bull_viewpoint.length > 0 && (
                     <div>
                       <div className="text-xs font-semibold text-green-400/90 mb-1">Bullish</div>
@@ -230,14 +237,14 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
                   )}
                   {(!selectedData.bull_viewpoint || selectedData.bull_viewpoint.length === 0) &&
                     (!selectedData.bear_viewpoint || selectedData.bear_viewpoint.length === 0) && (
-                    <p className="text-sm text-slate-500">No bullish/bearish viewpoints in this report.</p>
+                    <p className="text-sm text-slate-500">No researcher viewpoints in this report.</p>
                   )}
                 </div>
               )}
 
               {selectedReportKey === 'trader_investment_plan' && selectedData.tps_plan && selectedData.tps_plan.trim().length > 0 && (
                 <div className="space-y-3 pt-2 border-t border-gray-700">
-                  <h4 className="text-[0.72rem] font-bold uppercase tracking-wide text-slate-500">TPS — Structured Trading Plan</h4>
+                  <h4 className="text-[0.72rem] font-bold uppercase tracking-wide text-slate-500">TPS</h4>
                   <div className="rounded-lg border border-indigo-700/60 bg-indigo-950/30 overflow-hidden">
                     <div className="flex items-center justify-between px-4 py-2.5 border-b border-indigo-700/40 bg-indigo-900/30">
                       <span className="text-xs font-semibold uppercase tracking-widest text-indigo-300">TPS v0.1</span>
@@ -262,7 +269,7 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
 
               {selectedReportKey === 'final_trade_decision' && (
                 <div className="space-y-3 pt-2 border-t border-gray-700">
-                  <h4 className="text-[0.72rem] font-bold uppercase tracking-wide text-slate-500">Analyst viewpoints</h4>
+                  <h4 className="text-[0.72rem] font-bold uppercase tracking-wide text-slate-500">Analyst Viewpoints</h4>
                   {selectedData.risky_viewpoint && selectedData.risky_viewpoint.length > 0 && (
                     <div>
                       <div className="text-xs font-semibold text-amber-400/90 mb-1">Risky</div>
