@@ -3,11 +3,12 @@ import { Link } from 'react-router-dom';
 import DashboardTickerSidebar from '../components/DashboardTickerSidebar';
 import StockDetailPanel from '../components/TickerDetailPanel';
 import CopilotChatPanel from '../components/CopilotChatPanel';
+import MobileStockChatTabs from '../components/MobileStockChatTabs';
 import PageHeader from '../components/PageHeader';
 import { useSubscribedStocks } from '../hooks/useSubscribedStocks';
 import { useAuth } from '../contexts/AuthContext';
 import { COPILOT_NAME } from '../config';
-import type { TickerPageData, TickerWidget } from '../services/types';
+import type { TickerWidget } from '../services/types';
 import { chatApi } from '../services/api';
 import { useChatState } from '../components/ChatView';
 
@@ -303,91 +304,6 @@ export default function CopilotPage() {
             externalRefreshSessionsRef={chatRefreshSessionsRef}
           />
         </div>
-      </div>
-    </div>
-  );
-}
-
-/** Mobile-only tabbed view: Stock Detail | {COPILOT_NAME} */
-function MobileStockChatTabs({
-  selectedTicker,
-  tickers,
-  prefetchCache,
-  onSubscriptionChange,
-  chatState,
-  sessionId,
-  onSessionIdChange,
-  externalRefreshSessionsRef,
-}: {
-  selectedTicker: string | null;
-  tickers: string[];
-  prefetchCache: Record<string, TickerPageData>;
-  onSubscriptionChange: () => void;
-  chatState: ReturnType<typeof useChatState>;
-  sessionId: number | null;
-  onSessionIdChange: (id: number | null) => void;
-  externalRefreshSessionsRef: React.MutableRefObject<(() => void) | null>;
-}) {
-  const [activeTab, setActiveTab] = useState<'stock' | 'chat'>('stock');
-
-  return (
-    <div className="flex flex-col flex-1 min-h-0">
-      {/* Tab bar */}
-      <div className="shrink-0 flex border-b border-gray-700 bg-gray-800/80">
-        <button
-          type="button"
-          onClick={() => setActiveTab('stock')}
-          className={`flex-1 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
-            activeTab === 'stock'
-              ? 'text-white border-blue-500 bg-gray-800'
-              : 'text-gray-400 border-transparent hover:text-white'
-          }`}
-        >
-          Stock Detail
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('chat')}
-          className={`flex-1 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
-            activeTab === 'chat'
-              ? 'text-white border-blue-500 bg-gray-800'
-              : 'text-gray-400 border-transparent hover:text-white'
-          }`}
-        >
-          {COPILOT_NAME}
-        </button>
-      </div>
-
-      {/* Tab content */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        {activeTab === 'stock' && (
-          <div className="h-full overflow-y-auto bg-gray-900">
-            {selectedTicker ? (
-              <StockDetailPanel
-                key={selectedTicker}
-                ticker={selectedTicker}
-                prefetchedData={prefetchCache[selectedTicker] ?? null}
-                onSubscriptionChange={onSubscriptionChange}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full text-gray-500 text-sm p-8">
-                Select a stock from the list above to view details.
-              </div>
-            )}
-          </div>
-        )}
-        {activeTab === 'chat' && (
-          <div className="h-full">
-            <CopilotChatPanel
-              selectedTicker={selectedTicker}
-              tickers={tickers}
-              chatState={chatState}
-              sessionId={sessionId}
-              onSessionIdChange={onSessionIdChange}
-              externalRefreshSessionsRef={externalRefreshSessionsRef}
-            />
-          </div>
-        )}
       </div>
     </div>
   );

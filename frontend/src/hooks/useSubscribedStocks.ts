@@ -15,15 +15,15 @@ export interface UseSubscribedStocksReturn {
   prefetchCache: Record<string, TickerPageData>;
   prefetchProgress: { completed: number; inFlight: number; total: number };
   handleSubscriptionChange: () => void;
-  /** Add a ticker to the vibe list (fetches widget data on the fly) */
+  /** Add a ticker to the focus list (fetches widget data on the fly) */
   addTicker: (ticker: string) => Promise<void>;
-  /** Remove a ticker from the vibe list */
+  /** Remove a ticker from the focus list */
   removeTicker: (ticker: string) => void;
 }
 
 /**
  * Lightweight hook that loads only the user's subscribed stocks and prefetches
- * their StockPageData. Used by VibeTradingPage which only shows the portfolio.
+ * their StockPageData. Used by the Copilot page.
  *
  * The list is initialised from the user's subscriptions but the user can freely
  * add/remove tickers without affecting their actual subscription state.
@@ -146,7 +146,7 @@ export function useSubscribedStocks(): UseSubscribedStocksReturn {
     loadSubscriptions();
   }, [loadSubscriptions]);
 
-  /** Add a ticker to the vibe list without subscribing */
+  /** Add a ticker to the focus list without subscribing */
   const addTicker = useCallback(async (ticker: string) => {
     const upper = ticker.toUpperCase();
     if (widgets.some((w) => w.ticker === upper)) return; // already in list
@@ -165,7 +165,7 @@ export function useSubscribedStocks(): UseSubscribedStocksReturn {
     }
   }, [widgets]);
 
-  /** Remove a ticker from the vibe list without unsubscribing */
+  /** Remove a ticker from the focus list without unsubscribing */
   const removeTicker = useCallback((ticker: string) => {
     const upper = ticker.toUpperCase();
     userAddedRef.current.delete(upper);
