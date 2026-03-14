@@ -24,6 +24,7 @@ from models.schemas import (
 import app_services
 from services.info_fetcher import get_info_fetcher
 from services import token_service
+from services.share_service import get_share_url
 
 router = APIRouter(prefix="/api/tickers", tags=["tickers"])
 
@@ -306,6 +307,8 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
     bear_case_return_pct = investment_plan_meta.get("bear_case_return_pct")
     bull_case_return_pct = investment_plan_meta.get("bull_case_return_pct")
 
+    share_url = get_share_url(ticker, latest_analysis_run_id) if latest_analysis_run_id else None
+
     return TickerPageData(
         ticker=ticker,
         quote=quote,
@@ -322,6 +325,7 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
         expected_return_pct=expected_return_pct,
         bear_case_return_pct=bear_case_return_pct,
         bull_case_return_pct=bull_case_return_pct,
+        share_url=share_url,
     )
 
 

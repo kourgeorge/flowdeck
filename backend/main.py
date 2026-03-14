@@ -33,6 +33,7 @@ from routers.tickers import router as tickers_router
 from routers.me import router as me_router
 from routers.digest import router as digest_router
 from routers.public import router as public_router
+from routers.share import router as share_router
 from services.analysis_service import AnalysisService
 from services.market_data_service import MarketDataService
 from services.news_service import NewsService
@@ -152,6 +153,7 @@ app.include_router(analyses_ws_router)
 app.include_router(me_router)
 app.include_router(digest_router)
 app.include_router(public_router)
+app.include_router(share_router)
 app.include_router(admin_router)
 app.include_router(contact_router)
 app.include_router(payments_router)

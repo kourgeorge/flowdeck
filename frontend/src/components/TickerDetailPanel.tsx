@@ -109,6 +109,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const [companyOfficers, setCompanyOfficers] = useState<any[]>([]);
   const [isLoadingOfficers, setIsLoadingOfficers] = useState(false);
   const [hasLoadedCompanyOfficers, setHasLoadedCompanyOfficers] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
 
   const refreshedQuote = useQuoteRefresh(ticker, 60000);
   const prevPriceRef = useRef<number | null>(null);
@@ -1400,6 +1401,30 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                             />
                           )}
                         </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {stockData.share_url && !selectedRunId && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (stockData.share_url) {
+                                  navigator.clipboard.writeText(stockData.share_url);
+                                  setShareCopied(true);
+                                  setTimeout(() => setShareCopied(false), 2000);
+                                }
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-500 text-gray-300 hover:bg-gray-700/80 hover:text-white transition-colors text-sm"
+                              title="Copy shareable link (viewable without login)"
+                            >
+                              {shareCopied ? (
+                                <span className="text-green-400">Copied!</span>
+                              ) : (
+                                <>
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                                  <span>Share</span>
+                                </>
+                              )}
+                            </button>
+                          )}
                         <div ref={runSelectorRef} className="relative flex items-stretch w-fit max-w-full rounded-lg border border-blue-500 bg-blue-600 hover:bg-blue-700 transition-colors">
                             <button
                               type="button"
@@ -1499,6 +1524,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                               </>
                             )}
                           </div>
+                        </div>
                       </div>
                     </div>
                     <div className="text-sm text-amber-400/90 bg-amber-950/30 border border-amber-700/40 rounded-lg px-4 py-2 mt-4">
@@ -1510,6 +1536,31 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                   <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
                     {((stockData.has_reports && !stockData.is_generating) || (selectedRunId && historicalReportsData)) && (
                       <div>
+                        {stockData.share_url && !selectedRunId && (
+                          <div className="flex items-center justify-end mb-3 pb-2 border-b border-gray-700">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (stockData.share_url) {
+                                  navigator.clipboard.writeText(stockData.share_url);
+                                  setShareCopied(true);
+                                  setTimeout(() => setShareCopied(false), 2000);
+                                }
+                              }}
+                              className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
+                              title="Copy link — anyone with the link can view this report without signing in"
+                            >
+                              {shareCopied ? (
+                                <span className="text-green-400">Link copied!</span>
+                              ) : (
+                                <>
+                                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                                  <span>Copy share link</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
                         <ReportTabs
                           availableReports={availableReports}
                           selectedReport={selectedReport}

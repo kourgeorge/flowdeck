@@ -15,12 +15,14 @@ import ChatPage from './pages/ChatPage';
 import CopilotPage from './pages/CopilotPage';
 import DocsPage from './pages/DocsPage';
 import AuthCallbackPage from './pages/AuthCallbackPage';
+import SharedReportPage from './pages/SharedReportPage';
 
 function App() {
   return (
     <AuthProvider>
     <Router>
       <Routes>
+        <Route path="r/:token" element={<SharedReportPage />} />
         <Route element={<Layout />}>
           <Route index element={<HomePage />} />
           <Route path="tickers/:ticker" element={<TickerPage />} />

@@ -96,6 +96,10 @@ class DigestContext(BaseModel):
         default_factory=dict,
         description="ticker -> report_type -> {content, score, key_takeaways, ...}",
     )
+    share_urls: Dict[str, str] = Field(
+        default_factory=dict,
+        description="ticker -> shareable URL for the latest report (viewable without login).",
+    )
 
     sector_industry: Dict[str, Dict[str, str]] = Field(
         default_factory=dict,

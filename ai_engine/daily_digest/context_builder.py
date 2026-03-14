@@ -266,16 +266,21 @@ def build_digest_context(
         except Exception:
             insider[t] = {}
 
-    # Platform reports
+    # Platform reports and share URLs
     from services.report_service import ReportService  # type: ignore[import-untyped]
+    from services.share_service import get_share_url  # type: ignore[import-untyped]
     report_svc = ReportService()
     platform_reports: Dict[str, Dict[str, Any]] = {}
+    share_urls: Dict[str, str] = {}
     for t in priority_tickers:
         try:
             latest = report_svc.get_latest_execution_for_ticker(t)
             if latest:
                 ar_id, _ = latest
                 platform_reports[t] = report_svc.get_reports_with_scores(ar_id)
+                url = get_share_url(t, ar_id)
+                if url:
+                    share_urls[t] = url
             else:
                 platform_reports[t] = {}
         except Exception:
@@ -345,6 +350,7 @@ def build_digest_context(
         insider=insider,
         indicators=indicators,
         platform_reports=platform_reports,
+        share_urls=share_urls,
         sector_industry=sector_industry,
         peer_tickers=peer_tickers,
         peer_quotes=peer_quotes,

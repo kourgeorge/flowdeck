@@ -24,6 +24,7 @@ from database import get_db
 from services.edgar_service import get_edgar_service
 from services.info_fetcher import get_info_fetcher
 from services.report_service import ReportService
+from services.share_service import get_share_url
 
 logger = logging.getLogger(__name__)
 
@@ -378,9 +379,10 @@ async def data_reports_ticker(
         if latest:
             ar_id, date_display = latest
     if ar_id is None:
-        return {"report_run_id": None, "report_date": None, "reports": {}}
+        return {"report_run_id": None, "report_date": None, "reports": {}, "share_url": None}
     reports = await asyncio.to_thread(svc.get_reports_with_scores, ar_id)
-    return {"report_run_id": ar_id, "report_date": date_display, "reports": reports}
+    share_url = get_share_url(t, ar_id)
+    return {"report_run_id": ar_id, "report_date": date_display, "reports": reports, "share_url": share_url}
 
 
 @router.get("/reports/{ticker}/dates")
@@ -409,9 +411,10 @@ async def data_reports_batch(
     for t in tickers:
         latest = await asyncio.to_thread(svc.get_latest_execution_for_ticker, t)
         if not latest:
-            result[t] = {"report_run_id": None, "report_date": None, "reports": {}}
+            result[t] = {"report_run_id": None, "report_date": None, "reports": {}, "share_url": None}
         else:
             ar_id, date_display = latest
             reports = await asyncio.to_thread(svc.get_reports_with_scores, ar_id)
-            result[t] = {"report_run_id": ar_id, "report_date": date_display, "reports": reports}
+            share_url = get_share_url(t, ar_id)
+            result[t] = {"report_run_id": ar_id, "report_date": date_display, "reports": reports, "share_url": share_url}
     return {"tickers": result}

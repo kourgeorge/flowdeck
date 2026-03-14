@@ -191,6 +191,8 @@ class TickerPageData(BaseModel):
     # Token economy: unique view count and tokens earned for this report run
     report_view_count: Optional[int] = None
     report_earned_tokens: Optional[int] = None
+    # Shareable link for this report run (viewable without login)
+    share_url: Optional[str] = None
 
     @field_validator('expected_return_pct', 'bear_case_return_pct', 'bull_case_return_pct', mode='before')
     @classmethod

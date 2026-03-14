@@ -351,6 +351,7 @@ export const tickerApi = {
     report_run_id: number | null;
     report_date: string | null;
     reports: Record<string, { content?: string; score?: number; key_takeaways?: string[]; recommendation?: string; [key: string]: unknown }>;
+    share_url?: string | null;
   }> => {
     const token = getStoredToken();
     const params = date ? { date } : {};

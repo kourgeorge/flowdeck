@@ -66,6 +66,9 @@ def _format_ticker_context(ctx: DigestContext, ticker: str) -> str:
                 thesis_parts.append(f"{k}: {str(v)[:400]}")
         if thesis_parts:
             lines.append("Platform reports (thesis/takeaways): " + " | ".join(thesis_parts))
+    share_url = (ctx.share_urls or {}).get(ticker)
+    if share_url:
+        lines.append(f"Report share URL (viewable without login): {share_url}")
     si = (ctx.sector_industry or {}).get(ticker)
     if si:
         lines.append(f"Sector/industry: {si}")

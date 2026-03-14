@@ -108,6 +108,8 @@ export interface TickerPageData {
   /** Token economy: unique view count and tokens earned for this report run */
   report_view_count?: number | null;
   report_earned_tokens?: number | null;
+  /** Shareable URL for this report (viewable without login) */
+  share_url?: string | null;
 }
 export interface SimilarTicker {
   ticker: string;
