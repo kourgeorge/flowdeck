@@ -35,7 +35,7 @@ def _build_model_metadata(llm_usage: Optional[Dict[str, Any]]) -> Optional[Dict[
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["Chat"])
+router = APIRouter(prefix="/api", tags=["Chat"])
 
 
 class ChatMessageIn(BaseModel):

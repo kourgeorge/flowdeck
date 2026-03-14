@@ -32,7 +32,7 @@ class ReportsBatchBody(BaseModel):
     tickers: List[str] = []
 
 
-router = APIRouter(tags=["Data API"])
+router = APIRouter(prefix="/api/data", tags=["Data API"])
 
 # Single-flight for market overview: concurrent requests with same params share one thread/fetch.
 _market_overview_in_flight: Dict[Tuple, asyncio.Task] = {}

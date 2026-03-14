@@ -5,7 +5,7 @@ from pydantic import BaseModel, EmailStr
 
 from services.email_service import send_contact_form_email
 
-router = APIRouter(tags=["contact"])
+router = APIRouter(prefix="/api", tags=["contact"])
 
 
 class ContactRequest(BaseModel):
@@ -14,7 +14,7 @@ class ContactRequest(BaseModel):
     message: str = ""
 
 
-@router.post("/api/contact")
+@router.post("/contact")
 def submit_contact(req: ContactRequest):
     """
     Submit the contact form. Sends an email to kourgeorge@gmail.com with name, email, and message.

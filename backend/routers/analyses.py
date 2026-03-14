@@ -9,45 +9,20 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.orm import Session
 
+import app_services
 from auth import get_current_user, get_current_admin_user, decode_token
 from database import get_db, SessionLocal
 from models.db_models import User as UserModel
 from services.analysis_service import AnalysisService
-from services.info_fetcher import get_info_fetcher
-from services.market_data_service import MarketDataService
 from services import token_service
+from services.info_fetcher import get_info_fetcher
 from sync_major_stocks import get_missing_and_skipped, run_analyses_for_tickers
 
-router = APIRouter(tags=["analyses"])
+router = APIRouter(prefix="/api", tags=["analyses"])
+# WebSocket at /ws/... (no /api prefix); included separately in main
+ws_router = APIRouter(tags=["analyses-ws"])
 
 active_connections: dict[str, WebSocket] = {}
-
-_analysis_service: Optional[AnalysisService] = None
-_market_data_service: Optional[MarketDataService] = None
-
-
-def set_analysis_service(service: AnalysisService) -> None:
-    """Set the shared analysis service (called from main.py)."""
-    global _analysis_service
-    _analysis_service = service
-
-
-def set_market_data_service(service: MarketDataService) -> None:
-    """Set the shared market data service (called from main.py)."""
-    global _market_data_service
-    _market_data_service = service
-
-
-def _get_analysis_service() -> AnalysisService:
-    if _analysis_service is None:
-        raise RuntimeError("Analyses router: analysis_service not set")
-    return _analysis_service
-
-
-def _get_market_data_service() -> MarketDataService:
-    if _market_data_service is None:
-        raise RuntimeError("Analyses router: market_data_service not set")
-    return _market_data_service
 
 
 def run_sync_major_tickers_background(analysis_date: str, analysis_service: AnalysisService) -> None:
@@ -74,7 +49,7 @@ def run_sync_major_tickers_background(analysis_date: str, analysis_service: Anal
         db.close()
 
 
-@router.post("/api/analyses/start")
+@router.post("/analyses/start")
 async def start_analysis(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -82,7 +57,7 @@ async def start_analysis(
     db: Session = Depends(get_db),
 ):
     """Start a new analysis. Requires signed-in user; initiator is notified by email when the report is done. Costs 200 tokens."""
-    analysis_service = _get_analysis_service()
+    analysis_service = app_services.get_analysis_service()
     try:
         body = await request.json()
         ticker = body.get("ticker", "").upper()
@@ -171,20 +146,20 @@ async def start_analysis(
         raise HTTPException(status_code=500, detail=f"Failed to start analysis: {str(e)}")
 
 
-@router.get("/api/analyses/{analysis_run_id}/status")
+@router.get("/analyses/{analysis_run_id}/status")
 async def get_analysis_status(
     analysis_run_id: int,
     _current_user=Depends(get_current_user),
 ):
     """Get status of a running analysis. Requires authentication."""
-    analysis_service = _get_analysis_service()
+    analysis_service = app_services.get_analysis_service()
     status = analysis_service.get_analysis_status(analysis_run_id)
     if not status:
         raise HTTPException(status_code=404, detail="Analysis not found")
     return status
 
 
-@router.websocket("/ws/analyses/{analysis_run_id}")
+@ws_router.websocket("/ws/analyses/{analysis_run_id}")
 async def websocket_endpoint(websocket: WebSocket, analysis_run_id: str, token: Optional[str] = Query(None)):
     """WebSocket endpoint for real-time analysis updates. Requires a valid Bearer token via ?token= query param."""
     if not token:
@@ -213,7 +188,7 @@ async def websocket_endpoint(websocket: WebSocket, analysis_run_id: str, token: 
     await websocket.accept()
     active_connections[analysis_run_id] = websocket
 
-    analysis_service = _get_analysis_service()
+    analysis_service = app_services.get_analysis_service()
     try:
         run_id_int = int(analysis_run_id)
         status = analysis_service.get_analysis_status(run_id_int)
@@ -260,7 +235,7 @@ async def websocket_endpoint(websocket: WebSocket, analysis_run_id: str, token: 
             del active_connections[analysis_run_id]
 
 
-@router.post("/api/sync/major-stocks")
+@router.post("/sync/major-stocks")
 async def sync_major_tickers(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -279,6 +254,6 @@ async def sync_major_tickers(
         pass
     analysis_date = body.get("analysis_date") or datetime.now().strftime("%Y-%m-%d")
     triggered, skipped = get_missing_and_skipped(analysis_date)
-    analysis_service = _get_analysis_service()
+    analysis_service = app_services.get_analysis_service()
     background_tasks.add_task(run_sync_major_tickers_background, analysis_date, analysis_service)
     return {"date": analysis_date, "triggered": triggered, "skipped": skipped}

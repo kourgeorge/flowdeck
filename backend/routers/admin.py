@@ -14,27 +14,12 @@ from sqlalchemy.orm import Session
 from auth import get_current_admin_user
 from config import RESULTS_DIR
 from database import get_db
+import app_services
 from models.db_models import User, Report, Execution, ReportView, Subscription
 from services import token_service
-from services.analysis_service import AnalysisService
 from services.data_cache import delete_analysis_status, list_running_analyses, set_stop_requested
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
-# Use shared analysis service injected by main so mission control and API share in-memory + cache state
-_analysis_service: Optional[AnalysisService] = None
-
-
-def set_analysis_service(service: AnalysisService) -> None:
-    """Set the shared analysis service (called from main.py)."""
-    global _analysis_service
-    _analysis_service = service
-
-
-def _get_mission_analysis_service() -> AnalysisService:
-    """Analysis service for mission control; use shared one from main when set."""
-    if _analysis_service is not None:
-        return _analysis_service
-    return AnalysisService(results_dir=RESULTS_DIR)
 _MAJOR_STOCKS_SECTORS_PATH = (
     Path(__file__).resolve().parents[1] / "data" / "major_stocks_sectors.json"
 )
@@ -883,7 +868,7 @@ def run_mission_control(
 
         try:
             analysis_run_id = token_service.record_analysis_run(_user.id, ticker, db)
-            returned_run_id, existing = _get_mission_analysis_service().start_analysis(
+            returned_run_id, existing = app_services.get_analysis_service().start_analysis(
                 ticker=ticker,
                 analysis_date=date_str,
                 analysts=["market", "news", "fundamentals", "technical", "sec"],

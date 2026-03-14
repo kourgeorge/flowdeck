@@ -12,7 +12,7 @@ from config import MAJOR_TICKERS
 from database import get_db
 from models.db_models import Execution, Report
 
-router = APIRouter(tags=["public"])
+router = APIRouter(prefix="/api", tags=["public"])
 
 
 class PublicConfigResponse(BaseModel):
@@ -25,7 +25,7 @@ class PublicStatsResponse(BaseModel):
     unique_tickers_analyzed: int
 
 
-@router.get("/api/SKILL.md")
+@router.get("/SKILL.md")
 async def get_skill_md():
     """Serve the SKILL.md file for AI agents."""
     skill_path = Path(__file__).resolve().parents[1] / "SKILL.md"
@@ -44,13 +44,13 @@ async def get_skill_md():
         raise HTTPException(status_code=404, detail="SKILL.md not found")
 
 
-@router.get("/api/config/public", response_model=PublicConfigResponse)
+@router.get("/config/public", response_model=PublicConfigResponse)
 async def get_public_config():
     """Return public configuration (e.g. preview tickers visible without login)."""
     return PublicConfigResponse(preview_tickers=list(MAJOR_TICKERS))
 
 
-@router.get("/api/stats", response_model=PublicStatsResponse)
+@router.get("/stats", response_model=PublicStatsResponse)
 async def get_public_stats(db: Session = Depends(get_db)):
     """Public stats about analyses and reports (no auth required)."""
     total_analyses = db.query(sqla_func.count(Execution.id)).scalar() or 0

@@ -21,34 +21,11 @@ from models.schemas import (
     Recommendation,
     HistoricalAnalysis,
 )
+import app_services
 from services.info_fetcher import get_info_fetcher
-from services.report_service import ReportService
-from services.market_data_service import MarketDataService
 from services import token_service
 
 router = APIRouter(prefix="/api/tickers", tags=["tickers"])
-
-_report_service: Optional[ReportService] = None
-_market_data_service: Optional[MarketDataService] = None
-
-
-def set_services(report_service: ReportService, market_data_service: MarketDataService) -> None:
-    """Set shared services (called from main.py)."""
-    global _report_service, _market_data_service
-    _report_service = report_service
-    _market_data_service = market_data_service
-
-
-def _get_report_service() -> ReportService:
-    if _report_service is None:
-        raise RuntimeError("Tickers router: report_service not set")
-    return _report_service
-
-
-def _get_market_data_service() -> MarketDataService:
-    if _market_data_service is None:
-        raise RuntimeError("Tickers router: market_data_service not set")
-    return _market_data_service
 
 
 def _normalize_confidence(value: object) -> Optional[float]:
@@ -94,7 +71,7 @@ def _get_ticker_widgets_sync(
     recent_days: Optional[int] = None,
 ) -> WidgetsResponse:
     """Sync implementation of widget data (runs in thread pool to avoid blocking event loop)."""
-    report_service = _get_report_service()
+    report_service = app_services.get_report_service()
     use_major_split = False
     major_set: set[str] = set()
     total_count: Optional[int] = None
@@ -228,7 +205,7 @@ def _get_ticker_widgets_sync(
 
 def _get_ticker_page_sync(ticker: str) -> TickerPageData:
     """Sync implementation of ticker page data (runs in thread pool to avoid blocking event loop)."""
-    report_service = _get_report_service()
+    report_service = app_services.get_report_service()
     cached_fetcher = get_info_fetcher()
 
     quote_data = cached_fetcher.get_quote(ticker)
@@ -375,7 +352,7 @@ async def get_ticker_reports_for_run(
 ):
     """Get reports_with_scores for a specific historical run by analysis_run_id. Experimental."""
     ticker = ticker.upper()
-    report_service = _get_report_service()
+    report_service = app_services.get_report_service()
 
     def _fetch():
         scores_raw = report_service.get_reports_with_scores(analysis_run_id)

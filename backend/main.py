@@ -17,12 +17,10 @@ logging.getLogger("services.report_service").setLevel(logging.INFO)
 env_path = Path(__file__).parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
+import app_services
 from config import CORS_ORIGINS
 from database import init_db
-from routers import admin as admin_module
-from routers import analyses as analyses_module
-from routers import tickers as tickers_module
-from routers.analyses import run_sync_major_tickers_background
+from routers.analyses import run_sync_major_tickers_background, router as analyses_router, ws_router as analyses_ws_router
 from routers.data_api import router as data_router
 from routers.users import router as users_router
 from routers.subscriptions import router as subscriptions_router
@@ -32,7 +30,6 @@ from routers.payments import router as payments_router
 from routers.chat import router as chat_router
 from routers.api_keys import router as api_keys_router
 from routers.tickers import router as tickers_router
-from routers.analyses import router as analyses_router
 from routers.me import router as me_router
 from routers.digest import router as digest_router
 from routers.public import router as public_router
@@ -142,23 +139,23 @@ analysis_service = AnalysisService()
 news_service = NewsService()
 get_info_fetcher(market_data_service=market_data_service, news_service=news_service)
 
+# Shared services for routers that need them (tickers, analyses)
+app_services.set_services(report_service, market_data_service, analysis_service)
+
 # Routers
-app.include_router(data_router, prefix="/api/data")
+app.include_router(data_router)
 app.include_router(users_router)
 app.include_router(subscriptions_router)
-tickers_module.set_services(report_service, market_data_service)
 app.include_router(tickers_router)
-analyses_module.set_analysis_service(analysis_service)
-analyses_module.set_market_data_service(market_data_service)
 app.include_router(analyses_router)
+app.include_router(analyses_ws_router)
 app.include_router(me_router)
 app.include_router(digest_router)
 app.include_router(public_router)
-admin_module.set_analysis_service(analysis_service)
 app.include_router(admin_router)
 app.include_router(contact_router)
 app.include_router(payments_router)
-app.include_router(chat_router, prefix="/api")
+app.include_router(chat_router)
 app.include_router(api_keys_router)
 
 
