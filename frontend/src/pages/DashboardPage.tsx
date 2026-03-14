@@ -693,6 +693,22 @@ export default function DashboardPage() {
                   {!digestLoading && selectedDigestDate && digestBriefsForDay.length > 0 && selectedBrief && (
                     <>
                         <div className="space-y-3 pt-2">
+                          {(selectedBrief.user_note ||
+                            selectedBrief.narrative_style ||
+                            selectedBrief.user_focus_tickers?.length) && (
+                              <div className="space-y-1 text-sm text-gray-300 bg-gray-900/60 border border-gray-700 rounded px-3 py-2">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Run inputs</p>
+                                {selectedBrief.narrative_style && (
+                                  <p><span className="text-gray-500 mr-1">Style:</span>{selectedBrief.narrative_style}</p>
+                                )}
+                                {selectedBrief.user_focus_tickers?.length ? (
+                                  <p><span className="text-gray-500 mr-1">User focus:</span>{selectedBrief.user_focus_tickers.join(', ')}</p>
+                                ) : null}
+                                {selectedBrief.user_note && (
+                                  <p><span className="text-gray-500 mr-1">User note:</span><span className="whitespace-pre-wrap align-top">{selectedBrief.user_note}</span></p>
+                                )}
+                              </div>
+                            )}
                           <div className="flex items-start justify-between gap-3">
                             <div className="space-y-1">
                               <p className="text-sm text-gray-500">
@@ -717,33 +733,6 @@ export default function DashboardPage() {
                                   ))}
                                 </div>
                               )}
-                              {(selectedBrief.user_note ||
-                                selectedBrief.narrative_style ||
-                                selectedBrief.user_focus_tickers?.length) && (
-                                  <div className="mt-2 space-y-1 text-sm text-gray-300 bg-gray-900/60 border border-gray-700 rounded px-2 py-1.5">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                      Run inputs
-                                    </p>
-                                    {selectedBrief.narrative_style && (
-                                      <p>
-                                        <span className="uppercase tracking-wide text-gray-500 mr-1">Style:</span>
-                                        {selectedBrief.narrative_style}
-                                      </p>
-                                    )}
-                                    {selectedBrief.user_focus_tickers?.length ? (
-                                      <p>
-                                        <span className="uppercase tracking-wide text-gray-500 mr-1">User focus:</span>
-                                        {selectedBrief.user_focus_tickers.join(', ')}
-                                      </p>
-                                    ) : null}
-                                    {selectedBrief.user_note && (
-                                      <p className="text-sm text-gray-300">
-                                        <span className="uppercase tracking-wide text-gray-500 mr-1">User note:</span>
-                                        <span className="whitespace-pre-wrap align-top">{selectedBrief.user_note}</span>
-                                      </p>
-                                    )}
-                                  </div>
-                                )}
                             </div>
                             <div className="flex items-center gap-2">
                               <button
@@ -844,6 +833,20 @@ export default function DashboardPage() {
                   {/* Freshly run digest (shown when no list/selection yet, e.g. right after run or list fetch failed) */}
                   {!digestLoading && digest && (!selectedDigestDate || digestBriefsForDay.length === 0) && (
                     <div className="space-y-3">
+                      {(digest.user_note || digest.narrative_style || digest.user_focus_tickers?.length) && (
+                        <div className="space-y-1 text-sm text-gray-300 bg-gray-900/60 border border-gray-700 rounded px-3 py-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Run inputs</p>
+                          {digest.narrative_style && (
+                            <p><span className="text-gray-500 mr-1">Style:</span>{digest.narrative_style}</p>
+                          )}
+                          {digest.user_focus_tickers?.length ? (
+                            <p><span className="text-gray-500 mr-1">User focus:</span>{digest.user_focus_tickers.join(', ')}</p>
+                          ) : null}
+                          {digest.user_note && (
+                            <p><span className="text-gray-500 mr-1">User note:</span><span className="whitespace-pre-wrap align-top">{digest.user_note}</span></p>
+                          )}
+                        </div>
+                      )}
                       <div className="flex items-start justify-between gap-3">
                         <div className="space-y-1">
                           <p className="text-sm text-gray-500">
@@ -863,31 +866,6 @@ export default function DashboardPage() {
                                   {t}
                                 </span>
                               ))}
-                            </div>
-                          )}
-                          {(digest.user_note || digest.narrative_style || digest.user_focus_tickers?.length) && (
-                            <div className="mt-2 space-y-1 text-sm text-gray-300 bg-gray-900/60 border border-gray-700 rounded px-2 py-1.5">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                Run inputs
-                              </p>
-                              {digest.narrative_style && (
-                                <p>
-                                  <span className="uppercase tracking-wide text-gray-500 mr-1">Style:</span>
-                                  {digest.narrative_style}
-                                </p>
-                              )}
-                              {digest.user_focus_tickers?.length ? (
-                                <p>
-                                  <span className="uppercase tracking-wide text-gray-500 mr-1">User focus:</span>
-                                  {digest.user_focus_tickers.join(', ')}
-                                </p>
-                              ) : null}
-                              {digest.user_note && (
-                                <p className="text-sm text-gray-300">
-                                  <span className="uppercase tracking-wide text-gray-500 mr-1">User note:</span>
-                                  <span className="whitespace-pre-wrap align-top">{digest.user_note}</span>
-                                </p>
-                              )}
                             </div>
                           )}
                         </div>
