@@ -64,8 +64,8 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
     const scoreLabel = showScore && score != null ? `${score}/10` : '—';
     const isSelected = selectedReportKey === reportKey;
     const allTakeaways = data.key_takeaways ?? [];
-    const keyPoints = allTakeaways.slice(0, 2);
-    const moreCount = allTakeaways.length > 2 ? allTakeaways.length - 2 : 0;
+    const keyPoints = allTakeaways.slice(0, 1);
+    const moreCount = allTakeaways.length > 1 ? allTakeaways.length - 1 : 0;
 
     return (
       <button
@@ -84,9 +84,8 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
           <>
             <ul className="w-full min-w-0 list-none pl-0 space-y-1">
               {keyPoints.map((item, i) => (
-                <li key={i} className="flex gap-2 min-w-0 w-full">
-                  <span className="text-slate-500 flex-shrink-0 mt-0.5" aria-hidden="true">•</span>
-                  <span className="text-xs text-slate-300 leading-snug line-clamp-2 break-words min-w-0">{item}</span>
+                <li key={i} className="w-full min-w-0">
+                  <span className="text-xs text-slate-300 leading-snug line-clamp-2 break-words block">{item}</span>
                 </li>
               ))}
             </ul>
@@ -111,27 +110,20 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
         </div>
       </div>
       <div className="flex flex-col items-center w-full tree">
-        <div className="connector wide w-full max-w-4xl h-0.5 bg-teal-600/80 mx-auto mb-0" aria-hidden />
+        <div className="connector wide w-full max-w-4xl h-0.5 bg-slate-500 mx-auto mb-0" aria-hidden />
         <div className="flex w-full items-center mb-2">
           <div className="flex-1 min-w-0" />
-          <div className="connector w-0.5 h-4 bg-teal-600/80 shrink-0 rounded-full" aria-hidden />
+          <div className="connector w-0.5 h-4 bg-slate-500 shrink-0 rounded-full" aria-hidden />
           <div className="flex-1 min-w-0" />
         </div>
-        {/* Evidence: two rows of nodes */}
+        {/* Evidence: one row of nodes */}
         <div className="row flex flex-col items-center w-full gap-2 mb-2">
           {evidenceNodes.length > 0 ? (
-            <>
-              <div className="flex flex-wrap justify-center gap-2 w-full">
-                {evidenceNodes.slice(0, 3).map(({ key, data }) => (
-                  <div key={key} className="min-w-[320px] flex-1 max-w-[420px]">{renderNode(key, data)}</div>
-                ))}
-              </div>
-              <div className="flex flex-wrap justify-center gap-2 w-full">
-                {evidenceNodes.slice(3, 6).map(({ key, data }) => (
-                  <div key={key} className="min-w-[320px] flex-1 max-w-[420px]">{renderNode(key, data)}</div>
-                ))}
-              </div>
-            </>
+            <div className="flex flex-wrap justify-center gap-2 w-full">
+              {evidenceNodes.map(({ key, data }) => (
+                <div key={key} className="min-w-[220px] flex-1 max-w-[280px]">{renderNode(key, data)}</div>
+              ))}
+            </div>
           ) : (
             <div className="text-xs text-slate-500">—</div>
           )}
@@ -139,30 +131,30 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
         <div className="row flex flex-col items-center w-full gap-2 mb-2">
           <div className="flex w-full items-center mb-0">
             <div className="flex-1 min-w-0" />
-            <div className="connector w-0.5 h-5 bg-teal-600/80 shrink-0 rounded-full" aria-hidden />
+            <div className="connector w-0.5 h-5 bg-slate-500 shrink-0 rounded-full" aria-hidden />
             <div className="flex-1 min-w-0 flex items-center justify-start pl-2">
-              <span className="level-label text-[0.7rem] font-bold uppercase tracking-wider text-teal-400">Synthesis</span>
+              <span className="level-label text-[0.7rem] font-bold uppercase tracking-wider text-slate-400">Synthesis</span>
             </div>
           </div>
           <div className="flex flex-wrap justify-center gap-2 w-full">
             {synthesisNodes.length > 0 ? synthesisNodes.map(({ key, data }) => (
-              <div key={key} className="min-w-[320px] flex-1 max-w-[420px]">{renderNode(key, data)}</div>
+              <div key={key} className="min-w-[220px] flex-1 max-w-[280px]">{renderNode(key, data)}</div>
             )) : <div className="text-xs text-slate-500">—</div>}
           </div>
         </div>
         <div className="row flex flex-col items-center w-full gap-2 mb-2">
           <div className="flex w-full items-center mb-0">
             <div className="flex-1 min-w-0" />
-            <div className="connector w-0.5 h-5 bg-teal-600/80 shrink-0 rounded-full" aria-hidden />
+            <div className="connector w-0.5 h-5 bg-slate-500 shrink-0 rounded-full" aria-hidden />
             <div className="flex-1 min-w-0 flex items-center justify-start pl-2">
-              <span className="level-label text-[0.7rem] font-bold uppercase tracking-wider text-teal-400">Decision</span>
+              <span className="level-label text-[0.7rem] font-bold uppercase tracking-wider text-slate-400">Decision</span>
             </div>
           </div>
           <div className="flex flex-wrap justify-center gap-2 w-full">
             {decisionNodes.map(({ key, data }) => (
-              <div key={key} className="min-w-[320px] flex-1 max-w-[420px]">{renderNode(key, data)}</div>
+              <div key={key} className="min-w-[220px] flex-1 max-w-[280px]">{renderNode(key, data)}</div>
             ))}
-            <div className="min-w-[320px] flex-1 max-w-[420px]">
+            <div className="min-w-[220px] flex-1 max-w-[280px]">
               <div className="bg-slate-900 border border-gray-700 rounded-md p-2.5 min-h-[4rem] flex flex-col justify-center">
                 <div className="flex items-center justify-between gap-2 mb-1">
                   <span className="text-sm font-semibold text-slate-400">Final</span>
