@@ -850,8 +850,10 @@ export default function AdminDashboardPage() {
               <button
                 type="button"
                 onClick={() => {
+                  const tickers = selectedMissionTickers;
+                  setSelectedMissionTickers([]);
                   setMissionBulkRunning(true);
-                  void runMissionForTickers(selectedMissionTickers).finally(() => {
+                  void runMissionForTickers(tickers).finally(() => {
                     setMissionBulkRunning(false);
                   });
                 }}
