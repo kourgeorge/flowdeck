@@ -4,10 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from database import get_db
-from models.db_models import User, Subscription
 from auth import get_current_user
+from database import get_db
+from models.db_models import User
 from services.email_service import notify_admin_new_subscription, send_subscription_confirmation
+from services import subscription_service
 
 router = APIRouter(prefix="/api/subscriptions", tags=["subscriptions"])
 
@@ -32,23 +33,24 @@ class SubscriptionsListResponse(BaseModel):
     subscriptions: list[SubscriptionResponse]
 
 
+def _sub_to_response(s) -> SubscriptionResponse:
+    return SubscriptionResponse(
+        id=s.id,
+        ticker=s.ticker,
+        email_updates=getattr(s, "email_updates", True),
+        created_at=s.created_at.isoformat(),
+    )
+
+
 @router.get("", response_model=SubscriptionsListResponse)
 def list_subscriptions(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """List all tickers the current user is subscribed to."""
-    rows = db.query(Subscription).filter(Subscription.user_id == current_user.id).all()
+    rows = subscription_service.list_for_user(db, current_user.id)
     return SubscriptionsListResponse(
-        subscriptions=[
-            SubscriptionResponse(
-                id=s.id,
-                ticker=s.ticker,
-                email_updates=getattr(s, "email_updates", True),
-                created_at=s.created_at.isoformat(),
-            )
-            for s in rows
-        ]
+        subscriptions=[_sub_to_response(s) for s in rows]
     )
 
 
@@ -62,45 +64,23 @@ def subscribe(
     ticker = (req.ticker or "").strip().upper()
     if not ticker:
         raise HTTPException(status_code=400, detail="Ticker is required")
-    existing = (
-        db.query(Subscription)
-        .filter(Subscription.user_id == current_user.id, Subscription.ticker == ticker)
-        .first()
+    sub, created = subscription_service.subscribe(
+        db, current_user.id, ticker, email_updates=req.email_updates
     )
-    if existing:
-        return SubscriptionResponse(
-            id=existing.id,
-            ticker=existing.ticker,
-            email_updates=getattr(existing, "email_updates", True),
-            created_at=existing.created_at.isoformat(),
-        )
-    sub = Subscription(
-        user_id=current_user.id,
-        ticker=ticker,
-        email_updates=req.email_updates,
-    )
-    db.add(sub)
-    db.commit()
-    db.refresh(sub)
-    # Notify admin and send user a confirmation email (best-effort; do not fail the request)
-    try:
-        notify_admin_new_subscription(
-            user_email=current_user.email or "(no email)",
-            ticker=ticker,
-        )
-    except Exception:
-        pass
-    try:
-        if current_user.email:
-            send_subscription_confirmation(user_email=current_user.email, ticker=ticker)
-    except Exception:
-        pass
-    return SubscriptionResponse(
-        id=sub.id,
-        ticker=sub.ticker,
-        email_updates=sub.email_updates,
-        created_at=sub.created_at.isoformat(),
-    )
+    if created:
+        try:
+            notify_admin_new_subscription(
+                user_email=current_user.email or "(no email)",
+                ticker=ticker,
+            )
+        except Exception:
+            pass
+        try:
+            if current_user.email:
+                send_subscription_confirmation(user_email=current_user.email, ticker=ticker)
+        except Exception:
+            pass
+    return _sub_to_response(sub)
 
 
 @router.patch("/{ticker}", response_model=SubscriptionResponse)
@@ -111,26 +91,13 @@ def update_subscription(
     db: Session = Depends(get_db),
 ):
     """Update email_updates preference for a subscription."""
-    ticker_upper = ticker.strip().upper()
-    sub = (
-        db.query(Subscription)
-        .filter(
-            Subscription.user_id == current_user.id,
-            Subscription.ticker == ticker_upper,
+    try:
+        sub = subscription_service.update_email_updates(
+            db, current_user.id, ticker, req.email_updates
         )
-        .first()
-    )
-    if not sub:
+    except ValueError:
         raise HTTPException(status_code=404, detail="Subscription not found")
-    sub.email_updates = req.email_updates
-    db.commit()
-    db.refresh(sub)
-    return SubscriptionResponse(
-        id=sub.id,
-        ticker=sub.ticker,
-        email_updates=sub.email_updates,
-        created_at=sub.created_at.isoformat(),
-    )
+    return _sub_to_response(sub)
 
 
 @router.delete("/{ticker}", status_code=status.HTTP_204_NO_CONTENT)
@@ -140,15 +107,4 @@ def unsubscribe(
     db: Session = Depends(get_db),
 ):
     """Unsubscribe from a ticker."""
-    ticker_upper = ticker.strip().upper()
-    sub = (
-        db.query(Subscription)
-        .filter(
-            Subscription.user_id == current_user.id,
-            Subscription.ticker == ticker_upper,
-        )
-        .first()
-    )
-    if sub:
-        db.delete(sub)
-        db.commit()
+    subscription_service.unsubscribe(db, current_user.id, ticker)

@@ -1,7 +1,6 @@
 """User Daily Brief API: generate and retrieve tailored daily market briefs for the current user."""
 
 import asyncio
-import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -12,8 +11,8 @@ from sqlalchemy.orm import Session
 
 from auth import get_current_user
 from database import get_db
-from models.db_models import Execution, Report
 from services import token_service
+from services.digest_service import get_digest_dates as svc_get_digest_dates, get_digests_for_date as svc_get_digests_for_date
 from services.report_service import save_report
 
 logger = logging.getLogger(__name__)
@@ -221,73 +220,8 @@ def get_digest_dates(
     """
     Return dates (YYYY-MM-DD) that have at least one digest, and how many briefs per date.
     """
-    now = datetime.now(timezone.utc)
-    since = now - timedelta(days=days - 1)
-    rows = (
-        db.query(Execution.subject_id)
-        .filter(
-            Execution.execution_type == "daily_digest",
-            Execution.subject_type == "user_date",
-            Execution.creator_id == current_user.id,
-            Execution.created_at >= since,
-        )
-        .all()
-    )
-    # subject_id is "uid:YYYY-MM-DD" (daily) or "uid:w:YYYY-MM-DD" (weekly); date_str is the slot key
-    count_by_date: dict[str, int] = {}
-    for (subject_id,) in rows:
-        if not subject_id:
-            continue
-        parts = str(subject_id).split(":", 2)
-        if len(parts) < 2:
-            continue
-        # uid:date or uid:w:date
-        date_str = parts[1] if len(parts) == 2 else f"{parts[1]}:{parts[2]}"
-        if date_str:
-            count_by_date[date_str] = count_by_date.get(date_str, 0) + 1
-    dates = sorted(count_by_date.keys())
+    dates, count_by_date = svc_get_digest_dates(db, current_user.id, days)
     return DigestDatesResponse(dates=dates, count_by_date=count_by_date)
-
-
-def _report_to_brief_item(ex: Execution, report: Report, slot: str) -> DigestBriefItem:
-    meta: dict = {}
-    if report.metadata_json:
-        try:
-            meta = json.loads(report.metadata_json) or {}
-        except Exception:
-            meta = {}
-    narrative = report.content or ""
-    what_to_watch = str(meta.get("what_to_watch") or "")
-    digest_date = str(meta.get("digest_date") or slot)
-    span_type = str(meta.get("span_type") or "daily")
-    span_label = str(meta.get("span_label") or "Daily")
-    priority_tickers = meta.get("priority_tickers") or []
-    if not isinstance(priority_tickers, list):
-        priority_tickers = []
-    user_note = meta.get("user_note")
-    narrative_style = meta.get("narrative_style")
-    user_focus_tickers = meta.get("user_focus_tickers") or None
-    if user_focus_tickers is not None and not isinstance(user_focus_tickers, list):
-        user_focus_tickers = None
-    refs = meta.get("references")
-    if refs is not None and not isinstance(refs, list):
-        refs = None
-    created_at = ex.created_at.isoformat() if ex.created_at else ""
-    return DigestBriefItem(
-        execution_id=ex.id,
-        created_at=created_at,
-        narrative=narrative,
-        what_to_watch=what_to_watch,
-        digest_date=digest_date,
-        span_type=span_type,
-        span_label=span_label,
-        priority_tickers=[str(t) for t in priority_tickers],
-        user_note=str(user_note) if user_note is not None else None,
-        narrative_style=str(narrative_style) if narrative_style is not None else None,
-        user_focus_tickers=[str(t) for t in (user_focus_tickers or [])] or None,
-        references=refs,
-        raw_metadata=meta or None,
-    )
 
 
 def _validate_slot(slot: str) -> None:
@@ -296,6 +230,25 @@ def _validate_slot(slot: str) -> None:
         datetime.strptime(slot[2:], "%Y-%m-%d")
     else:
         datetime.strptime(slot, "%Y-%m-%d")
+
+
+def _brief_item_to_response(b) -> DigestBriefItem:
+    """Map service DigestBriefItem to Pydantic DigestBriefItem."""
+    return DigestBriefItem(
+        execution_id=b.execution_id,
+        created_at=b.created_at,
+        narrative=b.narrative,
+        what_to_watch=b.what_to_watch,
+        digest_date=b.digest_date,
+        span_type=b.span_type,
+        span_label=b.span_label,
+        priority_tickers=b.priority_tickers,
+        user_note=b.user_note,
+        narrative_style=b.narrative_style,
+        user_focus_tickers=b.user_focus_tickers,
+        references=b.references,
+        raw_metadata=b.raw_metadata,
+    )
 
 
 @router.get("/digest/history/{date}", response_model=DigestListForDateResponse)
@@ -313,32 +266,6 @@ def get_digests_for_date(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid slot format, expected YYYY-MM-DD or w:YYYY-MM-DD")
 
-    subject_id = f"{current_user.id}:{date}"
-    executions = (
-        db.query(Execution)
-        .filter(
-            Execution.execution_type == "daily_digest",
-            Execution.subject_type == "user_date",
-            Execution.subject_id == subject_id,
-            Execution.creator_id == current_user.id,
-        )
-        .order_by(Execution.created_at.desc())
-        .all()
-    )
-    if not executions:
-        return DigestListForDateResponse(date=date, briefs=[])
-
-    briefs: list[DigestBriefItem] = []
-    for ex in executions:
-        report = (
-            db.query(Report)
-            .filter(
-                Report.execution_id == ex.id,
-                Report.report_type == "daily_digest",
-            )
-            .first()
-        )
-        if report:
-            briefs.append(_report_to_brief_item(ex, report, date))
-
-    return DigestListForDateResponse(date=date, briefs=briefs)  # date is the slot (YYYY-MM-DD or w:YYYY-MM-DD)
+    brief_objs = svc_get_digests_for_date(db, current_user.id, date)
+    briefs = [_brief_item_to_response(b) for b in brief_objs]
+    return DigestListForDateResponse(date=date, briefs=briefs)

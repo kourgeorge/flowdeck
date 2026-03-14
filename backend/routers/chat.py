@@ -19,9 +19,17 @@ from sqlalchemy.orm import Session
 
 from auth import get_current_user
 from database import get_db, SessionLocal
-from models.db_models import ChatMessage, ChatSession
+from models.db_models import ChatMessage
 from services import token_service
-from services.chat_persistence import save_assistant_message, save_user_message, update_session_after_messages
+from services.chat_persistence import (
+    create_session_for_user,
+    delete_session_for_user,
+    get_session_for_user,
+    list_sessions_for_user,
+    save_assistant_message,
+    save_user_message,
+    update_session_after_messages,
+)
 from services.chat_service import get_chat_service
 
 
@@ -160,14 +168,6 @@ def _message_to_out(m: ChatMessage) -> ChatMessageOut:
     )
 
 
-def _get_session_for_user(db: Session, session_id: int, user_id: int) -> Optional[ChatSession]:
-    """Load session by id if it belongs to the user."""
-    session = db.get(ChatSession, session_id)
-    if session is None or session.user_id != user_id:
-        return None
-    return session
-
-
 def _persist_turn_on_done(
     db: Session,
     user_id: int,
@@ -196,9 +196,7 @@ def _persist_turn_on_done(
         return sid
     try:
         if sid is None:
-            new_session = ChatSession(user_id=user_id)
-            db.add(new_session)
-            db.flush()
+            new_session = create_session_for_user(db, user_id)
             sid = new_session.id
         base_order = existing_message_count if session_id_for_persist is not None else 0
         for i, um in enumerate(body_messages):
@@ -235,13 +233,7 @@ async def list_sessions(
     limit: int = 50,
 ):
     """List current user's chat sessions, most recently updated first."""
-    sessions = (
-        db.query(ChatSession)
-        .filter(ChatSession.user_id == current_user.id)
-        .order_by(ChatSession.updated_at.desc())
-        .limit(max(1, min(limit, 100)))
-        .all()
-    )
+    sessions = list_sessions_for_user(db, current_user.id, limit)
     return SessionListResponse(
         sessions=[
             SessionListItem(
@@ -260,8 +252,7 @@ async def create_session(
     db: Session = Depends(get_db),
 ):
     """Create a new chat session."""
-    session = ChatSession(user_id=current_user.id)
-    db.add(session)
+    session = create_session_for_user(db, current_user.id)
     db.commit()
     db.refresh(session)
     return ChatSessionOut(
@@ -279,7 +270,7 @@ async def get_session(
     db: Session = Depends(get_db),
 ):
     """Get one session and its messages. 404 if not found or not owned by user."""
-    session = _get_session_for_user(db, session_id, current_user.id)
+    session = get_session_for_user(db, session_id, current_user.id)
     if session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
     messages = list(session.messages)
@@ -299,11 +290,8 @@ async def delete_session(
     db: Session = Depends(get_db),
 ):
     """Delete a session and all its messages. 404 if not found or not owned by user."""
-    session = _get_session_for_user(db, session_id, current_user.id)
-    if session is None:
+    if not delete_session_for_user(db, session_id, current_user.id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
-    db.delete(session)
-    db.commit()
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -333,7 +321,7 @@ async def chat(
 
     # When session_id is set, load session messages and prepend to request messages
     if body.session_id is not None:
-        session = _get_session_for_user(db, body.session_id, user_id)
+        session = get_session_for_user(db, body.session_id, user_id)
         if session is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
         db_messages = [{"role": m.role, "content": m.content} for m in session.messages]
@@ -373,9 +361,7 @@ async def chat(
         try:
             sid = body.session_id
             if sid is None:
-                new_session = ChatSession(user_id=user_id)
-                db.add(new_session)
-                db.flush()
+                new_session = create_session_for_user(db, user_id)
                 sid = new_session.id
                 persisted_session_id = sid
             base_order = existing_message_count
@@ -443,7 +429,7 @@ async def chat_stream(
     session_id_for_persist: Optional[int] = None
     existing_message_count = 0
     if body.session_id is not None:
-        session = _get_session_for_user(db, body.session_id, user_id)
+        session = get_session_for_user(db, body.session_id, user_id)
         if session is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
         db_messages = [{"role": m.role, "content": m.content} for m in session.messages]

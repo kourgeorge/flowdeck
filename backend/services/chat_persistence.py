@@ -90,3 +90,46 @@ def update_session_after_messages(
         if title:
             session.title = title
     db.flush()
+
+
+def get_session_for_user(
+    db: Session, session_id: int, user_id: int
+) -> Optional[ChatSession]:
+    """Load session by id if it belongs to the user. Otherwise None."""
+    session = db.get(ChatSession, session_id)
+    if session is None or session.user_id != user_id:
+        return None
+    return session
+
+
+def list_sessions_for_user(
+    db: Session, user_id: int, limit: int = 50
+) -> List[ChatSession]:
+    """List user's chat sessions, most recently updated first."""
+    return (
+        db.query(ChatSession)
+        .filter(ChatSession.user_id == user_id)
+        .order_by(ChatSession.updated_at.desc())
+        .limit(max(1, min(limit, 100)))
+        .all()
+    )
+
+
+def create_session_for_user(db: Session, user_id: int) -> ChatSession:
+    """Create a new chat session for the user. Caller must commit."""
+    session = ChatSession(user_id=user_id)
+    db.add(session)
+    db.flush()
+    return session
+
+
+def delete_session_for_user(
+    db: Session, session_id: int, user_id: int
+) -> bool:
+    """Delete session if it exists and belongs to user. Returns True if deleted."""
+    session = get_session_for_user(db, session_id, user_id)
+    if session is None:
+        return False
+    db.delete(session)
+    db.commit()
+    return True
