@@ -2,6 +2,9 @@
 /** Special virtual tab key for the AI chat panel */
 export const CHAT_TAB_KEY = '__chat__';
 
+/** Special tab key for the hierarchical mind map overview */
+export const OVERVIEW_TAB_KEY = '__overview__';
+
 interface ReportScore {
   score: number | null;
   score_label: string | null;
@@ -14,14 +17,19 @@ interface ReportTabsProps {
   reportScores?: Record<string, ReportScore>;
   /** Whether to show the Chat tab at the end */
   showChatTab?: boolean;
+  /** Whether to show the Overview tab first (mind map) */
+  showOverviewTab?: boolean;
 }
 
-export default function ReportTabs({ availableReports, selectedReport, onSelectReport, reportScores, showChatTab }: ReportTabsProps) {
-  const allTabs = showChatTab ? [...availableReports, CHAT_TAB_KEY] : availableReports;
+export default function ReportTabs({ availableReports, selectedReport, onSelectReport, reportScores, showChatTab, showOverviewTab }: ReportTabsProps) {
+  const allTabs = showOverviewTab
+    ? [OVERVIEW_TAB_KEY, ...availableReports]
+    : availableReports;
+  const allTabsWithChat = showChatTab ? [...allTabs, CHAT_TAB_KEY] : allTabs;
 
-  const activeTab = selectedReport && allTabs.includes(selectedReport)
+  const activeTab = selectedReport && allTabsWithChat.includes(selectedReport)
     ? selectedReport
-    : (availableReports.length > 0 ? availableReports[0] : null);
+    : (allTabsWithChat.length > 0 ? allTabsWithChat[0] : null);
 
   const handleTabClick = (reportType: string) => {
     onSelectReport(reportType);
@@ -41,6 +49,7 @@ export default function ReportTabs({ availableReports, selectedReport, onSelectR
 
   const formatReportName = (name: string) => {
     if (name === CHAT_TAB_KEY) return 'Chat';
+    if (name === OVERVIEW_TAB_KEY) return 'Overview';
     if (REPORT_LABELS[name]) return REPORT_LABELS[name];
     return name
       .split('_')
@@ -56,13 +65,29 @@ export default function ReportTabs({ availableReports, selectedReport, onSelectR
     return 'text-green-400';
   };
 
-  if (availableReports.length === 0 && !showChatTab) {
+  if (availableReports.length === 0 && !showChatTab && !showOverviewTab) {
     return null;
   }
 
   return (
     <div className="border-b border-slate-700 mb-6">
       <div className="flex flex-wrap gap-0.5">
+        {showOverviewTab && (
+          <button
+            type="button"
+            onClick={() => handleTabClick(OVERVIEW_TAB_KEY)}
+            className={`
+              px-2 py-1.5 text-sm font-medium transition-colors flex items-center gap-1
+              ${
+                activeTab === OVERVIEW_TAB_KEY
+                  ? 'border-b-2 border-blue-500 text-blue-400'
+                  : 'text-slate-400 hover:text-slate-300'
+              }
+            `}
+          >
+            <span>Overview</span>
+          </button>
+        )}
         {availableReports.map((reportType) => {
           const scoreData = reportScores?.[reportType];
           const score = scoreData?.score;
@@ -93,6 +118,7 @@ export default function ReportTabs({ availableReports, selectedReport, onSelectR
         {showChatTab && (
           <button
             onClick={() => handleTabClick(CHAT_TAB_KEY)}
+            type="button"
             className={`
               px-2 py-1.5 text-sm font-medium transition-colors flex items-center gap-1.5 ml-1
               ${

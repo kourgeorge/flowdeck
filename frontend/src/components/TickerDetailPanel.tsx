@@ -7,8 +7,9 @@ import type { SimilarTicker, TickerPageData, SimilarTickersResponse } from '../s
 import { useQuoteRefresh } from '../hooks/useQuoteRefresh';
 import { useAuth } from '../contexts/AuthContext';
 import { subscriptionApi, type Subscription } from '../services/subscriptionApi';
-import ReportTabs from './ReportTabs';
+import ReportTabs, { OVERVIEW_TAB_KEY } from './ReportTabs';
 import ReportViewer from './ReportViewer';
+import HierarchicalMindMap from './HierarchicalMindMap';
 import SubscribeButton from './SubscribeButton';
 import AuthModal from './AuthModal';
 import PriceTrendWidget from './PriceTrendWidget';
@@ -139,6 +140,15 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     if (activeTab === 'fundamentals' && quoteType != null && quoteType !== 'EQUITY') setActiveTab('overview');
   }, [quoteType, activeTab]);
 
+  // When switching to the AI Analysis tab, open the Overview sub-tab by default
+  const prevMainTabRef = useRef<string>(activeTab);
+  useEffect(() => {
+    if (prevMainTabRef.current !== 'ai-analysis' && activeTab === 'ai-analysis') {
+      setSelectedReport(OVERVIEW_TAB_KEY);
+    }
+    prevMainTabRef.current = activeTab;
+  }, [activeTab]);
+
   useEffect(() => {
     if (activeTab === 'insider-transactions' && quoteType != null && quoteType !== 'EQUITY') setActiveTab('overview');
   }, [quoteType, activeTab]);
@@ -168,8 +178,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     setSelectedRunId(null);
     setHistoricalReportsData(null);
     if (data.reports && Object.keys(data.reports).length > 0) {
-      const reports = Object.keys(data.reports);
-      setSelectedReport(reports.includes('final_trade_decision') ? 'final_trade_decision' : reports[0]);
+      setSelectedReport(OVERVIEW_TAB_KEY);
     }
     if (data.is_generating && data.generation_analysis_run_id != null) {
       setAnalysisProgress(null);
@@ -187,8 +196,8 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
           if (freshData.reports && Object.keys(freshData.reports).length > 0) {
             const keys = Object.keys(freshData.reports);
             setSelectedReport((prev) => {
-              if (prev && keys.includes(prev)) return prev;
-              return keys.includes('final_trade_decision') ? 'final_trade_decision' : keys[0];
+              if (prev && prev !== OVERVIEW_TAB_KEY && keys.includes(prev)) return prev;
+              return OVERVIEW_TAB_KEY;
             });
           }
         }).catch(() => {});
@@ -387,8 +396,8 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
         if (!viewingHistoricalRunRef.current && data.reports && Object.keys(data.reports).length > 0) {
           const keys = Object.keys(data.reports);
           setSelectedReport((prev) => {
-            if (prev && keys.includes(prev)) return prev;
-            return keys.includes('final_trade_decision') ? 'final_trade_decision' : keys[0];
+            if (prev && prev !== OVERVIEW_TAB_KEY && keys.includes(prev)) return prev;
+            return OVERVIEW_TAB_KEY;
           });
         }
         if (!data.is_generating) {
@@ -484,10 +493,9 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     if (analysisRunId == null) {
       setSelectedRunId(null);
       setHistoricalReportsData(null);
-      // Reset to latest report tab
-      if (stockData?.reports) {
-        const reports = Object.keys(stockData.reports);
-        setSelectedReport(reports.includes('final_trade_decision') ? 'final_trade_decision' : reports[0] ?? null);
+      // Reset to latest report tab (Overview by default)
+      if (stockData?.reports && Object.keys(stockData.reports).length > 0) {
+        setSelectedReport(OVERVIEW_TAB_KEY);
       }
       return;
     }
@@ -786,6 +794,9 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const currentReportScoreLabel = currentReportData?.score_label;
   const reportScores: Record<string, { score: number | null; score_label: string | null }> = {};
   if (activeReportsSource) Object.entries(activeReportsSource).forEach(([k, v]) => { reportScores[k] = { score: v.score, score_label: v.score_label }; });
+  const activeRecommendation = selectedRunId != null && stockData.historical_analyses
+    ? stockData.historical_analyses.find((x) => x.analysis_run_id === selectedRunId)?.recommendation ?? null
+    : stockData.recommendation?.recommendation ?? null;
   const modelsUsed = activeReportsSource ? (Object.values(activeReportsSource).find((r) => r.models_used)?.models_used ?? null) : null;
   const quote = refreshedQuote ?? stockData.quote;
   const lastUpdateTime = quote?.last_update_time ? new Date(quote.last_update_time).toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '';
@@ -1325,9 +1336,6 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                       ? stockData.historical_analyses.find((x) => x.analysis_run_id === selectedRunId)?.date ?? stockData.report_date ?? null
                       : stockData.report_date ?? null;
                     const summaryScoreEntries = getAnalysisScoreEntries(activeReportsSource ?? null);
-                    const activeRecommendation = selectedRunId != null
-                      ? stockData.historical_analyses.find((x) => x.analysis_run_id === selectedRunId)?.recommendation ?? null
-                      : stockData.recommendation?.recommendation ?? null;
                     const activeConfidence = selectedRunId ? null : stockData.recommendation?.confidence ?? null;
                     const planReport = activeReportsSource?.investment_plan;
                     const activeExpected = selectedRunId ? (planReport?.expected_return_pct ?? null) : stockData.expected_return_pct ?? null;
@@ -1566,14 +1574,50 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                           selectedReport={selectedReport}
                           onSelectReport={setSelectedReport}
                           reportScores={reportScores}
+                          showOverviewTab
                         />
                         <div className="mt-4">
-                          <ReportViewer content={currentReportContent} score={currentReportScore} scoreLabel={currentReportScoreLabel}
-                            keyTakeaways={currentReportData?.key_takeaways} reportType={selectedReport}
-                            bullViewpoint={currentReportData?.bull_viewpoint} bearViewpoint={currentReportData?.bear_viewpoint}
-                            riskyViewpoint={currentReportData?.risky_viewpoint} safeViewpoint={currentReportData?.safe_viewpoint}
-                            neutralViewpoint={currentReportData?.neutral_viewpoint}
-                            tpsPlan={currentReportData?.tps_plan} />
+                          {(selectedReport === null || selectedReport === OVERVIEW_TAB_KEY) && availableReports.length > 0 ? (
+                            availableReports.includes('final_trade_decision') ? (
+                              <HierarchicalMindMap
+                                ticker={stockData.ticker}
+                                companyName={companyInfo?.name ?? null}
+                                recommendation={activeRecommendation}
+                                reports={activeReportsSource ?? {}}
+                              />
+                            ) : (
+                              <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 text-center">
+                                <p className="text-gray-300 mb-4">
+                                  The overview is available only when the full analysis has completed. Please re-run the analysis to see the overview.
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => handleGenerateReport('fresh')}
+                                  disabled={isStartingAnalysis || stockData.is_generating}
+                                  className="inline-flex items-center gap-2 px-5 py-2.5 text-white font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
+                                >
+                                  {isStartingAnalysis || stockData.is_generating ? (
+                                    <>
+                                      <svg className="w-4 h-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                                      </svg>
+                                      {stockData.is_generating ? 'Running…' : 'Starting...'}
+                                    </>
+                                  ) : (
+                                    'Run Fresh Analysis'
+                                  )}
+                                </button>
+                              </div>
+                            )
+                          ) : (
+                            <ReportViewer content={currentReportContent} score={currentReportScore} scoreLabel={currentReportScoreLabel}
+                              keyTakeaways={currentReportData?.key_takeaways} reportType={selectedReport}
+                              bullViewpoint={currentReportData?.bull_viewpoint} bearViewpoint={currentReportData?.bear_viewpoint}
+                              riskyViewpoint={currentReportData?.risky_viewpoint} safeViewpoint={currentReportData?.safe_viewpoint}
+                              neutralViewpoint={currentReportData?.neutral_viewpoint}
+                              tpsPlan={currentReportData?.tps_plan} />
+                          )}
                         </div>
                       </div>
                     )}
