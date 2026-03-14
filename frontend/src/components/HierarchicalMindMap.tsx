@@ -103,7 +103,7 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
   return (
     <div className="w-full">
       <div className="text-center">
-        <div className="inline-block text-center py-3.5 px-6 border-2 border-gray-700 rounded-lg bg-gray-800 mb-6">
+        <div className="inline-block text-center py-3.5 px-6 border-2 border-gray-700 rounded-lg bg-gray-900 mb-6">
           <div className="text-xl font-bold text-slate-100">{ticker}</div>
           <div className={`text-sm font-semibold mt-0.5 ${getRecommendationClass(recommendation)}`}>
             {recommendation ?? '—'}
@@ -212,35 +212,37 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
                 <p className="text-sm text-slate-500">No key takeaways for this report.</p>
               )}
 
-              {selectedReportKey === 'investment_plan' && (
-                <div className="space-y-3 pt-2 border-t border-gray-700">
-                  <h4 className="text-[0.72rem] font-bold uppercase tracking-wide text-slate-500">Researcher Viewpoints</h4>
-                  {selectedData.bull_viewpoint && selectedData.bull_viewpoint.length > 0 && (
-                    <div>
-                      <div className="text-xs font-semibold text-green-400/90 mb-1">Bullish</div>
-                      <ul className="text-sm text-slate-300 leading-relaxed pl-5 list-disc space-y-0.5">
-                        {selectedData.bull_viewpoint.map((item, i) => (
-                          <li key={i}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {selectedData.bear_viewpoint && selectedData.bear_viewpoint.length > 0 && (
-                    <div>
-                      <div className="text-xs font-semibold text-red-400/90 mb-1">Bearish</div>
-                      <ul className="text-sm text-slate-300 leading-relaxed pl-5 list-disc space-y-0.5">
-                        {selectedData.bear_viewpoint.map((item, i) => (
-                          <li key={i}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {(!selectedData.bull_viewpoint || selectedData.bull_viewpoint.length === 0) &&
-                    (!selectedData.bear_viewpoint || selectedData.bear_viewpoint.length === 0) && (
-                    <p className="text-sm text-slate-500">No researcher viewpoints in this report.</p>
-                  )}
+              {selectedReportKey === 'investment_plan' && (selectedData.bull_viewpoint?.length || selectedData.bear_viewpoint?.length) ? (
+                <div className="rounded-lg border border-slate-600 bg-slate-900/40 p-4 space-y-4">
+                  <div className="text-xs font-semibold uppercase tracking-widest text-slate-500 pb-1 border-b border-slate-700">
+                    Researcher Viewpoints
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {selectedData.bull_viewpoint && selectedData.bull_viewpoint.length > 0 && (
+                      <div className="rounded-lg border border-green-900/50 bg-green-950/30 p-4">
+                        <div className="mb-2 text-sm font-semibold text-green-400">Bull Viewpoint</div>
+                        <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
+                          {selectedData.bull_viewpoint.map((p, i) => (
+                            <li key={`${i}-${p.slice(0, 40)}`}>{p}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {selectedData.bear_viewpoint && selectedData.bear_viewpoint.length > 0 && (
+                      <div className="rounded-lg border border-red-900/50 bg-red-950/30 p-4">
+                        <div className="mb-2 text-sm font-semibold text-red-400">Bear Viewpoint</div>
+                        <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
+                          {selectedData.bear_viewpoint.map((p, i) => (
+                            <li key={`${i}-${p.slice(0, 40)}`}>{p}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
+              ) : selectedReportKey === 'investment_plan' ? (
+                <p className="text-sm text-slate-500">No researcher viewpoints in this report.</p>
+              ) : null}
 
               {selectedReportKey === 'trader_investment_plan' && selectedData.tps_plan && selectedData.tps_plan.trim().length > 0 && (
                 <div className="space-y-3 pt-2 border-t border-gray-700">
@@ -267,46 +269,45 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
                 </div>
               )}
 
-              {selectedReportKey === 'final_trade_decision' && (
-                <div className="space-y-3 pt-2 border-t border-gray-700">
-                  <h4 className="text-[0.72rem] font-bold uppercase tracking-wide text-slate-500">Analyst Viewpoints</h4>
+              {selectedReportKey === 'final_trade_decision' && (selectedData.risky_viewpoint?.length || selectedData.safe_viewpoint?.length || selectedData.neutral_viewpoint?.length) ? (
+                <div className="rounded-lg border border-slate-600 bg-slate-900/40 p-4 space-y-4">
+                  <div className="text-xs font-semibold uppercase tracking-widest text-slate-500 pb-1 border-b border-slate-700">
+                    Analyst Viewpoints
+                  </div>
                   {selectedData.risky_viewpoint && selectedData.risky_viewpoint.length > 0 && (
-                    <div>
-                      <div className="text-xs font-semibold text-amber-400/90 mb-1">Risky</div>
-                      <ul className="text-sm text-slate-300 leading-relaxed pl-5 list-disc space-y-0.5">
-                        {selectedData.risky_viewpoint.map((item, i) => (
-                          <li key={i}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {selectedData.safe_viewpoint && selectedData.safe_viewpoint.length > 0 && (
-                    <div>
-                      <div className="text-xs font-semibold text-green-400/90 mb-1">Safe</div>
-                      <ul className="text-sm text-slate-300 leading-relaxed pl-5 list-disc space-y-0.5">
-                        {selectedData.safe_viewpoint.map((item, i) => (
-                          <li key={i}>{item}</li>
+                    <div className="rounded-lg border border-amber-900/50 bg-amber-950/30 p-4">
+                      <div className="mb-2 text-sm font-semibold text-amber-400">Risky Analyst Viewpoint</div>
+                      <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
+                        {selectedData.risky_viewpoint.map((p, i) => (
+                          <li key={`${i}-${p.slice(0, 40)}`}>{p}</li>
                         ))}
                       </ul>
                     </div>
                   )}
                   {selectedData.neutral_viewpoint && selectedData.neutral_viewpoint.length > 0 && (
-                    <div>
-                      <div className="text-xs font-semibold text-slate-400 mb-1">Neutral</div>
-                      <ul className="text-sm text-slate-300 leading-relaxed pl-5 list-disc space-y-0.5">
-                        {selectedData.neutral_viewpoint.map((item, i) => (
-                          <li key={i}>{item}</li>
+                    <div className="rounded-lg border border-gray-500/50 bg-gray-700/40 p-4">
+                      <div className="mb-2 text-sm font-semibold text-gray-300">Neutral Analyst Viewpoint</div>
+                      <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
+                        {selectedData.neutral_viewpoint.map((p, i) => (
+                          <li key={`${i}-${p.slice(0, 40)}`}>{p}</li>
                         ))}
                       </ul>
                     </div>
                   )}
-                  {(!selectedData.risky_viewpoint || selectedData.risky_viewpoint.length === 0) &&
-                    (!selectedData.safe_viewpoint || selectedData.safe_viewpoint.length === 0) &&
-                    (!selectedData.neutral_viewpoint || selectedData.neutral_viewpoint.length === 0) && (
-                    <p className="text-sm text-slate-500">No analyst viewpoints in this report.</p>
+                  {selectedData.safe_viewpoint && selectedData.safe_viewpoint.length > 0 && (
+                    <div className="rounded-lg border border-blue-900/50 bg-blue-950/30 p-4">
+                      <div className="mb-2 text-sm font-semibold text-blue-400">Safe Analyst Viewpoint</div>
+                      <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
+                        {selectedData.safe_viewpoint.map((p, i) => (
+                          <li key={`${i}-${p.slice(0, 40)}`}>{p}</li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
                 </div>
-              )}
+              ) : selectedReportKey === 'final_trade_decision' ? (
+                <p className="text-sm text-slate-500">No analyst viewpoints in this report.</p>
+              ) : null}
             </div>
           </div>
         </div>,
