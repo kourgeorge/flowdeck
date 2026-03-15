@@ -67,7 +67,7 @@ export default function DailyDigestRunPanel({
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
       <div>
-        <h2 className="text-sm font-semibold text-white mb-1">User Daily Brief (beta)</h2>
+        <h2 className="text-sm font-semibold text-white mb-1">User Daily Brief</h2>
         <p className="text-xs text-gray-400">
           Generate a short narrative summary of {digestSpan === 'weekly' ? 'the past week\'s' : 'today\'s'} market and your subscribed tickers.
         </p>

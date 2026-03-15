@@ -51,10 +51,16 @@ export default function DashboardPage() {
   const [digestSpan, setDigestSpan] = useState<'daily' | 'weekly'>('daily');
   const [selectedFocusTickers, setSelectedFocusTickers] = useState<string[]>([]);
   const [showReferences, setShowReferences] = useState<boolean>(false);
-  const [showDigestHistory, setShowDigestHistory] = useState<boolean>(false);
   const [showRawDigest, setShowRawDigest] = useState<boolean>(false);
   const [digestInputExpanded, setDigestInputExpanded] = useState<boolean>(false);
   const [shareLinkCopied, setShareLinkCopied] = useState<boolean>(false);
+  const [hasBriefForToday, setHasBriefForToday] = useState<boolean | null>(null);
+  const [briefPromptDismissed, setBriefPromptDismissed] = useState<boolean>(() => {
+    if (typeof localStorage !== 'undefined') {
+      return localStorage.getItem('flowdeck_brief_prompt_dismissed') === 'true';
+    }
+    return false;
+  });
 
   const {
     widgets,
@@ -114,6 +120,9 @@ export default function DashboardPage() {
         ...prev,
         [slot]: (prev[slot] ?? 0) + 1,
       }));
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      if (data.digest_date === todayStr) setHasBriefForToday(true);
       if (trimmedNote) {
         setDigestUserNote('');
       }
@@ -127,6 +136,26 @@ export default function DashboardPage() {
       setDigestLoading(false);
     }
   };
+
+  // On Overview: check if user has a brief for today (for "no brief today" card)
+  useEffect(() => {
+    if (dashboardTab !== 'overview' || !user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await digestApi.getDigestDates(7);
+        const dates = res.dates ?? [];
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        if (!cancelled) {
+          setHasBriefForToday(dates.includes(todayStr));
+        }
+      } catch {
+        if (!cancelled) setHasBriefForToday(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [dashboardTab, user]);
 
   // Load digest history dates and show last digest when opening the digest tab (once per session)
   useEffect(() => {
@@ -186,13 +215,6 @@ export default function DashboardPage() {
   const goToNextMonth = () => {
     setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
   };
-
-  // Show 3 months: two before and the current calendar month
-  const calendarMonthsToShow: { year: number; monthIndex: number }[] = [];
-  for (let i = 2; i >= 0; i--) {
-    const d = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - i, 1);
-    calendarMonthsToShow.push({ year: d.getFullYear(), monthIndex: d.getMonth() });
-  }
 
   const formatDate = (y: number, mZeroBased: number, d: number) => {
     const m = mZeroBased + 1;
@@ -380,6 +402,46 @@ export default function DashboardPage() {
                 </div>
               )}
 
+              {/* No brief for today — prompt card (only when not dismissed) */}
+              {user && dashboardTab === 'overview' && !briefPromptDismissed && hasBriefForToday === false && (
+                <div className="mb-6 bg-gray-800 rounded-lg border border-gray-700 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-white mb-0.5">No brief for today yet.</p>
+                    <p className="text-xs text-gray-400">
+                      Get a short narrative summary of today&apos;s market and your portfolio.
+                    </p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handleDashboardTabChange('digest')}
+                      className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Generate today&apos;s brief
+                    </button>
+                    <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer sm:whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={briefPromptDismissed}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setBriefPromptDismissed(checked);
+                          try {
+                            if (checked) localStorage.setItem('flowdeck_brief_prompt_dismissed', 'true');
+                            else localStorage.removeItem('flowdeck_brief_prompt_dismissed');
+                          } catch {}
+                        }}
+                        className="rounded border-gray-600 bg-gray-900 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      Don&apos;t show this again
+                    </label>
+                  </div>
+                </div>
+              )}
+
               {hasNoStocks ? (
                 <div className="bg-gray-800 rounded-lg border border-gray-700 p-12 text-center">
                   <p className="text-gray-400 mb-4">You haven't subscribed to any stocks yet.</p>
@@ -541,67 +603,34 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Digest Tab ── */}
+      {/* ── Digest Tab: calendar view — left: current month + generation panel; right: brief ── */}
       {dashboardTab === 'digest' && (
         <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="px-4 py-6 sm:p-6 lg:p-8">
-            <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden space-y-4">
-              {/* Run panel: brief options + Run digest button (above Brief history) */}
-              <DailyDigestRunPanel
-                digestUserNote={digestUserNote}
-                onDigestUserNoteChange={setDigestUserNote}
-                digestNarrativeStyle={digestNarrativeStyle}
-                onDigestNarrativeStyleChange={setDigestNarrativeStyle}
-                digestSpan={digestSpan}
-                onDigestSpanChange={setDigestSpan}
-                digestInputExpanded={digestInputExpanded}
-                onDigestInputExpandedChange={setDigestInputExpanded}
-                selectedFocusTickers={selectedFocusTickers}
-                onSelectedFocusTickersChange={setSelectedFocusTickers}
-                subscribedTickers={subscribedTickers}
-                onRunDigest={handleRunDigest}
-                digestLoading={digestLoading}
-              />
-
-              {/* Brief history + Brief content — single panel (same lighter background as run panel) */}
-              <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setShowDigestHistory((v) => !v)}
-                  className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-left text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-700/50 transition-colors"
-                >
-                  <span>Brief history</span>
-                  <svg
-                    className={`w-3.5 h-3.5 transition-transform ${showDigestHistory ? 'rotate-180' : ''}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {showDigestHistory && (
-                  <div className="px-4 pb-4 pt-0 border-b border-gray-700">
-                    <div className="flex items-center justify-between mb-2">
+            <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
+              <div className="flex flex-col lg:flex-row gap-6">
+                {/* Left: calendar (current month) + generation panel */}
+                <div className="lg:w-72 xl:w-80 shrink-0 flex flex-col gap-4">
+                  {/* Current month calendar */}
+                  <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+                    <div className="flex items-center justify-between mb-3">
                       <button
                         type="button"
                         onClick={goToPrevMonth}
-                        className="p-1 text-gray-400 hover:text-white hover:bg-gray-800 rounded"
+                        className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded"
                         aria-label="Previous month"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                         </svg>
                       </button>
-                      <div className="text-xs font-medium text-gray-200">
-                        {calendarMonthsToShow.length === 3
-                          ? `${new Date(calendarMonthsToShow[0].year, calendarMonthsToShow[0].monthIndex).toLocaleString(undefined, { month: 'short' })} – ${new Date(calendarMonthsToShow[2].year, calendarMonthsToShow[2].monthIndex).toLocaleString(undefined, { month: 'short', year: 'numeric' })}`
-                          : null}
-                      </div>
+                      <span className="text-sm font-semibold text-white">
+                        {calendarMonth.toLocaleString(undefined, { month: 'long', year: 'numeric' })}
+                      </span>
                       <button
                         type="button"
                         onClick={goToNextMonth}
-                        className="p-1 text-gray-400 hover:text-white hover:bg-gray-800 rounded"
+                        className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded"
                         aria-label="Next month"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -609,22 +638,20 @@ export default function DashboardPage() {
                         </svg>
                       </button>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {calendarMonthsToShow.map(({ year, monthIndex }) => {
-                      const firstOfMonth = new Date(year, monthIndex, 1);
-                      const startWeekday = firstOfMonth.getDay();
-                      const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-                      return (
-                        <div key={`${year}-${monthIndex}`} className="min-w-0">
-                          <p className="text-xs font-medium text-gray-500 mb-1">
-                            {firstOfMonth.toLocaleString(undefined, { month: 'short', year: 'numeric' })}
-                          </p>
-                          <div className="grid grid-cols-7 gap-0.5 text-xs text-center text-gray-500 mb-0.5">
-                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d) => (
-                              <div key={d}>{d}</div>
-                            ))}
-                          </div>
-                          <div className="grid grid-cols-7 gap-0.5 text-xs">
+                    <div className="grid grid-cols-7 gap-0.5 text-[10px] text-center text-gray-500 mb-1">
+                      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d) => (
+                        <div key={d}>{d}</div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-7 gap-0.5 text-xs">
+                      {(() => {
+                        const year = calendarMonth.getFullYear();
+                        const monthIndex = calendarMonth.getMonth();
+                        const firstOfMonth = new Date(year, monthIndex, 1);
+                        const startWeekday = firstOfMonth.getDay();
+                        const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+                        return (
+                          <>
                             {Array.from({ length: startWeekday }).map((_, idx) => (
                               <div key={`b-${idx}`} />
                             ))}
@@ -635,7 +662,7 @@ export default function DashboardPage() {
                               const count = digestCountByDate[dateStr] ?? 0;
                               const isSelected = selectedDigestDate === dateStr;
                               const baseClasses =
-                                'h-7 relative flex items-center justify-center rounded cursor-pointer border text-xs';
+                                'h-8 relative flex items-center justify-center rounded cursor-pointer border text-xs';
                               const variant = hasDigest
                                 ? isSelected
                                   ? 'bg-emerald-600 border-emerald-500 text-white'
@@ -656,23 +683,22 @@ export default function DashboardPage() {
                                 >
                                   {day}
                                   {hasDigest && count > 1 && (
-                                    <span className="absolute bottom-0 right-0.5 text-[10px] leading-none opacity-80">x{count}</span>
+                                    <span className="absolute bottom-0 right-0.5 text-[9px] leading-none opacity-80">×{count}</span>
                                   )}
                                 </button>
                               );
                             })}
-                          </div>
-                        </div>
-                      );
-                    })}
+                          </>
+                        );
+                      })()}
                     </div>
-                    <p className="mt-2 text-xs text-gray-500">
-                      Green days have saved briefs; number is how many that day. Click a day to view.
+                    <p className="mt-2 text-[10px] text-gray-500">
+                      Green = briefs. Click a day to view.
                     </p>
                     {weeklyDigestSlots.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-gray-700">
-                        <p className="text-xs font-medium text-gray-500 mb-1.5">Weekly briefs</p>
-                        <div className="flex flex-wrap gap-1.5">
+                        <p className="text-[10px] font-medium text-gray-500 mb-1.5">Weekly briefs</p>
+                        <div className="flex flex-wrap gap-1">
                           {weeklyDigestSlots.map((slot) => {
                             const endDate = slot.startsWith('w:') ? slot.slice(2) : slot;
                             const isSelected = selectedDigestDate === slot;
@@ -681,10 +707,10 @@ export default function DashboardPage() {
                                 key={slot}
                                 type="button"
                                 onClick={() => handleSelectDigestDate(slot)}
-                                className={`px-2 py-1 text-xs rounded border transition-colors ${
+                                className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${
                                   isSelected
                                     ? 'bg-emerald-600 border-emerald-500 text-white'
-                                    : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
+                                    : 'bg-gray-900 border-gray-600 text-gray-300 hover:bg-gray-700'
                                 }`}
                                 title={endDate}
                               >
@@ -697,34 +723,51 @@ export default function DashboardPage() {
                     )}
                     {selectedDigestDate && digestBriefsForDay.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-gray-700">
-                        <p className="text-xs font-medium text-gray-500 mb-1.5">
-                          {selectedDigestDate.startsWith('w:') ? 'Briefs for this week' : 'Briefs on this day'}
+                        <p className="text-[10px] font-medium text-gray-500 mb-1.5">
+                          {selectedDigestDate.startsWith('w:') ? 'This week' : 'This day'}
                         </p>
-                        <div className="flex flex-wrap gap-1.5">
+                        <div className="flex flex-wrap gap-1">
                           {digestBriefsForDay.map((brief, i) => (
                             <button
                               key={brief.execution_id}
                               type="button"
                               onClick={() => setSelectedBrief(brief)}
-                              className={`px-2 py-1 text-xs rounded border transition-colors ${
+                              className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${
                                 selectedBrief?.execution_id === brief.execution_id
                                   ? 'bg-emerald-600 border-emerald-500 text-white'
-                                  : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
+                                  : 'bg-gray-900 border-gray-600 text-gray-300 hover:bg-gray-700'
                               }`}
                               title={brief.created_at}
                             >
-                              {formatBriefTime(brief.created_at) || `Brief ${i + 1}`}
+                              {formatBriefTime(brief.created_at) || `#${i + 1}`}
                             </button>
                           ))}
                         </div>
                       </div>
                     )}
                   </div>
-                )}
 
-                {/* Brief content (same panel, slightly different background from history) */}
-                <div className="bg-gray-900/40 rounded-b-lg">
-                  <div className="p-4 space-y-3">
+                  {/* Generation panel */}
+                  <DailyDigestRunPanel
+                    digestUserNote={digestUserNote}
+                    onDigestUserNoteChange={setDigestUserNote}
+                    digestNarrativeStyle={digestNarrativeStyle}
+                    onDigestNarrativeStyleChange={setDigestNarrativeStyle}
+                    digestSpan={digestSpan}
+                    onDigestSpanChange={setDigestSpan}
+                    digestInputExpanded={digestInputExpanded}
+                    onDigestInputExpandedChange={setDigestInputExpanded}
+                    selectedFocusTickers={selectedFocusTickers}
+                    onSelectedFocusTickersChange={setSelectedFocusTickers}
+                    subscribedTickers={subscribedTickers}
+                    onRunDigest={handleRunDigest}
+                    digestLoading={digestLoading}
+                  />
+                </div>
+
+                {/* Right: brief content */}
+                <div className="flex-1 min-w-0 bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+                  <div className="bg-gray-900/40 min-h-[200px] p-4 sm:p-6 space-y-3">
                   {digestLoading && (
                     <div className="flex items-center gap-2 text-sm text-gray-300">
                       <span className="inline-block w-4 h-4 border-2 border-gray-500 border-t-blue-400 rounded-full animate-spin" />
