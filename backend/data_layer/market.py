@@ -114,10 +114,12 @@ class MarketDataLayer:
     """Cache + vendor routing. Implements MarketDataSourceProtocol."""
 
     def get_quote(self, ticker: str) -> Optional[Dict[str, Any]]:
+        """Single-ticker quote with full fields (bid/ask, day high/low, 52-week range).
+        Uses quote_full: cache key so batch-quote cache (limited fields) does not override."""
         def fetch():
             q = quote_vendor.get_quote(ticker)
             return q if q and _valid_price(q.get("current_price")) else None
-        return _cached(f"quote:{ticker.upper()}", DATA_CACHE_TTL_QUOTE, fetch)
+        return _cached(f"quote_full:{ticker.upper()}", DATA_CACHE_TTL_QUOTE, fetch)
 
     def get_quotes_batch(self, tickers: List[str]) -> Dict[str, Optional[Dict[str, Any]]]:
         if not tickers:
