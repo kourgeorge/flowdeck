@@ -84,7 +84,7 @@ def create_social_media_analyst(llm):
         result = AIMessage(
             content="",
             tool_calls=[
-                {"id": "call_quote", "name": "get_ticker_quote", "args": {"ticker": ticker}},
+                {"id": "call_quote", "name": "get_ticker_quote", "args": {"symbol": ticker}},
                 {
                     "id": "call_reddit",
                     "name": "get_reddit_company_social",
