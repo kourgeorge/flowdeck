@@ -1,5 +1,5 @@
-import { Fragment, useState, useEffect, useMemo } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Fragment, useState, useEffect, useMemo, useCallback } from 'react';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
   BarChart,
@@ -28,6 +28,7 @@ import {
 } from '../services/adminApi';
 
 type AdminTab = 'overview' | 'mission-control' | 'users';
+const ADMIN_TAB_IDS: AdminTab[] = ['overview', 'mission-control', 'users'];
 type MissionSortKey = 'ticker' | 'company' | 'type' | 'market_cap' | 'sector' | 'industry' | 'last_completed' | 'status';
 type MissionSortDirection = 'asc' | 'desc';
 type ViewRunsSortKey = 'ticker' | 'analysis_run_id' | 'unique_views' | 'viewed';
@@ -138,6 +139,7 @@ function DailyBarChart({
 
 export default function AdminDashboardPage() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<AdminUserItem[]>([]);
@@ -190,6 +192,23 @@ export default function AdminDashboardPage() {
   const [addAmountByUser, setAddAmountByUser] = useState<Record<number, string>>({});
   const [latestReportsCollapsed, setLatestReportsCollapsed] = useState(true);
   const [expandedSubscriptionUserIds, setExpandedSubscriptionUserIds] = useState<Set<number>>(new Set());
+
+  // Sync URL -> tab state (reload / back restores tab)
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam && ADMIN_TAB_IDS.includes(tabParam as AdminTab)) {
+      setActiveTab(tabParam as AdminTab);
+    }
+  }, [searchParams]);
+
+  const handleAdminTabChange = useCallback((tab: AdminTab) => {
+    setActiveTab(tab);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', tab);
+      return next;
+    }, { replace: false });
+  }, [setSearchParams]);
 
   const subscriptionsByUser = useMemo(() => {
     const byUser = new Map<number, { user_email: string; subscriptions: AdminSubscriptionItem[] }>();
@@ -571,7 +590,7 @@ export default function AdminDashboardPage() {
           <div className="flex flex-wrap gap-0.5">
             <button
               type="button"
-              onClick={() => setActiveTab('overview')}
+              onClick={() => handleAdminTabChange('overview')}
               className={`px-2 py-1.5 text-sm font-medium transition-colors ${
                 activeTab === 'overview'
                   ? 'border-b-2 border-blue-500 text-blue-400'
@@ -582,7 +601,7 @@ export default function AdminDashboardPage() {
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('mission-control')}
+              onClick={() => handleAdminTabChange('mission-control')}
               className={`px-2 py-1.5 text-sm font-medium transition-colors ${
                 activeTab === 'mission-control'
                   ? 'border-b-2 border-blue-500 text-blue-400'
@@ -593,7 +612,7 @@ export default function AdminDashboardPage() {
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('users')}
+              onClick={() => handleAdminTabChange('users')}
               className={`px-2 py-1.5 text-sm font-medium transition-colors ${
                 activeTab === 'users'
                   ? 'border-b-2 border-blue-500 text-blue-400'

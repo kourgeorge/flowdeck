@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useSearchParams } from 'react-router-dom';
 import { tickerApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import TickerSearch from './TickerSearch';
@@ -533,8 +534,27 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
   const [mapUsIndices, setMapUsIndices] = useState<OverviewItem[]>([]);
   const [mapDataLoading, setMapDataLoading] = useState(false);
   const [overviewDataLoading, setOverviewDataLoading] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<'overview' | 'regional'>('overview');
   const [range, setRange] = useState<'1d' | '1w' | '1mo' | '6mo' | 'ytd'>('1d');
+
+  // Sync URL -> tab state (reload / back restores tab)
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'overview' || tabParam === 'regional') {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
+
+  const handleMarketTabChange = useCallback((tab: 'overview' | 'regional') => {
+    setActiveTab(tab);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', tab);
+      return next;
+    }, { replace: false });
+  }, [setSearchParams]);
+
   const [paginationSection, setPaginationSection] = useState<'indices' | 'sectors' | 'regions' | 'commodities' | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Ticker list for headlines: set only on initial load so news does not refresh when navigating sections
@@ -1017,7 +1037,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
         <div className="flex gap-0.5">
           <button
             type="button"
-            onClick={() => setActiveTab('overview')}
+            onClick={() => handleMarketTabChange('overview')}
             className={`px-3 py-1.5 text-sm font-medium transition-colors ${
               activeTab === 'overview'
                 ? 'text-white border-b-2 border-blue-500 -mb-px'
@@ -1028,7 +1048,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('regional')}
+            onClick={() => handleMarketTabChange('regional')}
             className={`px-3 py-1.5 text-sm font-medium transition-colors ${
               activeTab === 'regional'
                 ? 'text-white border-b-2 border-blue-500 -mb-px'

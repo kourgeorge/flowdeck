@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState, useCallback } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import TickerSearch from '../components/TickerSearch';
 import DashboardTopTiles from '../components/DashboardTopTiles';
 import PageHeader from '../components/PageHeader';
@@ -15,11 +15,27 @@ import { digestApi, type DigestResponse, type DigestBriefItem } from '../service
 type DashboardTab = 'overview' | 'portfolio' | 'news' | 'digest';
 type StockListTab = 'subscribed' | 'recent';
 
+const DASHBOARD_TAB_IDS: DashboardTab[] = ['overview', 'portfolio', 'news', 'digest'];
+const STOCK_LIST_TAB_IDS: StockListTab[] = ['subscribed', 'recent'];
+
 export default function DashboardPage() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>('overview');
   const [stockListTab, setStockListTab] = useState<StockListTab>('subscribed');
   const shouldLoadRecentAnalyzed = dashboardTab === 'overview' && stockListTab === 'recent';
+
+  // Sync URL -> tab state (reload / back restores tab)
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    const listParam = searchParams.get('list');
+    if (tabParam && DASHBOARD_TAB_IDS.includes(tabParam as DashboardTab)) {
+      setDashboardTab(tabParam as DashboardTab);
+    }
+    if (listParam && STOCK_LIST_TAB_IDS.includes(listParam as StockListTab)) {
+      setStockListTab(listParam as StockListTab);
+    }
+  }, [searchParams]);
 
   const [digest, setDigest] = useState<DigestResponse | null>(null);
   const [digestLoading, setDigestLoading] = useState(false);
@@ -52,6 +68,26 @@ export default function DashboardPage() {
   } = useDashboardData({
     enableRecentAnalyzed: shouldLoadRecentAnalyzed,
   });
+
+  const handleDashboardTabChange = useCallback((tab: DashboardTab) => {
+    setDashboardTab(tab);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', tab);
+      if (tab !== 'overview') next.delete('list');
+      return next;
+    }, { replace: false });
+  }, [setSearchParams]);
+
+  const handleStockListTabChange = useCallback((list: StockListTab) => {
+    setStockListTab(list);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', 'overview');
+      next.set('list', list);
+      return next;
+    }, { replace: false });
+  }, [setSearchParams]);
 
   const handleRunDigest = async () => {
     setDigestError(null);
@@ -313,7 +349,7 @@ export default function DashboardPage() {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setDashboardTab(tab.id)}
+                onClick={() => handleDashboardTabChange(tab.id)}
                 className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors -mb-px ${
                   dashboardTab === tab.id
                     ? 'text-white border-blue-500 bg-gray-800'
@@ -359,7 +395,7 @@ export default function DashboardPage() {
                 <div className="flex items-center gap-0 mb-0 border-b border-gray-700">
                   <button
                     type="button"
-                    onClick={() => setStockListTab('subscribed')}
+                    onClick={() => handleStockListTabChange('subscribed')}
                     className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors -mb-px ${
                       stockListTab === 'subscribed'
                         ? 'text-white border-blue-500 bg-gray-800'
@@ -373,7 +409,7 @@ export default function DashboardPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setStockListTab('recent')}
+                    onClick={() => handleStockListTabChange('recent')}
                     className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors -mb-px ${
                       stockListTab === 'recent'
                         ? 'text-white border-blue-500 bg-gray-800'
