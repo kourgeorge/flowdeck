@@ -400,9 +400,8 @@ async def data_edgar_filing_content(
     ticker: str,
     form: Optional[str] = Query(None, description="10-K or 10-Q"),
     limit: int = Query(1, ge=1, le=5, description="Max number of filings"),
-    _current_user=Depends(get_current_user),
 ):
-    """Get extracted SEC EDGAR sections (risk factors, MD&A, competition) for a ticker. Requires authentication and LLM (OpenAI or Azure)."""
+    """Get extracted SEC EDGAR sections (risk factors, MD&A, competition) for a ticker. Uses LLM (OpenAI or Azure). Same access as other /api/data/* endpoints for agent tools."""
     await _ensure_ticker_exists(ticker)
     return await asyncio.to_thread(_gateway().get_edgar_filing_content, ticker, form, limit)
 

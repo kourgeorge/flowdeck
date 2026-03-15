@@ -136,7 +136,7 @@ All under `/api/data/`. Most endpoints are public; auth-required endpoints are m
 | GET | `/api/data/similar-tickers/{ticker}?limit=10&offset=0` | Similar tickers based on sector/industry matching (paginated) |
 | GET | `/api/data/company-officers/{ticker}` | Company officers / management team |
 | GET | `/api/data/edgar-filings/{ticker}` | SEC 10-K / 10-Q filings list |
-| GET | `/api/data/edgar-filing-content/{ticker}?form=10-K&limit=1` | **[Auth required]** Extracted SEC sections (risk factors, MD&A); uses LLM |
+| GET | `/api/data/edgar-filing-content/{ticker}?form=10-K&limit=1` | Extracted SEC sections (risk factors, MD&A); uses LLM |
 | GET | `/api/data/reports/{ticker}` | **[Auth required]** Latest AI-generated reports with recommendations |
 | POST | `/api/data/reports/batch` | **[Auth required]** Batch fetch reports for multiple tickers |
 
@@ -596,7 +596,7 @@ Check balance via `GET /api/me` → `token_balance`.
 | GET | `/api/tickers/{ticker}/reports/{analysis_run_id}` | Optional | Reports for a specific historical run (integer path param) |
 | GET | `/api/data/*` | Mixed | Quote, company, news, fundamentals, historical, ticker-data, similar tickers, EDGAR, etc. |
 | GET | `/api/data/similar-tickers/{ticker}` | No | Similar tickers (sector/industry matching, supports `limit` and `offset`) |
-| GET | `/api/data/edgar-filing-content/{ticker}` | Yes | Extract SEC sections from latest filings |
+| GET | `/api/data/edgar-filing-content/{ticker}` | No | Extract SEC sections from latest filings |
 | GET | `/api/data/reports/{ticker}` | Yes | Get latest reports for ticker (no token cost) |
 | POST | `/api/data/reports/batch` | Yes | Get reports for multiple tickers (no token cost) |
 | POST | `/api/auth/register` | No | Register (email, password) |
