@@ -2,7 +2,7 @@ import logging
 from typing import Annotated, Optional
 
 # Import from vendor-specific modules
-from .reddit_utils import get_reddit_global_news_online, get_reddit_company_news_online
+from .reddit_utils import get_reddit_global_news_online, get_reddit_company_social_online
 from .y_finance import get_YFin_data_online, get_stock_stats_indicators_window, get_balance_sheet as get_yfinance_balance_sheet, get_cashflow as get_yfinance_cashflow, get_income_statement as get_yfinance_income_statement, get_insider_transactions as get_yfinance_insider_transactions, get_fundamentals as get_yfinance_fundamentals, get_yfinance_news
 from .google import get_google_news, get_global_news_google
 from .openai import get_stock_news_openai, get_global_news_openai, get_fundamentals_openai
@@ -102,7 +102,7 @@ VENDOR_METHODS = {
         "openai": get_stock_news_openai,
         "google": get_google_news,
         "yfinance": get_yfinance_news,
-        "reddit_online": get_reddit_company_news_online,
+        "reddit_online": get_reddit_company_social_online,
     },
     "get_global_news": {
         "serpapi": get_global_news_serpapi,

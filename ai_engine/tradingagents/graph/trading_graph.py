@@ -30,6 +30,7 @@ from ..agents.utils.agent_utils import (
     get_cashflow,
     get_income_statement,
     get_news,
+    get_reddit_company_social,
     get_insider_sentiment,
     get_insider_transactions,
     get_global_news
@@ -138,8 +139,9 @@ class TradingAgentsGraph:
             ),
             "social": ToolNode(
                 [
-                    # News tools for social media analysis
+                    get_ticker_quote,
                     get_news,
+                    get_reddit_company_social,
                 ]
             ),
             "news": ToolNode(

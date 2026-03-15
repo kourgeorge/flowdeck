@@ -3,6 +3,7 @@ from typing import Annotated, Optional
 
 from ...datasources.info_service_client import (
     get_news as get_news_via_service,
+    get_reddit_company_social as get_reddit_company_social_via_service,
     get_global_news as get_global_news_via_service,
     get_insider_sentiment as get_insider_sentiment_via_service,
     get_insider_transactions as get_insider_transactions_via_service,
@@ -28,6 +29,26 @@ def get_news(
     """
     require_info_service()
     return get_news_via_service(ticker, start_date, end_date)
+
+
+@tool
+def get_reddit_company_social(
+    ticker: Annotated[str, "Ticker symbol"],
+    start_date: Annotated[str, "Start date in yyyy-mm-dd format"],
+    end_date: Annotated[str, "End date in yyyy-mm-dd format"],
+    search_terms: Annotated[
+        list[str],
+        "Terms to search for in Reddit (e.g. company name and ticker). Get company name from get_quote or get_news first, then pass e.g. ['Apple', 'AAPL'].",
+    ],
+) -> str:
+    """
+    Retrieve Reddit social/discussion content for a company from finance subreddits
+    (e.g. r/stocks, r/investing, r/wallstreetbets). You must provide search_terms: use get_quote(ticker)
+    or get_news to get the company name, then pass a list of terms to look for (e.g. company name and ticker).
+    Requires INFO_SERVICE_URL and backend REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET.
+    """
+    require_info_service()
+    return get_reddit_company_social_via_service(ticker, start_date, end_date, search_terms)
 
 
 @tool

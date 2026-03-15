@@ -167,9 +167,9 @@ class AnalysisService:
                 analysis_run_id, ticker, analysis_date, analysts,
             )
 
-            # Default analysts if not provided
+            # Default analysts if not provided (social = sentiment/social media analyst)
             if analysts is None:
-                analysts = ["market", "news", "fundamentals", "technical", "sec"]
+                analysts = ["market", "social", "news", "fundamentals", "technical", "sec"]
             # Exclude SEC analyst when no SEC EDGAR data exists for this ticker
             if "sec" in analysts and not _has_sec_data(ticker):
                 analysts = [a for a in analysts if a != "sec"]
@@ -245,9 +245,10 @@ class AnalysisService:
                 "sec": "SEC Analyst",
             }
             first_selected = next((a for a in analysts if a in analyst_status_map), None)
+            current_agent = analyst_status_map[first_selected] if first_selected else None
             if first_selected:
                 agent_statuses[analyst_status_map[first_selected]] = "in_progress"
-            
+
             # Store analysis info immediately to prevent race condition
             # This must be done within the lock before starting the background thread
             self.running_analyses[analysis_run_id] = {
@@ -261,7 +262,7 @@ class AnalysisService:
                 "log_file": log_file,
                 "progress_callback": progress_callback,
                 "agent_statuses": agent_statuses,
-                "current_agent": None,
+                "current_agent": current_agent,
                 "reports": {},
                 "analysts": analysts,
                 "messages": [],
@@ -392,6 +393,22 @@ class AnalysisService:
                 "technical": "technical_report",
                 "sec": "sec_report",
             }
+            report_key_to_analyst = {
+                "market_report": "market",
+                "sentiment_report": "social",
+                "news_report": "news",
+                "fundamentals_report": "fundamentals",
+                "technical_report": "technical",
+                "sec_report": "sec",
+            }
+            analyst_status_map_run = {
+                "market": "Market Analyst",
+                "social": "Social Analyst",
+                "news": "News Analyst",
+                "fundamentals": "Fundamentals Analyst",
+                "technical": "Technical Analyst",
+                "sec": "SEC Analyst",
+            }
             last_analyst_report_key = None
             for analyst in reversed(analysts):
                 report_key = analyst_to_report_key.get(analyst)
@@ -459,6 +476,20 @@ class AnalysisService:
                         c = chunk[chunk_key]
                         analysis_info["reports"][key] = c
                         analysis_info["agent_statuses"][agent] = "completed"
+                        analyst_key = report_key_to_analyst.get(key)
+                        if analyst_key is not None and analysts:
+                            try:
+                                idx = analysts.index(analyst_key)
+                                if idx + 1 < len(analysts):
+                                    next_key = analysts[idx + 1]
+                                    next_agent = analyst_status_map_run.get(next_key)
+                                    if next_agent:
+                                        analysis_info["agent_statuses"][next_agent] = "in_progress"
+                                        analysis_info["current_agent"] = next_agent
+                                elif last_analyst_report_key and key == last_analyst_report_key:
+                                    analysis_info["current_agent"] = "Research Manager"
+                            except ValueError:
+                                pass
                         self._persist_analysis_status(analysis_run_id)
                         report_usage = chunk.get("report_usage") or {}
                         _write_report(key, c, chunk.get(score_key), label, llm_usage=report_usage.get(key))
@@ -467,6 +498,7 @@ class AnalysisService:
                             analysis_info["agent_statuses"]["Bull Researcher"] = "in_progress"
                             analysis_info["agent_statuses"]["Bear Researcher"] = "in_progress"
                             analysis_info["agent_statuses"]["Research Manager"] = "in_progress"
+                            analysis_info["current_agent"] = "Research Manager"
                             self._persist_analysis_status(analysis_run_id)
                             _progress_log("Bull/Bear researchers & Research Manager started")
 
@@ -479,6 +511,7 @@ class AnalysisService:
                         analysis_info["agent_statuses"]["Bear Researcher"] = "completed"
                         analysis_info["agent_statuses"]["Research Manager"] = "completed"
                         analysis_info["agent_statuses"]["Trader"] = "in_progress"
+                        analysis_info["current_agent"] = "Trader"
                         self._persist_analysis_status(analysis_run_id)
                         _progress_log("Bull/Bear/Research Manager completed → Trader started")
                 
@@ -529,6 +562,7 @@ class AnalysisService:
                     analysis_info["agent_statuses"]["Risky Analyst"] = "in_progress"
                     analysis_info["agent_statuses"]["Safe Analyst"] = "in_progress"
                     analysis_info["agent_statuses"]["Neutral Analyst"] = "in_progress"
+                    analysis_info["current_agent"] = "Risk Analyst"
                     self._persist_analysis_status(analysis_run_id)
                     _progress_log("Trader completed → Risk debate (Risky/Safe/Neutral) started")
                 
@@ -541,11 +575,13 @@ class AnalysisService:
                         analysis_info["agent_statuses"]["Safe Analyst"] = "completed"
                         analysis_info["agent_statuses"]["Neutral Analyst"] = "completed"
                         analysis_info["agent_statuses"]["Portfolio Manager"] = "in_progress"
+                        analysis_info["current_agent"] = "Portfolio Manager"
                         self._persist_analysis_status(analysis_run_id)
                         _progress_log("Risk analysts completed → Portfolio Manager started")
                 
                 if "final_trade_decision" in chunk and chunk["final_trade_decision"]:
                     analysis_info["agent_statuses"]["Portfolio Manager"] = "completed"
+                    analysis_info["current_agent"] = None
                     self._persist_analysis_status(analysis_run_id)
                     content = chunk["final_trade_decision"]
                     risky = chunk.get("risky_summary") or []

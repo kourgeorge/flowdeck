@@ -81,6 +81,26 @@ def get_news(ticker: str, start_date: str, end_date: str, base_url: Optional[str
     return data
 
 
+def get_reddit_company_social(
+    ticker: str,
+    start_date: str,
+    end_date: str,
+    search_terms: List[str],
+    base_url: Optional[str] = None,
+) -> str:
+    """Fetch Reddit company social/discussion feed from info service. search_terms from agent (e.g. company name + ticker from get_quote)."""
+    base_url = base_url or _get_info_service_base_url()
+    if not base_url:
+        raise ValueError("Info service URL not configured (set INFO_SERVICE_URL or config info_service_url)")
+    if not search_terms or not [t for t in search_terms if t and str(t).strip()]:
+        raise ValueError("search_terms is required (e.g. company name and ticker from get_quote/get_news)")
+    params = {"start_date": start_date, "end_date": end_date, "search_terms": ",".join(str(t).strip() for t in search_terms if str(t).strip())}
+    data = _get(None, base_url, f"/api/data/reddit-company-social/{ticker.upper()}", params=params)
+    if isinstance(data, dict) and "data" in data:
+        return data["data"] if isinstance(data["data"], str) else json.dumps(data["data"])
+    return str(data)
+
+
 def get_insider_transactions(
     ticker: str,
     base_url: Optional[str] = None,

@@ -82,7 +82,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run TradingAgents analysis (standalone for Node backend)")
     parser.add_argument("--ticker", required=True, help="Ticker symbol")
     parser.add_argument("--analysis-date", required=True, help="Analysis date YYYY-MM-DD")
-    parser.add_argument("--analysts", default="market,news,fundamentals,technical", help="Comma-separated analysts")
+    parser.add_argument("--analysts", default="market,social,news,fundamentals,technical", help="Comma-separated analysts (social = sentiment/social media)")
     parser.add_argument("--research-depth", type=int, default=2, help="Max debate rounds")
     parser.add_argument("--llm-provider", default="azure", help="LLM provider")
     parser.add_argument("--results-dir", default="results", help="Results directory (absolute or relative to repo)")
@@ -96,7 +96,7 @@ def main() -> None:
     analysis_date = args.analysis_date.strip()
     analysts = [a.strip() for a in args.analysts.split(",") if a.strip()]
     if not analysts:
-        analysts = ["market", "news", "fundamentals", "technical"]
+        analysts = ["market", "social", "news", "fundamentals", "technical"]
 
     os.environ["INFO_SERVICE_URL"] = args.info_service_url.strip().rstrip("/")
 

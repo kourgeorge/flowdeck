@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 /** Report keys in pipeline order (matches server writing order). */
 const REPORT_ORDER = [
   'market_report',
-  // 'sentiment_report',
+  'sentiment_report',
   'news_report',
   'fundamentals_report',
   'technical_report',
@@ -16,8 +16,8 @@ const REPORT_ORDER = [
 
 /** Short “doing” label per report (from server JSON files). */
 const REPORT_LABELS: Record<string, string> = {
-  market_report: 'Analyzing Market...',
-  sentiment_report: 'Analyzing indicators…',
+  market_report: 'Analyzing market…',
+  sentiment_report: 'Analyzing sentiment & social…',
   news_report: 'Reviewing news…',
   fundamentals_report: 'Evaluating fundamentals…',
   technical_report: 'Running technical analysis…',
@@ -43,17 +43,21 @@ interface AIAnalysisLoadingViewProps {
 
 export default function AIAnalysisLoadingView({
   existingReportKeys = [],
+  agentStatuses: _agentStatuses = null,
+  currentAgent = null,
 }: AIAnalysisLoadingViewProps) {
   const completedCount = REPORT_ORDER.filter((k) => existingReportKeys.includes(k)).length;
   const nextKey = REPORT_ORDER.find((k) => !existingReportKeys.includes(k));
   const totalSteps = REPORT_ORDER.length;
 
   const statusMessage =
-    nextKey != null
-      ? REPORT_LABELS[nextKey] ?? 'Processing…'
-      : completedCount >= totalSteps
-        ? 'Almost there…'
-        : null;
+    currentAgent != null && currentAgent !== ''
+      ? `${currentAgent}…`
+      : nextKey != null
+        ? REPORT_LABELS[nextKey] ?? 'Processing…'
+        : completedCount >= totalSteps
+          ? 'Almost there…'
+          : null;
   const fallbackIndex = completedCount % FALLBACK_PHRASES.length;
   const displayMessage =
     statusMessage ?? FALLBACK_PHRASES[fallbackIndex];

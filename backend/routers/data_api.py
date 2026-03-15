@@ -331,6 +331,28 @@ async def data_insider_sentiment(
     return {"ticker": ticker.upper(), "data": data}
 
 
+@router.get("/reddit-company-social/{ticker}")
+async def data_reddit_company_social(
+    ticker: str,
+    start_date: str = Query(..., description="Start date YYYY-MM-DD"),
+    end_date: str = Query(..., description="End date YYYY-MM-DD"),
+    search_terms: str = Query(..., description="Comma-separated terms to match (e.g. Apple,AAPL). Agent provides from get_quote/get_news."),
+):
+    """Get Reddit company social/discussion feed from finance subreddits. search_terms required (agent-provided)."""
+    await _ensure_ticker_exists(ticker)
+    terms = [t.strip() for t in search_terms.split(",") if t.strip()]
+    if not terms:
+        raise HTTPException(400, "search_terms must contain at least one non-empty term")
+    data = await asyncio.to_thread(
+        _gateway().get_reddit_company_social,
+        ticker.upper(),
+        start_date,
+        end_date,
+        terms,
+    )
+    return {"ticker": ticker.upper(), "data": data}
+
+
 @router.get("/analyst-recommendations/{ticker}")
 async def data_analyst_recommendations(ticker: str):
     """Get analyst recommendations from YahooQuery."""

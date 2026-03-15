@@ -63,7 +63,7 @@ config["data_vendors"] = {
 # Vendor implementations live in data_layer; use when backend is on path
 from data_layer.vendors.reddit_utils import (
     get_reddit_global_news_online,
-    get_reddit_company_news_online,
+    get_reddit_company_social_online,
 )
 
 # Get global news
@@ -73,8 +73,8 @@ global_news = get_reddit_global_news_online(
     limit=5
 )
 
-# Get company-specific news
-company_news = get_reddit_company_news_online(
+# Get company-specific social/discussion content
+company_social = get_reddit_company_social_online(
     query="INTC",  # or "Intel"
     start_date="2025-12-01",
     end_date="2025-12-11"
@@ -94,8 +94,8 @@ Fetches global/macroeconomic news from popular finance and news subreddits.
 **Subreddits searched:**
 - worldnews, news, business, economics, stocks, investing, StockMarket, wallstreetbets, finance
 
-### `get_reddit_company_news_online`
-Fetches company-specific news from finance and investing subreddits.
+### `get_reddit_company_social_online`
+Fetches company-specific Reddit social/discussion content from finance and investing subreddits.
 
 **Parameters:**
 - `query`: Search query or ticker symbol (e.g., "INTC" or "Intel")
@@ -103,7 +103,7 @@ Fetches company-specific news from finance and investing subreddits.
 - `end_date`: End date in YYYY-MM-DD format
 
 **Subreddits searched:**
-- stocks, investing, StockMarket, wallstreetbets, SecurityAnalysis, ValueInvesting, Stock_Picks
+- wallstreetbets, stocks, investing, StockMarket, options, Daytrading, ValueInvesting, thetagang, SecurityAnalysis (see `REDDIT_COMPANY_SOCIAL.md` for full list)
 
 ## Notes
 

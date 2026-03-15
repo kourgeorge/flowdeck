@@ -6,7 +6,6 @@ from dateutil.relativedelta import relativedelta
 from contextlib import contextmanager
 from typing import Annotated, Optional, List, Dict
 import os
-import re
 
 try:
     import praw
@@ -14,46 +13,6 @@ try:
 except ImportError:
     PRAW_AVAILABLE = False
 
-ticker_to_company = {
-    "AAPL": "Apple",
-    "MSFT": "Microsoft",
-    "GOOGL": "Google",
-    "AMZN": "Amazon",
-    "TSLA": "Tesla",
-    "NVDA": "Nvidia",
-    "TSM": "Taiwan Semiconductor Manufacturing Company OR TSMC",
-    "JPM": "JPMorgan Chase OR JP Morgan",
-    "JNJ": "Johnson & Johnson OR JNJ",
-    "V": "Visa",
-    "WMT": "Walmart",
-    "META": "Meta OR Facebook",
-    "AMD": "AMD",
-    "INTC": "Intel",
-    "QCOM": "Qualcomm",
-    "BABA": "Alibaba",
-    "ADBE": "Adobe",
-    "NFLX": "Netflix",
-    "CRM": "Salesforce",
-    "PYPL": "PayPal",
-    "PLTR": "Palantir",
-    "MU": "Micron",
-    "SQ": "Block OR Square",
-    "ZM": "Zoom",
-    "CSCO": "Cisco",
-    "SHOP": "Shopify",
-    "ORCL": "Oracle",
-    "X": "Twitter OR X",
-    "SPOT": "Spotify",
-    "AVGO": "Broadcom",
-    "ASML": "ASML ",
-    "TWLO": "Twilio",
-    "SNAP": "Snap Inc.",
-    "TEAM": "Atlassian",
-    "SQSP": "Squarespace",
-    "UBER": "Uber",
-    "ROKU": "Roku",
-    "PINS": "Pinterest",
-}
 
 # Default subreddits for global news
 DEFAULT_GLOBAL_NEWS_SUBREDDITS = [
@@ -68,15 +27,20 @@ DEFAULT_GLOBAL_NEWS_SUBREDDITS = [
     "finance",
 ]
 
-# Default subreddits for company news
-DEFAULT_COMPANY_NEWS_SUBREDDITS = [
+# Subreddits for company/ticker social/sentiment (core + advanced; r/Stock_Picks excluded: 403/private)
+# Core: WSB, stocks, investing, StockMarket (high volume, retail sentiment)
+# Advanced: options, Daytrading, ValueInvesting, thetagang (risk/momentum/quality signals)
+# See REDDIT_COMPANY_SOCIAL.md for rationale and weighting ideas.
+DEFAULT_COMPANY_SOCIAL_SUBREDDITS = [
+    "wallstreetbets",
     "stocks",
     "investing",
     "StockMarket",
-    "wallstreetbets",
-    "SecurityAnalysis",
+    "options",
+    "Daytrading",
     "ValueInvesting",
-    "Stock_Picks",
+    "thetagang",
+    "SecurityAnalysis",
 ]
 
 
@@ -107,7 +71,7 @@ def get_reddit_client():
 
 def fetch_reddit_posts_online(
     subreddits: List[str],
-    query: Optional[str] = None,
+    search_terms: Optional[List[str]] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     limit: int = 25,
@@ -116,18 +80,19 @@ def fetch_reddit_posts_online(
 ) -> List[Dict]:
     """
     Fetch Reddit posts online using PRAW.
-    
+
     Args:
         subreddits: List of subreddit names to search
-        query: Optional search query (searches in title and selftext)
+        search_terms: Optional list of terms; keep only posts where at least one term
+            appears in title or body (case-insensitive substring). No regex.
         start_date: Start date in YYYY-MM-DD format (filters posts by creation date)
         end_date: End date in YYYY-MM-DD format (filters posts by creation date)
         limit: Maximum number of posts to fetch per subreddit
         sort: Sort method ('hot', 'new', 'top', 'rising')
         time_filter: Time filter for 'top' sort ('hour', 'day', 'week', 'month', 'year', 'all')
-    
+
     Returns:
-        List of post dictionaries with keys: title, content, url, upvotes, posted_date
+        List of post dictionaries with keys: title, content, url, upvotes, posted_date, subreddit
     """
     if not PRAW_AVAILABLE:
         raise ImportError("PRAW is not installed. Install it with: pip install praw")
@@ -170,14 +135,13 @@ def fetch_reddit_posts_online(
                 if end_dt and post_date.date() > end_dt.date():
                     continue
                 
-                # Filter by query if specified
-                if query:
-                    search_terms = query.lower().split()
-                    title_lower = post.title.lower()
-                    selftext_lower = (post.selftext or "").lower()
-                    
-                    # Check if any search term appears in title or content
-                    if not any(term in title_lower or term in selftext_lower for term in search_terms):
+                # Filter by search_terms if specified: keep post if any term appears in title or body (substring, no regex)
+                if search_terms:
+                    title = post.title or ""
+                    selftext = post.selftext or ""
+                    combined = (title + " " + selftext).lower()
+                    terms = [t.strip() for t in search_terms if t and t.strip()]
+                    if not terms or not any(t.lower() in combined for t in terms):
                         continue
                 
                 post_dict = {
@@ -186,6 +150,7 @@ def fetch_reddit_posts_online(
                     "url": f"https://reddit.com{post.permalink}",
                     "upvotes": post.score,
                     "posted_date": post_date_str,
+                    "subreddit": subreddit_name,
                 }
                 all_posts.append(post_dict)
                 
@@ -235,21 +200,26 @@ def get_reddit_global_news_online(
         ) from e
 
 
-def get_reddit_company_news_online(
-    query: Annotated[str, "Search query or ticker symbol"],
+def get_reddit_company_social_online(
+    ticker: Annotated[str, "Ticker symbol for the response header (e.g. AAPL)."],
     start_date: Annotated[str, "Start date in yyyy-mm-dd format"],
     end_date: Annotated[str, "End date in yyyy-mm-dd format"],
+    search_terms: Annotated[
+        List[str],
+        "Terms to match in posts (e.g. company name and ticker). Agent should obtain from Yahoo/quote and pass here.",
+    ],
 ) -> str:
-    """Retrieve company-specific reddit news from online Reddit API."""
+    """Retrieve Reddit social/discussion content from finance subreddits. Uses only the provided search_terms; no heuristics or regex."""
+    if not search_terms:
+        raise ValueError("search_terms is required; agent should provide terms (e.g. company name and ticker from get_quote/get_news).")
     try:
-        search_query = query
-        if query in ticker_to_company:
-            company_name = ticker_to_company[query]
-            search_query = company_name.split(" OR ")[0] if "OR" in company_name else company_name
-            search_query = f"{search_query} {query}"
+        ticker_upper = (ticker or "").strip().upper()
+        terms = [t.strip() for t in search_terms if t and t.strip()]
+        if not terms:
+            raise ValueError("search_terms must contain at least one non-empty term.")
         posts = fetch_reddit_posts_online(
-            subreddits=DEFAULT_COMPANY_NEWS_SUBREDDITS,
-            query=search_query,
+            subreddits=DEFAULT_COMPANY_SOCIAL_SUBREDDITS,
+            search_terms=terms,
             start_date=start_date,
             end_date=end_date,
             limit=50,
@@ -264,7 +234,7 @@ def get_reddit_company_news_online(
                 news_str += f"### {post['title']}\n\n"
             else:
                 news_str += f"### {post['title']}\n\n{post['content']}\n\n"
-        return f"## {query} News Reddit (Online), from {start_date} to {end_date}:\n\n{news_str}"
+        return f"## {ticker_upper} Reddit (social), from {start_date} to {end_date}:\n\n{news_str}"
     except Exception as e:
         raise RuntimeError(
             f"Error fetching Reddit news online: {e}. "
@@ -319,25 +289,12 @@ def fetch_top_from_category(
                 if post_date != date:
                     continue
 
-                # if is company_news, check that the title or the content has the company's name (query) mentioned
+                # if is company, keep post if query appears in title or content (substring, no regex)
                 if "company" in category and query:
-                    search_terms = []
-                    if "OR" in ticker_to_company[query]:
-                        search_terms = ticker_to_company[query].split(" OR ")
-                    else:
-                        search_terms = [ticker_to_company[query]]
-
-                    search_terms.append(query)
-
-                    found = False
-                    for term in search_terms:
-                        if re.search(
-                            term, parsed_line["title"], re.IGNORECASE
-                        ) or re.search(term, parsed_line["selftext"], re.IGNORECASE):
-                            found = True
-                            break
-
-                    if not found:
+                    title = parsed_line.get("title") or ""
+                    selftext = parsed_line.get("selftext") or ""
+                    combined = (title + " " + selftext).lower()
+                    if query.strip().lower() not in combined:
                         continue
 
                 post = {

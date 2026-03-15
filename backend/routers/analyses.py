@@ -38,7 +38,7 @@ def run_sync_major_tickers_background(analysis_date: str, analysis_service: Anal
             analysis_service=analysis_service,
             db=db,
             creator_id=None,
-            analysts=["market", "news", "fundamentals", "technical", "sec"],
+            analysts=["market", "social", "news", "fundamentals", "technical", "sec"],
             research_depth=5,
             llm_provider="azure",
             wait_for_completion=True,
@@ -73,7 +73,7 @@ async def start_analysis(
             )
 
         analysis_date = body.get("analysis_date") or datetime.now().strftime("%Y-%m-%d")
-        analysts = body.get("analysts", ["market", "news", "fundamentals", "technical", "sec"])
+        analysts = body.get("analysts", ["market", "social", "news", "fundamentals", "technical", "sec"])
         research_depth = body.get("research_depth", 2)
         llm_provider = (body.get("llm_provider") or os.environ.get("LLM_PROVIDER") or "azure").strip().lower()
         backend_url = body.get("backend_url")

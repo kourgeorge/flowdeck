@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from ..utils.agent_utils import get_news
+from ..utils.agent_utils import get_news, get_reddit_company_social, get_ticker_quote
 from .helpers import _capture_usage
 from .prompts import build_social_media_analyst_prompt
 
@@ -21,7 +21,9 @@ def create_social_media_analyst(llm):
         ticker = state["company_of_interest"]
 
         tools = [
+            get_ticker_quote,
             get_news,
+            get_reddit_company_social,
         ]
 
         prompt = build_social_media_analyst_prompt(

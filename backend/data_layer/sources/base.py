@@ -141,6 +141,11 @@ class MarketDataSourceProtocol(Protocol):
     def get_insider_sentiment(self, ticker: str, curr_date: str) -> str:
         ...
 
+    def get_reddit_company_social(
+        self, ticker: str, start_date: str, end_date: str, search_terms: list[str]
+    ) -> str:
+        ...
+
 
 class ReportDataSourceProtocol(Protocol):
     """Protocol for platform reports (AI analysis reports)."""

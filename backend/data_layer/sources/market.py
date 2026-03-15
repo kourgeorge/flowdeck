@@ -166,3 +166,8 @@ class CachedMarketSource:
 
     def get_insider_sentiment(self, ticker: str, curr_date: str) -> str:
         return self._fetcher.get_insider_sentiment(ticker, curr_date)
+
+    def get_reddit_company_social(
+        self, ticker: str, start_date: str, end_date: str, search_terms: list[str]
+    ) -> str:
+        return self._fetcher.get_reddit_company_social(ticker, start_date, end_date, search_terms)

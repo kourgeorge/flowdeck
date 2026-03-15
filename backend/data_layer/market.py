@@ -42,6 +42,7 @@ from data_layer.vendors.interface import (
     get_insider_sentiment as interface_get_insider_sentiment,
     get_ticker_data as interface_get_ticker_data,
 )
+from data_layer.vendors.reddit_utils import get_reddit_company_social_online
 from data_layer.vendors.y_finance import (
     get_analyst_recommendations as yf_get_analyst_recommendations,
     get_company_info as yf_get_company_info,
@@ -246,6 +247,17 @@ class MarketDataLayer:
     def get_insider_sentiment(self, ticker: str, curr_date: str) -> str:
         return _cached(f"insider_sentiment:{ticker.upper()}:{curr_date}", DATA_CACHE_TTL_INSIDER_SENTIMENT,
                       lambda: interface_get_insider_sentiment(ticker, curr_date))
+
+    def get_reddit_company_social(
+        self, ticker: str, start_date: str, end_date: str, search_terms: list[str]
+    ) -> str:
+        """Reddit company social/discussion feed from finance subreddits. search_terms from agent (e.g. company name + ticker)."""
+        terms_key = ",".join(sorted(t.strip() for t in search_terms if t and t.strip()))
+        return _cached(
+            f"reddit_company_social:{ticker.upper()}:{start_date}:{end_date}:{terms_key}",
+            DATA_CACHE_TTL_NEWS,
+            lambda: get_reddit_company_social_online(ticker.upper(), start_date, end_date, search_terms),
+        )
 
     def get_market_overview(
         self,
