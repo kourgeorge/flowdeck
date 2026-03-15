@@ -135,7 +135,6 @@ class TradingAgentsGraph:
             ]),
             "social": ToolNode([
                 get_ticker_quote,
-                get_news,
                 get_reddit_company_social,
             ]),
             "news": ToolNode([

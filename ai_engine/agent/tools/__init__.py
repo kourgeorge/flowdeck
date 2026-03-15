@@ -17,6 +17,7 @@ from ai_engine.agent.tools.financials import (
     IncomeStatementTool,
 )
 from ai_engine.agent.tools.news import NewsTool, GlobalNewsTool
+from ai_engine.agent.tools.reddit import RedditCompanySocialTool
 from ai_engine.agent.tools.insider import InsiderTransactionsTool, InsiderSentimentTool
 from ai_engine.agent.tools.web_search import WebSearchTool
 from ai_engine.agent.tools.execute_python import ExecutePythonTool
@@ -37,6 +38,7 @@ ALL_TOOLS = [
     IncomeStatementTool(),
     NewsTool(),
     GlobalNewsTool(),
+    RedditCompanySocialTool(),
     InsiderTransactionsTool(),
     InsiderSentimentTool(),
     WebSearchTool(),
@@ -58,6 +60,7 @@ __all__ = [
     "IncomeStatementTool",
     "NewsTool",
     "GlobalNewsTool",
+    "RedditCompanySocialTool",
     "InsiderTransactionsTool",
     "InsiderSentimentTool",
     "WebSearchTool",

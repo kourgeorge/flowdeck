@@ -3,8 +3,8 @@
 Run only the Social Media (sentiment) analyst for one ticker and show how it uses the Reddit tool.
 
 Uses the real LLM provider (from .env / DEFAULT_CONFIG) and real backend—no mocks. The agent
-has get_ticker_quote, get_news, and get_reddit_company_social; it is instructed to get the
-company name (e.g. via get_quote) and pass search_terms to get_reddit_company_social. This
+has get_ticker_quote and get_reddit_company_social; it is instructed to get the
+company name via get_ticker_quote and pass search_terms to get_reddit_company_social. This
 script instruments the Reddit tool call to print the search_terms the agent chose.
 
 Usage:
@@ -59,7 +59,7 @@ def main() -> None:
         sys.exit(1)
     print(f"Using info service: {info_url}")
     print(f"Running Social Media Analyst only for ticker={ticker} trade_date={trade_date}")
-    print("(The agent will use get_quote/get_news, then get_reddit_company_social with search_terms.)\n")
+    print("(The agent will use get_ticker_quote, then get_reddit_company_social with search_terms.)\n")
 
     # Patch the function the tool actually calls so we log Reddit args when the agent uses the tool
     from ai_engine.tradingagents.agents.utils import news_data_tools
@@ -104,10 +104,10 @@ def main() -> None:
             print(f"  start_date   = {call['start_date']!r}")
             print(f"  end_date     = {call['end_date']!r}")
             print(f"  search_terms = {call['search_terms']!r}")
-        print("\nThe agent provides search_terms (e.g. company name + ticker from get_quote);")
+        print("\nThe agent provides search_terms (e.g. company name + ticker from get_ticker_quote);")
         print("the backend uses only these terms for Reddit post filtering (no regex/heuristics).")
     else:
-        print("\nThe Reddit tool was not called this run (agent may have used only get_news).")
+        print("\nThe Reddit tool was not called this run.")
     if final_state.get("sentiment_report"):
         snippet = (final_state["sentiment_report"] or "")[:400]
         print(f"\nSentiment report snippet:\n{snippet}...")

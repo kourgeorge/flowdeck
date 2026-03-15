@@ -232,6 +232,17 @@ def get_global_news(query: str = "", config: _InjectedConfig = None) -> str:
     return GlobalNewsTool().execute(ctx, query=query or None).to_str()
 
 
+@tool
+def get_reddit_company_social(ticker: str, search_terms: list[str], config: _InjectedConfig = None) -> str:
+    """Get Reddit discussions and sentiment for a stock from finance subreddits (r/stocks, r/investing, etc.).
+    Use when the user asks about Reddit sentiment, social media buzz, or what people are saying about a stock.
+    Call get_ticker_quote first to get the company name, then pass search_terms like ['Apple', 'AAPL'].
+    If the first call returns few results, call again with different search_terms (e.g. sector, product names)."""
+    from ai_engine.agent.tools.reddit import RedditCompanySocialTool
+    ctx = _ctx_from_config(config)
+    return RedditCompanySocialTool().execute(ctx, ticker=ticker, search_terms=search_terms).to_str()
+
+
 # ---------------------------------------------------------------------------
 # Insider trading tools
 # ---------------------------------------------------------------------------
@@ -362,6 +373,7 @@ ALL_LC_TOOLS = [
     get_historical_report_dates,
     get_news,
     get_global_news,
+    get_reddit_company_social,
     get_insider_transactions,
     get_insider_sentiment,
     web_search,
