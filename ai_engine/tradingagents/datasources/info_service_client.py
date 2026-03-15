@@ -221,7 +221,8 @@ def get_edgar_filing_content(
     if form:
         params["form"] = form
     try:
-        data = _get(None, base_url, f"/api/data/edgar-filing-content/{ticker.upper()}", params=params)
+        # Backend fetches SEC docs + runs LLM extraction; can exceed 30s for large 10-Ks (e.g. GOOG)
+        data = _get(None, base_url, f"/api/data/edgar-filing-content/{ticker.upper()}", params=params, timeout=120)
     except Exception as e:
         return f"Unable to load SEC filing content for {ticker.upper()}: {e}"
     if not isinstance(data, dict):

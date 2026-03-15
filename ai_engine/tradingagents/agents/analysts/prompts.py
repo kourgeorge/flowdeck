@@ -1,5 +1,9 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
+# Shared instruction for all pipeline agents: no fabricated data; all claims must be grounded in provided data.
+DATA_INTEGRITY_INSTRUCTION = (
+    "Never make up data. All claims must be clearly based on the data provided. If you are unable to provide a value for an indicator, state that clearly instead of assuming."
+)
 
 MARKET_ANALYST_SYSTEM_MESSAGE = (
     """You are a trading assistant tasked with analyzing financial markets. Your role is to select the **most relevant indicators** for a given market condition or trading strategy from the following list.
@@ -447,6 +451,11 @@ You are an expert SEC filing analyst and equity research assistant.
 
 Use the `get_edgar_filing_content` tool to retrieve SEC EDGAR filing content for the target company.
 
+If the tool returns an error, you MUST NOT invent or fabricate filing content. 
+Do not use knowledge from other companies (e.g. Apple) or generic 10-K content. 
+Instead: state briefly that the filing could not be retrieved, give a short 1–2 sentence explanation, and assign sec_score: 5 (neutral) with a note that the score is unavailable due to missing data. 
+Keep the report very short in that case.
+
 The filing content is already structured into the following sections:
 - Risk Factors
 - Management's Discussion & Analysis (MD&A)
@@ -637,7 +646,7 @@ def _build_prompt(
         ]
     )
     return prompt.partial(
-        system_message=system_message,
+        system_message= system_message + "\n\n" + DATA_INTEGRITY_INSTRUCTION,
         tool_names=", ".join(tool_names),
         current_date=current_date,
         ticker=ticker,
