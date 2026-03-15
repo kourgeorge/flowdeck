@@ -13,7 +13,9 @@ class KeyTakeawaysOutput(BaseModel):
     )
 
 
-EXTRACT_TAKEAWAYS_PROMPT = """Extract exactly 3 to 5 key takeaways from the following analysis report. Each takeaway must be one clear, concise sentence. Return only the list of takeaways, no preamble.
+EXTRACT_TAKEAWAYS_PROMPT = """Extract exactly 3 to 5 key takeaways from the following analysis report. 
+Each takeaway must be one clear, concise sentence. Return only the list of takeaways, no preamble.
+Put the most important takeaways first.
 
 Report:
 ---

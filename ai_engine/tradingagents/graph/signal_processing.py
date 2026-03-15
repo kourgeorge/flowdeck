@@ -23,6 +23,7 @@ class SignalProcessor:
         messages = [
             (
                 "system",
+                "Never make up data. All claims must be clearly based on the data provided. "
                 "You are an efficient assistant designed to analyze paragraphs or financial reports provided by a group of analysts. Your task is to extract the investment decision: SELL, BUY, or HOLD. Provide only the extracted decision (SELL, BUY, or HOLD) as your output, without adding any additional text or information.",
             ),
             ("human", full_signal),
