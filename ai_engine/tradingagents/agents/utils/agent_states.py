@@ -16,6 +16,26 @@ def _merge_report_usage(current: Dict[str, Any], update: Dict[str, Any]) -> Dict
     return base
 
 
+def _merge_report_resources(
+    current: List[Dict[str, Any]], update: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Reducer: append new resource entries and dedupe by (type, url) or (type, title/description/ticker)."""
+    combined = list(current) if current else []
+    new_entries = update if isinstance(update, list) else []
+    seen: set[tuple] = set()
+    for r in combined:
+        key = (r.get("type") or "", r.get("url") or r.get("title") or r.get("description") or r.get("ticker") or "")
+        seen.add(key)
+    for r in new_entries:
+        if not isinstance(r, dict):
+            continue
+        key = (r.get("type") or "", r.get("url") or r.get("title") or r.get("description") or r.get("ticker") or "")
+        if key not in seen:
+            seen.add(key)
+            combined.append(r)
+    return combined
+
+
 # Researcher team state
 class InvestDebateState(TypedDict):
     bull_history: Annotated[
@@ -107,3 +127,5 @@ class AgentState(MessagesState):
 
     # LLM usage per report (input_tokens, output_tokens, cost_usd) for DB metadata; merged by report key
     report_usage: Annotated[Dict[str, Any], _merge_report_usage]
+    # Resources used in this run: news, SEC filings, Reddit, etc. (type, url?, title?, ticker?, description?)
+    report_resources: Annotated[List[Dict[str, Any]], _merge_report_resources]

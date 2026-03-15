@@ -2,6 +2,20 @@ import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+export interface ReportResource {
+  type?: string;
+  url?: string;
+  title?: string;
+  ticker?: string;
+  description?: string;
+  /** Tool that was executed (e.g. get_news, get_global_news) */
+  tool_name?: string;
+  /** JSON or string summary of tool arguments */
+  tool_input?: string;
+  /** Truncated tool result for inspection */
+  tool_output_preview?: string;
+}
+
 interface ReportViewerProps {
   content: string | null;
   score?: number | null;
@@ -15,6 +29,8 @@ interface ReportViewerProps {
   neutralViewpoint?: string[] | null;
   /** TPS-YAML v0.1 structured trading plan (trader report only) */
   tpsPlan?: string | null;
+  /** Sources used for this report (news, SEC filings, Reddit, etc.) */
+  resources?: ReportResource[] | null;
 }
 
 const REPORT_METADATA: Record<string, { title: string; contains: string; aspects: string; methodology: string }> = {
@@ -122,12 +138,101 @@ function ReportMoreInfo({ reportType }: { reportType: string }) {
   );
 }
 
-export default function ReportViewer({ content, score, scoreLabel, keyTakeaways, reportType, bullViewpoint, bearViewpoint, riskyViewpoint, safeViewpoint, neutralViewpoint, tpsPlan }: ReportViewerProps) {
+function ResourceToolDetail({ resource }: { resource: ReportResource }) {
+  const [show, setShow] = useState(false);
+  const hasTool = resource.tool_name || resource.tool_input || resource.tool_output_preview;
+  if (!hasTool) return null;
+  return (
+    <div className="mt-1.5 rounded border border-slate-600 bg-slate-800/60 overflow-hidden text-xs">
+      <button
+        type="button"
+        onClick={() => setShow((v) => !v)}
+        className="w-full px-2.5 py-1.5 flex items-center justify-between gap-2 text-left text-slate-400 hover:text-slate-300 hover:bg-slate-700/40"
+      >
+        <span className="font-medium">Tool: {resource.tool_name || '—'}</span>
+        <svg className={`w-3 h-3 flex-shrink-0 ${show ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
+      {show && (
+        <div className="px-2.5 pb-2 space-y-1.5 font-mono text-slate-400">
+          {resource.tool_input != null && resource.tool_input !== '' && (
+            <div>
+              <div className="text-slate-500 mb-0.5">Input</div>
+              <pre className="whitespace-pre-wrap break-all rounded bg-slate-900/80 p-1.5 text-[11px] max-h-24 overflow-y-auto">{resource.tool_input}</pre>
+            </div>
+          )}
+          {resource.tool_output_preview != null && resource.tool_output_preview !== '' && (
+            <div>
+              <div className="text-slate-500 mb-0.5">Output (preview)</div>
+              <pre className="whitespace-pre-wrap break-all rounded bg-slate-900/80 p-1.5 text-[11px] max-h-32 overflow-y-auto">{resource.tool_output_preview}</pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReportResourcesSection({ resources }: { resources: ReportResource[] }) {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div className="pt-3 border-t border-slate-700">
+      <button
+        type="button"
+        onClick={() => setIsOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-400 hover:text-white"
+      >
+        <svg
+          className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-90 text-emerald-300' : 'text-slate-500'}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+        <span>Resources</span>
+        <span className="text-xs text-slate-500">({resources.length})</span>
+      </button>
+      {isOpen && (
+        <ul className="mt-1.5 space-y-1.5 text-sm text-slate-300">
+          {resources.map((ref, idx) => {
+            const label = ref.title || ref.description || (ref.type && ref.ticker ? `${ref.type} (${ref.ticker})` : ref.type) || 'Source';
+            const source = ref.type || ref.description;
+            return (
+              <li key={idx} className="flex flex-col">
+                <span className="font-medium">{label}</span>
+                <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+                  {source && <span>{source}</span>}
+                  {ref.url && (
+                    <a
+                      href={ref.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline underline-offset-2 text-emerald-300 hover:text-emerald-200"
+                    >
+                      Link
+                    </a>
+                  )}
+                  {ref.ticker && <span>Ticker: {ref.ticker}</span>}
+                </div>
+                <ResourceToolDetail resource={ref} />
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+export default function ReportViewer({ content, score, scoreLabel, keyTakeaways, reportType, bullViewpoint, bearViewpoint, riskyViewpoint, safeViewpoint, neutralViewpoint, tpsPlan, resources }: ReportViewerProps) {
   const hasContent = content && content.trim().length > 0;
   const hasBullBear = (bullViewpoint && bullViewpoint.length > 0) || (bearViewpoint && bearViewpoint.length > 0);
   const hasRiskViewpoints = (riskyViewpoint && riskyViewpoint.length > 0) || (safeViewpoint && safeViewpoint.length > 0) || (neutralViewpoint && neutralViewpoint.length > 0);
   const hasViewpoints = hasBullBear || hasRiskViewpoints;
-  if (!hasContent && !hasViewpoints) {
+  const hasResources = resources && resources.length > 0;
+  if (!hasContent && !hasViewpoints && !hasResources) {
     return (
       <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 text-center text-gray-400">
         No report content available
@@ -351,6 +456,7 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
         </div>
       </div>
       )}
+      {hasResources && <ReportResourcesSection resources={resources!} />}
     </div>
   );
 }

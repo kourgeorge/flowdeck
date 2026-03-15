@@ -198,7 +198,7 @@ def main() -> None:
         meta.update({k: v for k, v in extra.items() if v is not None})
         return {"metadata": meta, "content": content or ""}
 
-    def _write_report(key, content, score, label, llm_usage=None, **extra):
+    def _write_report(key, content, score, label, llm_usage=None, resources=None, **extra):
         try:
             data = _build_report_json(content, score, label, _takeaways(content), **extra)
             meta = data.get("metadata", {})
@@ -208,6 +208,8 @@ def main() -> None:
                 meta["output_tokens"] = llm_usage.get("output_tokens")
                 meta["total_tokens"] = llm_usage.get("total_tokens")
                 meta["cost_usd"] = llm_usage.get("cost_usd")
+            if resources is not None:
+                meta["resources"] = resources
             save_report(
                 analysis_run_id,
                 key,
@@ -281,7 +283,7 @@ def main() -> None:
                         reports[key] = c
                         agent_statuses[agent] = "completed"
                         report_usage = chunk.get("report_usage") or {}
-                        _write_report(key, c, chunk.get(score_key), label, llm_usage=report_usage.get(key))
+                        _write_report(key, c, chunk.get(score_key), label, llm_usage=report_usage.get(key), resources=chunk.get("report_resources"))
                         _progress_log(f"{agent} completed → {key} saved")
                         if last_analyst_report_key and key == last_analyst_report_key:
                             agent_statuses["Bull Researcher"] = "in_progress"
@@ -317,7 +319,7 @@ def main() -> None:
                         analysis_run_id,
                         "investment_plan",
                         content=content,
-                        metadata={**meta, "bull_viewpoint": bull, "bear_viewpoint": bear},
+                        metadata={**meta, "bull_viewpoint": bull, "bear_viewpoint": bear, "resources": chunk.get("report_resources") or []},
                     )
                     _progress_log("Investment plan ready → saved")
 
@@ -333,6 +335,7 @@ def main() -> None:
                         "Trader Plan",
                         llm_usage=report_usage.get("trader_investment_plan"),
                         recommendation=chunk.get("trader_recommendation"),
+                        resources=chunk.get("report_resources"),
                     )
                     agent_statuses["Risky Analyst"] = "in_progress"
                     agent_statuses["Safe Analyst"] = "in_progress"
@@ -372,7 +375,7 @@ def main() -> None:
                         analysis_run_id,
                         "final_trade_decision",
                         content=content,
-                        metadata={**meta, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral},
+                        metadata={**meta, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral, "resources": chunk.get("report_resources") or []},
                     )
                     rec = final_recommendation or ""
                     _progress_log(f"Final trade decision ready → {rec}")

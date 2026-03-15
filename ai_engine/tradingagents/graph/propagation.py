@@ -48,6 +48,7 @@ class Propagator:
             "technical_report": "",
             "technical_score": None,
             "report_usage": {},
+            "report_resources": [],
         }
 
     def get_graph_args(self) -> Dict[str, Any]:

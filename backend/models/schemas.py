@@ -2,7 +2,7 @@
 
 import math
 from pydantic import BaseModel, field_validator
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 
@@ -159,6 +159,8 @@ class ReportData(BaseModel):
     safe_viewpoint: Optional[List[str]] = None
     neutral_viewpoint: Optional[List[str]] = None
     tps_plan: Optional[str] = None
+    # Sources used for this report (news, SEC, Reddit, etc.)
+    resources: Optional[List[Dict[str, Any]]] = None
     # Return scenarios (typically on investment_plan report; used for historical run header)
     expected_return_pct: Optional[float] = None
     bear_case_return_pct: Optional[float] = None

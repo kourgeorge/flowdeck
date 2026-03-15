@@ -42,6 +42,7 @@ from .setup import GraphSetup
 from .propagation import Propagator
 from .reflection import Reflector
 from .signal_processing import SignalProcessor
+from .tool_node_with_resources import make_extract_resources_node
 
 
 class TradingAgentsGraph:
@@ -118,64 +119,46 @@ class TradingAgentsGraph:
         self.graph = self.graph_setup.setup_graph(selected_analysts)
 
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:
-        """Create tool nodes for different data sources using abstract methods."""
+        """Create tool nodes for different data sources."""
         from ..agents.utils.advanced_technical_tools import (
             detect_divergence,
             detect_regime,
             detect_support_resistance
         )
-        
+
         return {
-            "market": ToolNode(
-                [
-                    # Core stock data tools
-                    get_ticker_data,
-                    get_ticker_quote,
-                    # Technical indicators
-                    get_indicators,
-                    # Analyst consensus signal
-                    get_analysts_recommendation,
-                ]
-            ),
-            "social": ToolNode(
-                [
-                    get_ticker_quote,
-                    get_news,
-                    get_reddit_company_social,
-                ]
-            ),
-            "news": ToolNode(
-                [
-                    # News and insider information
-                    get_news,
-                    get_global_news,
-                    get_insider_sentiment,
-                    get_insider_transactions,
-                ]
-            ),
-            "fundamentals": ToolNode(
-                [
-                    # Fundamental analysis tools
-                    get_fundamentals,
-                    get_balance_sheet,
-                    get_cashflow,
-                    get_income_statement,
-                ]
-            ),
+            "market": ToolNode([
+                get_ticker_data,
+                get_ticker_quote,
+                get_indicators,
+                get_analysts_recommendation,
+            ]),
+            "social": ToolNode([
+                get_ticker_quote,
+                get_news,
+                get_reddit_company_social,
+            ]),
+            "news": ToolNode([
+                get_news,
+                get_global_news,
+                get_insider_sentiment,
+                get_insider_transactions,
+            ]),
+            "fundamentals": ToolNode([
+                get_fundamentals,
+                get_balance_sheet,
+                get_cashflow,
+                get_income_statement,
+            ]),
             "sec": ToolNode([get_edgar_filing_content]),
-            "technical": ToolNode(
-                [
-                    # Core stock data tools
-                    get_ticker_data,
-                    get_ticker_quote,
-                    # Technical indicators
-                    get_indicators,
-                    # Advanced technical analysis tools
-                    detect_divergence,
-                    detect_regime,
-                    detect_support_resistance,
-                ]
-            ),
+            "technical": ToolNode([
+                get_ticker_data,
+                get_ticker_quote,
+                get_indicators,
+                detect_divergence,
+                detect_regime,
+                detect_support_resistance,
+            ]),
         }
 
     def propagate(self, company_name, trade_date):

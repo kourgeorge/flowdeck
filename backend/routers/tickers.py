@@ -260,6 +260,7 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
                 safe_viewpoint=v.get('safe_viewpoint'),
                 neutral_viewpoint=v.get('neutral_viewpoint'),
                 tps_plan=v.get('tps_plan'),
+                resources=v.get('resources') or [],
             )
             for k, v in latest_reports_with_scores_raw.items()
         }
@@ -375,6 +376,7 @@ async def get_ticker_reports_for_run(
                 safe_viewpoint=v.get("safe_viewpoint"),
                 neutral_viewpoint=v.get("neutral_viewpoint"),
                 tps_plan=v.get("tps_plan"),
+                resources=v.get("resources") or [],
                 expected_return_pct=v.get("expected_return_pct"),
                 bear_case_return_pct=v.get("bear_case_return_pct"),
                 bull_case_return_pct=v.get("bull_case_return_pct"),

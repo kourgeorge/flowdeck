@@ -355,7 +355,7 @@ class AnalysisService:
                         analysis_run_id, key, e,
                     )
 
-            def _write_report(key, content, score, label, llm_usage=None, **extra):
+            def _write_report(key, content, score, label, llm_usage=None, resources=None, **extra):
                 try:
                     data = _build_report_json(content, score, label, _takeaways(content), **extra)
                     meta = data.get("metadata", {})
@@ -365,6 +365,8 @@ class AnalysisService:
                         meta["output_tokens"] = llm_usage.get("output_tokens")
                         meta["total_tokens"] = llm_usage.get("total_tokens")
                         meta["cost_usd"] = llm_usage.get("cost_usd")
+                    if resources is not None:
+                        meta["resources"] = resources
                     save_report(
                         analysis_info["analysis_run_id"],
                         key,
@@ -492,7 +494,7 @@ class AnalysisService:
                                 pass
                         self._persist_analysis_status(analysis_run_id)
                         report_usage = chunk.get("report_usage") or {}
-                        _write_report(key, c, chunk.get(score_key), label, llm_usage=report_usage.get(key))
+                        _write_report(key, c, chunk.get(score_key), label, llm_usage=report_usage.get(key), resources=chunk.get("report_resources"))
                         _progress_log(f"{agent} completed → {key} saved")
                         if last_analyst_report_key and key == last_analyst_report_key:
                             analysis_info["agent_statuses"]["Bull Researcher"] = "in_progress"
@@ -532,6 +534,7 @@ class AnalysisService:
                         inner["output_tokens"] = usage.get("output_tokens")
                         inner["total_tokens"] = usage.get("total_tokens")
                         inner["cost_usd"] = usage.get("cost_usd")
+                    inner["resources"] = chunk.get("report_resources") or []
                     save_report(
                         analysis_info["analysis_run_id"],
                         "investment_plan",
@@ -558,6 +561,7 @@ class AnalysisService:
                         llm_usage=report_usage.get("trader_investment_plan"),
                         recommendation=chunk.get("trader_recommendation"),
                         tps_plan=tps or None,
+                        resources=chunk.get("report_resources"),
                     )
                     analysis_info["agent_statuses"]["Risky Analyst"] = "in_progress"
                     analysis_info["agent_statuses"]["Safe Analyst"] = "in_progress"
@@ -604,6 +608,7 @@ class AnalysisService:
                         inner["output_tokens"] = usage.get("output_tokens")
                         inner["total_tokens"] = usage.get("total_tokens")
                         inner["cost_usd"] = usage.get("cost_usd")
+                    inner["resources"] = chunk.get("report_resources") or []
                     save_report(
                         analysis_info["analysis_run_id"],
                         "final_trade_decision",
@@ -642,7 +647,7 @@ class AnalysisService:
                         continue
                     try:
                         report_usage = last_chunk.get("report_usage") or {}
-                        _write_report(report_key, content, last_chunk.get(score_key), label, llm_usage=report_usage.get(report_key))
+                        _write_report(report_key, content, last_chunk.get(score_key), label, llm_usage=report_usage.get(report_key), resources=last_chunk.get("report_resources"))
                         analysis_info["reports"][report_key] = content
                         analysis_info["agent_statuses"][agent] = "completed"
                         _progress_log(f"{agent} report saved (from final state)")

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import ReportTabs from '../components/ReportTabs';
-import ReportViewer from '../components/ReportViewer';
+import ReportViewer, { type ReportResource } from '../components/ReportViewer';
 import AspectSpiderChart, { getAnalysisScoreEntries } from '../components/AspectSpiderChart';
 import ReturnScenarioBar from '../components/ReturnScenarioBar';
 import { API_BASE_URL } from '../services/api';
@@ -35,6 +35,7 @@ interface SharedTickerReport {
     safe_viewpoint?: string[] | null;
     neutral_viewpoint?: string[] | null;
     tps_plan?: string | null;
+    resources?: ReportResource[] | null;
     [key: string]: unknown;
   }>;
 }
@@ -276,6 +277,7 @@ export default function SharedReportPage() {
               safeViewpoint={current?.safe_viewpoint ?? null}
               neutralViewpoint={current?.neutral_viewpoint ?? null}
               tpsPlan={current?.tps_plan ?? null}
+              resources={current?.resources ?? undefined}
             />
           </div>
         </div>

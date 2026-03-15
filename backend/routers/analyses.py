@@ -200,6 +200,7 @@ async def websocket_endpoint(websocket: WebSocket, analysis_run_id: str, token: 
                     "ticker": status["ticker"],
                     "date": status["date"],
                     "agent_statuses": status.get("agent_statuses", {}),
+                    "current_agent": status.get("current_agent"),
                 }
             })
 

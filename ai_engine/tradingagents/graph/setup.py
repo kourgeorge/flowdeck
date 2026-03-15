@@ -1,6 +1,6 @@
 # TradingAgents/graph/setup.py
 
-from typing import Dict, Any
+from typing import Any, Dict
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langgraph.graph import END, StateGraph, START
@@ -10,6 +10,7 @@ from ..agents import *
 from ..agents.utils.agent_states import AgentState
 
 from .conditional_logic import ConditionalLogic
+from .tool_node_with_resources import make_extract_resources_node
 
 
 class GraphSetup:
@@ -122,6 +123,7 @@ class GraphSetup:
 
         # Create workflow
         workflow = StateGraph(AgentState)
+        extract_resources_node = make_extract_resources_node()
 
         # Add analyst nodes to the graph
         for analyst_type, node in analyst_nodes.items():
@@ -130,6 +132,7 @@ class GraphSetup:
                 f"Msg Clear {analyst_type.capitalize()}", delete_nodes[analyst_type]
             )
             workflow.add_node(f"tools_{analyst_type}", tool_nodes[analyst_type])
+            workflow.add_node(f"extract_resources_{analyst_type}", extract_resources_node)
 
         # Add other nodes
         workflow.add_node("Bull Researcher", bull_researcher_node)
@@ -158,7 +161,9 @@ class GraphSetup:
                 getattr(self.conditional_logic, f"should_continue_{analyst_type}"),
                 [current_tools, current_clear],
             )
-            workflow.add_edge(current_tools, current_analyst)
+            # After tools run, extract resources then loop back to analyst
+            workflow.add_edge(current_tools, f"extract_resources_{analyst_type}")
+            workflow.add_edge(f"extract_resources_{analyst_type}", current_analyst)
 
             # Connect to next analyst or to Bull Researcher if this is the last analyst
             if i < len(selected_analysts) - 1:

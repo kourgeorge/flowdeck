@@ -1,66 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
 
-
-/** Report keys in pipeline order (matches server writing order). */
-const REPORT_ORDER = [
-  'market_report',
-  'sentiment_report',
-  'news_report',
-  'fundamentals_report',
-  'technical_report',
-  'sec_report',
-  'investment_plan',
-  'trader_investment_plan',
-  'final_trade_decision',
-] as const;
-
-/** Short “doing” label per report (from server JSON files). */
-const REPORT_LABELS: Record<string, string> = {
-  market_report: 'Analyzing market…',
-  sentiment_report: 'Analyzing sentiment & social…',
-  news_report: 'Reviewing news…',
-  fundamentals_report: 'Evaluating fundamentals…',
-  technical_report: 'Running technical analysis…',
-  sec_report: 'Analyzing SEC filings…',
-  investment_plan: 'Running bull vs bear debate…',
-  trader_investment_plan: 'Translating to trading plan…',
-  final_trade_decision: 'Finalizing decision…',
-};
-
-/** Fallback when no report keys yet. */
-const FALLBACK_PHRASES = [
-  'Starting analysis…',
-  'Fetching market data…',
-  'Loading data…',
-];
-
 interface AIAnalysisLoadingViewProps {
   /** Report keys that already exist on the server (from stockData.reports). */
   existingReportKeys?: string[];
   agentStatuses?: Record<string, string> | null;
+  /** Current agent name from backend (e.g. "Market Analyst"). Shown as-is when analysis is running. */
   currentAgent?: string | null;
 }
 
 export default function AIAnalysisLoadingView({
-  existingReportKeys = [],
-  agentStatuses: _agentStatuses = null,
   currentAgent = null,
 }: AIAnalysisLoadingViewProps) {
-  const completedCount = REPORT_ORDER.filter((k) => existingReportKeys.includes(k)).length;
-  const nextKey = REPORT_ORDER.find((k) => !existingReportKeys.includes(k));
-  const totalSteps = REPORT_ORDER.length;
-
-  const statusMessage =
-    currentAgent != null && currentAgent !== ''
-      ? `${currentAgent}…`
-      : nextKey != null
-        ? REPORT_LABELS[nextKey] ?? 'Processing…'
-        : completedCount >= totalSteps
-          ? 'Almost there…'
-          : null;
-  const fallbackIndex = completedCount % FALLBACK_PHRASES.length;
   const displayMessage =
-    statusMessage ?? FALLBACK_PHRASES[fallbackIndex];
+    currentAgent != null && currentAgent !== ''
+      ? currentAgent
+      : 'Running analysis…';
 
   const [opacity, setOpacity] = useState(1);
   const [shownMessage, setShownMessage] = useState(displayMessage);
@@ -80,11 +34,6 @@ export default function AIAnalysisLoadingView({
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, [displayMessage]);
-
-  const progressLabel =
-    completedCount > 0 && completedCount < totalSteps
-      ? `${completedCount} of ${totalSteps} reports ready`
-      : null;
 
   return (
     <div className="flex items-center gap-3 rounded-lg border border-blue-500/30 bg-blue-500/5 px-5 py-4">
@@ -106,9 +55,6 @@ export default function AIAnalysisLoadingView({
         >
           {shownMessage}
         </p>
-        {progressLabel && (
-          <p className="mt-0.5 text-xs text-gray-500">{progressLabel}</p>
-        )}
       </div>
     </div>
   );

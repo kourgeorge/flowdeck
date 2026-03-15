@@ -183,7 +183,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     if (data.is_generating && data.generation_analysis_run_id != null) {
       setAnalysisProgress(null);
       const client = new WebSocketClient(data.generation_analysis_run_id);
-      client.on('status', (msg: any) => { const s = msg?.data?.agent_statuses; if (s) setAnalysisProgress({ agent_statuses: s, current_agent: null }); });
+      client.on('status', (msg: any) => { const s = msg?.data?.agent_statuses; if (s) setAnalysisProgress({ agent_statuses: s, current_agent: msg?.data?.current_agent ?? null }); });
       client.on('progress', (msg: any) => {
         const s = msg?.data?.agent_statuses;
         const c = msg?.data?.current_agent;
@@ -1617,7 +1617,8 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                               bullViewpoint={currentReportData?.bull_viewpoint} bearViewpoint={currentReportData?.bear_viewpoint}
                               riskyViewpoint={currentReportData?.risky_viewpoint} safeViewpoint={currentReportData?.safe_viewpoint}
                               neutralViewpoint={currentReportData?.neutral_viewpoint}
-                              tpsPlan={currentReportData?.tps_plan} />
+                              tpsPlan={currentReportData?.tps_plan}
+                              resources={currentReportData?.resources ?? null} />
                           )}
                         </div>
                       </div>

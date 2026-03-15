@@ -182,3 +182,33 @@ class TestMarketDataLayerQuote(unittest.TestCase):
         self.assertEqual(single_result["day_high"], 404.8)
         self.assertEqual(single_result["bid_price"], 395.21)
         self.assertEqual(single_result["fifty_two_week_high"], 555.45)
+
+
+class TestMarketDataLayerRedditCompanySocial(unittest.TestCase):
+    """Tests for get_reddit_company_social (Reddit vendor)."""
+
+    def setUp(self) -> None:
+        clear_cache()
+
+    @patch("data_layer.market.get_reddit_company_social_online")
+    @patch("data_layer.market.get_cached")
+    def test_get_reddit_company_social_returns_vendor_string(
+        self, mock_get_cached: object, mock_reddit: object
+    ) -> None:
+        mock_get_cached.side_effect = lambda key, ttl, fetch: fetch()
+        mock_reddit.return_value = "## AAPL Reddit (social), from 2025-01-01 to 2025-01-15:\n\n### Post title\n\nBody."
+
+        layer = MarketDataLayer()
+        result = layer.get_reddit_company_social(
+            "AAPL", "2025-01-01", "2025-01-15", search_terms=["Apple", "AAPL"]
+        )
+
+        self.assertIsInstance(result, str)
+        self.assertIn("AAPL", result)
+        self.assertIn("Post title", result)
+        mock_reddit.assert_called_once_with("AAPL", "2025-01-01", "2025-01-15", ["Apple", "AAPL"])
+        call_args = mock_get_cached.call_args[0]
+        self.assertEqual(
+            call_args[0],
+            "reddit_company_social:AAPL:2025-01-01:2025-01-15:AAPL,Apple",
+        )
