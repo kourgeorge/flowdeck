@@ -325,31 +325,75 @@ def run_narrative_writer(
         period_label=state.period_label,
     )
     message = HumanMessage(content=prompts.NARRATIVE_WRITER_SYSTEM + "\n\n" + prompt_text)
+    use_structured = prompts.style_uses_structured_output(state.narrative_style)
 
     try:
         from pydantic import BaseModel, Field
 
-        class _NarrativeOut(BaseModel):
-            narrative: str = Field(description="Short digest narrative (without references section)")
-            what_to_watch: str = Field(description="What to watch section")
-            references: Optional[List[ReferenceItem]] = Field(
-                default=None,
-                description=(
-                    "Structured list of source items used for this brief "
-                    "(news articles, global feeds, web snippets, etc.)."
-                ),
-            )
+        if use_structured:
+            class _NarrativeOutStructured(BaseModel):
+                market_highlights: str = Field(
+                    description="Market Highlights: what happened (key price moves, headlines, market action)."
+                )
+                key_signals: str = Field(
+                    description="Key Signals: what it means (drivers, themes, implications for the portfolio)."
+                )
+                what_to_watch: str = Field(
+                    description="What to Watch: coming catalysts (earnings, data, events, levels to monitor)."
+                )
+                risks_opportunities: str = Field(
+                    description="Risks & Opportunities: trading implications (risks, opportunities, positioning)."
+                )
+                references: Optional[List[ReferenceItem]] = Field(
+                    default=None,
+                    description=(
+                        "Structured list of source items used for this brief "
+                        "(news articles, global feeds, web snippets, etc.)."
+                    ),
+                )
 
-        chain = llm.with_structured_output(_NarrativeOut)
-        result = chain.invoke([message])
-        narrative = getattr(result, "narrative", "") or ""
-        what_to_watch = getattr(result, "what_to_watch", "") or ""
-        # Capture structured references on the workflow state so the caller can return them.
-        state.references = list(getattr(result, "references", None) or [])
+            chain = llm.with_structured_output(_NarrativeOutStructured)
+            result = chain.invoke([message])
+            market_highlights = getattr(result, "market_highlights", "") or ""
+            key_signals = getattr(result, "key_signals", "") or ""
+            what_to_watch = getattr(result, "what_to_watch", "") or ""
+            risks_opportunities = getattr(result, "risks_opportunities", "") or ""
+            # Special tokens allow parsing/formatting by section (market_highlights, key_signals, what_to_watch, risks_opportunities).
+            sections = [
+                ("Market Highlights", "market_highlights", market_highlights),
+                ("Key Signals", "key_signals", key_signals),
+                ("What to Watch", "what_to_watch", what_to_watch),
+                ("Risks & Opportunities", "risks_opportunities", risks_opportunities),
+            ]
+            narrative = "\n\n".join(
+                f"## {title}\n{token}\n{body.strip()}" for title, token, body in sections if body.strip()
+            ).strip()
+            if not narrative:
+                narrative = market_highlights or key_signals or "Brief unavailable."
+            state.references = list(getattr(result, "references", None) or [])
+        else:
+            class _NarrativeOutBasic(BaseModel):
+                narrative: str = Field(
+                    description="Short digest narrative (portfolio-centered, a few paragraphs)."
+                )
+                what_to_watch: str = Field(
+                    description="What to watch section (2–4 sentences)."
+                )
+                references: Optional[List[ReferenceItem]] = Field(
+                    default=None,
+                    description=(
+                        "Structured list of source items used for this brief "
+                        "(news articles, global feeds, web snippets, etc.)."
+                    ),
+                )
 
-        # If the model did not provide structured references, optionally fall back to heuristic ones.
+            chain = llm.with_structured_output(_NarrativeOutBasic)
+            result = chain.invoke([message])
+            narrative = getattr(result, "narrative", "") or ""
+            what_to_watch = getattr(result, "what_to_watch", "") or ""
+            state.references = list(getattr(result, "references", None) or [])
+
         if not state.references and resources_text:
-            # Very simple fallback: treat each bullet in resources_text as a ReferenceItem with label only.
             fallback_items: List[ReferenceItem] = []
             for line in resources_text.splitlines():
                 line = line.strip()

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, type ComponentProps } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import TickerSearch from '../components/TickerSearch';
 import DashboardTopTiles from '../components/DashboardTopTiles';
@@ -10,7 +10,33 @@ import DailyDigestRunPanel from '../components/DailyDigestRunPanel';
 import OverviewStatsPanel, { ByMarketSection, SubscribedChangeColumnsChart } from '../components/OverviewStatsPanel';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useAuth } from '../contexts/AuthContext';
+import ReactMarkdown from 'react-markdown';
 import { digestApi, type DigestResponse, type DigestBriefItem } from '../services/api';
+
+/** Special tokens used in technical-style briefs for formatting by section. */
+const BRIEF_SECTION_TOKENS = ['market_highlights', 'key_signals', 'what_to_watch', 'risks_opportunities'];
+
+/** True if the brief narrative already uses the 4-section format (Market Highlights, Key Signals, What to Watch, Risks & Opportunities). */
+function briefHasStructuredSections(narrative: string): boolean {
+    return /##\s*(Market Highlights|What to Watch|Risks\s*&\s*Opportunities)/i.test(narrative);
+}
+
+/** Remove standalone special-token lines from narrative for display (tokens stay in stored narrative for parsing). */
+function narrativeForDisplay(narrative: string): string {
+    if (!briefHasStructuredSections(narrative)) return narrative;
+    const tokenSet = new Set(BRIEF_SECTION_TOKENS);
+    return narrative
+        .split('\n')
+        .filter((line) => !tokenSet.has(line.trim()))
+        .join('\n');
+}
+
+/** ReactMarkdown components so brief section titles (##) use the same green as "What to watch". */
+const briefMarkdownComponents = {
+    h2: ({ children, ...props }: ComponentProps<'h2'>) => (
+        <h2 className="text-sm font-semibold text-emerald-300 mb-1 mt-4 first:mt-0" {...props}>{children}</h2>
+    ),
+};
 
 type DashboardTab = 'overview' | 'portfolio' | 'news' | 'digest';
 type StockListTab = 'subscribed' | 'recent';
@@ -249,7 +275,7 @@ export default function DashboardPage() {
     }
     lines.push('');
     lines.push(brief.narrative.trim());
-    if (brief.what_to_watch) {
+    if (brief.what_to_watch && !briefHasStructuredSections(brief.narrative)) {
       lines.push('');
       lines.push('What to watch');
       lines.push(brief.what_to_watch.trim());
@@ -615,7 +641,7 @@ export default function DashboardPage() {
                   <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
                     {/* Top bar: New brief action integrated into panel */}
                     <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-gray-700/80">
-                      <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500">Briefs</span>
+                      <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Briefs</span>
                       <button
                         type="button"
                         onClick={() => setNewBriefModalOpen(true)}
@@ -657,7 +683,7 @@ export default function DashboardPage() {
                         </svg>
                       </button>
                     </div>
-                    <div className="grid grid-cols-7 gap-0.5 text-[10px] text-center text-gray-500 mb-1">
+                    <div className="grid grid-cols-7 gap-0.5 text-xs text-center text-gray-500 mb-1">
                       {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d) => (
                         <div key={d}>{d}</div>
                       ))}
@@ -711,12 +737,12 @@ export default function DashboardPage() {
                         );
                       })()}
                     </div>
-                    <p className="mt-2 text-[10px] text-gray-500">
+                    <p className="mt-2 text-xs text-gray-500">
                       Green = briefs. Click a day to view.
                     </p>
                     {weeklyDigestSlots.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-gray-700">
-                        <p className="text-[10px] font-medium text-gray-500 mb-1.5">Weekly briefs</p>
+                        <p className="text-xs font-medium text-gray-500 mb-1.5">Weekly briefs</p>
                         <div className="flex flex-wrap gap-1">
                           {weeklyDigestSlots.map((slot) => {
                             const endDate = slot.startsWith('w:') ? slot.slice(2) : slot;
@@ -726,8 +752,8 @@ export default function DashboardPage() {
                                 key={slot}
                                 type="button"
                                 onClick={() => handleSelectDigestDate(slot)}
-                                className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${
-                                  isSelected
+className={`px-2 py-0.5 text-xs rounded border transition-colors ${
+                                isSelected
                                     ? 'bg-emerald-600 border-emerald-500 text-white'
                                     : 'bg-gray-900 border-gray-600 text-gray-300 hover:bg-gray-700'
                                 }`}
@@ -742,7 +768,7 @@ export default function DashboardPage() {
                     )}
                     {selectedDigestDate && digestBriefsForDay.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-gray-700">
-                        <p className="text-[10px] font-medium text-gray-500 mb-1.5">
+                        <p className="text-xs font-medium text-gray-500 mb-1.5">
                           {selectedDigestDate.startsWith('w:') ? 'This week' : 'This day'}
                         </p>
                         <div className="flex flex-wrap gap-1">
@@ -751,7 +777,7 @@ export default function DashboardPage() {
                               key={brief.execution_id}
                               type="button"
                               onClick={() => setSelectedBrief(brief)}
-                              className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${
+                              className={`px-2 py-0.5 text-xs rounded border transition-colors ${
                                 selectedBrief?.execution_id === brief.execution_id
                                   ? 'bg-emerald-600 border-emerald-500 text-white'
                                   : 'bg-gray-900 border-gray-600 text-gray-300 hover:bg-gray-700'
@@ -933,8 +959,12 @@ export default function DashboardPage() {
                               </button>
                             </div>
                           </div>
-                          <div className="prose prose-invert max-w-none">
-                            <p className="text-sm text-gray-200 whitespace-pre-wrap leading-relaxed">{selectedBrief.narrative}</p>
+                          <div className="prose prose-invert prose-sm max-w-none text-gray-200">
+                            {briefHasStructuredSections(selectedBrief.narrative) ? (
+                              <ReactMarkdown components={briefMarkdownComponents}>{narrativeForDisplay(selectedBrief.narrative)}</ReactMarkdown>
+                            ) : (
+                              <p className="whitespace-pre-wrap leading-relaxed">{selectedBrief.narrative}</p>
+                            )}
                           </div>
                           {showRawDigest && (
                             <div className="mt-2 rounded border border-gray-700 bg-black/50 p-2">
@@ -943,7 +973,7 @@ export default function DashboardPage() {
                               </pre>
                             </div>
                           )}
-                          {selectedBrief.what_to_watch && (
+                          {selectedBrief.what_to_watch && !briefHasStructuredSections(selectedBrief.narrative) && (
                             <div className="pt-3 border-t border-gray-700 space-y-2">
                               <div>
                                 <h3 className="text-sm font-semibold text-emerald-300 mb-1">What to watch</h3>
@@ -1087,8 +1117,12 @@ export default function DashboardPage() {
                           </button>
                         </div>
                       </div>
-                      <div className="prose prose-invert max-w-none">
-                        <p className="text-sm text-gray-200 whitespace-pre-wrap leading-relaxed">{digest.narrative}</p>
+                      <div className="prose prose-invert prose-sm max-w-none text-gray-200">
+                        {briefHasStructuredSections(digest.narrative) ? (
+                          <ReactMarkdown components={briefMarkdownComponents}>{narrativeForDisplay(digest.narrative)}</ReactMarkdown>
+                        ) : (
+                          <p className="whitespace-pre-wrap leading-relaxed">{digest.narrative}</p>
+                        )}
                       </div>
                       {showRawDigest && (
                         <div className="mt-2 rounded border border-gray-700 bg-black/50 p-2">
@@ -1097,7 +1131,7 @@ export default function DashboardPage() {
                           </pre>
                         </div>
                       )}
-                      {digest.what_to_watch && (
+                      {digest.what_to_watch && !briefHasStructuredSections(digest.narrative) && (
                         <div className="pt-3 border-t border-gray-700 space-y-2">
                           <div>
                             <h3 className="text-sm font-semibold text-emerald-300 mb-1">What to watch</h3>
@@ -1105,52 +1139,52 @@ export default function DashboardPage() {
                               {digest.what_to_watch}
                             </p>
                           </div>
-                          {digest.references && digest.references.length > 0 && (
-                            <div className="pt-2 border-t border-gray-800">
-                              <button
-                                type="button"
-                                onClick={() => setShowReferences((v) => !v)}
-                                className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-300 hover:text-white"
-                              >
-                                <svg
-                                  className={`w-3 h-3 transition-transform ${
-                                    showReferences ? 'rotate-90 text-emerald-300' : 'text-gray-400'
-                                  }`}
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                </svg>
-                                <span>References</span>
-                                <span className="text-xs text-gray-500">({digest.references.length})</span>
-                              </button>
-                              {showReferences && (
-                                <ul className="mt-1.5 space-y-1.5 text-sm text-gray-300">
-                                  {digest.references.map((ref, idx) => (
-                                    <li key={idx} className="flex flex-col">
-                                      <span className="font-medium">{ref.label}</span>
-                                      <div className="flex flex-wrap gap-2 text-xs text-gray-500">
-                                        {ref.source && <span>{ref.source}</span>}
-                                        {ref.url && (
-                                          <a
-                                            href={ref.url}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="underline underline-offset-2 text-emerald-300 hover:text-emerald-200"
-                                          >
-                                            Link
-                                          </a>
-                                        )}
-                                        {ref.tickers && ref.tickers.length > 0 && (
-                                          <span>Tickers: {ref.tickers.join(', ')}</span>
-                                        )}
-                                      </div>
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                            </div>
+                        </div>
+                      )}
+                      {digest.references && digest.references.length > 0 && (
+                        <div className="pt-3 border-t border-gray-700">
+                          <button
+                            type="button"
+                            onClick={() => setShowReferences((v) => !v)}
+                            className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-300 hover:text-white"
+                          >
+                            <svg
+                              className={`w-3 h-3 transition-transform ${
+                                showReferences ? 'rotate-90 text-emerald-300' : 'text-gray-400'
+                              }`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                            <span>References</span>
+                            <span className="text-xs text-gray-500">({digest.references.length})</span>
+                          </button>
+                          {showReferences && (
+                            <ul className="mt-1.5 space-y-1.5 text-sm text-gray-300">
+                              {digest.references.map((ref, idx) => (
+                                <li key={idx} className="flex flex-col">
+                                  <span className="font-medium">{ref.label}</span>
+                                  <div className="flex flex-wrap gap-2 text-xs text-gray-500">
+                                    {ref.source && <span>{ref.source}</span>}
+                                    {ref.url && (
+                                      <a
+                                        href={ref.url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="underline underline-offset-2 text-emerald-300 hover:text-emerald-200"
+                                      >
+                                        Link
+                                      </a>
+                                    )}
+                                    {ref.tickers && ref.tickers.length > 0 && (
+                                      <span>Tickers: {ref.tickers.join(', ')}</span>
+                                    )}
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
                           )}
                         </div>
                       )}

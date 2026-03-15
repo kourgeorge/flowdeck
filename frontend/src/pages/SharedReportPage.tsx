@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ComponentProps } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
 import ReportTabs from '../components/ReportTabs';
 import ReportViewer, { type ReportResource } from '../components/ReportViewer';
 import AspectSpiderChart, { getAnalysisScoreEntries } from '../components/AspectSpiderChart';
@@ -143,10 +144,28 @@ export default function SharedReportPage() {
                 Focus: {data.priority_tickers.join(', ')}
               </p>
             )}
-            <div className="prose prose-invert prose-sm max-w-none">
-              <p className="text-gray-200 whitespace-pre-wrap leading-relaxed">{data.narrative}</p>
+            <div className="prose prose-invert prose-sm max-w-none text-gray-200">
+              {/##\s*(Market Highlights|What to Watch|Risks\s*&\s*Opportunities)/i.test(data.narrative) ? (
+                <ReactMarkdown
+                  components={{
+                    h2: ({ children, ...props }: ComponentProps<'h2'>) => (
+                      <h2 className="text-sm font-semibold text-emerald-300 mb-1 mt-4 first:mt-0" {...props}>{children}</h2>
+                    ),
+                  }}
+                >
+                  {(() => {
+                    const tokens = new Set(['market_highlights', 'key_signals', 'what_to_watch', 'risks_opportunities']);
+                    return data.narrative
+                      .split('\n')
+                      .filter((line) => !tokens.has(line.trim()))
+                      .join('\n');
+                  })()}
+                </ReactMarkdown>
+              ) : (
+                <p className="whitespace-pre-wrap leading-relaxed">{data.narrative}</p>
+              )}
             </div>
-            {data.what_to_watch && (
+            {data.what_to_watch && !/##\s*(Market Highlights|What to Watch|Risks\s*&\s*Opportunities)/i.test(data.narrative) && (
               <div className="mt-6 pt-4 border-t border-gray-700">
                 <h2 className="text-sm font-semibold text-white mb-2">What to watch</h2>
                 <p className="text-gray-300 text-sm whitespace-pre-wrap">{data.what_to_watch}</p>

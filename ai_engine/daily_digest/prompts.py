@@ -87,13 +87,82 @@ def build_market_interpreter_prompt(
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# Narrative writer: output field tokens and style blocks
+# ---------------------------------------------------------------------------
+
+# Phrase used in every style block so the model maps content to the right output fields.
+_OUTPUT_FIELDS_BASIC = "Output the digest narrative and the what_to_watch section as the corresponding fields: narrative, what_to_watch."
+_OUTPUT_FIELDS_STRUCTURED = "Output each section as the corresponding fields: market_highlights, key_signals, what_to_watch, risks_opportunities."
+
+# Shared closing for basic-style blocks (narrative + what_to_watch).
+def _basic_tail(what_to_watch_sentences: str = "2–4 sentences") -> str:
+    return f'End with a brief "What to watch" section ({what_to_watch_sentences}). {_OUTPUT_FIELDS_BASIC}'
+
+
+# Styles that use four-section structured output; agent uses the structured schema for these.
+STRUCTURED_OUTPUT_STYLES: set[str] = {"technical"}
+
+# Style key normalization: UI sends "default" for Balanced; accept common typos.
+_STYLE_ALIASES: Dict[str, str] = {"default": "balanced", "profesional": "professional"}
+
+
+def _normalize_style_key(narrative_style: Optional[str]) -> Optional[str]:
+    """Return lowercase style key for lookup, or None if empty."""
+    if not narrative_style or not narrative_style.strip():
+        return None
+    key = narrative_style.strip().lower()
+    return _STYLE_ALIASES.get(key, key)
+
+
+# Default block when no style or unknown style: short narrative + what_to_watch.
+BASIC_NARRATIVE_BLOCK = f"""Write a short, narrative, portfolio-centered brief (a few paragraphs). Use a conversational but informative tone. Avoid long bullet lists. End with a brief "What to watch" section (2–4 sentences) highlighting what the user should monitor next.
+
+{_OUTPUT_FIELDS_BASIC}"""
+
+
+# Style name (lowercase) -> full block injected into the narrative writer prompt.
+NARRATIVE_STYLE_BLOCKS: Dict[str, str] = {
+    "balanced": f"""**Style: Balanced.** Mix context with actionable takeaways. Cover what happened and what it means without leaning too narrative or too terse. Suitable for readers who want both story and next steps in one flow. Keep to a few paragraphs plus a short forward-looking close.
+
+{_basic_tail()}""",
+    "concise": f"""**Style: Concise.** Short and scannable. Lead with the most important moves and implications; cut filler and repetition. Use short sentences and clear subordination. Suitable for busy readers who want the gist in under a minute.
+
+{_basic_tail("2–3 sentences")}""",
+    "professional": f"""**Style: Professional.** Formal, measured tone. Emphasize clarity and objectivity; avoid colloquialisms and hype. Suitable for institutional or advisory contexts. Structure as a brief report: context, interpretation, and forward-looking view.
+
+{_basic_tail()}""",
+    "technical": f"""**Style: Technical.** Use precise language; focus on data, levels, and catalysts. Suitable for active traders who want a clear, scannable structure.
+
+Write the brief in exactly four sections, each as a short block of text (a few sentences). Avoid long bullet lists. Each section will be stored with the special tokens market_highlights, key_signals, what_to_watch, risks_opportunities so that formatting can be applied by section.
+
+1. **Market Highlights** — What happened (key price moves, headlines, and market action in the period).
+2. **Key Signals** — What it means (interpretation: drivers, themes, and implications for the user's portfolio).
+3. **What to Watch** — Coming catalysts (earnings, data releases, events, or levels to monitor next).
+4. **Risks & Opportunities** — Trading implications (concrete risks and opportunities; how to think about positioning).
+
+{_OUTPUT_FIELDS_STRUCTURED}""",
+}
+
 NARRATIVE_WRITER_SYSTEM = """You are the writer for a short User Daily Brief. You receive:
 - Per-ticker interpretations (explanation, driver, thesis comparison) for the user's priority holdings.
 - A market interpretation (overall backdrop and relevance to the portfolio).
 
-Your task: Write a short, narrative, portfolio-centered brief (a few paragraphs). Avoid long bullet lists. Use a conversational but informative tone. End with a brief "What to watch" section (2–4 sentences) highlighting what the user should monitor next.
+A style/structure block will be injected below: follow it exactly for tone, structure, and output fields."""
 
-Output the digest narrative and the "what to watch" section separately as requested."""
+
+def get_style_block_for_narrative(narrative_style: Optional[str]) -> str:
+    """Return the block to inject into the narrative writer prompt. Uses BASIC_NARRATIVE_BLOCK when no/unknown style."""
+    key = _normalize_style_key(narrative_style)
+    if key is not None and key in NARRATIVE_STYLE_BLOCKS:
+        return NARRATIVE_STYLE_BLOCKS[key]
+    return BASIC_NARRATIVE_BLOCK
+
+
+def style_uses_structured_output(narrative_style: Optional[str]) -> bool:
+    """True if this style uses the four-section structured output (market_highlights, key_signals, what_to_watch, risks_opportunities)."""
+    key = _normalize_style_key(narrative_style)
+    return key is not None and key in STRUCTURED_OUTPUT_STYLES
 
 
 def build_narrative_writer_prompt(
@@ -109,13 +178,7 @@ def build_narrative_writer_prompt(
     if user_note:
         user_note_block = f"\n\n## User note for this brief\n{user_note[:1500]}"
 
-    style_block = ""
-    if narrative_style:
-        style_block = (
-            "\n\n## Desired writing style\n"
-            f"The user requested this style for this brief: '{narrative_style}'. "
-            "Follow this style while writing the narrative and the 'What to watch' section."
-        )
+    style_block = get_style_block_for_narrative(narrative_style)
 
     period_block = f"\n\n## Period\nThis brief covers **{period_label}**."
 
@@ -127,11 +190,12 @@ def build_narrative_writer_prompt(
 {ticker_interpretations_text}
 
 ## Market interpretation
-{market_interpretation_text}{period_block}{user_note_block}{style_block}{resources_block}
+{market_interpretation_text}{period_block}{user_note_block}{resources_block}
 
-You may use these tools to insert exact prices or report dates if needed: {', '.join(tool_names)}.
+## Style and structure
+{style_block}
 
-Write the digest narrative and the "what to watch" section. Keep the brief short and narrative; avoid long bullet lists."""
+You may use these tools to insert exact prices or report dates if needed: {', '.join(tool_names)}."""
 
 
 FOCUS_SELECTOR_SYSTEM = """You are a portfolio assistant helping choose which tickers to focus on in a User Daily Brief.
