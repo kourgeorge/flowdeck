@@ -89,8 +89,15 @@ def _fetch_multi_historical_prices(
     start_date: str,
     end_date: str,
 ) -> str:
-    import yfinance as yf
-    import pandas as pd
+    import csv
+    import io
+
+    from ai_engine.tradingagents.datasources.info_service_client import (
+        get_ticker_data,
+        require_info_service,
+    )
+
+    require_info_service()
 
     # Validate and clamp dates
     try:
@@ -110,32 +117,35 @@ def _fetch_multi_historical_prices(
     if start_dt >= end_dt:
         return "Error: start_date must be before end_date."
 
-    # Normalise tickers
     tickers_upper = [t.strip().upper() for t in tickers[:20]]
-
     results: dict[str, str] = {}
     errors: dict[str, str] = {}
 
     for ticker in tickers_upper:
         try:
-            data = yf.download(
-                ticker,
-                start=start_dt.isoformat(),
-                end=end_dt.isoformat(),
-                multi_level_index=False,
-                progress=False,
-                auto_adjust=True,
-            )
-
-            if data is None or data.empty:
+            raw = get_ticker_data(ticker, start_dt.isoformat(), end_dt.isoformat())
+            if not raw or not raw.strip():
                 errors[ticker] = f"No data found between {start_dt} and {end_dt}"
                 continue
-
-            data = data.reset_index()[["Date", "Close"]]
-            data["Date"] = [str(d)[:10] for d in pd.to_datetime(data["Date"])]
-            data["Close"] = data["Close"].round(4)
-            results[ticker] = data.to_csv(index=False)
-
+            # Parse CSV, keep Date and Close, output CSV
+            reader = csv.DictReader(io.StringIO(raw))
+            rows = []
+            for row in reader:
+                date_val = row.get("Date", row.get("date", ""))
+                close_val = row.get("Close", row.get("close", ""))
+                if date_val and close_val:
+                    try:
+                        rows.append({"Date": str(date_val)[:10], "Close": round(float(close_val), 4)})
+                    except (ValueError, TypeError):
+                        pass
+            if not rows:
+                errors[ticker] = f"No valid rows between {start_dt} and {end_dt}"
+                continue
+            out = io.StringIO()
+            w = csv.DictWriter(out, fieldnames=["Date", "Close"])
+            w.writeheader()
+            w.writerows(rows)
+            results[ticker] = out.getvalue()
         except Exception as e:
             errors[ticker] = str(e)
 

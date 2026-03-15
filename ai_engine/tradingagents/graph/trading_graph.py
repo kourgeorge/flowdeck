@@ -17,7 +17,7 @@ from ..agents.utils.agent_states import (
     InvestDebateState,
     RiskDebateState,
 )
-from ..dataflows.config import set_config
+from ..datasources.info_service_client import require_info_service, set_info_service_url
 
 # Import the new abstract tool methods from agent_utils
 from ..agents.utils.agent_utils import (
@@ -62,20 +62,14 @@ class TradingAgentsGraph:
         self.debug = debug
         self.config = config or DEFAULT_CONFIG
 
-        # Update the interface's config
-        set_config(self.config)
-        
+        set_info_service_url(self.config.get("info_service_url"))
+        require_info_service()
+
         # Import advanced technical tools for tool nodes
         from ..agents.utils.advanced_technical_tools import (
             detect_divergence,
             detect_regime,
             detect_support_resistance
-        )
-
-        # Create necessary directories
-        os.makedirs(
-            os.path.join(self.config["project_dir"], "dataflows/data_cache"),
-            exist_ok=True,
         )
 
         # Initialize LLMs via provider (deep thinker + quick thinking model)

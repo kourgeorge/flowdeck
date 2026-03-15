@@ -158,8 +158,13 @@ def _rank_tickers(
 
 def _fetch_global_news(digest_date: str, lookback_days: int = 7) -> Any:
     try:
-        from ai_engine.tradingagents.dataflows.interface import route_to_vendor
-        return route_to_vendor("get_global_news", digest_date, lookback_days, 10, None)
+        from ai_engine.tradingagents.datasources.info_service_client import (
+            get_global_news,
+            is_configured,
+        )
+        if not is_configured():
+            return None
+        return get_global_news(digest_date, lookback_days, 10, None)
     except Exception as e:
         logger.debug("Global news: %s", e)
         return None

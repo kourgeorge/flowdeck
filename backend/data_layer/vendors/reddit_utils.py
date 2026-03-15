@@ -2,6 +2,7 @@ import requests
 import time
 import json
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 from contextlib import contextmanager
 from typing import Annotated, Optional, List, Dict
 import os
@@ -196,6 +197,79 @@ def fetch_reddit_posts_online(
     all_posts.sort(key=lambda x: x["upvotes"], reverse=True)
     
     return all_posts
+
+
+def get_reddit_global_news_online(
+    curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],
+    look_back_days: Annotated[int, "Number of days to look back"] = 7,
+    limit: Annotated[int, "Maximum number of articles to return"] = 5,
+    query: Annotated[Optional[str], "Optional search focus (unused for Reddit)"] = None,
+) -> str:
+    """Retrieve the latest top reddit news from online Reddit API."""
+    try:
+        curr_date_dt = datetime.strptime(curr_date, "%Y-%m-%d")
+        before = curr_date_dt - relativedelta(days=look_back_days)
+        before_str = before.strftime("%Y-%m-%d")
+        posts = fetch_reddit_posts_online(
+            subreddits=DEFAULT_GLOBAL_NEWS_SUBREDDITS,
+            start_date=before_str,
+            end_date=curr_date,
+            limit=limit * 2,
+            sort="top",
+            time_filter="week",
+        )
+        posts = posts[:limit]
+        if len(posts) == 0:
+            return ""
+        news_str = ""
+        for post in posts:
+            if post["content"] == "":
+                news_str += f"### {post['title']}\n\n"
+            else:
+                news_str += f"### {post['title']}\n\n{post['content']}\n\n"
+        return f"## Global News Reddit (Online), from {before_str} to {curr_date}:\n{news_str}"
+    except Exception as e:
+        raise RuntimeError(
+            f"Error fetching Reddit news online: {e}. "
+            "Set REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_USER_AGENT."
+        ) from e
+
+
+def get_reddit_company_news_online(
+    query: Annotated[str, "Search query or ticker symbol"],
+    start_date: Annotated[str, "Start date in yyyy-mm-dd format"],
+    end_date: Annotated[str, "End date in yyyy-mm-dd format"],
+) -> str:
+    """Retrieve company-specific reddit news from online Reddit API."""
+    try:
+        search_query = query
+        if query in ticker_to_company:
+            company_name = ticker_to_company[query]
+            search_query = company_name.split(" OR ")[0] if "OR" in company_name else company_name
+            search_query = f"{search_query} {query}"
+        posts = fetch_reddit_posts_online(
+            subreddits=DEFAULT_COMPANY_NEWS_SUBREDDITS,
+            query=search_query,
+            start_date=start_date,
+            end_date=end_date,
+            limit=50,
+            sort="top",
+            time_filter="month",
+        )
+        if len(posts) == 0:
+            return ""
+        news_str = ""
+        for post in posts:
+            if post["content"] == "":
+                news_str += f"### {post['title']}\n\n"
+            else:
+                news_str += f"### {post['title']}\n\n{post['content']}\n\n"
+        return f"## {query} News Reddit (Online), from {start_date} to {end_date}:\n\n{news_str}"
+    except Exception as e:
+        raise RuntimeError(
+            f"Error fetching Reddit news online: {e}. "
+            "Set REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_USER_AGENT."
+        ) from e
 
 
 def fetch_top_from_category(

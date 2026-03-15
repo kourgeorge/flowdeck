@@ -2,20 +2,12 @@ from langchain_core.tools import tool
 from typing import Annotated, Optional
 import json
 
-from ...dataflows.interface import route_to_vendor
-
-try:
-    from ...dataflows.info_service_client import (
-        get_fundamentals as get_fundamentals_via_service,
-        get_financial_statements,
-        get_analyst_recommendations as get_analysts_recommendation_via_service,
-        is_configured as info_service_configured,
-    )
-except ImportError:
-    get_fundamentals_via_service = None
-    get_financial_statements = None
-    get_analysts_recommendation_via_service = None
-    info_service_configured = lambda: False
+from ...datasources.info_service_client import (
+    get_fundamentals as get_fundamentals_via_service,
+    get_financial_statements,
+    get_analyst_recommendations,
+    require_info_service,
+)
 
 
 def _statement_to_str(statements: dict, key: str) -> str:
@@ -33,16 +25,15 @@ def get_fundamentals(
 ) -> str:
     """
     Retrieve comprehensive fundamental data for a given ticker symbol.
-    Uses the Information Service API when INFO_SERVICE_URL is set, otherwise the configured fundamental_data vendor.
+    Requires INFO_SERVICE_URL (backend). Agents work only with the backend.
     Args:
         ticker (str): Ticker symbol of the company
         curr_date (str): Current date you are trading at, yyyy-mm-dd (optional when using info service)
     Returns:
         str: A formatted report containing comprehensive fundamental data
     """
-    if get_fundamentals_via_service is not None and info_service_configured():
-        return get_fundamentals_via_service(ticker)
-    return route_to_vendor("get_fundamentals", ticker, curr_date)
+    require_info_service()
+    return get_fundamentals_via_service(ticker)
 
 
 @tool
@@ -53,7 +44,7 @@ def get_balance_sheet(
 ) -> str:
     """
     Retrieve balance sheet data for a given ticker symbol.
-    Uses the Information Service API when INFO_SERVICE_URL is set, otherwise the configured fundamental_data vendor.
+    Requires INFO_SERVICE_URL (backend). Agents work only with the backend.
     Args:
         ticker (str): Ticker symbol of the company
         freq (str): Reporting frequency: annual/quarterly (default quarterly)
@@ -61,11 +52,11 @@ def get_balance_sheet(
     Returns:
         str: A formatted report containing balance sheet data
     """
-    if get_financial_statements is not None and info_service_configured():
-        data = get_financial_statements(ticker, statement_type="balance_sheet", freq=freq)
-        if data is not None:
-            return _statement_to_str(data, "balance_sheet")
-    return route_to_vendor("get_balance_sheet", ticker, freq, curr_date)
+    require_info_service()
+    data = get_financial_statements(ticker, statement_type="balance_sheet", freq=freq)
+    if data is not None:
+        return _statement_to_str(data, "balance_sheet")
+    return "No balance sheet data available"
 
 
 @tool
@@ -76,7 +67,7 @@ def get_cashflow(
 ) -> str:
     """
     Retrieve cash flow statement data for a given ticker symbol.
-    Uses the Information Service API when INFO_SERVICE_URL is set, otherwise the configured fundamental_data vendor.
+    Requires INFO_SERVICE_URL (backend). Agents work only with the backend.
     Args:
         ticker (str): Ticker symbol of the company
         freq (str): Reporting frequency: annual/quarterly (default quarterly)
@@ -84,11 +75,11 @@ def get_cashflow(
     Returns:
         str: A formatted report containing cash flow statement data
     """
-    if get_financial_statements is not None and info_service_configured():
-        data = get_financial_statements(ticker, statement_type="cashflow", freq=freq)
-        if data is not None:
-            return _statement_to_str(data, "cashflow")
-    return route_to_vendor("get_cashflow", ticker, freq, curr_date)
+    require_info_service()
+    data = get_financial_statements(ticker, statement_type="cashflow", freq=freq)
+    if data is not None:
+        return _statement_to_str(data, "cashflow")
+    return "No cash flow data available"
 
 
 @tool
@@ -99,7 +90,7 @@ def get_income_statement(
 ) -> str:
     """
     Retrieve income statement data for a given ticker symbol.
-    Uses the Information Service API when INFO_SERVICE_URL is set, otherwise the configured fundamental_data vendor.
+    Requires INFO_SERVICE_URL (backend). Agents work only with the backend.
     Args:
         ticker (str): Ticker symbol of the company
         freq (str): Reporting frequency: annual/quarterly (default quarterly)
@@ -107,11 +98,11 @@ def get_income_statement(
     Returns:
         str: A formatted report containing income statement data
     """
-    if get_financial_statements is not None and info_service_configured():
-        data = get_financial_statements(ticker, statement_type="income_statement", freq=freq)
-        if data is not None:
-            return _statement_to_str(data, "income_statement")
-    return route_to_vendor("get_income_statement", ticker, freq, curr_date)
+    require_info_service()
+    data = get_financial_statements(ticker, statement_type="income_statement", freq=freq)
+    if data is not None:
+        return _statement_to_str(data, "income_statement")
+    return "No income statement data available"
 
 
 @tool
@@ -120,20 +111,15 @@ def get_analysts_recommendation(
 ) -> str:
     """
     Retrieve analyst recommendation data for a given ticker symbol.
-    Uses the Information Service API when INFO_SERVICE_URL is set, otherwise falls back to yfinance.
+    Requires INFO_SERVICE_URL (backend). Agents work only with the backend.
     Args:
         ticker (str): Ticker symbol of the company
     Returns:
         str: JSON payload containing recommendation, trend breakdown, and related metadata.
     """
+    require_info_service()
     ticker_upper = ticker.upper()
-
-    if get_analysts_recommendation_via_service is not None and info_service_configured():
-        data = get_analysts_recommendation_via_service(ticker_upper)
-        if data is not None:
-            return json.dumps(data, default=str)
-
-    from ...dataflows.y_finance import get_analyst_recommendations as get_yfinance_analyst_recommendations
-
-    data = get_yfinance_analyst_recommendations(ticker_upper)
-    return json.dumps(data, default=str)
+    data = get_analyst_recommendations(ticker_upper)
+    if data is not None:
+        return json.dumps(data, default=str)
+    return json.dumps({"ticker": ticker_upper, "error": "No analyst recommendation data available"})

@@ -138,6 +138,18 @@ class _SQLiteTTLStore:
                 return None
             return json.loads(value_json)
 
+    def get_raw(self, key: str) -> Optional[T]:
+        """Return cached value if present, ignoring TTL. For fallback when primary fetch fails."""
+        with self._lock:
+            conn = self._connection()
+            row = conn.execute(
+                f"SELECT value FROM {self._DATA_CACHE_TABLE} WHERE key = ?",
+                (key,),
+            ).fetchone()
+            if row is None:
+                return None
+            return json.loads(row[0])
+
     def set(self, key: str, value: T, ttl_seconds: float) -> None:
         with self._lock:
             conn = self._connection()
@@ -298,6 +310,17 @@ def _get_store() -> Union[_TTLStore, _SQLiteTTLStore]:
 def ensure_data_cache() -> None:
     """Initialize the shared SQLite store if needed. Call at app startup so analysis status is visible to all workers."""
     _get_store()
+
+
+def get_cached_raw(key: str) -> Optional[T]:
+    """Return cached value if present, ignoring TTL. For fallback when fetch fails."""
+    from config import DATA_CACHE_ENABLED
+    if not DATA_CACHE_ENABLED:
+        return None
+    store = _get_store()
+    if hasattr(store, "get_raw"):
+        return store.get_raw(key)
+    return None
 
 
 def get_cached(

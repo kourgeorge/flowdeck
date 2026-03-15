@@ -60,9 +60,10 @@ config["data_vendors"] = {
 ### Option 2: Use Directly in Code
 
 ```python
-from ai_engine.tradingagents.dataflows.local import (
+# Vendor implementations live in data_layer; use when backend is on path
+from data_layer.vendors.reddit_utils import (
     get_reddit_global_news_online,
-    get_reddit_company_news_online
+    get_reddit_company_news_online,
 )
 
 # Get global news

@@ -35,15 +35,13 @@ from routers.digest import router as digest_router
 from routers.public import router as public_router
 from routers.share import router as share_router
 from data_layer import init_data_gateway
+from data_layer.market import MarketDataLayer
 from data_layer.sources.market import CachedMarketSource
 from data_layer.sources.reports import ReportDataSource
 from data_layer.sources.user import UserPortfolioSource
 from data_layer.sources.edgar import EdgarDataSource
 from services.analysis_service import AnalysisService
-from services.market_data_service import MarketDataService
-from services.news_service import NewsService
 from services.report_service import ReportService
-from services.info_fetcher import get_info_fetcher
 from services.edgar_service import get_edgar_service
 
 
@@ -141,16 +139,11 @@ app.add_middleware(
 )
 
 # Initialize services
-market_data_service = MarketDataService()
 report_service = ReportService()
 analysis_service = AnalysisService()
-news_service = NewsService()
-cached_info_fetcher = get_info_fetcher(
-    market_data_service=market_data_service, news_service=news_service
-)
 
-# Initialize data layer (single entry point for all data access)
-market_source = CachedMarketSource(cached_info_fetcher)
+# Initialize data layer (single entry point for all data access; owns cache + vendors)
+market_source = CachedMarketSource(MarketDataLayer())
 report_source = ReportDataSource(report_service)
 user_source = UserPortfolioSource()
 edgar_source = EdgarDataSource(get_edgar_service())
@@ -162,7 +155,7 @@ init_data_gateway(
 )
 
 # Shared services for routers that need them (tickers, analyses)
-app_services.set_services(report_service, market_data_service, analysis_service)
+app_services.set_services(report_service, analysis_service)
 
 # Routers
 app.include_router(data_router)

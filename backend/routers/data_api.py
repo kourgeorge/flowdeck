@@ -283,6 +283,54 @@ async def data_ticker_data(
     return {"ticker": ticker.upper(), "start_date": start_date, "end_date": end_date, "data": data}
 
 
+@router.get("/indicators/{ticker}")
+async def data_indicators(
+    ticker: str,
+    indicator: str = Query(..., description="Indicator name (rsi, macd, macdh, etc.)"),
+    curr_date: str = Query(..., description="Current date YYYY-MM-DD"),
+    look_back_days: int = Query(30, ge=1, le=365, description="Days to look back"),
+):
+    """Get technical indicators (RSI, MACD, Bollinger Bands, etc.) for agents."""
+    await _ensure_ticker_exists(ticker)
+    data = await asyncio.to_thread(
+        _gateway().get_indicators,
+        ticker.upper(),
+        indicator,
+        curr_date,
+        look_back_days,
+    )
+    return {"ticker": ticker.upper(), "indicator": indicator, "data": data}
+
+
+@router.get("/global-news")
+async def data_global_news(
+    curr_date: str = Query(..., description="Current date YYYY-MM-DD"),
+    lookback_days: int = Query(7, ge=1, le=90, description="Days to look back"),
+    limit: int = Query(10, ge=1, le=50, description="Max articles to return"),
+    query: Optional[str] = Query(None, description="Optional search focus"),
+):
+    """Get global/macro news for agents."""
+    data = await asyncio.to_thread(
+        _gateway().get_global_news,
+        curr_date,
+        lookback_days,
+        limit,
+        query,
+    )
+    return {"data": data}
+
+
+@router.get("/insider-sentiment/{ticker}")
+async def data_insider_sentiment(
+    ticker: str,
+    curr_date: str = Query(..., description="Current date YYYY-MM-DD"),
+):
+    """Get insider sentiment for a ticker (Finnhub)."""
+    await _ensure_ticker_exists(ticker)
+    data = await asyncio.to_thread(_gateway().get_insider_sentiment, ticker.upper(), curr_date)
+    return {"ticker": ticker.upper(), "data": data}
+
+
 @router.get("/analyst-recommendations/{ticker}")
 async def data_analyst_recommendations(ticker: str):
     """Get analyst recommendations from YahooQuery."""

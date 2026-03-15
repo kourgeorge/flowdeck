@@ -1,13 +1,15 @@
 import os
 
+# data_dir: backend data layer uses DATA_SOURCES_DATA_DIR; here we default to project/data
+_DATA_DIR = os.getenv("DATA_SOURCES_DATA_DIR", "").strip() or os.path.join(
+    os.path.dirname(__file__), "..", "..", "..", "data"
+)
+_DATA_DIR = os.path.abspath(_DATA_DIR)
+
 DEFAULT_CONFIG = {
     "project_dir": os.path.abspath(os.path.join(os.path.dirname(__file__), ".")),
     "results_dir": os.getenv("TRADINGAGENTS_RESULTS_DIR", "./results"),
-    "data_dir": "/Users/yluo/Documents/Code/ScAI/FR1-data",
-    "data_cache_dir": os.path.join(
-        os.path.abspath(os.path.join(os.path.dirname(__file__), ".")),
-        "dataflows/data_cache",
-    ),
+    "data_dir": _DATA_DIR,
     # LLM settings
     "llm_provider": "openai",
     "deep_think_llm": "o4-mini",
@@ -17,13 +19,12 @@ DEFAULT_CONFIG = {
     "max_debate_rounds": 2,
     "max_risk_discuss_rounds": 2,
     "max_recur_limit": 100,
-    # Data vendor configuration
-    # Category-level configuration (default for all tools in category)
+    # Data vendor configuration (aligned with data_layer/vendors/config)
     "data_vendors": {
-        "core_stock_apis": "yfinance",       # Options: yfinance, alpha_vantage, local
-        "technical_indicators": "yfinance",  # Options: yfinance, alpha_vantage, local
-        "fundamental_data": "alpha_vantage", # Options: openai, alpha_vantage, local
-        "news_data": "alpha_vantage",        # Options: openai, alpha_vantage, google, local
+        "core_stock_apis": "yfinance",
+        "technical_indicators": "yfinance",
+        "fundamental_data": "yfinance",
+        "news_data": "yfinance",
     },
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {

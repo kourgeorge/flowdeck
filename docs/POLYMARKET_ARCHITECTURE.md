@@ -142,13 +142,13 @@ graph TD
     ENV[.env file<br/>POLYMARKET_API_BASE_URL]
     DC[default_config.py<br/>prediction_markets: polymarket]
     INT[interface.py<br/>VENDOR_METHODS]
-    RT[route_to_vendor]
+    API[vendor domain API]
     PM[polymarket.py functions]
 
     ENV --> DC
     DC --> INT
-    INT --> RT
-    RT --> PM
+    INT --> API
+    API --> PM
 
     style ENV fill:#e3f2fd
     style DC fill:#fff3e0

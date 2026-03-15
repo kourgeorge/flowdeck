@@ -1,8 +1,8 @@
 import logging
-from typing import Annotated
+from typing import Annotated, Optional
 
 # Import from vendor-specific modules
-from .local import get_YFin_data, get_finnhub_news, get_finnhub_company_insider_sentiment, get_finnhub_company_insider_transactions, get_simfin_balance_sheet, get_simfin_cashflow, get_simfin_income_statements, get_reddit_global_news, get_reddit_company_news, get_reddit_global_news_online, get_reddit_company_news_online
+from .reddit_utils import get_reddit_global_news_online, get_reddit_company_news_online
 from .y_finance import get_YFin_data_online, get_stock_stats_indicators_window, get_balance_sheet as get_yfinance_balance_sheet, get_cashflow as get_yfinance_cashflow, get_income_statement as get_yfinance_income_statement, get_insider_transactions as get_yfinance_insider_transactions, get_fundamentals as get_yfinance_fundamentals, get_yfinance_news
 from .google import get_google_news, get_global_news_google
 from .openai import get_stock_news_openai, get_global_news_openai, get_fundamentals_openai
@@ -64,10 +64,9 @@ TOOLS_CATEGORIES = {
 }
 
 VENDOR_LIST = [
-    "local",
     "yfinance",
     "openai",
-    "google"
+    "google",
 ]
 
 # Mapping of methods to their vendor-specific implementations
@@ -76,13 +75,11 @@ VENDOR_METHODS = {
     "get_ticker_data": {
         "alpha_vantage": get_alpha_vantage_stock,
         "yfinance": get_YFin_data_online,
-        "local": get_YFin_data,
     },
     # technical_indicators
     "get_indicators": {
         "alpha_vantage": get_alpha_vantage_indicator,
         "yfinance": get_stock_stats_indicators_window,
-        "local": get_stock_stats_indicators_window
     },
     # fundamental_data
     "get_fundamentals": {
@@ -91,19 +88,13 @@ VENDOR_METHODS = {
         "yfinance": get_yfinance_fundamentals,
     },
     "get_balance_sheet": {
-        # "alpha_vantage": get_alpha_vantage_balance_sheet,  # Commented out - not using Alpha Vantage for fundamentals
         "yfinance": get_yfinance_balance_sheet,
-        "local": get_simfin_balance_sheet,
     },
     "get_cashflow": {
-        # "alpha_vantage": get_alpha_vantage_cashflow,  # Commented out - not using Alpha Vantage for fundamentals
         "yfinance": get_yfinance_cashflow,
-        "local": get_simfin_cashflow,
     },
     "get_income_statement": {
-        # "alpha_vantage": get_alpha_vantage_income_statement,  # Commented out - not using Alpha Vantage for fundamentals
         "yfinance": get_yfinance_income_statement,
-        "local": get_simfin_income_statements,
     },
     # news_data
     "get_news": {
@@ -111,23 +102,18 @@ VENDOR_METHODS = {
         "openai": get_stock_news_openai,
         "google": get_google_news,
         "yfinance": get_yfinance_news,
-        "local": [get_finnhub_news, get_reddit_company_news, get_google_news],
         "reddit_online": get_reddit_company_news_online,
     },
     "get_global_news": {
         "serpapi": get_global_news_serpapi,
         "openai": get_global_news_openai,
         "google": get_global_news_google,
-        "local": get_reddit_global_news,
         "reddit_online": get_reddit_global_news_online,
     },
-    "get_insider_sentiment": {
-        "local": get_finnhub_company_insider_sentiment
-    },
+    "get_insider_sentiment": {},
     "get_insider_transactions": {
         "alpha_vantage": get_alpha_vantage_insider_transactions,
         "yfinance": get_yfinance_insider_transactions,
-        "local": get_finnhub_company_insider_transactions,
     },
 }
 
@@ -166,10 +152,10 @@ def get_vendor(category: str, method: str = None) -> str:
             return tool_vendors[method]
 
     # Fall back to category-level configuration
-    return config.get("data_vendors", {}).get(category, "default")
+    return config.get("data_vendors", {}).get(category, "yfinance")
 
-def route_to_vendor(method: str, *args, **kwargs):
-    """Route method calls to appropriate vendor implementation with fallback support."""
+def _route(method: str, *args, **kwargs):
+    """Internal: route to configured vendor with fallback. Not part of the public API."""
     method = METHOD_ALIASES.get(method, method)
     category = get_category_for_method(method)
     vendor_config = get_vendor(category, method)
@@ -316,3 +302,35 @@ def route_to_vendor(method: str, *args, **kwargs):
     else:
         # Convert all results to strings and concatenate
         return '\n'.join(str(result) for result in results)
+
+
+# --- Public domain API: callers use these, not _route ---
+
+def get_ticker_data(ticker: str, start_date: str, end_date: str) -> str:
+    """OHLCV time series for a ticker. Vendor selection and fallback are internal."""
+    return _route("get_ticker_data", ticker.upper(), start_date, end_date)
+
+
+def get_indicators(
+    ticker: str,
+    indicator: str,
+    curr_date: str,
+    look_back_days: int = 30,
+) -> str:
+    """Technical indicators (RSI, MACD, etc.). Vendor selection and fallback are internal."""
+    return _route("get_indicators", ticker.upper(), indicator, curr_date, look_back_days)
+
+
+def get_global_news(
+    curr_date: str,
+    lookback_days: int = 7,
+    limit: int = 10,
+    query: Optional[str] = None,
+) -> str:
+    """Global/macro news. Vendor selection and fallback are internal."""
+    return _route("get_global_news", curr_date, lookback_days, limit, query=query)
+
+
+def get_insider_sentiment(ticker: str, curr_date: str) -> str:
+    """Insider sentiment for a ticker. Vendor selection and fallback are internal."""
+    return _route("get_insider_sentiment", ticker.upper(), curr_date)

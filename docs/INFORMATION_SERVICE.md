@@ -38,10 +38,11 @@ When you want agents to use the same data as the dashboard:
    - **Environment:** `export INFO_SERVICE_URL=http://localhost:8002`
    - **Config:** In `tradingagents/default_config.py` or your config, set `"info_service_url": "http://localhost:8002"`.
 
-Then the agent tools (`get_news`, `get_stock_data`, `get_fundamentals`, `get_financial_statements`, `get_financial_charts`, etc.) will call `/api/data/*` instead of the local dataflow vendors.
+Then the agent tools (`get_news`, `get_stock_data`, `get_fundamentals`, `get_financial_statements`, `get_financial_charts`, etc.) will call `/api/data/*` instead of local vendor calls.
 
 ## Summary
 
 - **Engine:** `backend/services/info_fetcher.py` – single entry point for all fetching.
+- **Vendors:** `backend/data_layer/vendors/` – yfinance, Alpha Vantage, etc.
 - **API:** `backend/routers/data_api.py` – REST routes mounted at `/api/data`.
-- **Client:** `tradingagents/dataflows/info_service_client.py` – used by agents when `INFO_SERVICE_URL` is set.
+- **Client:** `tradingagents/datasources/info_service_client.py` – used by agents when `INFO_SERVICE_URL` is set.

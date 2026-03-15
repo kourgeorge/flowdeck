@@ -42,7 +42,7 @@ Polymarket provides a public REST API and GraphQL endpoint with the following ca
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  ai_engine/tradingagents/dataflows/polymarket.py                │
+│  ai_engine/tradingagents/datasources/polymarket.py                │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │ • get_market_sentiment(ticker, date)                      │  │
 │  │ • get_related_markets(ticker, category)                   │  │
@@ -54,7 +54,7 @@ Polymarket provides a public REST API and GraphQL endpoint with the following ca
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  ai_engine/tradingagents/dataflows/interface.py                 │
+│  ai_engine/tradingagents/datasources/interface.py                 │
 │  • Add "prediction_markets" category to TOOLS_CATEGORIES        │
 │  • Register Polymarket vendor in VENDOR_METHODS                 │
 └─────────────────────────────────────────────────────────────────┘
@@ -119,7 +119,7 @@ Add to [`backend/.env.example`](backend/.env.example):
 
 ### 3.1 Core Polymarket Dataflow Module
 
-**File**: `ai_engine/tradingagents/dataflows/polymarket.py`
+**File**: `ai_engine/tradingagents/datasources/polymarket.py`
 
 **Functions to Implement**:
 

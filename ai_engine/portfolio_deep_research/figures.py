@@ -68,18 +68,9 @@ def build_figure_data_and_payload(
     if info_url:
         figure_data = fetch_figure_data_via_http(tickers, info_url)
     else:
-        try:
-            from ai_engine.watchlist_consulting.fetch_figure_data import fetch_figure_data_for_tickers
-            figure_data = fetch_figure_data_for_tickers(
-                tickers,
-                include_historical=True,
-                include_fundamentals=False,
-                include_financial_charts=True,
-                historical_period="6mo",
-            )
-        except Exception:
-            for t in tickers:
-                figure_data[t.upper()] = {}
+        # Platform (INFO_SERVICE_URL) required; no yfinance fallback
+        for t in tickers:
+            figure_data[t.upper()] = {}
 
     entries: List[Dict[str, Any]] = []
     for ticker in tickers:

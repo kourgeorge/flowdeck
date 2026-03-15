@@ -120,6 +120,27 @@ class MarketDataSourceProtocol(Protocol):
     def refresh_market_movers_cache(self) -> None:
         ...
 
+    def get_indicators(
+        self,
+        ticker: str,
+        indicator: str,
+        curr_date: str,
+        look_back_days: int = 30,
+    ) -> str:
+        ...
+
+    def get_global_news(
+        self,
+        curr_date: str,
+        lookback_days: int = 7,
+        limit: int = 10,
+        query: Optional[str] = None,
+    ) -> str:
+        ...
+
+    def get_insider_sentiment(self, ticker: str, curr_date: str) -> str:
+        ...
+
 
 class ReportDataSourceProtocol(Protocol):
     """Protocol for platform reports (AI analysis reports)."""

@@ -34,14 +34,17 @@ class MarketMoversTool(BaseTool):
 
     def execute(self, ctx: ExecutionContext, *, count: int = 8, **_) -> ToolResult:
         try:
-            from ai_engine.tradingagents.dataflows.info_service_client import (
+            from ai_engine.tradingagents.datasources.info_service_client import (
                 get_market_movers,
                 is_configured,
             )
             if not is_configured():
                 return ToolResult(
                     ok=False,
-                    error={"code": "CONFIG", "message": "Info service URL not configured (INFO_SERVICE_URL)."},
+                    error={
+                        "code": "CONFIG",
+                        "message": "INFO_SERVICE_URL must be set. Agents work only with the backend.",
+                    },
                 )
             count = max(1, min(100, count))
             data = get_market_movers(count=count)

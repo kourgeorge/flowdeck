@@ -7,7 +7,7 @@ Three sources:
   - yahooquery: direct yahooquery Ticker().history(period=..., interval='1d').
   - backend: HTTP GET /api/data/market-overview (live backend).
 
-Uses the same international ticker list as the API (InfoFetcher.MARKET_OVERVIEW_TICKERS)
+Uses the same international ticker list as the API (data_layer.constants.MARKET_OVERVIEW_TICKERS)
 for yfinance/yahooquery; for backend, ticker list comes from the API response.
 Reports how many tickers do NOT return proper values per range and lists them.
 
@@ -39,11 +39,11 @@ OFFSET_SESSIONS = {"1w": 6, "1mo": 22, "6mo": 126, "ytd": None}  # None = use fi
 
 def get_regional_tickers() -> list[str]:
     """Same ticker list the backend uses for market overview 'international' (regions)."""
-    from services.info_fetcher import InfoFetcher
+    from data_layer.constants import MARKET_OVERVIEW_TICKERS
 
     tickers = []
     seen = set()
-    for group_key, ticker, _name in InfoFetcher.MARKET_OVERVIEW_TICKERS:
+    for group_key, ticker, _name in MARKET_OVERVIEW_TICKERS:
         if group_key != "international":
             continue
         t = ticker.upper()
@@ -340,7 +340,7 @@ def run_compare(
     """Run all three sources and print a comparison table."""
     total = len(tickers)
     print("Comparing all 3 sources (yfinance, yahooquery, backend)")
-    print(f"  Ticker list: {total} international (InfoFetcher.MARKET_OVERVIEW_TICKERS)")
+    print(f"  Ticker list: {total} international (MARKET_OVERVIEW_TICKERS)")
     print(f"  Backend URL: {backend_url}")
     print()
 
@@ -456,7 +456,7 @@ def main() -> None:
         else:
             print("Regional map data test (yfinance)")
             print("  Source: MarketDataService (batch 25 + single-ticker retry, 1-row accepted as 0%% change)")
-        print(f"  Tickers: {total} (international from InfoFetcher.MARKET_OVERVIEW_TICKERS)")
+        print(f"  Tickers: {total} (international from MARKET_OVERVIEW_TICKERS)")
         print("  Ranges: 1W, 1M, 6M, YTD")
         print()
         t0 = time.perf_counter()

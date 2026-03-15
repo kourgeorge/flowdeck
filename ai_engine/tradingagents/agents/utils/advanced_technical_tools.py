@@ -4,10 +4,12 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
-from ...dataflows.interface import route_to_vendor
-from ...dataflows.config import get_config
-import yfinance as yf
-import os
+
+from ...datasources.info_service_client import (
+    get_ticker_data as get_ticker_data_via_service,
+    get_indicators as get_indicators_via_service,
+    require_info_service,
+)
 
 
 @tool
@@ -30,6 +32,7 @@ def detect_divergence(
     Returns:
         String containing divergence analysis with detected signals and interpretation
     """
+    require_info_service()
     try:
         # Get stock data
         try:
@@ -40,8 +43,7 @@ def detect_divergence(
             return f"Error: Invalid date format '{curr_date}'. Expected YYYY-MM-DD format. Please check the date and try again."
         
         try:
-            # Call route_to_vendor directly instead of the tool wrapper
-            stock_data_str = route_to_vendor("get_ticker_data", symbol, start_date, end_date)
+            stock_data_str = get_ticker_data_via_service(symbol, start_date, end_date)
         except Exception as e:
             return f"Error: Failed to retrieve stock data for {symbol}. Underlying error: {str(e)}. Please verify the ticker symbol is correct and the data vendor is accessible."
         
@@ -98,8 +100,7 @@ def detect_divergence(
         
         # Get indicator data
         try:
-            # Call route_to_vendor directly instead of the tool wrapper
-            indicator_data_str = route_to_vendor("get_indicators", symbol, indicator, curr_date, look_back_days)
+            indicator_data_str = get_indicators_via_service(symbol, indicator, curr_date, look_back_days)
         except Exception as e:
             return f"Error: Failed to retrieve indicator data for {symbol} ({indicator}). Underlying error: {str(e)}. Please verify the indicator name is correct and the data vendor is accessible."
         
@@ -272,6 +273,7 @@ def detect_regime(
     Returns:
         String containing regime classification and adaptive trading recommendations
     """
+    require_info_service()
     try:
         # Get stock data
         try:
@@ -282,8 +284,7 @@ def detect_regime(
             return f"Error: Invalid date format '{curr_date}'. Expected YYYY-MM-DD format. Please check the date and try again."
         
         try:
-            # Call route_to_vendor directly instead of the tool wrapper
-            stock_data_str = route_to_vendor("get_ticker_data", symbol, start_date, end_date)
+            stock_data_str = get_ticker_data_via_service(symbol, start_date, end_date)
         except Exception as e:
             return f"Error: Failed to retrieve stock data for {symbol}. Underlying error: {str(e)}. Please verify the ticker symbol is correct and the data vendor is accessible."
         
@@ -505,6 +506,7 @@ def detect_support_resistance(
     Returns:
         String containing identified support/resistance levels with strength ratings
     """
+    require_info_service()
     try:
         # Get stock data
         try:
@@ -515,8 +517,7 @@ def detect_support_resistance(
             return f"Error: Invalid date format '{curr_date}'. Expected YYYY-MM-DD format. Please check the date and try again."
         
         try:
-            # Call route_to_vendor directly instead of the tool wrapper
-            stock_data_str = route_to_vendor("get_ticker_data", symbol, start_date, end_date)
+            stock_data_str = get_ticker_data_via_service(symbol, start_date, end_date)
         except Exception as e:
             return f"Error: Failed to retrieve stock data for {symbol}. Underlying error: {str(e)}. Please verify the ticker symbol is correct and the data vendor is accessible."
         

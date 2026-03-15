@@ -47,7 +47,7 @@ flowchart TB
         Tools["Agent tools"]
         Graph --> Tools
         Tools --> |"INFO_SERVICE_URL set"| InfoClient["info_service_client"]
-        Tools --> |"INFO_SERVICE_URL not set"| RouteVendor["route_to_vendor"]
+        Tools --> |"INFO_SERVICE_URL not set"| Vendors["data_layer.vendors"]
     end
 
     subgraph External["External"]
@@ -61,7 +61,7 @@ flowchart TB
 
     API_Client -->|"HTTP"| Backend
     InfoClient -->|"HTTP /api/data/*"| Backend
-    RouteVendor -->|"direct"| Yahoo
+    Vendors -->|"direct"| Yahoo
     InfoFetcher --> Yahoo
     ReportSvc -->|"read"| Results
     AnalysisSvc -->|"invoke graph"| Graph
@@ -80,7 +80,7 @@ flowchart TB
 | **Backend** | SEC EDGAR | EDGAR service: company tickers→CIK, 10-K/10-Q filings list, filing HTML; LLM extraction of risk factors, MD&A, competition for `/api/data/edgar-filing-content`. |
 | **Backend** | FS | **Read**: `results/<TICKER>/<DATE>/reports/*.json` for report content and recommendations. |
 | **Agents** (when `INFO_SERVICE_URL` set) | Backend | Data via `/api/data/*`: quote, news, stock-data, fundamentals, financial-statements, financial-charts, edgar-filing-content (SEC), etc. |
-| **Agents** (when `INFO_SERVICE_URL` not set) | Yahoo / vendors | Data via `route_to_vendor` (yfinance, Alpha Vantage, local, etc.). |
+| **Agents** (when `INFO_SERVICE_URL` not set) | Yahoo / vendors | Data via `data_layer.vendors` (get_ticker_data, get_indicators, etc.). |
 | **Backend** (analysis) | Agents | `AnalysisService` runs `TradingAgentsGraph`; graph uses tools that call backend `/api/data/*` (config sets `info_service_url`). |
 | **Agents / CLI** | FS | **Write**: `results/<TICKER>/<DATE>/reports/*.json` (market, news, fundamentals, sec, technical, sentiment, investment_plan, final_trade_decision, etc.). |
 
@@ -100,7 +100,7 @@ flowchart TB
 
 - **UI**: React/Vite app. Raw data from `/api/data/*`; UI views from `/api/tickers/*`. No direct Yahoo or agent calls.
 - **Backend**: FastAPI. Serves raw data (`/api/data/*`), UI views (`/api/tickers/*`), analysis (`/api/analyses/start`). InfoFetcher fetches from Yahoo; ReportService reads from FS.
-- **Agents**: LangGraph pipeline (analysts → researchers → risk → trader). Use either backend (`INFO_SERVICE_URL` → `/api/data/*`) or vendors directly (`route_to_vendor`). Write reports to FS (when run from CLI or backend analysis).
+- **Agents**: LangGraph pipeline (analysts → researchers → risk → trader). Use either backend (`INFO_SERVICE_URL` → `/api/data/*`) or vendors directly (`data_layer.vendors` domain API). Write reports to FS (when run from CLI or backend analysis).
 - **FS**: No database. `results/` holds per-ticker, per-date report JSON (metadata + markdown content); optional `stocks.json` for search. Backend reads; agents/CLI (or backend-driven graph) write.
 
 ---
@@ -124,7 +124,7 @@ flowchart TB
        │    (optional)                           ▼                                             │
        │                ┌─────────────────────────────────────────────────────────┐           │
        └────────────────│  Trading Agents (LangGraph)                              │───────────┘
-                        │  Tools → info_service_client or route_to_vendor         │  write
+                        │  Tools → info_service_client or data_layer.vendors     │  write
                         │  Analysts → Researchers → Risk → Trader                  │
                         └─────────────────────────────────────────────────────────┘
 ```

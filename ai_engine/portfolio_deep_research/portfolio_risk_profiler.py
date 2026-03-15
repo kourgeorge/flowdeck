@@ -11,23 +11,20 @@ logger = logging.getLogger(__name__)
 
 
 def _fetch_company_info_from_service(ticker: str) -> Dict[str, Any]:
-    """Fetch company info (sector, industry) directly from yfinance via info_fetcher."""
+    """Fetch company info (sector, industry) via data layer."""
     try:
-        # Import here to avoid circular dependencies
-        from backend.services.info_fetcher import InfoFetcher
-        fetcher = InfoFetcher()
-        return fetcher.get_company_info(ticker)
+        from services.info_fetcher import get_info_fetcher
+        return get_info_fetcher().get_company_info(ticker)
     except Exception as e:
         logger.warning(f"Failed to fetch company info for {ticker}: {e}")
         return {}
 
 
 def _fetch_extended_info_from_service(ticker: str) -> Dict[str, Any]:
-    """Fetch extended info (beta, market cap) directly from yfinance via info_fetcher."""
+    """Fetch extended info (beta, market cap) via data layer."""
     try:
-        from backend.services.info_fetcher import InfoFetcher
-        fetcher = InfoFetcher()
-        return fetcher.get_extended_info(ticker)
+        from services.info_fetcher import get_info_fetcher
+        return get_info_fetcher().get_extended_info(ticker)
     except Exception as e:
         logger.warning(f"Failed to fetch extended info for {ticker}: {e}")
         return {}

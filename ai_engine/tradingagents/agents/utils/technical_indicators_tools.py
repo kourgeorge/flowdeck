@@ -1,6 +1,8 @@
 from langchain_core.tools import tool
 from typing import Annotated
-from ...dataflows.interface import route_to_vendor
+
+from ...datasources.info_service_client import get_indicators as get_indicators_via_service, require_info_service
+
 
 @tool
 def get_indicators(
@@ -11,7 +13,7 @@ def get_indicators(
 ) -> str:
     """
     Retrieve technical indicators for a given ticker symbol.
-    Uses the configured technical_indicators vendor.
+    Requires INFO_SERVICE_URL (backend). Agents work only with the backend.
     Args:
         symbol (str): Ticker symbol of the company, e.g. AAPL, TSM
         indicator (str): Technical indicator to get the analysis and report of
@@ -20,4 +22,5 @@ def get_indicators(
     Returns:
         str: A formatted dataframe containing the technical indicators for the specified ticker symbol and indicator.
     """
-    return route_to_vendor("get_indicators", symbol, indicator, curr_date, look_back_days)
+    require_info_service()
+    return get_indicators_via_service(symbol, indicator, curr_date, look_back_days)

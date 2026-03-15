@@ -1,26 +1,24 @@
 """
-Market data source: wraps CachedInfoFetcher (which wraps InfoFetcher).
+Market data source: wraps MarketDataLayer.
 
-Uses existing Yahoo-based implementation with SQLite TTL cache.
-Option A (route_to_vendor) can be added later for multi-vendor support.
+Delegates to MarketDataLayer for quotes, news, fundamentals, etc.
+Backend uses data_layer as single entry point; no service imports vendors directly.
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from data_layer.sources.base import MarketDataSourceProtocol
-
 
 class CachedMarketSource:
     """
-    Market data source delegating to CachedInfoFetcher.
+    Market data source delegating to MarketDataLayer.
     Implements MarketDataSourceProtocol.
     """
 
-    def __init__(self, cached_fetcher: Any):
-        """Expects a CachedInfoFetcher instance (from services.cached_info_fetcher)."""
-        self._fetcher = cached_fetcher
+    def __init__(self, market_data_layer: Any):
+        """Expects a MarketDataLayer instance (from data_layer.market)."""
+        self._fetcher = market_data_layer
 
     def get_quote(self, ticker: str) -> Optional[Dict[str, Any]]:
         return self._fetcher.get_quote(ticker)
@@ -147,3 +145,24 @@ class CachedMarketSource:
 
     def refresh_market_movers_cache(self) -> None:
         self._fetcher.refresh_market_movers_cache()
+
+    def get_indicators(
+        self,
+        ticker: str,
+        indicator: str,
+        curr_date: str,
+        look_back_days: int = 30,
+    ) -> str:
+        return self._fetcher.get_indicators(ticker, indicator, curr_date, look_back_days)
+
+    def get_global_news(
+        self,
+        curr_date: str,
+        lookback_days: int = 7,
+        limit: int = 10,
+        query: Optional[str] = None,
+    ) -> str:
+        return self._fetcher.get_global_news(curr_date, lookback_days, limit, query)
+
+    def get_insider_sentiment(self, ticker: str, curr_date: str) -> str:
+        return self._fetcher.get_insider_sentiment(ticker, curr_date)

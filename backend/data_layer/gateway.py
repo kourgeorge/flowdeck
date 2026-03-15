@@ -165,6 +165,31 @@ class DataGateway:
     def refresh_market_movers_cache(self) -> None:
         self._market.refresh_market_movers_cache()
 
+    def get_indicators(
+        self,
+        ticker: str,
+        indicator: str,
+        curr_date: str,
+        look_back_days: int = 30,
+    ) -> str:
+        return self._market.get_indicators(
+            ticker, indicator, curr_date, look_back_days
+        )
+
+    def get_global_news(
+        self,
+        curr_date: str,
+        lookback_days: int = 7,
+        limit: int = 10,
+        query: Optional[str] = None,
+    ) -> str:
+        return self._market.get_global_news(
+            curr_date, lookback_days, limit, query
+        )
+
+    def get_insider_sentiment(self, ticker: str, curr_date: str) -> str:
+        return self._market.get_insider_sentiment(ticker, curr_date)
+
     # ---------- Reports ----------
     def get_latest_execution_for_ticker(
         self, ticker: str

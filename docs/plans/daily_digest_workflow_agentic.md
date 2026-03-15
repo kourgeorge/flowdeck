@@ -22,7 +22,7 @@ flowchart LR
   Build --> TickerInt --> MarketInt --> Writer
 ```
 
-**Data sources:** Used inside the algorithmic step and exposed to agents via their tools: portfolio from `ai_engine/agent/tools/user_context.py` (Subscription); quotes, history, news, fundamentals, analyst/insider, market movers from `backend/services/cached_info_fetcher.py` and `backend/services/info_fetcher.py`; platform reports from `backend/services/report_service.py`; web search from `ai_engine/agent/tools/web_search.py`.
+**Data sources:** Used inside the algorithmic step and exposed to agents via their tools: portfolio from `ai_engine/agent/tools/user_context.py` (Subscription); quotes, history, news, fundamentals, analyst/insider, market movers from `backend/data_layer` (via `get_info_fetcher()`); platform reports from `backend/services/report_service.py`; web search from `ai_engine/agent/tools/web_search.py`.
 
 ---
 

@@ -1,9 +1,9 @@
 """
 Client for the Information Fetcher Service API.
 
-When INFO_SERVICE_URL (or config info_service_url) is set, agent tools can use
-this client to fetch data from the same service as the dashboard UI, ensuring
-consistent data and a single source of truth.
+When INFO_SERVICE_URL (or config info_service_url) is set, agent tools use this
+client to fetch data from the platform backend, ensuring consistent data and
+a single source of truth.
 """
 
 from __future__ import annotations
@@ -18,16 +18,25 @@ try:
 except ImportError:
     requests = None
 
+_url_override: Optional[str] = None
+
+
+def set_info_service_url(url: Optional[str]) -> None:
+    """Set the info service URL (e.g. from TradingAgentsGraph config). Overrides env and default_config."""
+    global _url_override
+    _url_override = (url or "").strip().rstrip("/") or None
+
 
 def _get_info_service_base_url() -> Optional[str]:
     """Base URL for the info service (e.g. http://localhost:8002)."""
     url = os.getenv("INFO_SERVICE_URL", "").strip()
     if url:
         return url.rstrip("/")
+    if _url_override:
+        return _url_override
     try:
-        from .config import get_config
-        cfg = get_config()
-        url = (cfg.get("info_service_url") or "").strip()
+        from ..default_config import DEFAULT_CONFIG
+        url = (DEFAULT_CONFIG.get("info_service_url") or "").strip()
         return url.rstrip("/") if url else None
     except Exception:
         return None
@@ -57,7 +66,7 @@ def get_quote(ticker: str, base_url: Optional[str] = None) -> Optional[Dict[str,
 
 
 def get_news(ticker: str, start_date: str, end_date: str, base_url: Optional[str] = None, lookback_days: int = 7) -> str:
-    """Fetch news from info service. Returns JSON string with articles (same shape as route_to_vendor get_news)."""
+    """Fetch news from info service. Returns JSON string with articles (same shape as vendor get_news)."""
     base_url = base_url or _get_info_service_base_url()
     if not base_url:
         raise ValueError("Info service URL not configured (set INFO_SERVICE_URL or config info_service_url)")
@@ -84,7 +93,7 @@ def get_insider_transactions(
 
 
 def get_ticker_data(ticker: str, start_date: str, end_date: str, base_url: Optional[str] = None) -> str:
-    """Fetch OHLCV time series from info service. Returns the same string format as route_to_vendor get_ticker_data."""
+    """Fetch OHLCV time series from info service. Returns the same string format as vendor get_ticker_data."""
     base_url = base_url or _get_info_service_base_url()
     if not base_url:
         raise ValueError("Info service URL not configured (set INFO_SERVICE_URL or config info_service_url)")
@@ -287,3 +296,66 @@ def get_report_dates(ticker: str, base_url: Optional[str] = None) -> List[str]:
 def is_configured() -> bool:
     """Return True if info service URL is set."""
     return _get_info_service_base_url() is not None
+
+
+def require_info_service() -> None:
+    """Raise if INFO_SERVICE_URL is not set. Call at tool/graph init for fail-fast."""
+    if _get_info_service_base_url() is None:
+        raise ValueError(
+            "INFO_SERVICE_URL (or config info_service_url) must be set. "
+            "Agents work only with the backend."
+        )
+
+
+def get_indicators(
+    ticker: str,
+    indicator: str,
+    curr_date: str,
+    look_back_days: int = 30,
+    base_url: Optional[str] = None,
+) -> str:
+    """Fetch technical indicators from info service. Returns formatted string."""
+    base_url = base_url or _get_info_service_base_url()
+    if not base_url:
+        raise ValueError("Info service URL not configured (set INFO_SERVICE_URL or config info_service_url)")
+    params = {"indicator": indicator, "curr_date": curr_date, "look_back_days": look_back_days}
+    data = _get(None, base_url, f"/api/data/indicators/{ticker.upper()}", params=params)
+    if isinstance(data, dict) and "data" in data:
+        return data["data"]
+    return str(data)
+
+
+def get_global_news(
+    curr_date: str,
+    lookback_days: int = 7,
+    limit: int = 10,
+    query: Optional[str] = None,
+    base_url: Optional[str] = None,
+) -> str:
+    """Fetch global/macro news from info service. Returns formatted string."""
+    base_url = base_url or _get_info_service_base_url()
+    if not base_url:
+        raise ValueError("Info service URL not configured (set INFO_SERVICE_URL or config info_service_url)")
+    params: Dict[str, Any] = {"curr_date": curr_date, "lookback_days": lookback_days, "limit": limit}
+    if query:
+        params["query"] = query
+    data = _get(None, base_url, "/api/data/global-news", params=params)
+    if isinstance(data, dict) and "data" in data:
+        return data["data"]
+    return str(data)
+
+
+def get_insider_sentiment(
+    ticker: str,
+    curr_date: str,
+    base_url: Optional[str] = None,
+) -> str:
+    """Fetch insider sentiment from info service. Returns formatted string."""
+    base_url = base_url or _get_info_service_base_url()
+    if not base_url:
+        raise ValueError("Info service URL not configured (set INFO_SERVICE_URL or config info_service_url)")
+    params = {"curr_date": curr_date}
+    data = _get(None, base_url, f"/api/data/insider-sentiment/{ticker.upper()}", params=params)
+    if isinstance(data, dict) and "data" in data:
+        return data["data"]
+    return str(data)

@@ -1,18 +1,13 @@
 from langchain_core.tools import tool
 from typing import Annotated, Optional
 
-from ...dataflows.interface import route_to_vendor
-
-try:
-    from ...dataflows.info_service_client import (
-        get_news as get_news_via_service,
-        get_insider_transactions as get_insider_transactions_via_service,
-        is_configured as info_service_configured,
-    )
-except ImportError:
-    get_news_via_service = None
-    get_insider_transactions_via_service = None
-    info_service_configured = lambda: False
+from ...datasources.info_service_client import (
+    get_news as get_news_via_service,
+    get_global_news as get_global_news_via_service,
+    get_insider_sentiment as get_insider_sentiment_via_service,
+    get_insider_transactions as get_insider_transactions_via_service,
+    require_info_service,
+)
 
 
 @tool
@@ -23,7 +18,7 @@ def get_news(
 ) -> str:
     """
     Retrieve news data for a given ticker symbol.
-    Uses the Information Service API when INFO_SERVICE_URL is set, otherwise the configured news_data vendor.
+    Requires INFO_SERVICE_URL (backend). Agents work only with the backend.
     Args:
         ticker (str): Ticker symbol
         start_date (str): Start date in yyyy-mm-dd format
@@ -31,9 +26,9 @@ def get_news(
     Returns:
         str: A formatted string containing news data
     """
-    if get_news_via_service is not None and info_service_configured():
-        return get_news_via_service(ticker, start_date, end_date)
-    return route_to_vendor("get_news", ticker, start_date, end_date)
+    require_info_service()
+    return get_news_via_service(ticker, start_date, end_date)
+
 
 @tool
 def get_global_news(
@@ -44,7 +39,7 @@ def get_global_news(
 ) -> str:
     """
     Retrieve global news data.
-    Uses the configured news_data vendor.
+    Requires INFO_SERVICE_URL (backend). Agents work only with the backend.
     Args:
         curr_date (str): Current date in yyyy-mm-dd format
         look_back_days (int): Number of days to look back (default 7)
@@ -53,7 +48,9 @@ def get_global_news(
     Returns:
         str: A formatted string containing global news data
     """
-    return route_to_vendor("get_global_news", curr_date, look_back_days, limit, query=query)
+    require_info_service()
+    return get_global_news_via_service(curr_date, look_back_days, limit, query=query)
+
 
 @tool
 def get_insider_sentiment(
@@ -62,14 +59,16 @@ def get_insider_sentiment(
 ) -> str:
     """
     Retrieve insider sentiment information about a company.
-    Uses the configured news_data vendor.
+    Requires INFO_SERVICE_URL (backend). Agents work only with the backend.
     Args:
         ticker (str): Ticker symbol of the company
         curr_date (str): Current date you are trading at, yyyy-mm-dd
     Returns:
         str: A report of insider sentiment data
     """
-    return route_to_vendor("get_insider_sentiment", ticker, curr_date)
+    require_info_service()
+    return get_insider_sentiment_via_service(ticker, curr_date)
+
 
 @tool
 def get_insider_transactions(
@@ -78,13 +77,12 @@ def get_insider_transactions(
 ) -> str:
     """
     Retrieve insider transaction information about a company.
-    Uses the configured news_data vendor.
+    Requires INFO_SERVICE_URL (backend). Agents work only with the backend.
     Args:
         ticker (str): Ticker symbol of the company
         curr_date (str): Current date you are trading at, yyyy-mm-dd
     Returns:
         str: A report of insider transaction data
     """
-    if get_insider_transactions_via_service is not None and info_service_configured():
-        return get_insider_transactions_via_service(ticker, limit=50)
-    return route_to_vendor("get_insider_transactions", ticker, curr_date)
+    require_info_service()
+    return get_insider_transactions_via_service(ticker, limit=50)

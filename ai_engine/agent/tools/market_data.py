@@ -108,9 +108,12 @@ class HistoricalPricesTool(BaseTool):
 
 
 def _fetch_historical_prices(ticker: str, start_date: str, end_date: str) -> str:
-    import yfinance as yf
-    import pandas as pd
+    from ai_engine.tradingagents.datasources.info_service_client import (
+        get_ticker_data,
+        require_info_service,
+    )
 
+    require_info_service()
     ticker_upper = ticker.strip().upper()
 
     try:
@@ -130,29 +133,16 @@ def _fetch_historical_prices(ticker: str, start_date: str, end_date: str) -> str
     if start_dt >= end_dt:
         return "Error: start_date must be before end_date."
 
-    data = yf.download(
-        ticker_upper,
-        start=start_dt.isoformat(),
-        end=end_dt.isoformat(),
-        multi_level_index=False,
-        progress=False,
-        auto_adjust=True,
-    )
-
-    if data is None or data.empty:
+    raw = get_ticker_data(ticker_upper, start_dt.isoformat(), end_dt.isoformat())
+    if not raw or not raw.strip():
         return f"No price data found for {ticker_upper} between {start_dt} and {end_dt}."
 
-    data = data.reset_index()[["Date", "Open", "High", "Low", "Close", "Volume"]]
-    data["Date"] = [str(d)[:10] for d in pd.to_datetime(data["Date"])]
-    data[["Open", "High", "Low", "Close"]] = data[["Open", "High", "Low", "Close"]].round(4)
-
-    csv_out = data.to_csv(index=False)
     header = (
         f"# Historical daily prices for {ticker_upper}\n"
-        f"# Period: {start_dt} to {end_dt} | Rows: {len(data)}\n"
+        f"# Period: {start_dt} to {end_dt}\n"
         f"# Columns: Date, Open, High, Low, Close (adjusted), Volume\n\n"
     )
-    return header + csv_out
+    return header + raw.strip()
 
 
 # ---------------------------------------------------------------------------
@@ -197,14 +187,18 @@ class IndicatorsTool(BaseTool):
 
     def execute(self, ctx: ExecutionContext, *, ticker: str, **_) -> ToolResult:
         try:
-            from ai_engine.tradingagents.dataflows.y_finance import get_stock_stats_indicators_window
+            from ai_engine.tradingagents.datasources.info_service_client import (
+                get_indicators,
+                require_info_service,
+            )
+            require_info_service()
             today = datetime.date.today().isoformat()
             parts: list[str] = []
             errors: list[str] = []
             for ind in _DEFAULT_INDICATORS:
                 try:
-                    result = get_stock_stats_indicators_window(
-                        symbol=ticker.upper(),
+                    result = get_indicators(
+                        ticker=ticker.upper(),
                         indicator=ind,
                         curr_date=today,
                         look_back_days=5,  # last 5 trading days is enough for a snapshot
@@ -263,7 +257,10 @@ class SpecificIndicatorTool(BaseTool):
 
     def execute(self, ctx: ExecutionContext, *, ticker: str, indicator: str, **_) -> ToolResult:
         try:
-            from ai_engine.tradingagents.dataflows.y_finance import get_stock_stats_indicators_window
+            from ai_engine.tradingagents.datasources.info_service_client import (
+                get_indicators,
+                require_info_service,
+            )
             
             # Validate indicator
             if indicator not in _DEFAULT_INDICATORS:
@@ -275,9 +272,10 @@ class SpecificIndicatorTool(BaseTool):
                     }
                 )
             
+            require_info_service()
             today = datetime.date.today().isoformat()
-            result = get_stock_stats_indicators_window(
-                symbol=ticker.upper(),
+            result = get_indicators(
+                ticker=ticker.upper(),
                 indicator=indicator,
                 curr_date=today,
                 look_back_days=5,  # last 5 trading days is enough for a snapshot
