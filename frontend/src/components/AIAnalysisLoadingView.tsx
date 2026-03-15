@@ -15,6 +15,23 @@ const REPORT_ORDER = [
 
 const TOTAL_STAGES = REPORT_ORDER.length;
 
+/** Backend agent name → 1-based pipeline stage. Used so "Market Analyst" shows 1/9, not 9/9 when re-running. */
+const AGENT_TO_STAGE: Record<string, number> = {
+  'Market Analyst': 1,
+  'Social Analyst': 2,
+  'News Analyst': 3,
+  'Fundamentals Analyst': 4,
+  'Technical Analyst': 5,
+  'SEC Analyst': 6,
+  'Research Manager': 7,
+  'Trader': 8,
+  'Risky Analyst': 9,
+  'Safe Analyst': 9,
+  'Neutral Analyst': 9,
+  'Risk Analyst': 9,
+  'Portfolio Manager': 9,
+};
+
 interface AIAnalysisLoadingViewProps {
   /** Report keys that already exist on the server (from stockData.reports). */
   existingReportKeys?: string[];
@@ -25,10 +42,21 @@ interface AIAnalysisLoadingViewProps {
 
 export default function AIAnalysisLoadingView({
   existingReportKeys = [],
+  agentStatuses: _agentStatuses = null,
   currentAgent = null,
 }: AIAnalysisLoadingViewProps) {
-  const completedCount = REPORT_ORDER.filter((k) => existingReportKeys.includes(k)).length;
-  const currentStage = Math.min(completedCount + 1, TOTAL_STAGES);
+  // When we have live progress from the backend, derive stage from current agent so we show 1/9 for Market Analyst, not 9/9 from stale existingReportKeys.
+  const stageFromAgent =
+    currentAgent != null && currentAgent !== ''
+      ? AGENT_TO_STAGE[currentAgent]
+      : undefined;
+  const currentStage =
+    stageFromAgent != null
+      ? Math.min(stageFromAgent, TOTAL_STAGES)
+      : Math.min(
+          REPORT_ORDER.filter((k) => existingReportKeys.includes(k)).length + 1,
+          TOTAL_STAGES,
+        );
   const stageLabel = `${currentStage}/${TOTAL_STAGES}`;
 
   const agentMessage =
