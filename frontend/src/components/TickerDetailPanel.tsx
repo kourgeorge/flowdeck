@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { tickerApi, configApi } from '../services/api';
 import { WebSocketClient } from '../services/websocket';
 import type { SimilarTicker, TickerPageData, SimilarTickersResponse } from '../services/types';
 import { useQuoteRefresh } from '../hooks/useQuoteRefresh';
 import { useAuth } from '../contexts/AuthContext';
 import { subscriptionApi, type Subscription } from '../services/subscriptionApi';
-import ReportTabs, { OVERVIEW_TAB_KEY } from './ReportTabs';
+import ReportTabs, { OVERVIEW_TAB_KEY, CHAT_TAB_KEY } from './ReportTabs';
 import ReportViewer from './ReportViewer';
 import HierarchicalMindMap from './HierarchicalMindMap';
 import SubscribeButton from './SubscribeButton';
@@ -47,8 +47,25 @@ const REPORT_PROCESS_ORDER = [
 ];
 const SIMILAR_STOCKS_PER_PAGE = 10;
 
+const MAIN_TAB_IDS = ['overview', 'fundamentals', 'sec-filings', 'insider-transactions', 'news', 'similar-stocks', 'ai-analysis'] as const;
+type MainTabId = (typeof MAIN_TAB_IDS)[number];
+
+function reportKeyFromParam(param: string | null): string | null {
+  if (param === 'overview') return OVERVIEW_TAB_KEY;
+  if (param === 'chat') return CHAT_TAB_KEY;
+  if (param) return param;
+  return null;
+}
+function reportParamFromKey(key: string | null): string | null {
+  if (key === OVERVIEW_TAB_KEY) return 'overview';
+  if (key === CHAT_TAB_KEY) return 'chat';
+  if (key) return key;
+  return null;
+}
+
 export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptionChange }: StockDetailPanelProps) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalMessage, setAuthModalMessage] = useState('Please sign in to run a fresh analysis.');
@@ -136,9 +153,35 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       .catch(() => {});
   }, []);
 
+  // Sync URL search params -> tab state (so reload / back restores tab)
   useEffect(() => {
-    if (activeTab === 'fundamentals' && quoteType != null && quoteType !== 'EQUITY') setActiveTab('overview');
-  }, [quoteType, activeTab]);
+    const tabParam = searchParams.get('tab');
+    const subParam = searchParams.get('sub');
+    const reportParam = searchParams.get('report');
+    if (tabParam && MAIN_TAB_IDS.includes(tabParam as MainTabId)) {
+      setActiveTab(tabParam);
+      if (tabParam === 'fundamentals' && (subParam === 'charts' || subParam === 'statements')) {
+        setFundamentalsSubTab(subParam);
+      }
+      if (tabParam === 'ai-analysis' && reportParam) {
+        const key = reportKeyFromParam(reportParam);
+        if (key) setSelectedReport(key);
+      }
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (activeTab === 'fundamentals' && quoteType != null && quoteType !== 'EQUITY') {
+      setActiveTab('overview');
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('tab', 'overview');
+        next.delete('sub');
+        next.delete('report');
+        return next;
+      }, { replace: true });
+    }
+  }, [quoteType, activeTab, setSearchParams]);
 
   // When switching to the AI Analysis tab, open the Overview sub-tab by default
   const prevMainTabRef = useRef<string>(activeTab);
@@ -150,12 +193,63 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab === 'insider-transactions' && quoteType != null && quoteType !== 'EQUITY') setActiveTab('overview');
-  }, [quoteType, activeTab]);
+    if (activeTab === 'insider-transactions' && quoteType != null && quoteType !== 'EQUITY') {
+      setActiveTab('overview');
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('tab', 'overview');
+        next.delete('sub');
+        next.delete('report');
+        return next;
+      }, { replace: true });
+    }
+  }, [quoteType, activeTab, setSearchParams]);
 
   useEffect(() => {
-    if (activeTab === 'similar-stocks' && quoteType != null && quoteType !== 'EQUITY') setActiveTab('overview');
-  }, [quoteType, activeTab]);
+    if (activeTab === 'similar-stocks' && quoteType != null && quoteType !== 'EQUITY') {
+      setActiveTab('overview');
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('tab', 'overview');
+        next.delete('sub');
+        next.delete('report');
+        return next;
+      }, { replace: true });
+    }
+  }, [quoteType, activeTab, setSearchParams]);
+
+  const handleMainTabChange = useCallback((tabId: string) => {
+    setActiveTab(tabId);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', tabId);
+      if (tabId !== 'fundamentals') next.delete('sub');
+      if (tabId !== 'ai-analysis') next.delete('report');
+      return next;
+    }, { replace: false });
+  }, [setSearchParams]);
+
+  const handleFundamentalsSubTabChange = useCallback((sub: 'charts' | 'statements') => {
+    setFundamentalsSubTab(sub);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', 'fundamentals');
+      next.set('sub', sub);
+      return next;
+    }, { replace: false });
+  }, [setSearchParams]);
+
+  const handleSelectReport = useCallback((reportType: string) => {
+    setSelectedReport(reportType);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', 'ai-analysis');
+      const param = reportParamFromKey(reportType);
+      if (param) next.set('report', param);
+      else next.delete('report');
+      return next;
+    }, { replace: false });
+  }, [setSearchParams]);
 
   useEffect(() => {
     const currentPrice = refreshedQuote?.current_price ?? stockData?.quote?.current_price;
@@ -304,6 +398,13 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     // EXPERIMENTAL: reset historical run state
     setSelectedRunId(null); setHistoricalReportsData(null);
     // END EXPERIMENTAL
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', 'ai-analysis');
+      next.delete('sub');
+      next.delete('report');
+      return next;
+    }, { replace: true });
     if (wsClientRef.current) { wsClientRef.current.disconnect(); wsClientRef.current = null; }
 
     if (prefetchedData) {
@@ -862,7 +963,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                   const isActive = activeTab === tab.id;
                   const isBlueTab = tab.id === 'ai-analysis' || tab.id === 'similar-stocks';
                   return (
-                    <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                    <button key={tab.id} onClick={() => handleMainTabChange(tab.id)}
                       className={`px-3 py-2 text-sm rounded-t-lg transition-colors border-b-2 -mb-px ${
                         isActive
                           ? isBlueTab ? 'bg-blue-950/70 text-blue-200 border-blue-500 font-semibold' : 'bg-gray-800 text-white border-blue-500 font-medium'
@@ -888,9 +989,9 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
           {activeTab === 'fundamentals' && (
             <div className="space-y-4">
               <div className="flex gap-2 border-b border-gray-700 pb-3">
-                <button type="button" onClick={() => setFundamentalsSubTab('charts')}
+                <button type="button" onClick={() => handleFundamentalsSubTabChange('charts')}
                   className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${fundamentalsSubTab === 'charts' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>Charts</button>
-                <button type="button" onClick={() => setFundamentalsSubTab('statements')}
+                <button type="button" onClick={() => handleFundamentalsSubTabChange('statements')}
                   className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${fundamentalsSubTab === 'statements' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>Financial Statements</button>
               </div>
               {fundamentalsSubTab === 'charts' && (
@@ -1535,17 +1636,15 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                         </div>
                       </div>
                     </div>
-                    <div className="text-sm text-amber-400/90 bg-amber-950/30 border border-amber-700/40 rounded-lg px-4 py-2 mt-4">
-                      <span>For informational purposes only. Not investment advice.</span>
-                    </div>
                     </>
                     );
                   })()}
                   <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
                     {((stockData.has_reports && !stockData.is_generating) || (selectedRunId && historicalReportsData)) && (
                       <div>
-                        {stockData.share_url && !selectedRunId && (
-                          <div className="flex items-center justify-end mb-3 pb-2 border-b border-gray-700">
+                        <div className="flex items-center justify-between gap-3 mb-3 pb-2 border-b border-gray-700">
+                          <span className="text-sm text-amber-400/90">For informational purposes only. Not investment advice.</span>
+                          {stockData.share_url && !selectedRunId && (
                             <button
                               type="button"
                               onClick={() => {
@@ -1567,12 +1666,12 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                                 </>
                               )}
                             </button>
-                          </div>
-                        )}
+                          )}
+                        </div>
                         <ReportTabs
                           availableReports={availableReports}
                           selectedReport={selectedReport}
-                          onSelectReport={setSelectedReport}
+                          onSelectReport={handleSelectReport}
                           reportScores={reportScores}
                           showOverviewTab
                         />
@@ -1584,7 +1683,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                                 companyName={companyInfo?.name ?? null}
                                 recommendation={activeRecommendation}
                                 reports={activeReportsSource ?? {}}
-                                onOpenReport={setSelectedReport}
+                                onOpenReport={handleSelectReport}
                               />
                             ) : (
                               <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 text-center">
