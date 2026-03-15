@@ -41,7 +41,7 @@ const REPORT_METADATA: Record<string, { title: string; contains: string; aspects
     methodology: 'First in the analysis chain. The Market Analyst uses historical price data and indicator values, selects relevant indicators, interprets their signals together, and writes a detailed narrative. The goal is fine-grained analysis that avoids redundancy and explains why each indicator matters for the current market.',
   },
   sentiment_report: {
-    title: 'Sentiment Analysis',
+    title: 'Sentiment',
     contains: 'An analysis of public sentiment, social media discussions, and company-specific news from the past week. Assigns a Sentiment Score (1–10).',
     aspects: 'Social media posts and discussions, sentiment polarity (bullish vs bearish), recent company news, public perception, community engagement, and sentiment trends. All available sources are used to assess the overall tone around the security.',
     methodology: 'Runs early in the chain. The Social Analyst gathers company-related news and social discussions, synthesizes what people are saying and feeling, and produces a report with an overall sentiment assessment.',

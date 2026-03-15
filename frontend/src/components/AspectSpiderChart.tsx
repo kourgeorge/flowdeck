@@ -42,6 +42,7 @@ function roundedPolygonPath(
 const REPORT_LABELS: Record<string, string> = {
   fundamentals_report: 'Fundamentals',
   market_report: 'Market',
+  sentiment_report: 'Sentiment',
   news_report: 'News',
   technical_report: 'Technical',
   sec_report: 'SEC',
@@ -53,6 +54,7 @@ const REPORT_LABELS: Record<string, string> = {
 /** Radar axis labels: max 5 characters each */
 const SHORT_AXIS_LABELS: Record<string, string> = {
   Market: 'Mkt',
+  Sentiment: 'Sent',
   News: 'News',
   Fundamentals: 'Fund',
   Technical: 'Tech',
@@ -80,7 +82,7 @@ export function formatReportKey(key: string): string {
 export function getAnalysisScoreEntries(scores: ReportScoreMap | null | undefined): [string, { score: number | null }][] {
   if (!scores || Object.keys(scores).length === 0) return [];
   const REPORT_ORDER = [
-    'market_report', 'news_report', 'fundamentals_report', 'technical_report',
+    'market_report', 'sentiment_report', 'news_report', 'fundamentals_report', 'technical_report',
     'sec_report', 'investment_plan', 'final_trade_decision',
   ];
   return (Object.entries(scores) as [string, { score: number | null }][])

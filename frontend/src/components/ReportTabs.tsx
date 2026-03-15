@@ -38,6 +38,7 @@ export default function ReportTabs({ availableReports, selectedReport, onSelectR
   // Custom labels for AI analysis tabs and plan names
   const REPORT_LABELS: Record<string, string> = {
     market_report: 'Market',
+    sentiment_report: 'Sentiment',
     fundamentals_report: 'Fundamentals',
     technical_report: 'Technical',
     news_report: 'News',
