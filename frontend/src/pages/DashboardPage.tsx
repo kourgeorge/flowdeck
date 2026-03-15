@@ -54,6 +54,7 @@ export default function DashboardPage() {
   const [showRawDigest, setShowRawDigest] = useState<boolean>(false);
   const [digestInputExpanded, setDigestInputExpanded] = useState<boolean>(false);
   const [shareLinkCopied, setShareLinkCopied] = useState<boolean>(false);
+  const [newBriefModalOpen, setNewBriefModalOpen] = useState<boolean>(false);
   const [hasBriefForToday, setHasBriefForToday] = useState<boolean | null>(null);
   const [briefPromptDismissed, setBriefPromptDismissed] = useState<boolean>(() => {
     if (typeof localStorage !== 'undefined') {
@@ -609,10 +610,28 @@ export default function DashboardPage() {
           <div className="px-4 py-6 sm:p-6 lg:p-8">
             <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
               <div className="flex flex-col lg:flex-row gap-6">
-                {/* Left: calendar (current month) + generation panel */}
-                <div className="lg:w-72 xl:w-80 shrink-0 flex flex-col gap-4">
-                  {/* Current month calendar */}
-                  <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+                {/* Left: calendar panel (with New brief integrated) */}
+                <div className="lg:w-72 xl:w-80 shrink-0">
+                  <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+                    {/* Top bar: New brief action integrated into panel */}
+                    <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-gray-700/80">
+                      <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500">Briefs</span>
+                      <button
+                        type="button"
+                        onClick={() => setNewBriefModalOpen(true)}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-emerald-300 hover:text-white hover:bg-emerald-600/20 rounded-md transition-colors focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+                        title="Create new brief"
+                        aria-label="Create new brief"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        <span>New</span>
+                      </button>
+                    </div>
+
+                    {/* Month + grid */}
+                    <div className="p-4 pt-3">
                     <div className="flex items-center justify-between mb-3">
                       <button
                         type="button"
@@ -745,33 +764,81 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     )}
+                    </div>
                   </div>
-
-                  {/* Generation panel */}
-                  <DailyDigestRunPanel
-                    digestUserNote={digestUserNote}
-                    onDigestUserNoteChange={setDigestUserNote}
-                    digestNarrativeStyle={digestNarrativeStyle}
-                    onDigestNarrativeStyleChange={setDigestNarrativeStyle}
-                    digestSpan={digestSpan}
-                    onDigestSpanChange={setDigestSpan}
-                    digestInputExpanded={digestInputExpanded}
-                    onDigestInputExpandedChange={setDigestInputExpanded}
-                    selectedFocusTickers={selectedFocusTickers}
-                    onSelectedFocusTickersChange={setSelectedFocusTickers}
-                    subscribedTickers={subscribedTickers}
-                    onRunDigest={handleRunDigest}
-                    digestLoading={digestLoading}
-                  />
                 </div>
+
+                {/* New brief modal (create new email style) */}
+                {newBriefModalOpen && (
+                  <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+                    onClick={() => setNewBriefModalOpen(false)}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="new-brief-modal-title"
+                  >
+                    <div
+                      className="bg-gray-800 border border-gray-700 rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="sticky top-0 flex justify-between items-center px-4 py-3 border-b border-gray-700 bg-gray-800 z-10">
+                        <h2 id="new-brief-modal-title" className="text-base font-semibold text-white">
+                          Create new brief
+                        </h2>
+                        <button
+                          type="button"
+                          onClick={() => setNewBriefModalOpen(false)}
+                          className="p-1.5 text-gray-400 hover:text-white rounded-lg transition-colors"
+                          aria-label="Close"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                      <div className="p-4">
+                        <DailyDigestRunPanel
+                          digestUserNote={digestUserNote}
+                          onDigestUserNoteChange={setDigestUserNote}
+                          digestNarrativeStyle={digestNarrativeStyle}
+                          onDigestNarrativeStyleChange={setDigestNarrativeStyle}
+                          digestSpan={digestSpan}
+                          onDigestSpanChange={setDigestSpan}
+                          digestInputExpanded={digestInputExpanded}
+                          onDigestInputExpandedChange={setDigestInputExpanded}
+                          selectedFocusTickers={selectedFocusTickers}
+                          onSelectedFocusTickersChange={setSelectedFocusTickers}
+                          subscribedTickers={subscribedTickers}
+                          onRunDigest={() => {
+                            handleRunDigest();
+                            setNewBriefModalOpen(false);
+                          }}
+                          digestLoading={digestLoading}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Right: brief content */}
                 <div className="flex-1 min-w-0 bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
                   <div className="bg-gray-900/40 min-h-[200px] p-4 sm:p-6 space-y-3">
                   {digestLoading && (
-                    <div className="flex items-center gap-2 text-sm text-gray-300">
-                      <span className="inline-block w-4 h-4 border-2 border-gray-500 border-t-blue-400 rounded-full animate-spin" />
-                      <span>Loading briefs…</span>
+                    <div className="flex flex-col items-center justify-center min-h-[280px] py-12 px-4">
+                      <div className="relative">
+                        <div className="w-16 h-16 rounded-2xl border-2 border-emerald-500/30 bg-emerald-950/30 flex items-center justify-center">
+                          <svg className="w-8 h-8 text-emerald-400/80 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                        </div>
+                        <span className="absolute -inset-1 rounded-2xl border border-emerald-400/20 animate-ping opacity-30" aria-hidden />
+                      </div>
+                      <p className="mt-5 text-base font-semibold text-white">Generating your brief</p>
+                      <p className="mt-1 text-sm text-gray-400">Analyzing market and portfolio…</p>
+                      <div className="mt-6 w-48 h-1 rounded-full bg-gray-700 overflow-hidden">
+                        <div className="h-full w-1/2 rounded-full bg-emerald-500 [animation:briefShimmer_1.8s_ease-in-out_infinite]" />
+                      </div>
+                      <style>{`@keyframes briefShimmer { 0%, 100% { transform: translateX(-100%); } 50% { transform: translateX(200%); } }`}</style>
                     </div>
                   )}
 
