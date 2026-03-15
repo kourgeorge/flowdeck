@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { APP_NAME, LOGO_PATH, COPILOT_NAME } from '../config';
 import { useAuth } from '../contexts/AuthContext';
+import { digestApi } from '../services/api';
 import AuthModal from './AuthModal';
 import Footer from './Footer';
 
@@ -73,10 +74,19 @@ function MarketIcon() {
   );
 }
 
+function BriefIcon() {
+  return (
+    <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+    </svg>
+  );
+}
+
 const navItems: { to: string; label: string; icon: () => JSX.Element; authOnly?: boolean }[] = [
   { to: '/', label: 'FlowDeck', icon: FlowDeckIcon },
   { to: '/market', label: 'Market View', icon: MarketIcon },
   { to: '/dashboard', label: 'Dashboard', icon: DashboardIcon, authOnly: true },
+  { to: '/dashboard?tab=digest', label: 'Brief', icon: BriefIcon, authOnly: true },
   { to: '/copilot', label: 'Trading Copilot', icon: CopilotIcon, authOnly: true },
   { to: '/chat', label: 'AI Analyst Agent', icon: ChatIcon, authOnly: true },
 ];
@@ -112,6 +122,14 @@ function SidebarIcon() {
   );
 }
 
+function todayDateStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 export default function Layout() {
   // Start collapsed on mobile (< 768px), expanded on desktop
   const [sidebarExpanded, setSidebarExpanded] = useState(() => {
@@ -121,8 +139,31 @@ export default function Layout() {
     return false;
   });
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [hasBriefForToday, setHasBriefForToday] = useState<boolean | null>(null);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!user) {
+      setHasBriefForToday(null);
+      return;
+    }
+    let cancelled = false;
+    digestApi
+      .getDigestDates(7)
+      .then((res) => {
+        if (cancelled) return;
+        const dailyDates = (res.dates ?? []).filter((d) => !d.startsWith('w:'));
+        setHasBriefForToday(dailyDates.includes(todayDateStr()));
+      })
+      .catch(() => {
+        if (!cancelled) setHasBriefForToday(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   const closeSidebarIfMobile = () => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
@@ -198,6 +239,13 @@ export default function Layout() {
               {navItems.map(({ to, label, icon: Icon, authOnly }) => {
                 const disabled = authOnly && !user;
                 const title = !sidebarExpanded ? (disabled ? `Sign in to access ${label}` : label) : undefined;
+                const tab = new URLSearchParams(location.search).get('tab');
+                const navActive =
+                  to === '/dashboard'
+                    ? location.pathname === '/dashboard' && tab !== 'digest'
+                    : to.startsWith('/dashboard?')
+                      ? location.pathname === '/dashboard' && tab === 'digest'
+                      : undefined;
                 if (disabled) {
                   return (
                     <li key={to}>
@@ -213,23 +261,41 @@ export default function Layout() {
                     </li>
                   );
                 }
+                const isBrief = to === '/dashboard?tab=digest';
+                const showNoBrief = isBrief && hasBriefForToday === false;
                 return (
                   <li key={to}>
                     <NavLink
                       to={to}
                       end={to === '/'}
-                      title={title}
+                      title={title ?? (showNoBrief ? 'No brief generated for today' : undefined)}
                       onClick={closeSidebarIfMobile}
-                      className={({ isActive }) =>
-                        `flex items-center ${sidebarExpanded ? 'gap-3 px-4' : 'justify-center px-2'} py-2 rounded-lg text-sm font-medium transition-colors ${
-                          isActive
+                      className={({ isActive }) => {
+                        const active = navActive !== undefined ? navActive : isActive;
+                        return `flex items-center ${sidebarExpanded ? 'gap-3 px-4' : 'justify-center px-2'} py-2 rounded-lg text-sm font-medium transition-colors ${
+                          active
                             ? 'bg-blue-600 text-white'
                             : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                        }`
-                      }
+                        }`;
+                      }}
                     >
-                      <Icon />
-                      {sidebarExpanded && <span>{label}</span>}
+                      <span className="relative inline-flex shrink-0">
+                        <Icon />
+                        {showNoBrief && (
+                          <span
+                            className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-gray-800"
+                            aria-hidden
+                          />
+                        )}
+                      </span>
+                      {sidebarExpanded && (
+                        <span className="flex flex-col items-start gap-0 min-w-0">
+                          <span>{label}</span>
+                          {showNoBrief && (
+                            <span className="text-[10px] font-normal text-amber-400">No brief today</span>
+                          )}
+                        </span>
+                      )}
                     </NavLink>
                   </li>
                 );
