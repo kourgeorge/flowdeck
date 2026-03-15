@@ -1,5 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
 
+/** Report keys in pipeline order (for stage count). */
+const REPORT_ORDER = [
+  'market_report',
+  'sentiment_report',
+  'news_report',
+  'fundamentals_report',
+  'technical_report',
+  'sec_report',
+  'investment_plan',
+  'trader_investment_plan',
+  'final_trade_decision',
+] as const;
+
+const TOTAL_STAGES = REPORT_ORDER.length;
+
 interface AIAnalysisLoadingViewProps {
   /** Report keys that already exist on the server (from stockData.reports). */
   existingReportKeys?: string[];
@@ -9,12 +24,18 @@ interface AIAnalysisLoadingViewProps {
 }
 
 export default function AIAnalysisLoadingView({
+  existingReportKeys = [],
   currentAgent = null,
 }: AIAnalysisLoadingViewProps) {
-  const displayMessage =
+  const completedCount = REPORT_ORDER.filter((k) => existingReportKeys.includes(k)).length;
+  const currentStage = Math.min(completedCount + 1, TOTAL_STAGES);
+  const stageLabel = `${currentStage}/${TOTAL_STAGES}`;
+
+  const agentMessage =
     currentAgent != null && currentAgent !== ''
       ? currentAgent
       : 'Running analysis…';
+  const displayMessage = `${agentMessage} · ${stageLabel}`;
 
   const [opacity, setOpacity] = useState(1);
   const [shownMessage, setShownMessage] = useState(displayMessage);
