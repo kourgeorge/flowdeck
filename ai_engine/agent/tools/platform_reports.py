@@ -155,35 +155,16 @@ def _fetch_platform_reports(
                 f"Also accepted aliases: {', '.join(sorted(_REPORT_ALIASES.keys()))}."
             )
 
-    # Prefer platform API (INFO_SERVICE_URL)
-    if is_configured():
-        data = get_reports(ticker, date=date.strip() if date else None)
-        if not data:
-            if date:
-                all_dates = get_report_dates(ticker)
-                return (
-                    f"No reports found for {ticker} on date '{date}'. "
-                    f"Available dates: {', '.join(all_dates[:10])}."
-                )
-            return (
-                f"No AI analysis reports found for **{ticker}** on FlowDeck. "
-                f"Reports are generated when a full analysis is run for this ticker."
-            )
-        reports_with_scores = data.get("reports") or {}
-        date_display = str(data.get("report_date") or "")
-    else:
-        # Fallback: backend in-process (e.g. chat served by backend)
-        _ensure_backend_importable()
-        try:
-            from data_layer import get_data_gateway
-            gw = get_data_gateway()
-        except (ImportError, RuntimeError):
-            return (
-                "Platform reports unavailable: set INFO_SERVICE_URL to your FlowDeck backend, "
-                "or run the chat agent from within the backend process."
-            )
+    # Prefer in-process when backend is available (e.g. chat served by backend).
+    # HTTP path requires auth; in-process does not. External agents use INFO_SERVICE_URL + Bearer token.
+    reports_with_scores: dict = {}
+    date_display = ""
+
+    _ensure_backend_importable()
+    try:
+        from data_layer import get_data_gateway
+        gw = get_data_gateway()
         analysis_run_id: int | None = None
-        date_display = ""
         if date:
             date = date.strip()
             resolved = gw.get_analysis_run_for_date(ticker, date)
@@ -203,6 +184,27 @@ def _fetch_platform_reports(
                 )
             analysis_run_id, date_display = latest
         reports_with_scores = gw.get_reports_with_scores(analysis_run_id)
+    except (ImportError, RuntimeError):
+        # Backend not available; use HTTP (requires INFO_SERVICE_URL and Bearer auth for reports)
+        if not is_configured():
+            return (
+                "Platform reports unavailable: set INFO_SERVICE_URL to your FlowDeck backend, "
+                "or run the chat agent from within the backend process."
+            )
+        data = get_reports(ticker, date=date.strip() if date else None)
+        if not data:
+            if date:
+                all_dates = get_report_dates(ticker)
+                return (
+                    f"No reports found for {ticker} on date '{date}'. "
+                    f"Available dates: {', '.join(all_dates[:10])}."
+                )
+            return (
+                f"No AI analysis reports found for **{ticker}** on FlowDeck. "
+                f"Reports are generated when a full analysis is run for this ticker."
+            )
+        reports_with_scores = data.get("reports") or {}
+        date_display = str(data.get("report_date") or "")
 
     # --- Fetch specific report ---
     if canonical_type:
@@ -349,16 +351,17 @@ def _fetch_historical_dates(ticker: str) -> str:
     )
 
     ticker = ticker.strip().upper()
+    dates: list = []
 
-    if is_configured():
-        dates = get_report_dates(ticker)
-    else:
-        _ensure_backend_importable()
-        try:
-            from data_layer import get_data_gateway
-            gw = get_data_gateway()
-            dates = gw.list_report_dates(ticker)
-        except (ImportError, RuntimeError):
+    _ensure_backend_importable()
+    try:
+        from data_layer import get_data_gateway
+        gw = get_data_gateway()
+        dates = gw.list_report_dates(ticker)
+    except (ImportError, RuntimeError):
+        if is_configured():
+            dates = get_report_dates(ticker)
+        else:
             return (
                 "Platform reports unavailable: set INFO_SERVICE_URL to your FlowDeck backend, "
                 "or run the chat agent from within the backend process."

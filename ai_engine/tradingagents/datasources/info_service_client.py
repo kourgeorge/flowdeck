@@ -37,9 +37,13 @@ def _get_info_service_base_url() -> Optional[str]:
     try:
         from ..default_config import DEFAULT_CONFIG
         url = (DEFAULT_CONFIG.get("info_service_url") or "").strip()
-        return url.rstrip("/") if url else None
+        if url:
+            return url.rstrip("/")
     except Exception:
-        return None
+        pass
+    # Fall back to BACKEND_URL (same server; .env.example says INFO_SERVICE_URL defaults to it)
+    url = os.getenv("BACKEND_URL", "").strip()
+    return url.rstrip("/") if url else None
 
 
 def _get(session: Optional[requests.Session], base_url: str, path: str, params: Optional[Dict] = None, timeout: int = 30) -> Any:

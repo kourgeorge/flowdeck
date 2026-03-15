@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import yfinance as yf
@@ -1102,6 +1102,16 @@ def get_historical_app_format(ticker: str, period: str = "6mo", interval: str = 
     return {"ticker": ticker, "period": period, "interval": interval, "data": data, "count": len(data)}
 
 
+def _to_json_safe_int(val: Any) -> int:
+    """Convert to native Python int (handles numpy.int64, etc.) for JSON serialization."""
+    if val is None:
+        return 0
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return 0
+
+
 def get_news_app_format(ticker: str, lookback_days: int = 7) -> dict:
     """Fetch ticker news from yfinance and return app API shape: {ticker, date, articles, count}."""
     from typing import Any, Dict, List
@@ -1109,75 +1119,83 @@ def get_news_app_format(ticker: str, lookback_days: int = 7) -> dict:
     ticker = ticker.upper()
     curr_date = datetime.now().strftime("%Y-%m-%d")
 
-    def _parse_article(raw: Dict[str, Any]) -> Dict[str, Any] | None:
-        content = raw.get("content")
-        if isinstance(content, dict):
-            uuid = raw.get("id") or content.get("id", "")
-            title = content.get("title", "")
-            link = ""
-            for key in ("canonicalUrl", "clickThroughUrl"):
-                u = content.get(key)
-                if isinstance(u, dict) and u.get("url"):
-                    link = u["url"]
-                    break
-            provider = content.get("provider")
-            publisher = provider.get("displayName", "") if isinstance(provider, dict) else ""
-            pub_date_str = content.get("pubDate") or ""
-            published_time = pub_date_str[:19].replace("T", " ") if pub_date_str else None
-            published_timestamp = 0
-            if pub_date_str:
+    def _safe_resolutions_first(thumb: dict) -> Any:
+        res = thumb.get("resolutions")
+        if isinstance(res, list) and res:
+            return res[0]
+        return None
+
+    def _parse_article(raw: Dict[str, Any]):
+        try:
+            content = raw.get("content")
+            if isinstance(content, dict):
+                uuid = raw.get("id") or content.get("id", "")
+                title = content.get("title", "")
+                link = ""
+                for key in ("canonicalUrl", "clickThroughUrl"):
+                    u = content.get(key)
+                    if isinstance(u, dict) and u.get("url"):
+                        link = u["url"]
+                        break
+                provider = content.get("provider")
+                publisher = provider.get("displayName", "") if isinstance(provider, dict) else ""
+                pub_date_str = content.get("pubDate") or ""
+                published_time = pub_date_str[:19].replace("T", " ") if pub_date_str else None
+                published_timestamp = 0
+                if pub_date_str:
+                    try:
+                        s = pub_date_str.replace("Z", "+00:00")
+                        dt = datetime.fromisoformat(s[:26])
+                        published_timestamp = _to_json_safe_int(dt.timestamp())
+                    except Exception:
+                        pass
+                thumb = content.get("thumbnail")
+                thumb_url = None
+                if isinstance(thumb, dict):
+                    thumb_url = thumb.get("originalUrl")
+                    if not thumb_url:
+                        first = _safe_resolutions_first(thumb)
+                        if isinstance(first, dict):
+                            thumb_url = first.get("url")
+                summary = content.get("summary") or content.get("description") or ""
+                return {
+                    "uuid": str(uuid),
+                    "title": title or "",
+                    "summary": summary if isinstance(summary, str) else "",
+                    "publisher": publisher or "",
+                    "link": link or "",
+                    "published_time": published_time,
+                    "published_timestamp": published_timestamp,
+                    "type": content.get("contentType", ""),
+                    "thumbnail": thumb_url,
+                }
+            pub_time = raw.get("providerPublishTime", 0)
+            pub_date = None
+            if pub_time:
                 try:
-                    s = pub_date_str.replace("Z", "+00:00")
-                    dt = datetime.fromisoformat(s[:26])
-                    published_timestamp = int(dt.timestamp())
+                    pub_date = datetime.fromtimestamp(int(pub_time)).strftime("%Y-%m-%d %H:%M:%S")
                 except Exception:
                     pass
-            thumb = content.get("thumbnail")
+            thumb = raw.get("thumbnail")
             thumb_url = None
-            if isinstance(thumb, dict):
-                thumb_url = thumb.get("originalUrl")
-                if not thumb_url:
-                    resolutions = thumb.get("resolutions") or []
-                    first = resolutions[0] if resolutions else None
-                    if isinstance(first, dict):
-                        thumb_url = first.get("url")
-            summary = content.get("summary") or content.get("description") or ""
+            if thumb and isinstance(thumb, dict):
+                first = _safe_resolutions_first(thumb)
+                if isinstance(first, dict):
+                    thumb_url = first.get("url")
+            summary = raw.get("summary") or raw.get("description") or ""
             return {
-                "uuid": str(uuid),
-                "title": title or "",
+                "uuid": str(raw.get("uuid", raw.get("id", ""))),
+                "title": str(raw.get("title", "")),
                 "summary": summary if isinstance(summary, str) else "",
-                "publisher": publisher or "",
-                "link": link or "",
-                "published_time": published_time,
-                "published_timestamp": published_timestamp,
-                "type": content.get("contentType", ""),
+                "publisher": str(raw.get("publisher", "")),
+                "link": str(raw.get("link", "")),
+                "published_time": pub_date,
+                "published_timestamp": _to_json_safe_int(pub_time),
+                "type": str(raw.get("type", "")),
                 "thumbnail": thumb_url,
             }
-        pub_time = raw.get("providerPublishTime", 0)
-        pub_date = (
-            datetime.fromtimestamp(pub_time).strftime("%Y-%m-%d %H:%M:%S")
-            if pub_time
-            else None
-        )
-        thumb = raw.get("thumbnail")
-        thumb_url = None
-        if thumb and isinstance(thumb, dict):
-            resolutions = thumb.get("resolutions") or []
-            first = resolutions[0] if resolutions else None
-            if isinstance(first, dict):
-                thumb_url = first.get("url")
-        summary = raw.get("summary") or raw.get("description") or ""
-        return {
-            "uuid": raw.get("uuid", raw.get("id", "")),
-            "title": raw.get("title", ""),
-            "summary": summary if isinstance(summary, str) else "",
-            "publisher": raw.get("publisher", ""),
-            "link": raw.get("link", ""),
-            "published_time": pub_date,
-            "published_timestamp": pub_time,
-            "type": raw.get("type", ""),
-            "thumbnail": thumb_url,
-        }
+        except Exception:
+            return None
 
     try:
         ticker_obj = yf.Ticker(ticker)
