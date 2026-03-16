@@ -179,6 +179,14 @@ export const adminApi = {
     return res.data;
   },
 
+  deleteAnalysis: async (analysisRunId: number): Promise<{ ok: boolean; id: number }> => {
+    const res = await api.delete<{ ok: boolean; id: number }>(
+      `/api/admin/analyses/${analysisRunId}`,
+      { headers: authHeaders() },
+    );
+    return res.data;
+  },
+
   getSubscriptions: async (
     limit = 100,
     offset = 0,

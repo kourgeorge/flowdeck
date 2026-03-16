@@ -307,6 +307,18 @@ def get_admin_analyses(
     )
 
 
+@router.delete("/analyses/{analysis_run_id}")
+def delete_analysis_run(
+    analysis_run_id: int,
+    _user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Delete an AI analysis run and its reports (admin only). Cascades to reports and report_views."""
+    delete_analysis_status("ticker", analysis_run_id)
+    token_service.delete_execution(analysis_run_id, db)
+    return {"ok": True, "id": analysis_run_id}
+
+
 @router.get("/subscriptions", response_model=AdminSubscriptionsResponse)
 def get_admin_subscriptions(
     _user: User = Depends(get_current_admin_user),

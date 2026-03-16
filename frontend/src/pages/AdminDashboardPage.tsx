@@ -148,6 +148,8 @@ export default function AdminDashboardPage() {
   const [reportsTotal, setReportsTotal] = useState(0);
   const [analyses, setAnalyses] = useState<AdminAnalysisItem[]>([]);
   const [analysesTotal, setAnalysesTotal] = useState(0);
+  const [analysisTickerFilter, setAnalysisTickerFilter] = useState('');
+  const [analysisCreatorFilter, setAnalysisCreatorFilter] = useState('');
   const [subscriptions, setSubscriptions] = useState<AdminSubscriptionItem[]>([]);
   const [subscriptionsTotal, setSubscriptionsTotal] = useState(0);
   const [viewRuns, setViewRuns] = useState<AdminReportViewRunItem[]>([]);
@@ -184,6 +186,20 @@ export default function AdminDashboardPage() {
     key: 'market_cap',
     direction: 'desc',
   });
+
+  const filteredAnalyses = useMemo(
+    () =>
+      analyses.filter((a) => {
+        const tickerOk =
+          !analysisTickerFilter ||
+          a.ticker.toLowerCase().includes(analysisTickerFilter.trim().toLowerCase());
+        const creatorOk =
+          !analysisCreatorFilter ||
+          a.creator_email.toLowerCase().includes(analysisCreatorFilter.trim().toLowerCase());
+        return tickerOk && creatorOk;
+      }),
+    [analyses, analysisTickerFilter, analysisCreatorFilter],
+  );
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1153,7 +1169,35 @@ export default function AdminDashboardPage() {
             )}
 
             <section className="mb-10">
-              <h2 className="text-lg font-semibold text-white mb-4">Recent analyses ({analysesTotal})</h2>
+              <h2 className="text-lg font-semibold text-white mb-2">Recent analyses ({analysesTotal})</h2>
+              <div className="flex flex-wrap gap-3 mb-3 text-xs md:text-sm">
+                <div className="flex items-center gap-2">
+                  <label htmlFor="analysis-ticker-filter" className="text-gray-400">
+                    Ticker:
+                  </label>
+                  <input
+                    id="analysis-ticker-filter"
+                    type="text"
+                    value={analysisTickerFilter}
+                    onChange={(e) => setAnalysisTickerFilter(e.target.value)}
+                    className="px-2 py-1 rounded-md bg-gray-900 border border-gray-700 text-gray-100 placeholder-gray-500 text-xs md:text-sm"
+                    placeholder="e.g. AAPL"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label htmlFor="analysis-creator-filter" className="text-gray-400">
+                    Creator:
+                  </label>
+                  <input
+                    id="analysis-creator-filter"
+                    type="text"
+                    value={analysisCreatorFilter}
+                    onChange={(e) => setAnalysisCreatorFilter(e.target.value)}
+                    className="px-2 py-1 rounded-md bg-gray-900 border border-gray-700 text-gray-100 placeholder-gray-500 text-xs md:text-sm"
+                    placeholder="email contains…"
+                  />
+                </div>
+              </div>
               <div className="overflow-x-auto overflow-y-auto max-h-96 rounded-lg border border-gray-700 bg-gray-800/80">
                 <table className="w-full min-w-[500px] text-left text-sm">
                     <thead className="sticky top-0 bg-gray-800 z-10">
@@ -1166,10 +1210,11 @@ export default function AdminDashboardPage() {
                         <th className="px-4 py-3 text-gray-400 font-medium">Out tokens</th>
                         <th className="px-4 py-3 text-gray-400 font-medium">LLM cost</th>
                         <th className="px-4 py-3 text-gray-400 font-medium">Created</th>
+                        <th className="px-4 py-3 text-gray-400 font-medium w-20">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                    {analyses.map((a) => (
+                    {filteredAnalyses.map((a) => (
                       <tr key={a.id} className="border-b border-gray-700/50">
                         <td className="px-4 py-3">
                           <Link
@@ -1198,6 +1243,28 @@ export default function AdminDashboardPage() {
                             : '—'}
                         </td>
                         <td className="px-4 py-3 text-gray-400">{formatDate(a.created_at)}</td>
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!window.confirm(`Delete analysis run ${a.id} (${a.ticker})? This cannot be undone.`)) return;
+                              await adminApi.deleteAnalysis(a.id);
+                              const [s, aRes, rRes] = await Promise.all([
+                                adminApi.getStats(),
+                                adminApi.getAnalyses(50),
+                                adminApi.getReports(200),
+                              ]);
+                              setStats(s);
+                              setAnalyses(aRes.analyses);
+                              setAnalysesTotal(aRes.total);
+                              setReports(rRes.reports);
+                              setReportsTotal(rRes.total);
+                            }}
+                            className="text-red-400 hover:text-red-300 hover:underline text-sm font-medium"
+                          >
+                            Delete
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
