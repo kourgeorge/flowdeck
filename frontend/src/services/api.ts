@@ -878,6 +878,14 @@ export const digestApi = {
     });
     return response.data;
   },
+
+  deleteBrief: async (executionId: number): Promise<void> => {
+    const token = getStoredToken();
+    if (!token) throw new Error('Sign in to delete a brief');
+    await api.delete(`/api/digest/briefs/${executionId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  },
 };
 
 export interface ChatMessage {

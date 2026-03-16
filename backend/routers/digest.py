@@ -12,7 +12,11 @@ from sqlalchemy.orm import Session
 from auth import get_current_user
 from database import get_db
 from services import token_service
-from services.digest_service import get_digest_dates as svc_get_digest_dates, get_digests_for_date as svc_get_digests_for_date
+from services.digest_service import (
+    delete_brief as svc_delete_brief,
+    get_digest_dates as svc_get_digest_dates,
+    get_digests_for_date as svc_get_digests_for_date,
+)
 from services.report_service import save_report
 from services.share_service import get_share_url
 
@@ -276,3 +280,14 @@ def get_digests_for_date(
     brief_objs = svc_get_digests_for_date(db, current_user.id, date)
     briefs = [_brief_item_to_response(b) for b in brief_objs]
     return DigestListForDateResponse(date=date, briefs=briefs)
+
+
+@router.delete("/digest/briefs/{execution_id}", status_code=204)
+def delete_brief(
+    execution_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a User Daily Brief by execution_id. Only the creator can delete. Returns 204 on success, 404 if not found."""
+    if not svc_delete_brief(db, current_user.id, execution_id):
+        raise HTTPException(status_code=404, detail="Brief not found or you do not have permission to delete it")

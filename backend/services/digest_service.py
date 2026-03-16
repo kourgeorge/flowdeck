@@ -149,3 +149,25 @@ def get_digests_for_date(
         if report:
             briefs.append(_report_to_brief_item(ex, report, slot))
     return briefs
+
+
+def delete_brief(db: Session, user_id: int, execution_id: int) -> bool:
+    """
+    Delete a daily_digest brief (Execution and its Reports; Reports cascade).
+    Returns True if deleted, False if not found or not owned by user.
+    """
+    ex = (
+        db.query(Execution)
+        .filter(
+            Execution.id == execution_id,
+            Execution.execution_type == "daily_digest",
+            Execution.subject_type == "user_date",
+            Execution.creator_id == user_id,
+        )
+        .first()
+    )
+    if not ex:
+        return False
+    db.delete(ex)
+    db.commit()
+    return True
