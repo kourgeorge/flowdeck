@@ -10,6 +10,8 @@ from models.db_models import User, Execution, ReportView
 
 INITIAL_BALANCE = 1000
 COST_PER_ANALYSIS = 200
+# Cost per User Daily Brief (daily or weekly)
+COST_PER_DIGEST = 200
 EARNINGS_PER_UNIQUE_VIEW = 1
 MAX_REWARD_PER_REPORT = 400
 REWARD_WINDOW_DAYS = 14  # 0 = no window
@@ -111,6 +113,39 @@ def deduct_for_analysis(user_id: int, ticker: str, db: Session) -> Tuple[bool, O
     try:
         user.token_balance -= COST_PER_ANALYSIS
         ex_id = record_execution(user_id, "ticker", "ticker", ticker.upper(), db, commit=False)
+        db.commit()
+        return (True, ex_id)
+    except Exception:
+        db.rollback()
+        return (False, None)
+
+
+def deduct_for_digest(user_id: int, subject_id: str, db: Session) -> Tuple[bool, Optional[int]]:
+    """
+    Deduct COST_PER_DIGEST from user and create Execution (daily/weekly digest run).
+    subject_id: slot key, e.g. "user_id:YYYY-MM-DD" or "user_id:w:YYYY-MM-DD".
+    Returns (True, execution_id) on success, (False, None) if insufficient balance or error.
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return (False, None)
+    balance = getattr(user, "token_balance", None)
+    if balance is None:
+        user.token_balance = INITIAL_BALANCE
+        db.flush()
+        balance = user.token_balance
+    if balance < COST_PER_DIGEST:
+        return (False, None)
+    try:
+        user.token_balance -= COST_PER_DIGEST
+        ex_id = record_execution(
+            creator_id=user_id,
+            execution_type="daily_digest",
+            subject_type="user_date",
+            subject_id=subject_id,
+            db=db,
+            commit=False,
+        )
         db.commit()
         return (True, ex_id)
     except Exception:

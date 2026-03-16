@@ -1,7 +1,17 @@
 """SQLAlchemy database models."""
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, UniqueConstraint, DateTime, Index, Boolean
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 import secrets
 
@@ -169,5 +179,52 @@ class ApiKey(Base):
         """Hash an API key for comparison."""
         import hashlib
         return hashlib.sha256(key.encode()).hexdigest()
+
+
+class UserSchedule(Base):
+    """
+    Generic scheduling configuration.
+
+    One row represents a single scheduled job, which can be:
+    - associated with a user (user_id not null), e.g. daily/weekly digest
+    - global/system-level (user_id null), e.g. system maintenance tasks
+    """
+
+    __tablename__ = "user_schedules"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    # When null, this schedule is system-level rather than per-user.
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+
+    # Logical job type, e.g. "daily_digest", "weekly_digest"
+    schedule_type = Column(String(64), nullable=False, index=True)
+
+    # Whether this schedule is active. Disabled rows are ignored by the scheduler.
+    enabled = Column(Boolean, nullable=False, default=True)
+
+    # Precise time of day in the local timezone ("HH:MM" 24h format).
+    # When null, the job can run at any time that other constraints allow.
+    time_of_day = Column(String(8), nullable=True)
+
+    # IANA timezone name, e.g. "Europe/Athens". When null, backend falls back to a default (e.g. UTC).
+    timezone = Column(String(64), nullable=True)
+
+    # Optional local weekday for weekly-style schedules: 0=Monday .. 6=Sunday (Python's weekday()).
+    weekday = Column(Integer, nullable=True)
+
+    # Arbitrary JSON payload for schedule-type-specific options (e.g. digest narrative_style, user_note, focus tickers).
+    metadata_json = Column(Text, nullable=True)
+
+    # Last time this schedule successfully executed (UTC).
+    last_executed_at = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        # At most one row per (user, schedule_type) for now; can be relaxed later if needed.
+        UniqueConstraint("user_id", "schedule_type", name="uq_user_schedule_user_type"),
+        Index("idx_user_schedules_type_enabled", "schedule_type", "enabled"),
+    )
 
 

@@ -1,8 +1,7 @@
 """User Daily Brief API: generate and retrieve tailored daily market briefs for the current user."""
 
-import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,8 +10,8 @@ from sqlalchemy.orm import Session
 
 from auth import get_current_user
 from database import get_db
-from services import token_service
 from services.digest_service import (
+    run_and_store_digest,
     delete_brief as svc_delete_brief,
     get_digest_dates as svc_get_digest_dates,
     get_digests_for_date as svc_get_digests_for_date,
@@ -70,15 +69,6 @@ class DigestListForDateResponse(BaseModel):
     briefs: list[DigestBriefItem]
 
 
-def _parse_span(span: Optional[str]) -> tuple[str, Optional[str], Optional[str]]:
-    """Return (span_type, start_date, end_date). span in ('daily', 'weekly'). Custom not yet supported via API."""
-    if not span or span == "daily":
-        return "daily", None, None
-    if span == "weekly":
-        return "weekly", None, None
-    return "daily", None, None
-
-
 @router.get("/digest", response_model=DigestResponse)
 async def get_digest(
     current_user=Depends(get_current_user),
@@ -118,93 +108,30 @@ async def get_digest(
     narrative brief and a "what to watch" section. Use span=daily (default) or span=weekly.
     """
     digest_date = date or datetime.utcnow().strftime("%Y-%m-%d")
-    span_type, start_date, end_date = _parse_span(span)
+    span_type = span or "daily"
 
     try:
-        from ai_engine.daily_digest import run_digest
-    except ImportError as e:
-        logger.exception("Digest module not available: %s", e)
-        raise HTTPException(status_code=503, detail="Digest service unavailable")
-
-    try:
-        result = await asyncio.to_thread(
-            run_digest,
-            user_id=current_user.id,
+        result, metadata, execution_id, _slot = await run_and_store_digest(
+            db,
+            current_user.id,
             digest_date=digest_date,
-            db=db,
-            config=None,
+            span_type=span_type,
             max_priority_tickers=max_priority_tickers,
             user_note=user_note,
             narrative_style=narrative_style,
             user_focus_tickers=user_focus_tickers,
-            span_type=span_type,
-            start_date=start_date,
-            end_date=end_date,
         )
-    except Exception as e:
+    except RuntimeError as e:
+        raise HTTPException(
+            status_code=402,
+            detail=str(e),
+        )
+    except ImportError as e:
+        logger.exception("Digest module not available: %s", e)
+        raise HTTPException(status_code=503, detail="Digest service unavailable")
+    except Exception as e:  # pragma: no cover - bubble to client
         logger.exception("Digest generation failed for user_id=%s: %s", current_user.id, e)
         raise HTTPException(status_code=500, detail=f"Digest generation failed: {e}")
-
-    # subject_id: daily = "uid:YYYY-MM-DD", weekly = "uid:w:YYYY-MM-DD"
-    slot = digest_date if span_type == "daily" else f"w:{digest_date}"
-    subject_id = f"{current_user.id}:{slot}"
-    metadata: dict = {}
-    try:
-        execution_id = token_service.record_execution(
-            creator_id=current_user.id,
-            execution_type="daily_digest",
-            subject_type="user_date",
-            subject_id=subject_id,
-            db=db,
-        )
-        metadata = {
-            "digest_date": result.digest_date,
-            "span_type": getattr(result, "span_type", "daily"),
-            "span_label": getattr(result, "span_label", "Daily"),
-            "priority_tickers": result.priority_tickers,
-            "what_to_watch": result.what_to_watch,
-        }
-        if user_note:
-            metadata["user_note"] = user_note
-        if narrative_style:
-            metadata["narrative_style"] = narrative_style
-        if user_focus_tickers:
-            metadata["user_focus_tickers"] = user_focus_tickers
-        if getattr(result, "references", None):
-            metadata["references"] = [
-                r.model_dump() if hasattr(r, "model_dump") else r
-                for r in (result.references or [])
-            ]
-        # Attach LLM usage metadata when available
-        if result.input_tokens is not None:
-            metadata["input_tokens"] = result.input_tokens
-        if result.output_tokens is not None:
-            metadata["output_tokens"] = result.output_tokens
-        if result.total_tokens is not None:
-            metadata["total_tokens"] = result.total_tokens
-        if result.cost_usd is not None:
-            metadata["cost_usd"] = result.cost_usd
-        if result.models_used is not None:
-            metadata["models_used"] = result.models_used
-        save_report(
-            execution_id,
-            "daily_digest",
-            content=result.narrative,
-            metadata=metadata,
-        )
-        logger.info(
-            "Persisted digest execution_id=%s user_id=%s slot=%s",
-            execution_id,
-            current_user.id,
-            slot,
-        )
-    except Exception as e:
-        logger.exception(
-            "Failed to persist daily digest for user_id=%s date=%s: %s",
-            current_user.id,
-            digest_date,
-            e,
-        )
 
     share_url = get_share_url(execution_id) if execution_id else None
     return DigestResponse(

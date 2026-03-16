@@ -64,17 +64,24 @@ export default function DailyDigestRunPanel({
     { value: 'technical', label: 'Technical (more detail)' },
   ];
 
+  const spanLabel = digestSpan === 'weekly' ? 'Weekly' : 'Daily';
+
   return (
-    <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
+    <div className="bg-[#020617] rounded-xl border border-amber-700/70 p-5 space-y-4">
       <div>
-        <h2 className="text-sm font-semibold text-white mb-1">User Daily Brief</h2>
-        <p className="text-xs text-gray-400">
-          Generate a short narrative summary of {digestSpan === 'weekly' ? 'the past week\'s' : 'today\'s'} market and your subscribed tickers.
+        <h2 className="text-sm font-semibold text-amber-100 mb-1 flex items-center justify-between">
+          <span>User Daily Brief</span>
+          <span className="text-[11px] font-mono text-amber-300 uppercase tracking-widest">
+            {spanLabel}
+          </span>
+        </h2>
+        <p className="text-xs text-slate-400">
+          Generate a short narrative summary of {digestSpan === 'weekly' ? "the past week's" : "today's"} market and your subscribed tickers.
         </p>
       </div>
 
       <div className="flex items-center gap-3" ref={spanRef}>
-        <label htmlFor="digest-span" className="text-sm font-medium text-gray-300">
+        <label htmlFor="digest-span" className="text-sm font-medium text-amber-100">
           Time span
         </label>
         <div className="relative">
@@ -82,15 +89,15 @@ export default function DailyDigestRunPanel({
             type="button"
             id="digest-span"
             onClick={() => { setSpanOpen((o) => !o); setStyleOpen(false); }}
-            className="min-w-[7rem] flex items-center justify-between gap-2 rounded-lg border border-gray-600 bg-gray-900/80 py-2 px-3 text-sm text-gray-100 shadow-sm transition-colors hover:border-gray-500 hover:bg-gray-800/80 focus:outline-none focus:ring-2 focus:ring-emerald-500/60 focus:border-emerald-500/70"
+            className="min-w-[7rem] flex items-center justify-between gap-2 rounded-lg border border-amber-600 bg-slate-950/80 py-2 px-3 text-sm text-amber-50 shadow-sm transition-colors hover:border-amber-400 hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/60 focus:border-amber-400"
           >
             <span>{spanOptions.find((o) => o.value === digestSpan)?.label ?? digestSpan}</span>
-            <svg className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${spanOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className={`w-4 h-4 text-amber-300 shrink-0 transition-transform ${spanOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
           {spanOpen && (
-            <div className="absolute top-full left-0 z-10 mt-1 w-full rounded-lg border border-gray-600 bg-gray-900 shadow-xl py-1 min-w-[7rem]">
+            <div className="absolute top-full left-0 z-10 mt-1 w-full rounded-lg border border-amber-600 bg-slate-950 shadow-xl py-1 min-w-[7rem]">
               {spanOptions.map((opt) => (
                 <button
                   key={opt.value}
@@ -98,8 +105,8 @@ export default function DailyDigestRunPanel({
                   onClick={() => { onDigestSpanChange(opt.value); setSpanOpen(false); }}
                   className={`w-full text-left px-3 py-2 text-sm transition-colors first:rounded-t-lg last:rounded-b-lg ${
                     opt.value === digestSpan
-                      ? 'bg-emerald-900/50 text-emerald-100 font-medium'
-                      : 'text-gray-200 hover:bg-gray-700/80'
+                      ? 'bg-amber-500/20 text-amber-100 font-medium'
+                      : 'text-slate-100 hover:bg-slate-800'
                   }`}
                 >
                   {opt.label}
@@ -110,11 +117,11 @@ export default function DailyDigestRunPanel({
         </div>
       </div>
 
-      <div className="border border-gray-700/80 rounded-md bg-gray-900/60 overflow-hidden">
+      <div className="border border-amber-700/70 rounded-md bg-slate-950/60 overflow-hidden">
         <button
           type="button"
           onClick={() => onDigestInputExpandedChange(!digestInputExpanded)}
-          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-800/60 transition-colors"
+          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-sm font-medium text-amber-100 hover:text-black hover:bg-amber-400/80 transition-colors"
         >
           <span>Brief options</span>
           <svg
@@ -129,7 +136,7 @@ export default function DailyDigestRunPanel({
         {digestInputExpanded && (
           <div className="space-y-3 px-3 pb-3 pt-0">
             <div className="space-y-1" ref={styleRef}>
-              <label htmlFor="digest-style" className="block text-sm font-medium text-gray-300">
+              <label htmlFor="digest-style" className="block text-sm font-medium text-amber-100">
                 Brief style
               </label>
               <div className="relative w-full max-w-xs">
@@ -137,15 +144,15 @@ export default function DailyDigestRunPanel({
                   type="button"
                   id="digest-style"
                   onClick={() => { setStyleOpen((o) => !o); setSpanOpen(false); }}
-                  className="w-full flex items-center justify-between gap-2 rounded-lg border border-gray-600 bg-gray-900/80 py-2.5 pl-3 pr-3 text-sm text-gray-100 shadow-sm transition-colors hover:border-gray-500 hover:bg-gray-800/80 focus:outline-none focus:ring-2 focus:ring-emerald-500/60 focus:border-emerald-500/70"
+                  className="w-full flex items-center justify-between gap-2 rounded-lg border border-amber-600 bg-slate-950/80 py-2.5 pl-3 pr-3 text-sm text-amber-50 shadow-sm transition-colors hover:border-amber-400 hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/60 focus:border-amber-400"
                 >
                   <span>{styleOptions.find((o) => o.value === digestNarrativeStyle)?.label ?? digestNarrativeStyle}</span>
-                  <svg className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${styleOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className={`w-4 h-4 text-amber-300 shrink-0 transition-transform ${styleOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
                 {styleOpen && (
-                  <div className="absolute top-full left-0 z-10 mt-1 w-full rounded-lg border border-gray-600 bg-gray-900 shadow-xl py-1 max-w-xs">
+                  <div className="absolute top-full left-0 z-10 mt-1 w-full rounded-lg border border-amber-600 bg-slate-950 shadow-xl py-1 max-w-xs">
                     {styleOptions.map((opt) => (
                       <button
                         key={opt.value}
@@ -153,8 +160,8 @@ export default function DailyDigestRunPanel({
                         onClick={() => { onDigestNarrativeStyleChange(opt.value); setStyleOpen(false); }}
                         className={`w-full text-left px-3 py-2 text-sm transition-colors first:rounded-t-lg last:rounded-b-lg ${
                           opt.value === digestNarrativeStyle
-                            ? 'bg-emerald-900/50 text-emerald-100 font-medium'
-                            : 'text-gray-200 hover:bg-gray-700/80'
+                            ? 'bg-amber-500/20 text-amber-100 font-medium'
+                            : 'text-slate-100 hover:bg-slate-800'
                         }`}
                       >
                         {opt.label}
@@ -166,8 +173,8 @@ export default function DailyDigestRunPanel({
             </div>
 
             <div className="space-y-1">
-              <label htmlFor="digest-user-note" className="block text-sm font-medium text-gray-300">
-                Optional note for today&apos;s brief
+              <label htmlFor="digest-user-note" className="block text-sm font-medium text-amber-100">
+                Optional note for this brief
               </label>
               <textarea
                 id="digest-user-note"
@@ -176,9 +183,9 @@ export default function DailyDigestRunPanel({
                 onChange={(e: ChangeEvent<HTMLTextAreaElement>) => onDigestUserNoteChange(e.target.value)}
                 maxLength={2000}
                 placeholder="E.g. Focus on earnings next week, I'm worried about tech exposure, cash needs in 3 months…"
-                className="w-full rounded-md border border-gray-700 bg-gray-950/60 px-2.5 py-1.5 text-xs text-gray-100 placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
+                className="w-full rounded-md border border-amber-700 bg-slate-950/60 px-2.5 py-1.5 text-xs text-amber-50 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-400 resize-none"
               />
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-slate-500">
                 Style and note apply only to the next run and are considered when writing the narrative and
                 &quot;What to watch&quot;.
               </p>
@@ -186,20 +193,20 @@ export default function DailyDigestRunPanel({
 
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <label className="block text-sm font-medium text-gray-300">
+                <label className="block text-sm font-medium text-amber-100">
                   Focus tickers (optional)
                 </label>
                 {selectedFocusTickers.length > 0 && (
                   <button
                     type="button"
                     onClick={() => onSelectedFocusTickersChange([])}
-                    className="text-xs text-emerald-300 hover:text-emerald-200 underline-offset-2 hover:underline"
+                    className="text-xs text-amber-300 hover:text-amber-200 underline-offset-2 hover:underline"
                   >
                     Clear
                   </button>
                 )}
               </div>
-              <p className="text-xs text-gray-500 mb-0.5">
+              <p className="text-xs text-slate-500 mb-0.5">
                 Choose a subset of your portfolio to highlight. Leave empty to let the system pick based on
                 moves and news.
               </p>
@@ -217,8 +224,8 @@ export default function DailyDigestRunPanel({
                       }}
                       className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs transition-colors ${
                         selected
-                          ? 'bg-emerald-900/50 border-emerald-500 text-emerald-100'
-                          : 'bg-gray-900 border-gray-700 text-gray-300 hover:border-emerald-500 hover:text-emerald-100'
+                          ? 'bg-amber-500/20 border-amber-400 text-amber-100'
+                          : 'bg-slate-950 border-slate-700 text-slate-200 hover:border-amber-400 hover:text-amber-100'
                       }`}
                     >
                       {t}
@@ -226,7 +233,7 @@ export default function DailyDigestRunPanel({
                   );
                 })}
                 {subscribedTickers.length === 0 && (
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-slate-500">
                     Subscribe to tickers on your dashboard to choose a manual focus set.
                   </span>
                 )}
@@ -241,7 +248,7 @@ export default function DailyDigestRunPanel({
           type="button"
           onClick={onRunDigest}
           disabled={digestLoading}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-black bg-amber-400 hover:bg-amber-300 disabled:opacity-60 disabled:cursor-not-allowed rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-slate-950"
         >
           {digestLoading ? (
             <>
@@ -265,6 +272,9 @@ export default function DailyDigestRunPanel({
             </>
           )}
         </button>
+        <p className="mt-1 text-[11px] text-slate-400">
+          Each brief (daily or weekly) costs <span className="font-semibold text-amber-200">200 tokens</span>.
+        </p>
       </div>
     </div>
   );

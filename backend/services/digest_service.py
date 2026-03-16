@@ -1,12 +1,13 @@
-"""Digest history: dates and briefs for a user. Read-only DB access for digest API."""
+"""Digest service: generation helpers and history for user briefs."""
 
 import json
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
 from models.db_models import Execution, Report
+from services import token_service
 
 
 class DigestBriefItem:
@@ -41,6 +42,112 @@ class DigestBriefItem:
         self.user_focus_tickers = user_focus_tickers
         self.references = references
         self.raw_metadata = raw_metadata
+
+
+def _build_slot(span_type: str, digest_date: str) -> str:
+    """Return slot key used in subject_id."""
+    return digest_date if span_type == "daily" else f"w:{digest_date}"
+
+
+def _parse_span(span_type: str) -> tuple[str, Optional[str], Optional[str]]:
+    """Return (span_type, start_date, end_date) for run_digest. Custom not yet supported here."""
+    if not span_type or span_type == "daily":
+        return "daily", None, None
+    if span_type == "weekly":
+        return "weekly", None, None
+    return "daily", None, None
+
+
+async def run_and_store_digest(
+    db: Session,
+    user_id: int,
+    *,
+    digest_date: str,
+    span_type: str,
+    max_priority_tickers: int = 5,
+    user_note: Optional[str] = None,
+    narrative_style: Optional[str] = None,
+    user_focus_tickers: Optional[list[str]] = None,
+) -> Tuple["DigestResultProtocol", dict, int, str]:
+    """
+    Shared helper used by both the HTTP API and the scheduler.
+
+    - Deducts tokens and creates an Execution.
+    - Runs the digest workflow.
+    - Persists the Report with metadata.
+    - Returns (result, metadata, execution_id, slot).
+    """
+    from ai_engine.daily_digest import run_digest  # imported lazily
+
+    slot = _build_slot(span_type, digest_date)
+    subject_id = f"{user_id}:{slot}"
+
+    deduct_ok, execution_id = token_service.deduct_for_digest(user_id, subject_id, db)
+    if not deduct_ok or execution_id is None:
+        raise RuntimeError("Insufficient token balance for User Daily Brief.")
+
+    parsed_span_type, start_date, end_date = _parse_span(span_type)
+
+    # Run the heavy work in a background thread.
+    import asyncio
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        result = await asyncio.to_thread(
+            run_digest,
+            user_id=user_id,
+            digest_date=digest_date,
+            db=db,
+            config=None,
+            max_priority_tickers=max_priority_tickers,
+            user_note=user_note,
+            narrative_style=narrative_style,
+            user_focus_tickers=user_focus_tickers,
+            span_type=parsed_span_type,
+            start_date=start_date,
+            end_date=end_date,
+        )
+    except Exception as e:  # pragma: no cover - surface to caller
+        logger = logging.getLogger(__name__)
+        logger.exception("Digest generation failed for user_id=%s: %s", user_id, e)
+        raise
+
+    metadata: dict = {
+        "digest_date": getattr(result, "digest_date", digest_date),
+        "span_type": getattr(result, "span_type", parsed_span_type),
+        "span_label": getattr(result, "span_label", "Daily"),
+        "priority_tickers": getattr(result, "priority_tickers", []),
+        "what_to_watch": getattr(result, "what_to_watch", ""),
+    }
+    if user_note:
+        metadata["user_note"] = user_note
+    if narrative_style:
+        metadata["narrative_style"] = narrative_style
+    if user_focus_tickers:
+        metadata["user_focus_tickers"] = user_focus_tickers
+    if getattr(result, "references", None):
+        metadata["references"] = [
+            r.model_dump() if hasattr(r, "model_dump") else r
+            for r in (result.references or [])
+        ]
+    # Optional LLM usage metadata
+    for key in ("input_tokens", "output_tokens", "total_tokens", "cost_usd", "models_used"):
+        value = getattr(result, key, None)
+        if value is not None:
+            metadata[key] = value
+
+    from services.report_service import save_report
+
+    save_report(
+        execution_id,
+        "daily_digest",
+        content=getattr(result, "narrative", ""),
+        metadata=metadata,
+    )
+
+    return result, metadata, execution_id, slot
 
 
 def get_digest_dates(

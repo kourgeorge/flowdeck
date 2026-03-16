@@ -28,7 +28,17 @@ Base = declarative_base()
 
 def init_db() -> None:
     """Create all tables if they don't exist."""
-    from models.db_models import User, Report, Subscription, Execution, ReportView, ApiKey, ChatSession, ChatMessage  # noqa: F401
+    from models.db_models import (  # noqa: F401
+        ApiKey,
+        ChatMessage,
+        ChatSession,
+        Execution,
+        Report,
+        ReportView,
+        Subscription,
+        User,
+        UserSchedule,
+    )
     Base.metadata.create_all(bind=engine)
 
 

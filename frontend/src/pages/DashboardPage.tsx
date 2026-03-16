@@ -31,10 +31,15 @@ function narrativeForDisplay(narrative: string): string {
         .join('\n');
 }
 
-/** ReactMarkdown components so brief section titles (##) use the same green as "What to watch". */
+/** ReactMarkdown components so structured brief section titles match the brief card styling. */
 const briefMarkdownComponents = {
     h2: ({ children, ...props }: ComponentProps<'h2'>) => (
-        <h2 className="text-sm font-semibold text-emerald-300 mb-1 mt-4 first:mt-0" {...props}>{children}</h2>
+        <h2
+          className="text-[13px] font-semibold text-amber-200 mb-1 mt-4 first:mt-0 tracking-wide"
+          {...props}
+        >
+          {children}
+        </h2>
     ),
 };
 
@@ -327,6 +332,84 @@ export default function DashboardPage() {
     } catch {
       return String(payload);
     }
+  };
+
+  const tickerWidgetByTicker = new Map(widgets.map((w) => [w.ticker.toUpperCase(), w]));
+
+  const renderBriefContentCard = (brief: DigestResponse | DigestBriefItem) => {
+    const focusTickers = brief.priority_tickers ?? [];
+    const styleLabel = (brief as any)?.narrative_style ?? 'Balanced';
+    const spanLabel = brief.span_label && brief.span_label !== 'Daily' ? brief.span_label : 'Daily';
+    const overviewLabel =
+      spanLabel.toLowerCase().startsWith('week') || brief.span_type === 'weekly'
+        ? "This week's overview"
+        : "Today's overview";
+    return (
+      <div className="rounded-xl border border-amber-700/60 bg-[#020617]/90 text-sm p-4 space-y-4">
+        <div>
+          <div className="text-[11px] font-mono text-amber-300 uppercase tracking-[0.18em] mb-1">
+            {overviewLabel}
+          </div>
+          <div className="prose prose-invert prose-sm max-w-none text-gray-100">
+            {briefHasStructuredSections(brief.narrative) ? (
+              <ReactMarkdown components={briefMarkdownComponents}>{narrativeForDisplay(brief.narrative)}</ReactMarkdown>
+            ) : (
+              <p className="whitespace-pre-wrap leading-relaxed text-[13px]">
+                {brief.narrative}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {brief.what_to_watch && !briefHasStructuredSections(brief.narrative) && (
+          <div className="pt-2 border-t border-slate-700/80 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-mono text-slate-300 uppercase tracking-[0.18em]">
+                What to watch next
+              </span>
+            </div>
+            <p className="text-[13px] text-slate-100 whitespace-pre-wrap leading-relaxed">
+              {brief.what_to_watch}
+            </p>
+          </div>
+        )}
+
+        {focusTickers.length > 0 && (
+          <div className="pt-2 border-t border-slate-700/80 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-mono text-slate-300 uppercase tracking-[0.18em]">
+                Focus tickers
+              </span>
+              <span className="text-[11px] text-amber-300 font-mono">
+                Style: {styleLabel} · Span: {spanLabel}
+              </span>
+            </div>
+            <div className="space-y-1">
+              {focusTickers.map((t) => {
+                const w = tickerWidgetByTicker.get(t.toUpperCase());
+                const change = w?.daily_change_percent;
+                const changeStr =
+                  typeof change === 'number'
+                    ? `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`
+                    : null;
+                const changeClass =
+                  typeof change === 'number'
+                    ? change >= 0
+                      ? 'text-emerald-300'
+                      : 'text-red-300'
+                    : 'text-slate-400';
+                return (
+                  <div key={t} className="flex items-center justify-between text-[13px] text-slate-100">
+                    <span className="mr-3">{t}</span>
+                    {changeStr && <span className={changeClass}>{changeStr}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   const handleSendBriefEmail = async (executionId: number) => {
@@ -673,20 +756,20 @@ export default function DashboardPage() {
 
       {/* ── Digest Tab: calendar view — left: current month + generation panel; right: brief ── */}
       {dashboardTab === 'digest' && (
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-y-auto bg-[#020617]">
           <div className="px-4 py-6 sm:p-6 lg:p-8">
             <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
               <div className="flex flex-col lg:flex-row gap-6">
                 {/* Left: calendar panel (with New brief integrated) */}
                 <div className="lg:w-72 xl:w-80 shrink-0">
-                  <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+                  <div className="bg-[#020617] rounded-xl border border-amber-700/70 overflow-hidden shadow-lg">
                     {/* Top bar: New brief action integrated into panel */}
-                    <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-gray-700/80">
-                      <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Briefs</span>
+                    <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-amber-700/70 bg-slate-950/80">
+                      <span className="text-xs font-medium uppercase tracking-wider text-amber-300">Briefs</span>
                       <button
                         type="button"
                         onClick={() => setNewBriefModalOpen(true)}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-emerald-300 hover:text-white hover:bg-emerald-600/20 rounded-md transition-colors focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-amber-200 hover:text-black hover:bg-amber-400 rounded-md transition-colors focus:outline-none focus:ring-1 focus:ring-amber-400/70"
                         title="Create new brief"
                         aria-label="Create new brief"
                       >
@@ -703,20 +786,20 @@ export default function DashboardPage() {
                       <button
                         type="button"
                         onClick={goToPrevMonth}
-                        className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded"
+                        className="p-1.5 text-amber-200 hover:text-black hover:bg-amber-400 rounded"
                         aria-label="Previous month"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                         </svg>
                       </button>
-                      <span className="text-sm font-semibold text-white">
+                      <span className="text-sm font-semibold text-amber-100">
                         {calendarMonth.toLocaleString(undefined, { month: 'long', year: 'numeric' })}
                       </span>
                       <button
                         type="button"
                         onClick={goToNextMonth}
-                        className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded"
+                        className="p-1.5 text-amber-200 hover:text-black hover:bg-amber-400 rounded"
                         aria-label="Next month"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -724,7 +807,7 @@ export default function DashboardPage() {
                         </svg>
                       </button>
                     </div>
-                    <div className="grid grid-cols-7 gap-0.5 text-xs text-center text-gray-500 mb-1">
+                    <div className="grid grid-cols-7 gap-0.5 text-xs text-center text-slate-500 mb-1">
                       {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d) => (
                         <div key={d}>{d}</div>
                       ))}
@@ -748,12 +831,12 @@ export default function DashboardPage() {
                               const count = digestCountByDate[dateStr] ?? 0;
                               const isSelected = selectedDigestDate === dateStr;
                               const baseClasses =
-                                'h-8 relative flex items-center justify-center rounded cursor-pointer border text-xs';
+                                'h-8 relative flex items-center justify-center rounded cursor-pointer border text-xs font-mono';
                               const variant = hasDigest
                                 ? isSelected
-                                  ? 'bg-emerald-600 border-emerald-500 text-white'
-                                  : 'bg-emerald-900/40 border-emerald-600/60 text-emerald-100 hover:bg-emerald-700/70'
-                                : 'bg-gray-900 border-gray-800 text-gray-500';
+                                  ? 'bg-amber-500 border-amber-400 text-black'
+                                  : 'bg-amber-900/40 border-amber-600/70 text-amber-100 hover:bg-amber-700/70'
+                                : 'bg-slate-900 border-slate-800 text-slate-500';
                               return (
                                 <button
                                   key={dateStr}
@@ -778,12 +861,12 @@ export default function DashboardPage() {
                         );
                       })()}
                     </div>
-                    <p className="mt-2 text-xs text-gray-500">
-                      Green = briefs. Click a day to view.
+                    <p className="mt-2 text-xs text-slate-400">
+                      Amber = briefs. Click a day to view.
                     </p>
                     {weeklyDigestSlots.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-gray-700">
-                        <p className="text-xs font-medium text-gray-500 mb-1.5">Weekly briefs</p>
+                      <div className="mt-3 pt-3 border-t border-slate-800">
+                        <p className="text-xs font-medium text-slate-300 mb-1.5">Weekly briefs</p>
                         <div className="flex flex-wrap gap-1">
                           {weeklyDigestSlots.map((slot) => {
                             const endDate = slot.startsWith('w:') ? slot.slice(2) : slot;
@@ -793,10 +876,10 @@ export default function DashboardPage() {
                                 key={slot}
                                 type="button"
                                 onClick={() => handleSelectDigestDate(slot)}
-className={`px-2 py-0.5 text-xs rounded border transition-colors ${
-                                isSelected
-                                    ? 'bg-emerald-600 border-emerald-500 text-white'
-                                    : 'bg-gray-900 border-gray-600 text-gray-300 hover:bg-gray-700'
+                                className={`px-2 py-0.5 text-xs rounded border transition-colors font-mono ${
+                                  isSelected
+                                    ? 'bg-amber-500 border-amber-400 text-black'
+                                    : 'bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800'
                                 }`}
                                 title={endDate}
                               >
@@ -808,8 +891,8 @@ className={`px-2 py-0.5 text-xs rounded border transition-colors ${
                       </div>
                     )}
                     {selectedDigestDate && digestBriefsForDay.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-gray-700">
-                        <p className="text-xs font-medium text-gray-500 mb-1.5">
+                      <div className="mt-3 pt-3 border-t border-slate-800">
+                        <p className="text-xs font-medium text-slate-300 mb-1.5">
                           {selectedDigestDate.startsWith('w:') ? 'This week' : 'This day'}
                         </p>
                         <div className="flex flex-wrap gap-1">
@@ -818,10 +901,10 @@ className={`px-2 py-0.5 text-xs rounded border transition-colors ${
                               key={brief.execution_id}
                               type="button"
                               onClick={() => setSelectedBrief(brief)}
-                              className={`px-2 py-0.5 text-xs rounded border transition-colors ${
+                              className={`px-2 py-0.5 text-xs rounded border transition-colors font-mono ${
                                 selectedBrief?.execution_id === brief.execution_id
-                                  ? 'bg-emerald-600 border-emerald-500 text-white'
-                                  : 'bg-gray-900 border-gray-600 text-gray-300 hover:bg-gray-700'
+                                  ? 'bg-amber-500 border-amber-400 text-black'
+                                  : 'bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800'
                               }`}
                               title={brief.created_at}
                             >
@@ -845,17 +928,17 @@ className={`px-2 py-0.5 text-xs rounded border transition-colors ${
                     aria-labelledby="new-brief-modal-title"
                   >
                     <div
-                      className="bg-gray-800 border border-gray-700 rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+                      className="bg-[#020617] border border-amber-700/70 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <div className="sticky top-0 flex justify-between items-center px-4 py-3 border-b border-gray-700 bg-gray-800 z-10">
-                        <h2 id="new-brief-modal-title" className="text-base font-semibold text-white">
+                      <div className="sticky top-0 flex justify-between items-center px-4 py-3 border-b border-amber-700/70 bg-slate-950 z-10">
+                        <h2 id="new-brief-modal-title" className="text-base font-semibold text-amber-100 tracking-wide">
                           Create new brief
                         </h2>
                         <button
                           type="button"
                           onClick={() => setNewBriefModalOpen(false)}
-                          className="p-1.5 text-gray-400 hover:text-white rounded-lg transition-colors"
+                          className="p-1.5 text-amber-200 hover:text-white rounded-lg transition-colors"
                           aria-label="Close"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -888,22 +971,22 @@ className={`px-2 py-0.5 text-xs rounded border transition-colors ${
                 )}
 
                 {/* Right: brief content */}
-                <div className="flex-1 min-w-0 bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-                  <div className="bg-gray-900/40 min-h-[200px] px-4 sm:px-6 pt-2 sm:pt-3 pb-4 sm:pb-6 space-y-3">
+                <div className="flex-1 min-w-0 bg-[#020617] rounded-xl border border-amber-700/70 overflow-hidden shadow-lg">
+                  <div className="bg-slate-950/60 min-h-[200px] px-4 sm:px-6 pt-3 sm:pt-4 pb-4 sm:pb-6 space-y-3">
                   {digestLoading && (
                     <div className="flex flex-col items-center justify-center min-h-[280px] py-12 px-4">
                       <div className="relative">
-                        <div className="w-16 h-16 rounded-2xl border-2 border-emerald-500/30 bg-emerald-950/30 flex items-center justify-center">
-                          <svg className="w-8 h-8 text-emerald-400/80 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                        <div className="w-16 h-16 rounded-2xl border-2 border-amber-400/40 bg-amber-900/30 flex items-center justify-center">
+                          <svg className="w-8 h-8 text-amber-300/90 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>
                         </div>
-                        <span className="absolute -inset-1 rounded-2xl border border-emerald-400/20 animate-ping opacity-30" aria-hidden />
+                        <span className="absolute -inset-1 rounded-2xl border border-amber-400/30 animate-ping opacity-40" aria-hidden />
                       </div>
-                      <p className="mt-5 text-base font-semibold text-white">Generating your brief</p>
-                      <p className="mt-1 text-sm text-gray-400">Analyzing market and portfolio…</p>
-                      <div className="mt-6 w-48 h-1 rounded-full bg-gray-700 overflow-hidden">
-                        <div className="h-full w-1/2 rounded-full bg-emerald-500 [animation:briefShimmer_1.8s_ease-in-out_infinite]" />
+                      <p className="mt-5 text-base font-semibold text-amber-50">Generating your brief</p>
+                      <p className="mt-1 text-sm text-slate-400">Analyzing market and portfolio…</p>
+                      <div className="mt-6 w-48 h-1 rounded-full bg-slate-800 overflow-hidden">
+                        <div className="h-full w-1/2 rounded-full bg-amber-400 [animation:briefShimmer_1.8s_ease-in-out_infinite]" />
                       </div>
                       <style>{`@keyframes briefShimmer { 0%, 100% { transform: translateX(-100%); } 50% { transform: translateX(200%); } }`}</style>
                     </div>
@@ -914,15 +997,19 @@ className={`px-2 py-0.5 text-xs rounded border transition-colors ${
                   {/* Selected day brief content (hours list is in Brief history panel) */}
                   {!digestLoading && selectedDigestDate && digestBriefsForDay.length > 0 && selectedBrief && (
                     <>
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                           <div className="flex items-center justify-between gap-2 flex-nowrap">
-                            <span className="text-sm text-gray-500 whitespace-nowrap shrink-0">
-                              {selectedBrief.span_label && selectedBrief.span_label !== 'Daily' && (
-                                <span className="mr-1.5">{selectedBrief.span_label}</span>
+                            <span className="text-xs sm:text-sm text-gray-500 whitespace-nowrap shrink-0">
+                              <span className="font-mono text-[11px] text-amber-300 uppercase tracking-wider">
+                                {selectedBrief.span_label && selectedBrief.span_label !== 'Daily'
+                                  ? selectedBrief.span_label
+                                  : 'Daily'}
+                              </span>
+                              {selectedBrief.digest_date && (
+                                <span className="ml-2 text-gray-300">{selectedBrief.digest_date}</span>
                               )}
-                              {selectedBrief.digest_date}
                               {selectedBrief.created_at && (
-                                <span className="ml-1.5">· {formatBriefTime(selectedBrief.created_at)}</span>
+                                <span className="ml-1.5 text-gray-500">· {formatBriefTime(selectedBrief.created_at)}</span>
                               )}
                             </span>
                             <div className="flex items-center gap-1.5 shrink-0">
@@ -1008,57 +1095,28 @@ className={`px-2 py-0.5 text-xs rounded border transition-colors ${
                               </button>
                             </div>
                           </div>
+                          {renderBriefContentCard(selectedBrief)}
                           {(selectedBrief.user_note ||
                             selectedBrief.narrative_style ||
                             selectedBrief.user_focus_tickers?.length) && (
-                              <div className="space-y-1 text-sm text-gray-300 bg-gray-900/60 border border-gray-700 rounded px-3 py-2">
-                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Run inputs</p>
-                                {selectedBrief.narrative_style && (
-                                  <p><span className="text-gray-500 mr-1">Style:</span>{selectedBrief.narrative_style}</p>
-                                )}
-                                {selectedBrief.user_focus_tickers?.length ? (
-                                  <p><span className="text-gray-500 mr-1">User focus:</span>{selectedBrief.user_focus_tickers.join(', ')}</p>
-                                ) : null}
-                                {selectedBrief.user_note && (
-                                  <p><span className="text-gray-500 mr-1">User note:</span><span className="whitespace-pre-wrap align-top">{selectedBrief.user_note}</span></p>
-                                )}
-                              </div>
-                            )}
-                          {selectedBrief.priority_tickers?.length > 0 && (
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="text-xs uppercase tracking-wide text-gray-500">Focus</span>
-                              {selectedBrief.priority_tickers.map((t) => (
-                                <span
-                                  key={t}
-                                  className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-600/60 text-sm text-emerald-100"
-                                >
-                                  {t}
-                                </span>
-                              ))}
+                            <div className="space-y-1 text-sm text-gray-300 bg-gray-900/60 border border-gray-700 rounded px-3 py-2">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Run inputs</p>
+                              {selectedBrief.narrative_style && (
+                                <p><span className="text-gray-500 mr-1">Style:</span>{selectedBrief.narrative_style}</p>
+                              )}
+                              {selectedBrief.user_focus_tickers?.length ? (
+                                <p><span className="text-gray-500 mr-1">User focus:</span>{selectedBrief.user_focus_tickers.join(', ')}</p>
+                              ) : null}
+                              {selectedBrief.user_note && (
+                                <p><span className="text-gray-500 mr-1">User note:</span><span className="whitespace-pre-wrap align-top">{selectedBrief.user_note}</span></p>
+                              )}
                             </div>
                           )}
-                          <div className="prose prose-invert prose-sm max-w-none text-gray-200">
-                            {briefHasStructuredSections(selectedBrief.narrative) ? (
-                              <ReactMarkdown components={briefMarkdownComponents}>{narrativeForDisplay(selectedBrief.narrative)}</ReactMarkdown>
-                            ) : (
-                              <p className="whitespace-pre-wrap leading-relaxed">{selectedBrief.narrative}</p>
-                            )}
-                          </div>
                           {showRawDigest && (
                             <div className="mt-2 rounded border border-gray-700 bg-black/50 p-2">
                               <pre className="text-xs whitespace-pre-wrap text-gray-200">
                                 {formatBriefRaw(selectedBrief)}
                               </pre>
-                            </div>
-                          )}
-                          {selectedBrief.what_to_watch && !briefHasStructuredSections(selectedBrief.narrative) && (
-                            <div className="pt-3 border-t border-gray-700 space-y-2">
-                              <div>
-                                <h3 className="text-sm font-semibold text-emerald-300 mb-1">What to watch</h3>
-                                <p className="text-gray-200 text-sm whitespace-pre-wrap leading-relaxed">
-                                  {selectedBrief.what_to_watch}
-                                </p>
-                              </div>
                             </div>
                           )}
                           {selectedBrief.references && selectedBrief.references.length > 0 && (
@@ -1114,13 +1172,15 @@ className={`px-2 py-0.5 text-xs rounded border transition-colors ${
 
                   {/* Freshly run digest (shown when no list/selection yet, e.g. right after run or list fetch failed) */}
                   {!digestLoading && digest && (!selectedDigestDate || digestBriefsForDay.length === 0) && (
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       <div className="flex items-center justify-between gap-2 flex-nowrap">
-                        <span className="text-sm text-gray-500 whitespace-nowrap shrink-0">
-                          {digest.span_label && digest.span_label !== 'Daily' && (
-                            <span className="mr-1.5">{digest.span_label}</span>
+                        <span className="text-xs sm:text-sm text-gray-500 whitespace-nowrap shrink-0">
+                          <span className="font-mono text-[11px] text-amber-300 uppercase tracking-wider">
+                            {digest.span_label && digest.span_label !== 'Daily' ? digest.span_label : 'Daily'}
+                          </span>
+                          {digest.digest_date && (
+                            <span className="ml-2 text-gray-300">{digest.digest_date}</span>
                           )}
-                          {digest.digest_date}
                         </span>
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button
@@ -1194,6 +1254,7 @@ className={`px-2 py-0.5 text-xs rounded border transition-colors ${
                           </button>
                         </div>
                       </div>
+                      {renderBriefContentCard(digest)}
                       {(digest.user_note || digest.narrative_style || digest.user_focus_tickers?.length) && (
                         <div className="space-y-1 text-sm text-gray-300 bg-gray-900/60 border border-gray-700 rounded px-3 py-2">
                           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Run inputs</p>
@@ -1208,26 +1269,6 @@ className={`px-2 py-0.5 text-xs rounded border transition-colors ${
                           )}
                         </div>
                       )}
-                      {digest.priority_tickers?.length > 0 && (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-xs uppercase tracking-wide text-gray-500">Focus</span>
-                          {digest.priority_tickers.map((t) => (
-                            <span
-                              key={t}
-                              className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-600/60 text-sm text-emerald-100"
-                            >
-                              {t}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      <div className="prose prose-invert prose-sm max-w-none text-gray-200">
-                        {briefHasStructuredSections(digest.narrative) ? (
-                          <ReactMarkdown components={briefMarkdownComponents}>{narrativeForDisplay(digest.narrative)}</ReactMarkdown>
-                        ) : (
-                          <p className="whitespace-pre-wrap leading-relaxed">{digest.narrative}</p>
-                        )}
-                      </div>
                       {showRawDigest && (
                         <div className="mt-2 rounded border border-gray-700 bg-black/50 p-2">
                           <pre className="text-xs whitespace-pre-wrap text-gray-200">

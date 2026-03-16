@@ -103,6 +103,28 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"Failed to start market overview cache refresh: {e}")
 
+    # Optional: scheduled jobs (currently User Daily Brief emails: daily/weekly digests)
+    if os.environ.get("ENABLE_DIGEST_SCHEDULER", "false").lower() in ("true", "1", "yes"):
+        try:
+            if scheduler is None:
+                from apscheduler.schedulers.background import BackgroundScheduler
+
+                scheduler = BackgroundScheduler()
+
+            from services.scheduler import run_scheduled_jobs
+
+            interval_minutes = int(os.environ.get("DIGEST_SCHEDULER_INTERVAL_MINUTES", "15"))
+            scheduler.add_job(
+                lambda: __import__("asyncio").run(run_scheduled_jobs()),
+                "interval",
+                minutes=interval_minutes,
+                id="scheduled_jobs",
+            )
+            if not scheduler.running:
+                scheduler.start()
+        except Exception as e:
+            print(f"Failed to start digest scheduler: {e}")
+
     # Warm homepage widgets cache (MAJOR_TICKERS quotes + company info) so first load is fast
     import threading as _threading
     from config import MAJOR_TICKERS
