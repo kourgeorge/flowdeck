@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import type { ChangeEvent } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { profileApi, type MeProfile } from '../services/authApi';
@@ -7,10 +8,13 @@ import PageHeader from '../components/PageHeader';
 import TokenPurchase from '../components/TokenPurchase';
 import UserStatsSection from '../components/UserStatsSection';
 import ApiKeyManagement from '../components/ApiKeyManagement';
+import { digestScheduleApi, type DigestSchedule, type DigestScheduleType } from '../services/api';
 
 const DELETE_CONFIRM_TEXT = 'DELETE';
 
-type TabType = 'overview' | 'api-keys' | 'account';
+type TabType = 'overview' | 'api-keys' | 'account' | 'brief-schedule';
+
+type DigestNarrativeStyle = 'default' | 'concise' | 'professional' | 'technical';
 
 export default function ProfilePage() {
   const { user, deleteAccount } = useAuth();
@@ -44,6 +48,32 @@ export default function ProfilePage() {
   const [subscriptionsLoading, setSubscriptionsLoading] = useState(false);
   const [togglingTicker, setTogglingTicker] = useState<string | null>(null);
 
+  // Brief schedules
+  const [schedulesLoading, setSchedulesLoading] = useState(false);
+  const [schedulesError, setSchedulesError] = useState<string | null>(null);
+
+  const [dailyEnabled, setDailyEnabled] = useState(false);
+  const [dailyTime, setDailyTime] = useState('08:00');
+  const [dailyNarrativeStyle, setDailyNarrativeStyle] = useState<DigestNarrativeStyle>('default');
+  const [dailyUserNote, setDailyUserNote] = useState('');
+  const [dailyFocusTickers, setDailyFocusTickers] = useState<string[]>([]);
+  const [dailyTimezone, setDailyTimezone] = useState<string>('');
+  const [dailySaving, setDailySaving] = useState(false);
+  const [dailySaveMessage, setDailySaveMessage] = useState<string | null>(null);
+  const [dailyLastExecutedAt, setDailyLastExecutedAt] = useState<string | null>(null);
+
+  const [weeklyEnabled, setWeeklyEnabled] = useState(false);
+  const [weeklyTime, setWeeklyTime] = useState('08:00');
+  const [weeklyDayOfWeek, setWeeklyDayOfWeek] = useState(0); // Monday by default
+  const [weeklyNarrativeStyle, setWeeklyNarrativeStyle] = useState<DigestNarrativeStyle>('default');
+  const [weeklyUserNote, setWeeklyUserNote] = useState('');
+  const [weeklyFocusTickers, setWeeklyFocusTickers] = useState<string[]>([]);
+  const [weeklyTimezone, setWeeklyTimezone] = useState<string>('');
+  const [weeklySaving, setWeeklySaving] = useState(false);
+  const [weeklySaveMessage, setWeeklySaveMessage] = useState<string | null>(null);
+  const [weeklyLastExecutedAt, setWeeklyLastExecutedAt] = useState<string | null>(null);
+  const [editingSchedules, setEditingSchedules] = useState(false);
+
   const loadSubscriptions = useCallback(async () => {
     if (!user) return;
     setSubscriptionsLoading(true);
@@ -60,6 +90,83 @@ export default function ProfilePage() {
   useEffect(() => {
     loadSubscriptions();
   }, [loadSubscriptions]);
+
+  const loadSchedules = useCallback(async () => {
+    if (!user) return;
+    setSchedulesLoading(true);
+    setSchedulesError(null);
+    try {
+      const data = await digestScheduleApi.getSchedules();
+      const defaultTz =
+        Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+
+      if (data.daily) {
+        applyScheduleToState(data.daily, 'daily');
+      } else {
+        setDailyTimezone(defaultTz);
+      }
+
+      if (data.weekly) {
+        applyScheduleToState(data.weekly, 'weekly');
+      } else {
+        setWeeklyTimezone(defaultTz);
+      }
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail;
+      setSchedulesError(
+        typeof msg === 'string'
+          ? msg
+          : 'Failed to load brief schedules',
+      );
+    } finally {
+      setSchedulesLoading(false);
+    }
+  }, [user]);
+
+  const formatLastRun = (iso: string | null) => {
+    if (!iso) return 'Never';
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return 'Never';
+      return d.toLocaleString();
+    } catch {
+      return 'Never';
+    }
+  };
+
+  function applyScheduleToState(schedule: DigestSchedule, which: 'daily' | 'weekly') {
+    const hh = String(schedule.hour).padStart(2, '0');
+    const mm = String(schedule.minute).padStart(2, '0');
+    const timeStr = `${hh}:${mm}`;
+    const tz = schedule.timezone || '';
+    const meta = schedule.metadata || {};
+    const narrativeStyle = (meta.narrative_style as DigestNarrativeStyle | null) ?? 'default';
+    const note = meta.user_note ?? '';
+    const focus = meta.user_focus_tickers ?? [];
+
+    if (which === 'daily') {
+      setDailyEnabled(schedule.enabled);
+      setDailyTime(timeStr);
+      setDailyTimezone(tz);
+      setDailyNarrativeStyle(narrativeStyle);
+      setDailyUserNote(note);
+      setDailyFocusTickers(focus);
+      setDailyLastExecutedAt(schedule.last_executed_at ?? null);
+    } else {
+      setWeeklyEnabled(schedule.enabled);
+      setWeeklyTime(timeStr);
+      setWeeklyTimezone(tz);
+      setWeeklyNarrativeStyle(narrativeStyle);
+      setWeeklyUserNote(note);
+      setWeeklyFocusTickers(focus);
+      if (typeof schedule.day_of_week === 'number') {
+        setWeeklyDayOfWeek(schedule.day_of_week);
+      }
+      setWeeklyLastExecutedAt(schedule.last_executed_at ?? null);
+    }
+  }
 
   const handleEmailUpdatesToggle = async (ticker: string, email_updates: boolean) => {
     setTogglingTicker(ticker);
@@ -79,10 +186,18 @@ export default function ProfilePage() {
       setActiveTab('api-keys');
     } else if (hash === '#account') {
       setActiveTab('account');
+    } else if (hash === '#brief-schedule') {
+      setActiveTab('brief-schedule');
     } else {
       setActiveTab('overview');
     }
   }, [hash]);
+
+  useEffect(() => {
+    if (activeTab === 'brief-schedule') {
+      loadSchedules();
+    }
+  }, [activeTab, loadSchedules]);
 
   useEffect(() => {
     if (!user) {
@@ -177,6 +292,72 @@ export default function ProfilePage() {
       setDeleteError(typeof msg === 'string' ? msg : 'Failed to delete account');
     } finally {
       setDeleteLoading(false);
+    }
+  };
+
+  const parseTime = (value: string): { hour: number; minute: number } => {
+    const [h, m] = value.split(':');
+    const hour = Math.min(23, Math.max(0, Number(h) || 0));
+    const minute = Math.min(59, Math.max(0, Number(m) || 0));
+    return { hour, minute };
+  };
+
+  const saveSchedule = async (type: DigestScheduleType) => {
+    const isDaily = type === 'daily_digest';
+    const { hour, minute } = parseTime(isDaily ? dailyTime : weeklyTime);
+    const timezone = (isDaily ? dailyTimezone : weeklyTimezone) || null;
+    const enabled = isDaily ? dailyEnabled : weeklyEnabled;
+    const narrativeStyle = (isDaily ? dailyNarrativeStyle : weeklyNarrativeStyle) ?? 'default';
+    const userNote = (isDaily ? dailyUserNote : weeklyUserNote) || null;
+    const focusTickers = (isDaily ? dailyFocusTickers : weeklyFocusTickers) || [];
+    const dayOfWeek = isDaily ? null : weeklyDayOfWeek;
+
+    const payload = {
+      enabled,
+      hour,
+      minute,
+      day_of_week: dayOfWeek,
+      timezone,
+      metadata: {
+        user_note: userNote,
+        narrative_style: narrativeStyle === 'default' ? null : narrativeStyle,
+        user_focus_tickers: focusTickers.length ? focusTickers : null,
+      },
+    };
+
+    if (isDaily) {
+      setDailySaving(true);
+      setDailySaveMessage(null);
+    } else {
+      setWeeklySaving(true);
+      setWeeklySaveMessage(null);
+    }
+
+    try {
+      const updated = await digestScheduleApi.updateSchedule(type, payload);
+      applyScheduleToState(updated, isDaily ? 'daily' : 'weekly');
+      if (isDaily) {
+        setDailySaveMessage('Daily brief schedule saved.');
+        setTimeout(() => setDailySaveMessage(null), 3000);
+      } else {
+        setWeeklySaveMessage('Weekly brief schedule saved.');
+        setTimeout(() => setWeeklySaveMessage(null), 3000);
+      }
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail;
+      setSchedulesError(
+        typeof msg === 'string'
+          ? msg
+          : 'Failed to save brief schedule',
+      );
+    } finally {
+      if (isDaily) {
+        setDailySaving(false);
+      } else {
+        setWeeklySaving(false);
+      }
     }
   };
 
@@ -473,6 +654,442 @@ export default function ProfilePage() {
       );
     }
 
+    if (activeTab === 'brief-schedule') {
+      const subscriptionTickers = subscriptions.map((s) => s.ticker);
+      const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+      return (
+        <>
+          <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
+            <h2 className="text-lg font-semibold text-white mb-2">User Daily Brief schedule</h2>
+            <p className="text-sm text-gray-400 mb-4">
+              Configure automatic email delivery of your User Daily Brief. The brief uses your subscribed tickers
+              and the same engine as the dashboard tab, but runs on a schedule in your local timezone.
+            </p>
+            <div className="mb-4 flex flex-col gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                {/* Daily panel */}
+                <div className="flex-1 bg-gray-900/60 border border-gray-700 rounded-lg px-3 py-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs font-semibold text-gray-100 uppercase tracking-wide">Daily brief</p>
+                    <span className={`text-[11px] font-mono ${dailyEnabled ? 'text-green-400' : 'text-gray-500'}`}>
+                      {dailyEnabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                  </div>
+                  <dl className="space-y-0.5 text-[11px] text-gray-300">
+                    <div className="flex gap-1.5">
+                      <dt className="text-gray-500">Time:</dt>
+                      <dd>{dailyTime || '—'}</dd>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <dt className="text-gray-500">Timezone:</dt>
+                      <dd>{dailyTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'default'}</dd>
+                    </div>
+                  <div className="flex gap-1.5">
+                    <dt className="text-gray-500">Last run:</dt>
+                    <dd>{formatLastRun(dailyLastExecutedAt)}</dd>
+                  </div>
+                    <div className="flex gap-1.5">
+                      <dt className="text-gray-500">Style:</dt>
+                      <dd>
+                        {dailyNarrativeStyle === 'default'
+                          ? 'Balanced (default)'
+                          : dailyNarrativeStyle.charAt(0).toUpperCase() + dailyNarrativeStyle.slice(1)}
+                      </dd>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <dt className="text-gray-500">Note:</dt>
+                      <dd className="truncate max-w-[14rem]" title={dailyUserNote || undefined}>
+                        {dailyUserNote ? dailyUserNote : '—'}
+                      </dd>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <dt className="text-gray-500">Focus:</dt>
+                      <dd>
+                        {dailyFocusTickers.length === 0
+                          ? 'Auto-select from portfolio'
+                          : `${dailyFocusTickers.length} ticker${dailyFocusTickers.length > 1 ? 's' : ''}`}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+                {/* Weekly panel */}
+                <div className="flex-1 bg-gray-900/60 border border-gray-700 rounded-lg px-3 py-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs font-semibold text-gray-100 uppercase tracking-wide">Weekly brief</p>
+                    <span className={`text-[11px] font-mono ${weeklyEnabled ? 'text-green-400' : 'text-gray-500'}`}>
+                      {weeklyEnabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                  </div>
+                  <dl className="space-y-0.5 text-[11px] text-gray-300">
+                    <div className="flex gap-1.5">
+                      <dt className="text-gray-500">Weekday:</dt>
+                      <dd>{(() => {
+                        const weekDaysFull = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                        return weekDaysFull[weeklyDayOfWeek] ?? '—';
+                      })()}</dd>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <dt className="text-gray-500">Time:</dt>
+                      <dd>{weeklyTime || '—'}</dd>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <dt className="text-gray-500">Timezone:</dt>
+                      <dd>{weeklyTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'default'}</dd>
+                    </div>
+                  <div className="flex gap-1.5">
+                    <dt className="text-gray-500">Last run:</dt>
+                    <dd>{formatLastRun(weeklyLastExecutedAt)}</dd>
+                  </div>
+                    <div className="flex gap-1.5">
+                      <dt className="text-gray-500">Style:</dt>
+                      <dd>
+                        {weeklyNarrativeStyle === 'default'
+                          ? 'Balanced (default)'
+                          : weeklyNarrativeStyle.charAt(0).toUpperCase() + weeklyNarrativeStyle.slice(1)}
+                      </dd>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <dt className="text-gray-500">Note:</dt>
+                      <dd className="truncate max-w-[14rem]" title={weeklyUserNote || undefined}>
+                        {weeklyUserNote ? weeklyUserNote : '—'}
+                      </dd>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <dt className="text-gray-500">Focus:</dt>
+                      <dd>
+                        {weeklyFocusTickers.length === 0
+                          ? 'Auto-select from portfolio'
+                          : `${weeklyFocusTickers.length} ticker${weeklyFocusTickers.length > 1 ? 's' : ''}`}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingSchedules((v) => !v)}
+                className="self-start inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-600 bg-gray-800 text-gray-100 hover:bg-gray-700 transition-colors"
+              >
+                {editingSchedules ? (
+                  <>
+                    <span>Done editing</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Edit schedules</span>
+                  </>
+                )}
+              </button>
+            </div>
+            {schedulesError && (
+              <p className="mb-3 text-sm text-red-400">{schedulesError}</p>
+            )}
+            {schedulesLoading ? (
+              <p className="text-sm text-gray-400">Loading schedules…</p>
+            ) : editingSchedules ? (
+              <div className="space-y-6">
+                {/* Daily schedule */}
+                <div className="border border-gray-700 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">Daily brief</h3>
+                      <p className="text-xs text-gray-400">
+                        Get a brief for today&apos;s market every day at the selected time.
+                      </p>
+                    </div>
+                    <label className="inline-flex items-center gap-2 cursor-pointer">
+                      <span className="text-xs text-gray-400">Enabled</span>
+                      <input
+                        type="checkbox"
+                        checked={dailyEnabled}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setDailyEnabled(e.target.checked)}
+                        className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
+                      />
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-300 mb-1">
+                        Time of day
+                      </label>
+                      <input
+                        type="time"
+                        value={dailyTime}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setDailyTime(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-300 mb-1">
+                        Timezone
+                      </label>
+                      <input
+                        type="text"
+                        value={dailyTimezone}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setDailyTimezone(e.target.value)}
+                        placeholder="e.g. Europe/Athens"
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <p className="mt-1 text-[11px] text-gray-500">
+                        Uses IANA timezone names. Leave empty to use the default ({Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'}).
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-300 mb-1">
+                        Brief style
+                      </label>
+                      <select
+                        value={dailyNarrativeStyle}
+                        onChange={(e: ChangeEvent<HTMLSelectElement>) => setDailyNarrativeStyle(e.target.value as DigestNarrativeStyle)}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="default">Balanced (default)</option>
+                        <option value="concise">Concise</option>
+                        <option value="professional">Professional</option>
+                        <option value="technical">Technical (more detail)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-300 mb-1">
+                        Optional note
+                      </label>
+                      <textarea
+                        value={dailyUserNote}
+                        onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setDailyUserNote(e.target.value)}
+                        maxLength={2000}
+                        rows={3}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-xs text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                        placeholder="E.g. Emphasize earnings, focus on risk, income needs in 3 months…"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-medium text-gray-300">
+                          Focus tickers
+                        </label>
+                        {dailyFocusTickers.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setDailyFocusTickers([])}
+                            className="text-[11px] text-blue-300 hover:text-blue-200 underline-offset-2 hover:underline"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-gray-500 mb-1">
+                        Optional subset of your subscribed tickers to emphasize. Leave empty to let the system pick.
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {subscriptionTickers.length === 0 && (
+                          <span className="text-[11px] text-gray-500">
+                            Subscribe to tickers on the dashboard to pick focus tickers here.
+                          </span>
+                        )}
+                        {subscriptionTickers.map((t) => {
+                          const selected = dailyFocusTickers.includes(t);
+                          return (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => {
+                                setDailyFocusTickers(
+                                  selected
+                                    ? dailyFocusTickers.filter((x) => x !== t)
+                                    : [...dailyFocusTickers, t],
+                                );
+                              }}
+                              className={`px-2 py-0.5 rounded-full border text-[11px] transition-colors ${
+                                selected
+                                  ? 'bg-blue-500/20 border-blue-400 text-blue-100'
+                                  : 'bg-gray-900 border-gray-700 text-gray-200 hover:border-blue-400 hover:text-blue-100'
+                              }`}
+                            >
+                              {t}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => saveSchedule('daily_digest')}
+                    disabled={dailySaving}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
+                  >
+                    {dailySaving ? 'Saving…' : 'Save daily schedule'}
+                  </button>
+                  {dailySaveMessage && (
+                    <p className="mt-2 text-xs text-green-400">
+                      {dailySaveMessage}
+                    </p>
+                  )}
+                </div>
+
+                {/* Weekly schedule */}
+                <div className="border border-gray-700 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">Weekly brief</h3>
+                      <p className="text-xs text-gray-400">
+                        Get a recap brief for the past week on the selected weekday and time.
+                      </p>
+                    </div>
+                    <label className="inline-flex items-center gap-2 cursor-pointer">
+                      <span className="text-xs text-gray-400">Enabled</span>
+                      <input
+                        type="checkbox"
+                        checked={weeklyEnabled}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setWeeklyEnabled(e.target.checked)}
+                        className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
+                      />
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-300 mb-1">
+                        Weekday
+                      </label>
+                      <select
+                        value={weeklyDayOfWeek}
+                        onChange={(e: ChangeEvent<HTMLSelectElement>) => setWeeklyDayOfWeek(Number(e.target.value) || 0)}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        {weekDays.map((label, idx) => (
+                          <option key={label} value={idx}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-300 mb-1">
+                        Time of day
+                      </label>
+                      <input
+                        type="time"
+                        value={weeklyTime}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setWeeklyTime(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-300 mb-1">
+                        Timezone
+                      </label>
+                      <input
+                        type="text"
+                        value={weeklyTimezone}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setWeeklyTimezone(e.target.value)}
+                        placeholder="e.g. Europe/Athens"
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-300 mb-1">
+                        Brief style
+                      </label>
+                      <select
+                        value={weeklyNarrativeStyle}
+                        onChange={(e: ChangeEvent<HTMLSelectElement>) => setWeeklyNarrativeStyle(e.target.value as DigestNarrativeStyle)}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="default">Balanced (default)</option>
+                        <option value="concise">Concise</option>
+                        <option value="professional">Professional</option>
+                        <option value="technical">Technical (more detail)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-300 mb-1">
+                        Optional note
+                      </label>
+                      <textarea
+                        value={weeklyUserNote}
+                        onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setWeeklyUserNote(e.target.value)}
+                        maxLength={2000}
+                        rows={3}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-xs text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                        placeholder="E.g. Weekly recap with focus on portfolio risk, macro narratives…"
+                      />
+                    </div>
+                  </div>
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-medium text-gray-300">
+                        Focus tickers
+                      </label>
+                      {weeklyFocusTickers.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setWeeklyFocusTickers([])}
+                          className="text-[11px] text-blue-300 hover:text-blue-200 underline-offset-2 hover:underline"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-gray-500 mb-1">
+                      Optional subset of your subscribed tickers to emphasize in weekly briefs.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {subscriptionTickers.length === 0 && (
+                        <span className="text-[11px] text-gray-500">
+                          Subscribe to tickers on the dashboard to pick focus tickers here.
+                        </span>
+                      )}
+                      {subscriptionTickers.map((t) => {
+                        const selected = weeklyFocusTickers.includes(t);
+                        return (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => {
+                              setWeeklyFocusTickers(
+                                selected
+                                  ? weeklyFocusTickers.filter((x) => x !== t)
+                                  : [...weeklyFocusTickers, t],
+                              );
+                            }}
+                            className={`px-2 py-0.5 rounded-full border text-[11px] transition-colors ${
+                              selected
+                                ? 'bg-blue-500/20 border-blue-400 text-blue-100'
+                                : 'bg-gray-900 border-gray-700 text-gray-200 hover:border-blue-400 hover:text-blue-100'
+                            }`}
+                          >
+                            {t}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => saveSchedule('weekly_digest')}
+                    disabled={weeklySaving}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
+                  >
+                    {weeklySaving ? 'Saving…' : 'Save weekly schedule'}
+                  </button>
+                  {weeklySaveMessage && (
+                    <p className="mt-2 text-xs text-green-400">
+                      {weeklySaveMessage}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </section>
+        </>
+      );
+    }
+
     return null;
   };
 
@@ -528,6 +1145,19 @@ export default function ProfilePage() {
             }`}
           >
             Account
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('brief-schedule');
+              navigate('/profile#brief-schedule', { replace: true });
+            }}
+            className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${
+              activeTab === 'brief-schedule'
+                ? 'text-blue-400 border-blue-400'
+                : 'text-gray-400 border-transparent hover:text-white hover:border-gray-600'
+            }`}
+          >
+            Brief schedule
           </button>
         </div>
 

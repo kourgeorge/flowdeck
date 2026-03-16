@@ -32,6 +32,7 @@ from routers.api_keys import router as api_keys_router
 from routers.tickers import router as tickers_router
 from routers.me import router as me_router
 from routers.digest import router as digest_router
+from routers.schedule import router as schedule_router
 from routers.public import router as public_router
 from routers.share import router as share_router
 from data_layer import init_data_gateway
@@ -188,6 +189,7 @@ app.include_router(analyses_router)
 app.include_router(analyses_ws_router)
 app.include_router(me_router)
 app.include_router(digest_router)
+app.include_router(schedule_router)
 app.include_router(public_router)
 app.include_router(share_router)
 app.include_router(admin_router)

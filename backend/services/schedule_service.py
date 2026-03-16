@@ -51,10 +51,8 @@ def upsert_user_schedule(
     schedule_type: str,
     *,
     enabled: Optional[bool] = None,
-    time_window: Optional[str] = None,
-    time_of_day: Optional[str] = None,
+    cron_expression: Optional[str] = None,
     timezone_name: Optional[str] = None,
-    weekday: Optional[int] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> UserSchedule:
     """
@@ -74,11 +72,9 @@ def upsert_user_schedule(
 
     if enabled is not None:
         schedule.enabled = enabled
-    # Only one of time_of_day / time_window is expected to be actively used, but we don't enforce here.
-    schedule.time_window = time_window
-    schedule.time_of_day = time_of_day
+    if cron_expression is not None:
+        schedule.cron_expression = cron_expression
     schedule.timezone = timezone_name
-    schedule.weekday = weekday
     if metadata is not None:
         schedule.metadata_json = json.dumps(metadata)
     if is_new:

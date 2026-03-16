@@ -837,6 +837,40 @@ export interface DigestListForDateResponse {
   briefs: DigestBriefItem[];
 }
 
+export interface DigestScheduleMetadata {
+  user_note?: string | null;
+  narrative_style?: string | null;
+  user_focus_tickers?: string[] | null;
+}
+
+export type DigestScheduleType = 'daily_digest' | 'weekly_digest';
+
+export interface DigestSchedule {
+  id: number;
+  schedule_type: DigestScheduleType;
+  enabled: boolean;
+  timezone: string | null;
+  hour: number;
+  minute: number;
+  day_of_week?: number | null;
+  metadata: DigestScheduleMetadata;
+  last_executed_at?: string | null;
+}
+
+export interface DigestSchedulesResponse {
+  daily?: DigestSchedule | null;
+  weekly?: DigestSchedule | null;
+}
+
+export interface DigestScheduleUpdatePayload {
+  enabled: boolean;
+  hour: number;
+  minute: number;
+  day_of_week?: number | null;
+  timezone?: string | null;
+  metadata?: DigestScheduleMetadata | null;
+}
+
 export const digestApi = {
   getDigest: async (params?: { date?: string; span?: DigestSpan; max_priority_tickers?: number; user_note?: string; narrative_style?: string; user_focus_tickers?: string[] }): Promise<DigestResponse> => {
     const token = getStoredToken();
@@ -898,6 +932,26 @@ export const digestApi = {
         headers: { Authorization: `Bearer ${token}` },
       },
     );
+  },
+};
+
+export const digestScheduleApi = {
+  getSchedules: async (): Promise<DigestSchedulesResponse> => {
+    const token = getStoredToken();
+    if (!token) throw new Error('Sign in to manage brief schedules');
+    const response = await api.get<DigestSchedulesResponse>('/api/digest/schedules', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data;
+  },
+
+  updateSchedule: async (scheduleType: DigestScheduleType, payload: DigestScheduleUpdatePayload): Promise<DigestSchedule> => {
+    const token = getStoredToken();
+    if (!token) throw new Error('Sign in to manage brief schedules');
+    const response = await api.put<DigestSchedule>(`/api/digest/schedules/${scheduleType}`, payload, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data;
   },
 };
 

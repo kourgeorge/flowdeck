@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from zoneinfo import ZoneInfo
@@ -27,63 +27,80 @@ def _get_default_timezone() -> str:
     return os.environ.get("DIGEST_DEFAULT_TIMEZONE", "UTC")
 
 
-def _parse_time_of_day(value: Optional[str]) -> Optional[time]:
-    if not value:
-        return None
-    try:
-        parts = value.split(":")
-        hour = int(parts[0])
-        minute = int(parts[1]) if len(parts) > 1 else 0
-        return time(hour=hour, minute=minute)
-    except Exception:
-        return None
+def _cron_field_matches(value: int, field: str) -> bool:
+    """
+    Minimal cron field matcher.
 
-
-def _is_within_window(now_local: datetime, schedule: UserSchedule) -> bool:
-    """Check if now_local lies within the schedule's configured time-of-day window."""
-    t_exact = _parse_time_of_day(schedule.time_of_day)
-    if t_exact is None:
-        # No specific time configured: allow anytime during the day.
+    Supports:
+    - "*" (any)
+    - "N" (single integer)
+    - "a,b,c" (list of integers)
+    """
+    field = (field or "").strip()
+    if field == "*" or not field:
         return True
-    # Allow a small ±10 minute tolerance so a 10–15 minute scheduler interval can catch it.
-    window_start = datetime.combine(now_local.date(), t_exact, tzinfo=now_local.tzinfo) - timedelta(minutes=10)
-    window_end = datetime.combine(now_local.date(), t_exact, tzinfo=now_local.tzinfo) + timedelta(minutes=10)
-    return window_start <= now_local <= window_end
+    parts = field.split(",")
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            if value == int(part):
+                return True
+        except ValueError:
+            continue
+    return False
 
 
-def _has_run_today(schedule: UserSchedule, now_local: datetime) -> bool:
-    if not schedule.last_executed_at:
+def _cron_matches(now_local: datetime, expr: str) -> bool:
+    """
+    Check whether a 5-field cron expression matches the given local datetime
+    at minute resolution: "min hour day month weekday".
+    """
+    expr = (expr or "").strip()
+    fields = expr.split()
+    if len(fields) != 5:
         return False
-    last_local = schedule.last_executed_at.astimezone(now_local.tzinfo)
-    return last_local.date() == now_local.date()
+    minute_f, hour_f, dom_f, month_f, dow_f = fields
+
+    minute = now_local.minute
+    hour = now_local.hour
+    day = now_local.day
+    month = now_local.month
+    # Python: Monday=0..Sunday=6, cron: Sunday=0 or 7. We accept 0-6 here for simplicity.
+    dow = now_local.weekday()
+
+    return (
+        _cron_field_matches(minute, minute_f)
+        and _cron_field_matches(hour, hour_f)
+        and _cron_field_matches(day, dom_f)
+        and _cron_field_matches(month, month_f)
+        and _cron_field_matches(dow, dow_f)
+    )
 
 
-def _has_run_this_week(schedule: UserSchedule, now_local: datetime) -> bool:
-    if not schedule.last_executed_at:
+def _should_run_now(now_utc: datetime, schedule: UserSchedule, default_tz: ZoneInfo) -> bool:
+    """Return True if the cron expression matches now and we haven't run in this minute yet."""
+    expr = (schedule.cron_expression or "").strip()
+    if not expr:
         return False
-    last_local = schedule.last_executed_at.astimezone(now_local.tzinfo)
-    # Same ISO week and year considered "this week".
-    return (last_local.isocalendar()[:2] == now_local.isocalendar()[:2])
 
+    tz_name = schedule.timezone or _get_default_timezone()
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:
+        tz = default_tz
 
-def _should_run_daily(now_utc: datetime, schedule: UserSchedule, tz: ZoneInfo) -> bool:
-    now_local = now_utc.astimezone(tz)
-    if _has_run_today(schedule, now_local):
-        return False
-    if not _is_within_window(now_local, schedule):
-        return False
-    return True
+    now_local = now_utc.astimezone(tz).replace(second=0, microsecond=0)
 
+    if not _cron_matches(now_local, expr):
+        return False
 
-def _should_run_weekly(now_utc: datetime, schedule: UserSchedule, tz: ZoneInfo) -> bool:
-    now_local = now_utc.astimezone(tz)
-    weekday = schedule.weekday
-    if weekday is not None and now_local.weekday() != int(weekday):
-        return False
-    if _has_run_this_week(schedule, now_local):
-        return False
-    if not _is_within_window(now_local, schedule):
-        return False
+    if schedule.last_executed_at:
+        last_local = schedule.last_executed_at.astimezone(tz).replace(second=0, microsecond=0)
+        if last_local == now_local:
+            return False
+
     return True
 
 
@@ -96,7 +113,14 @@ async def run_scheduled_jobs() -> None:
     - Updates last_executed_at for successfully executed schedules.
     """
     now_utc = datetime.now(timezone.utc)
-    default_tz = ZoneInfo(_get_default_timezone())
+    default_tz_name = _get_default_timezone()
+    default_tz = ZoneInfo(default_tz_name)
+
+    logger.info(
+        "Scheduled jobs tick at %s (default_tz=%s)",
+        now_utc.isoformat(),
+        default_tz_name,
+    )
 
     db = SessionLocal()
     try:
@@ -111,22 +135,25 @@ async def run_scheduled_jobs() -> None:
             .all()
         )
 
+        logger.info(
+            "Found %d active user schedules for digest processing",
+            len(schedules),
+        )
+
+        processed_count = 0
+
         for schedule in schedules:
             try:
+                if not _should_run_now(now_utc, schedule, default_tz):
+                    continue
+
                 tz_name = schedule.timezone or _get_default_timezone()
                 try:
                     tz = ZoneInfo(tz_name)
                 except Exception:
                     tz = default_tz
 
-                if schedule.schedule_type == "daily_digest":
-                    if not _should_run_daily(now_utc, schedule, tz):
-                        continue
-                    span_type = "daily"
-                else:
-                    if not _should_run_weekly(now_utc, schedule, tz):
-                        continue
-                    span_type = "weekly"
+                span_type = "daily" if schedule.schedule_type == "daily_digest" else "weekly"
 
                 user = db.query(User).filter(User.id == schedule.user_id).first()
                 if not user or not user.email:
@@ -166,6 +193,7 @@ async def run_scheduled_jobs() -> None:
                     if ok:
                         schedule.last_executed_at = now_utc
                         db.commit()
+                        processed_count += 1
                         logger.info(
                             "Scheduled digest sent: user_id=%s execution_id=%s span=%s",
                             user.id,
@@ -183,4 +211,10 @@ async def run_scheduled_jobs() -> None:
                 db.rollback()
     finally:
         db.close()
+
+    logger.info(
+        "Scheduled jobs tick complete at %s; digests sent: %d",
+        datetime.now(timezone.utc).isoformat(),
+        processed_count,
+    )
 

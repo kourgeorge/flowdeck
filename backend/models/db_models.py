@@ -202,15 +202,14 @@ class UserSchedule(Base):
     # Whether this schedule is active. Disabled rows are ignored by the scheduler.
     enabled = Column(Boolean, nullable=False, default=True)
 
-    # Precise time of day in the local timezone ("HH:MM" 24h format).
-    # When null, the job can run at any time that other constraints allow.
-    time_of_day = Column(String(8), nullable=True)
+    # Cron expression in standard 5-field format: "min hour day month weekday"
+    # Examples:
+    # - "0 8 * * *"  -> every day at 08:00
+    # - "0 18 * * 1" -> every Monday at 18:00
+    cron_expression = Column(String(64), nullable=False)
 
     # IANA timezone name, e.g. "Europe/Athens". When null, backend falls back to a default (e.g. UTC).
     timezone = Column(String(64), nullable=True)
-
-    # Optional local weekday for weekly-style schedules: 0=Monday .. 6=Sunday (Python's weekday()).
-    weekday = Column(Integer, nullable=True)
 
     # Arbitrary JSON payload for schedule-type-specific options (e.g. digest narrative_style, user_note, focus tickers).
     metadata_json = Column(Text, nullable=True)
