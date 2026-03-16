@@ -79,16 +79,18 @@ export default function TickerListView({ widgets, tickerToName, scrollRef, onScr
       >
         <table className="table-fixed text-left w-full min-w-[960px]" style={{ tableLayout: 'fixed' }}>
         <colgroup>
+          <col className="w-[8%]" />
           <col className="w-[7%]" />
-          <col className="w-[16%]" />
+          <col className="w-[12%]" />
           <col className="w-[8%]" />
           <col className="w-[8%]" />
           <col className="w-[7%]" />
-          <col className="w-[46%]" />
+          <col className="w-[42%]" />
           <col className="w-[8%]" />
         </colgroup>
         <thead className="sticky top-0 z-10 bg-gray-800 shadow-[0_1px_0_0_rgba(55,65,81,1)]">
           <tr className="border-b border-gray-700 text-gray-400 text-sm">
+            <th className="py-3 px-2 font-semibold"></th>
             <th className="py-3 px-2 font-semibold whitespace-nowrap">Ticker</th>
             <th className="py-3 px-2 font-semibold truncate" title="Name">Name</th>
             <th className="py-3 px-2 font-semibold text-right whitespace-nowrap">Price</th>
@@ -110,6 +112,13 @@ export default function TickerListView({ widgets, tickerToName, scrollRef, onScr
                 onClick={() => navigate(`/tickers/${widget.ticker}`)}
                 className="border-b border-gray-700/80 hover:bg-gray-700/50 cursor-pointer transition-colors"
               >
+                <td className="py-3 px-2">
+                  {scoreEntries.length > 0 ? (
+                    <div className="flex items-center justify-center">
+                      <AspectSpiderChart scoreEntries={scoreEntries} size={80} />
+                    </div>
+                  ) : null}
+                </td>
                 <td className="py-3 px-2 font-bold text-white whitespace-nowrap truncate" title={widget.ticker}>{widget.ticker}</td>
                 <td className="py-3 px-2 text-gray-300 min-w-0 truncate" title={name}>
                   {name}
@@ -125,10 +134,8 @@ export default function TickerListView({ widgets, tickerToName, scrollRef, onScr
                 <td className="py-3 px-2 min-w-0 truncate text-center">{getRecommendationBadge(widget.recommendation)}</td>
                 <td className="py-3 px-2 min-w-0">
                   {scoreEntries.length > 0 ? (
-                    <div className="flex items-center gap-3 min-w-0">
-                      <AspectSpiderChart scoreEntries={scoreEntries} size={80} />
-                      <div className="flex flex-wrap gap-2 min-w-0">
-                        {scoreEntries.map(([reportType, data]) => {
+                    <div className="flex flex-wrap gap-2 min-w-0">
+                      {scoreEntries.map(([reportType, data]) => {
                         const label = formatReportKey(reportType);
                         const value = data.score != null ? `${data.score}/10` : '—';
                         return (
@@ -143,7 +150,6 @@ export default function TickerListView({ widgets, tickerToName, scrollRef, onScr
                           </div>
                         );
                       })}
-                      </div>
                     </div>
                   ) : (
                     <span className="text-gray-500 text-sm">No scores</span>
