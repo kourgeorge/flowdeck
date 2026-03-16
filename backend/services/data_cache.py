@@ -227,11 +227,13 @@ class _SQLiteTTLStore:
             conn.commit()
 
     def get_running_analysis_run_id_for_ticker(self, type_name: str, ticker: str) -> Optional[int]:
-        """Return analysis_run_id for a running analysis of this ticker, or None."""
+        """Return analysis_run_id for a running analysis of this ticker, or None.
+        When multiple runs exist for the same ticker, returns the latest (highest run_id) so the result is deterministic on refresh.
+        """
         with self._lock:
             conn = self._connection()
             rows = conn.execute(
-                f"SELECT run_id, payload FROM {self._ANALYSIS_STATUS_TABLE} WHERE type = ?",
+                f"SELECT run_id, payload FROM {self._ANALYSIS_STATUS_TABLE} WHERE type = ? ORDER BY run_id DESC",
                 (type_name,),
             ).fetchall()
             ticker_upper = ticker.upper()
