@@ -114,7 +114,7 @@ export default function DailyDigestRunPanel({
         <button
           type="button"
           onClick={() => onDigestInputExpandedChange(!digestInputExpanded)}
-          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-[11px] font-medium text-gray-300 hover:text-white hover:bg-gray-800/60 transition-colors"
+          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-800/60 transition-colors"
         >
           <span>Brief options</span>
           <svg
@@ -166,7 +166,7 @@ export default function DailyDigestRunPanel({
             </div>
 
             <div className="space-y-1">
-              <label htmlFor="digest-user-note" className="block text-[11px] font-medium text-gray-300">
+              <label htmlFor="digest-user-note" className="block text-sm font-medium text-gray-300">
                 Optional note for today&apos;s brief
               </label>
               <textarea
@@ -178,7 +178,7 @@ export default function DailyDigestRunPanel({
                 placeholder="E.g. Focus on earnings next week, I'm worried about tech exposure, cash needs in 3 months…"
                 className="w-full rounded-md border border-gray-700 bg-gray-950/60 px-2.5 py-1.5 text-xs text-gray-100 placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
               />
-              <p className="text-[10px] text-gray-500">
+              <p className="text-sm text-gray-500">
                 Style and note apply only to the next run and are considered when writing the narrative and
                 &quot;What to watch&quot;.
               </p>
@@ -186,20 +186,20 @@ export default function DailyDigestRunPanel({
 
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <label className="block text-[11px] font-medium text-gray-300">
+                <label className="block text-sm font-medium text-gray-300">
                   Focus tickers (optional)
                 </label>
                 {selectedFocusTickers.length > 0 && (
                   <button
                     type="button"
                     onClick={() => onSelectedFocusTickersChange([])}
-                    className="text-[10px] text-emerald-300 hover:text-emerald-200 underline-offset-2 hover:underline"
+                    className="text-xs text-emerald-300 hover:text-emerald-200 underline-offset-2 hover:underline"
                   >
                     Clear
                   </button>
                 )}
               </div>
-              <p className="text-[10px] text-gray-500 mb-0.5">
+              <p className="text-xs text-gray-500 mb-0.5">
                 Choose a subset of your portfolio to highlight. Leave empty to let the system pick based on
                 moves and news.
               </p>
@@ -215,7 +215,7 @@ export default function DailyDigestRunPanel({
                           selected ? selectedFocusTickers.filter((x) => x !== t) : [...selectedFocusTickers, t],
                         );
                       }}
-                      className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] transition-colors ${
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs transition-colors ${
                         selected
                           ? 'bg-emerald-900/50 border-emerald-500 text-emerald-100'
                           : 'bg-gray-900 border-gray-700 text-gray-300 hover:border-emerald-500 hover:text-emerald-100'
@@ -226,7 +226,7 @@ export default function DailyDigestRunPanel({
                   );
                 })}
                 {subscribedTickers.length === 0 && (
-                  <span className="text-[10px] text-gray-500">
+                  <span className="text-xs text-gray-500">
                     Subscribe to tickers on your dashboard to choose a manual focus set.
                   </span>
                 )}
