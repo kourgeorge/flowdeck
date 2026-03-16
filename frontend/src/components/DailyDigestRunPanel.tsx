@@ -272,9 +272,17 @@ export default function DailyDigestRunPanel({
             </>
           )}
         </button>
-        <p className="mt-1 text-[11px] text-slate-400">
-          Each brief (daily or weekly) costs <span className="font-semibold text-emerald-200">20 DECK tokens</span>.
-        </p>
+        <div className="mt-1 space-y-0.5">
+          <p className="text-[11px] text-slate-400">
+            Each brief (daily or weekly) costs <span className="font-semibold text-emerald-200">20 DECK tokens</span>.
+          </p>
+          <p className="text-[11px] text-emerald-300/80 flex items-center gap-1">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            <span>An email will be sent when your brief is ready</span>
+          </p>
+        </div>
       </div>
     </div>
   );

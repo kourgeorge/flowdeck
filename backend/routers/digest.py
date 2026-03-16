@@ -122,6 +122,7 @@ async def get_digest(
             user_note=user_note,
             narrative_style=narrative_style,
             user_focus_tickers=user_focus_tickers,
+            user_email=current_user.email,
         )
     except RuntimeError as e:
         raise HTTPException(

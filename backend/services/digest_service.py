@@ -68,6 +68,7 @@ async def run_and_store_digest(
     user_note: Optional[str] = None,
     narrative_style: Optional[str] = None,
     user_focus_tickers: Optional[list[str]] = None,
+    user_email: Optional[str] = None,
 ) -> Tuple["DigestResultProtocol", dict, int, str]:
     """
     Shared helper used by both the HTTP API and the scheduler.
@@ -75,6 +76,7 @@ async def run_and_store_digest(
     - Deducts tokens and creates an Execution.
     - Runs the digest workflow.
     - Persists the Report with metadata.
+    - Sends email notification to user if user_email is provided.
     - Returns (result, metadata, execution_id, slot).
     """
     from ai_engine.briefing_agent import run_digest  # imported lazily
@@ -150,6 +152,15 @@ async def run_and_store_digest(
         content=getattr(result, "narrative", ""),
         metadata=metadata,
     )
+
+    # Send email notification to user if email is provided (best-effort; do not fail digest)
+    if user_email:
+        try:
+            from services.email_service import send_daily_digest_email_to_user
+            send_daily_digest_email_to_user(execution_id, user_email)
+            logger.info("Brief email sent to user_id=%s execution_id=%s", user_id, execution_id)
+        except Exception as e:
+            logger.warning("Failed to send brief email to user_id=%s execution_id=%s: %s", user_id, execution_id, e)
 
     return result, metadata, execution_id, slot
 

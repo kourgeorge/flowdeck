@@ -382,6 +382,50 @@ const CONTRACT_PHASES: ContractPhase[] = [
   },
 ];
 
+// Briefing Agent workflow stages
+const BRIEFING_STAGES = [
+  {
+    id: 'context-builder',
+    title: 'Context Builder',
+    description: 'Algorithmic stage that loads portfolio, fetches market data, ranks tickers by attention score, and builds comprehensive context.',
+    inputs: ['user_id', 'digest_date', 'portfolio_tickers', 'span_type (daily/weekly/custom)'],
+    outputs: ['DigestContext with quotes, returns, news, fundamentals, platform reports, market movers, sector/peer data'],
+    isAlgorithmic: true,
+  },
+  {
+    id: 'focus-selector',
+    title: 'Focus Selector Agent',
+    description: 'LLM agent that determines which tickers to focus on based on attention scores, user preferences, and portfolio context.',
+    inputs: ['portfolio_tickers', 'attention_scores', 'user_note', 'user_focus_tickers'],
+    outputs: ['focus_tickers (ordered list of priority tickers)'],
+    isAlgorithmic: false,
+  },
+  {
+    id: 'ticker-interpreter',
+    title: 'Ticker Interpreter Agent',
+    description: 'LLM agent that analyzes each priority ticker to explain what happened, identify the main driver, and compare to platform thesis.',
+    inputs: ['ticker', 'quote', 'returns', 'news', 'fundamentals', 'platform_reports', 'sector/peer context'],
+    outputs: ['TickerInterpretation (explanation, driver classification, thesis comparison)'],
+    isAlgorithmic: false,
+  },
+  {
+    id: 'market-interpreter',
+    title: 'Market Interpreter Agent',
+    description: 'LLM agent that synthesizes market-wide context and explains relevance to the portfolio.',
+    inputs: ['market_movers', 'global_news', 'ticker_interpretations', 'portfolio_tickers'],
+    outputs: ['MarketInterpretation (market summary, portfolio relevance)'],
+    isAlgorithmic: false,
+  },
+  {
+    id: 'narrative-writer',
+    title: 'Narrative Writer Agent',
+    description: 'LLM agent that composes the final brief narrative with market highlights, key signals, what to watch, and risks/opportunities.',
+    inputs: ['ticker_interpretations', 'market_interpretation', 'user_note', 'narrative_style', 'resources'],
+    outputs: ['narrative (structured or basic format)', 'what_to_watch', 'references'],
+    isAlgorithmic: false,
+  },
+];
+
 const FINAL_LOGGED_OUTPUT_SHAPE = {
   company_of_interest: '<string>',
   trade_date: '<YYYY-MM-DD>',
@@ -448,7 +492,7 @@ function FlowNode({
 }
 
 function FlowArrow() {
-  return <span className="text-xs text-gray-400 px-1">-&gt;</span>;
+  return <span className="text-xs text-gray-400 px-1">→</span>;
 }
 
 function AgentContractCard({ agent }: { agent: AgentContract }) {
@@ -495,14 +539,145 @@ export default function ArchitecturePage() {
     <div className="min-h-screen px-4 py-6 sm:p-6 lg:p-8">
       <div className="text-gray-300">
         <section className="rounded-2xl border border-gray-700 bg-gradient-to-b from-gray-800/80 to-gray-900/90 p-6 md:p-8">
-          <p className="text-xs uppercase tracking-[0.2em] text-blue-300">TradingAgents Graph</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-blue-300">AI Architecture</p>
           <h1 className="mt-2 text-3xl md:text-4xl font-bold text-white">Architecture Blueprint</h1>
           <p className="mt-3 text-sm text-gray-300 max-w-3xl">
-            This page maps the exact workflow implemented by the graph. It shows every analyst and manager,
-            what each step consumes, and the precise output shape each step emits into shared state.
+            FlowDeck uses two complementary AI systems: the <strong>TradingAgents Graph</strong> for deep stock analysis 
+            and the <strong>Briefing Agent</strong> for personalized daily portfolio briefs.
           </p>
-          <p className="mt-2 text-xs text-gray-400">
-            Runtime default analyst selection in backend: market -&gt; news -&gt; fundamentals -&gt; technical -&gt; sec (US only). Social analyst is available but not selected by default.
+        </section>
+
+        {/* Briefing Agent Section */}
+        <section className="mt-6 rounded-2xl border border-gray-700 bg-gray-900/70 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="rounded-lg bg-purple-500/20 p-2">
+              <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-2xl font-semibold text-white">Briefing Agent</h2>
+              <p className="text-sm text-gray-400">User Daily Brief Pipeline</p>
+            </div>
+          </div>
+
+          <p className="text-sm text-gray-300 mb-4">
+            The Briefing Agent generates personalized daily (or weekly/custom) portfolio briefs by combining algorithmic 
+            context building with specialized LLM agents. It analyzes your subscribed stocks, identifies priority tickers 
+            based on attention scores, and produces a concise narrative with market context and actionable insights.
+          </p>
+
+          <div className="mt-5 space-y-4">
+            <h3 className="text-lg font-semibold text-white">Pipeline Stages</h3>
+            
+            {BRIEFING_STAGES.map((stage, idx) => (
+              <div 
+                key={stage.id} 
+                className={`rounded-xl border p-4 ${
+                  stage.isAlgorithmic 
+                    ? 'border-sky-500/40 bg-sky-500/10' 
+                    : 'border-purple-500/40 bg-purple-500/10'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                    stage.isAlgorithmic ? 'bg-sky-500/20 text-sky-300' : 'bg-purple-500/20 text-purple-300'
+                  }`}>
+                    {idx + 1}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-base font-semibold text-white">{stage.title}</h4>
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        stage.isAlgorithmic 
+                          ? 'bg-sky-500/20 text-sky-300' 
+                          : 'bg-purple-500/20 text-purple-300'
+                      }`}>
+                        {stage.isAlgorithmic ? 'Algorithmic' : 'LLM Agent'}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-300 mt-2">{stage.description}</p>
+                    
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-gray-400 mb-1">Inputs</p>
+                        <ul className="text-xs text-gray-200 space-y-1">
+                          {stage.inputs.map((input, i) => (
+                            <li key={i} className="flex items-start gap-1">
+                              <span className="text-gray-500">•</span>
+                              <span>{input}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-gray-400 mb-1">Outputs</p>
+                        <ul className="text-xs text-gray-200 space-y-1">
+                          {stage.outputs.map((output, i) => (
+                            <li key={i} className="flex items-start gap-1">
+                              <span className="text-gray-500">•</span>
+                              <span>{output}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-6 rounded-lg border border-gray-700 bg-gray-950/80 p-4">
+            <h4 className="text-sm font-semibold text-white mb-2">Key Features</h4>
+            <ul className="text-xs text-gray-300 space-y-2">
+              <li className="flex items-start gap-2">
+                <span className="text-purple-400 mt-0.5">✓</span>
+                <span><strong>Attention Scoring:</strong> Ranks tickers by absolute returns, abnormal moves, and recent news</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-purple-400 mt-0.5">✓</span>
+                <span><strong>Multi-Span Support:</strong> Daily, weekly, or custom date ranges</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-purple-400 mt-0.5">✓</span>
+                <span><strong>User Preferences:</strong> Optional user notes, focus tickers, and narrative style</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-purple-400 mt-0.5">✓</span>
+                <span><strong>Platform Integration:</strong> References FlowDeck reports and provides shareable URLs</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-purple-400 mt-0.5">✓</span>
+                <span><strong>Structured References:</strong> Tracks and cites news articles, feeds, and web sources</span>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        {/* TradingAgents Graph Section */}
+        <section className="mt-6 rounded-2xl border border-gray-700 bg-gray-900/70 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="rounded-lg bg-blue-500/20 p-2">
+              <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-2xl font-semibold text-white">TradingAgents Graph</h2>
+              <p className="text-sm text-gray-400">Deep Stock Analysis Pipeline</p>
+            </div>
+          </div>
+
+          <p className="text-sm text-gray-300 mb-4">
+            The TradingAgents Graph performs comprehensive stock analysis through a multi-phase debate system. 
+            Specialized analysts gather evidence, bull/bear researchers debate investment merits, and risk analysts 
+            evaluate tradeoffs before producing final recommendations.
+          </p>
+
+          <p className="text-xs text-gray-400 mb-4">
+            Runtime default analyst selection: market → news → fundamentals → technical → sec (US only). 
+            Social analyst is available but not selected by default.
           </p>
         </section>
 
@@ -610,3 +785,5 @@ export default function ArchitecturePage() {
     </div>
   );
 }
+
+// Made with Bob

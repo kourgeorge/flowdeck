@@ -1011,6 +1011,12 @@ export default function DashboardPage() {
                       </div>
                       <p className="mt-5 text-base font-semibold text-emerald-50">Generating your brief</p>
                       <p className="mt-1 text-sm text-slate-400">Analyzing market and portfolio…</p>
+                      <p className="mt-2 text-xs text-emerald-300/70 flex items-center justify-center gap-1.5">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        <span>An email will be sent when ready</span>
+                      </p>
                       <div className="mt-6 w-48 h-1 rounded-full bg-slate-800 overflow-hidden">
                         <div className="h-full w-1/2 rounded-full bg-emerald-400 [animation:briefShimmer_1.8s_ease-in-out_infinite]" />
                       </div>
