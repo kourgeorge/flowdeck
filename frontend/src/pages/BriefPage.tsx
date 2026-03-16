@@ -50,6 +50,7 @@ function BriefIcon() {
 export default function BriefPage() {
   const { user } = useAuth();
   const { widgets } = useDashboardData({ enableRecentAnalyzed: false });
+  const canViewRawDigest = user?.is_admin === true;
 
   const [digest, setDigest] = useState<DigestResponse | null>(null);
   const [digestLoading, setDigestLoading] = useState(false);
@@ -734,17 +735,19 @@ export default function BriefPage() {
                               )}
                             </button>
                           )}
-                          <button
-                            type="button"
-                            onClick={() => setShowRawDigest((v) => !v)}
-                            className="inline-flex items-center justify-center p-1.5 rounded border border-gray-500 text-gray-300 hover:bg-gray-800/80"
-                            title={showRawDigest ? 'Hide raw' : 'Show raw'}
-                            aria-label={showRawDigest ? 'Hide raw' : 'Show raw'}
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
-                            </svg>
-                          </button>
+                          {canViewRawDigest && (
+                            <button
+                              type="button"
+                              onClick={() => setShowRawDigest((v) => !v)}
+                              className="inline-flex items-center justify-center p-1.5 rounded border border-gray-500 text-gray-300 hover:bg-gray-800/80"
+                              title={showRawDigest ? 'Hide raw' : 'Show raw'}
+                              aria-label={showRawDigest ? 'Hide raw' : 'Show raw'}
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+                              </svg>
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={handleDeleteBrief}
@@ -775,7 +778,7 @@ export default function BriefPage() {
                           )}
                         </div>
                       )}
-                      {showRawDigest && (
+                      {canViewRawDigest && showRawDigest && (
                         <div className="mt-2 rounded border border-gray-700 bg-black/50 p-2">
                           <pre className="text-xs whitespace-pre-wrap text-gray-200">
                             {formatBriefRaw(selectedBrief)}
@@ -902,17 +905,19 @@ export default function BriefPage() {
                               )}
                             </button>
                           )}
-                          <button
-                            type="button"
-                            onClick={() => setShowRawDigest((v) => !v)}
-                            className="inline-flex items-center justify-center p-1.5 rounded border border-gray-500 text-gray-300 hover:bg-gray-800/80"
-                            title={showRawDigest ? 'Hide raw' : 'Show raw'}
-                            aria-label={showRawDigest ? 'Hide raw' : 'Show raw'}
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
-                            </svg>
-                          </button>
+                          {canViewRawDigest && (
+                            <button
+                              type="button"
+                              onClick={() => setShowRawDigest((v) => !v)}
+                              className="inline-flex items-center justify-center p-1.5 rounded border border-gray-500 text-gray-300 hover:bg-gray-800/80"
+                              title={showRawDigest ? 'Hide raw' : 'Show raw'}
+                              aria-label={showRawDigest ? 'Hide raw' : 'Show raw'}
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+                              </svg>
+                            </button>
+                          )}
                         </div>
                       </div>
                       {renderBriefContentCard(digest)}
@@ -930,7 +935,7 @@ export default function BriefPage() {
                           )}
                         </div>
                       )}
-                      {showRawDigest && (
+                      {canViewRawDigest && showRawDigest && (
                         <div className="mt-2 rounded border border-gray-700 bg-black/50 p-2">
                           <pre className="text-xs whitespace-pre-wrap text-gray-200">
                             {formatBriefRaw(digest)}
