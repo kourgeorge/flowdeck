@@ -35,7 +35,7 @@ function narrativeForDisplay(narrative: string): string {
 const briefMarkdownComponents = {
     h2: ({ children, ...props }: ComponentProps<'h2'>) => (
         <h2
-          className="text-[13px] font-semibold text-emerald-200 mb-1 mt-4 first:mt-0 tracking-wide"
+          className="text-sm font-semibold text-emerald-200 mb-1 mt-4 first:mt-0 tracking-wide"
           {...props}
         >
           {children}
@@ -353,16 +353,22 @@ export default function DashboardPage() {
     return (
       <div className="mt-3 pt-3 border-t border-slate-800 space-y-4 text-base">
         <div>
-          <div className="text-xs font-mono text-emerald-300 uppercase tracking-[0.18em] mb-1">
+          <div className="text-sm font-mono text-emerald-300 uppercase tracking-[0.18em] mb-1">
             {overviewLabel}
           </div>
-          <div className="prose prose-invert prose-sm max-w-none text-gray-100">
+          <div
+            className="prose prose-invert prose-sm max-w-none text-gray-100 text-sm"
+            style={{ fontFamily: 'Menlo, Monaco, "Courier New", monospace' }}
+          >
             {briefHasStructuredSections(brief.narrative) ? (
               <ReactMarkdown components={briefMarkdownComponents}>
                 {narrativeForDisplay(brief.narrative)}
               </ReactMarkdown>
             ) : (
-              <p className="whitespace-pre-wrap leading-relaxed text-sm">
+              <p
+                className="whitespace-pre-wrap leading-relaxed text-sm"
+                style={{ fontFamily: 'Menlo, Monaco, "Courier New", monospace' }}
+              >
                 {brief.narrative}
               </p>
             )}
@@ -372,11 +378,14 @@ export default function DashboardPage() {
         {brief.what_to_watch && !briefHasStructuredSections(brief.narrative) && (
           <div className="pt-3 border-t border-slate-700/80 space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-mono text-slate-300 uppercase tracking-[0.18em]">
+              <span className="text-sm font-mono text-slate-300 uppercase tracking-[0.18em]">
                 What to watch next
               </span>
             </div>
-            <p className="text-sm text-slate-100 whitespace-pre-wrap leading-relaxed">
+            <p
+              className="text-sm text-slate-100 whitespace-pre-wrap leading-relaxed"
+              style={{ fontFamily: 'Menlo, Monaco, "Courier New", monospace' }}
+            >
               {brief.what_to_watch}
             </p>
           </div>
@@ -385,10 +394,10 @@ export default function DashboardPage() {
         {focusTickers.length > 0 && (
           <div className="pt-3 border-t border-slate-700/80 space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-mono font-semibold text-white uppercase tracking-[0.18em]">
+              <span className="text-sm font-mono font-semibold text-white uppercase tracking-[0.18em]">
                 Focus tickers
               </span>
-              <span className="text-xs text-emerald-300 font-mono">
+              <span className="text-sm text-emerald-300 font-mono">
                 Style: {styleLabel} · Span: {spanLabel}
               </span>
             </div>
@@ -415,7 +424,7 @@ export default function DashboardPage() {
                     <span className="mr-3 flex items-center gap-2">
                       <span>{t}</span>
                       {typeof price === 'number' && (
-                        <span className="text-xs text-slate-400">${price.toFixed(2)}</span>
+                        <span className="text-sm text-slate-400">${price.toFixed(2)}</span>
                       )}
                     </span>
                     {changeStr && <span className={changeClass}>{changeStr}</span>}
@@ -773,7 +782,7 @@ export default function DashboardPage() {
 
       {/* ── Digest Tab: calendar view — left: current month + generation panel; right: brief ── */}
       {dashboardTab === 'digest' && (
-        <div className="flex-1 min-h-0 overflow-y-auto bg-[#020617]">
+      <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="px-4 py-6 sm:p-6 lg:p-8">
             <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
               <div className="flex flex-col lg:flex-row gap-6">
@@ -1017,7 +1026,7 @@ export default function DashboardPage() {
                         <div className="space-y-4">
                           <div className="flex items-center justify-between gap-2 flex-nowrap">
                             <span className="text-xs sm:text-sm text-gray-500 whitespace-nowrap shrink-0">
-                              <span className="font-mono text-[11px] text-emerald-300 uppercase tracking-wider">
+                              <span className="font-mono text-sm text-emerald-300 uppercase tracking-wider">
                                 {selectedBrief.span_label && selectedBrief.span_label !== 'Daily'
                                   ? selectedBrief.span_label
                                   : 'Daily'}
@@ -1192,7 +1201,7 @@ export default function DashboardPage() {
                     <div className="space-y-4">
                       <div className="flex items-center justify-between gap-2 flex-nowrap">
                         <span className="text-xs sm:text-sm text-gray-500 whitespace-nowrap shrink-0">
-                          <span className="font-mono text-[11px] text-emerald-300 uppercase tracking-wider">
+                          <span className="font-mono text-sm text-emerald-300 uppercase tracking-wider">
                             {digest.span_label && digest.span_label !== 'Daily' ? digest.span_label : 'Daily'}
                           </span>
                           {digest.digest_date && (
