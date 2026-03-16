@@ -713,6 +713,29 @@ class AnalysisService:
                 # Delete status file after error (analysis is done)
                 delete_analysis_status("ticker", analysis_run_id)
     
+    # Fixed pipeline order for deriving current_agent when missing (deterministic on refresh).
+    _AGENT_PIPELINE_ORDER = (
+        "Market Analyst", "Social Analyst", "News Analyst", "Fundamentals Analyst",
+        "Technical Analyst", "SEC Analyst",
+        "Bull Researcher", "Bear Researcher", "Research Manager",
+        "Trader",
+        "Risky Analyst", "Safe Analyst", "Neutral Analyst", "Portfolio Manager",
+    )
+
     def get_analysis_status(self, analysis_run_id: int) -> Optional[Dict]:
-        """Get current status of a running analysis from shared cache (works across workers)."""
-        return get_analysis_status_from_cache("ticker", analysis_run_id)
+        """Get current status of a running analysis from shared cache (works across workers).
+        If current_agent is missing but some agent is in_progress, set current_agent to the
+        first in pipeline order so the UI shows a deterministic value on refresh.
+        """
+        status = get_analysis_status_from_cache("ticker", analysis_run_id)
+        if not status:
+            return None
+        if status.get("current_agent"):
+            return status
+        agent_statuses = status.get("agent_statuses") or {}
+        for name in self._AGENT_PIPELINE_ORDER:
+            if agent_statuses.get(name) == "in_progress":
+                status = dict(status)
+                status["current_agent"] = name
+                break
+        return status
