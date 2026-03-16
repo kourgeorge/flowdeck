@@ -10,8 +10,6 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Optional
-
 from zoneinfo import ZoneInfo
 
 from database import SessionLocal
@@ -80,9 +78,29 @@ def _cron_matches(now_local: datetime, expr: str) -> bool:
 
 
 def _should_run_now(now_utc: datetime, schedule: UserSchedule, default_tz: ZoneInfo) -> bool:
-    """Return True if the cron expression matches now and we haven't run in this minute yet."""
+    """
+    Return True if this schedule should run on this tick.
+
+    Semantics:
+    - Daily digests: run at/after the configured local time once per local day.
+    - Weekly digests: run at/after the configured local weekday+time once per local ISO week.
+
+    This is more tolerant than strict cron matching, so it still works even when
+    the APScheduler interval does not land exactly on the scheduled minute.
+    """
     expr = (schedule.cron_expression or "").strip()
     if not expr:
+        return False
+
+    fields = expr.split()
+    if len(fields) != 5:
+        return False
+
+    minute_f, hour_f, _dom_f, _month_f, dow_f = fields
+    try:
+        scheduled_minute = int(minute_f)
+        scheduled_hour = int(hour_f)
+    except ValueError:
         return False
 
     tz_name = schedule.timezone or _get_default_timezone()
@@ -93,15 +111,61 @@ def _should_run_now(now_utc: datetime, schedule: UserSchedule, default_tz: ZoneI
 
     now_local = now_utc.astimezone(tz).replace(second=0, microsecond=0)
 
-    if not _cron_matches(now_local, expr):
-        return False
+    # Compute local datetime for the scheduled time in the current period (day or week).
+    if schedule.schedule_type == "daily_digest":
+        scheduled_dt = now_local.replace(hour=scheduled_hour, minute=scheduled_minute, second=0, microsecond=0)
 
-    if schedule.last_executed_at:
-        last_local = schedule.last_executed_at.astimezone(tz).replace(second=0, microsecond=0)
-        if last_local == now_local:
+        # If we've already run once today in local time, skip.
+        if schedule.last_executed_at:
+            last_local = schedule.last_executed_at.astimezone(tz)
+            if last_local.date() == now_local.date():
+                return False
+
+        # Run if we've reached or passed the scheduled time today.
+        return now_local >= scheduled_dt
+
+    if schedule.schedule_type == "weekly_digest":
+        # Determine scheduled weekday from cron (0-6, matching Python's Monday=0..Sunday=6).
+        dow_f = dow_f.strip()
+        try:
+            scheduled_weekday = int(dow_f)
+        except ValueError:
+            # Fallback: if invalid weekday, do not run.
             return False
 
-    return True
+        # Local ISO week/year for "once per week" semantics.
+        iso_year, iso_week, _iso_dow = now_local.isocalendar()
+
+        if schedule.last_executed_at:
+            last_local = schedule.last_executed_at.astimezone(tz)
+            last_year, last_week, _ = last_local.isocalendar()
+            # Already ran in this ISO week.
+            if (last_year, last_week) == (iso_year, iso_week):
+                return False
+
+        # Compute the scheduled date for this week.
+        # now_local.weekday(): 0=Mon..6=Sun
+        today_weekday = now_local.weekday()
+        # Start of this week (Monday).
+        start_of_week = now_local.replace(
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0,
+        ) - timedelta(days=today_weekday)
+        scheduled_date = start_of_week + timedelta(days=scheduled_weekday)
+        scheduled_dt = scheduled_date.replace(
+            hour=scheduled_hour,
+            minute=scheduled_minute,
+            second=0,
+            microsecond=0,
+        )
+
+        # Run if we've reached or passed the scheduled datetime this week.
+        return now_local >= scheduled_dt
+
+    # Unknown schedule_type – be conservative and do not run.
+    return False
 
 
 async def run_scheduled_jobs() -> None:

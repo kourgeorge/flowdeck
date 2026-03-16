@@ -38,10 +38,12 @@
             </p>
             {% endif %}
 
-            <div style="margin:0 0 18px;padding:16px 18px;border-radius:10px;background:#f8fafc;border:1px solid #e2e8f0;text-align:left;">
-              <p style="margin:0 0 6px;font-size:13px;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;font-weight:600;">Brief</p>
-              <div style="font-size:14px;line-height:1.7;color:#0f172a;white-space:pre-wrap;">
-                {{ narrative }}
+            <div style="margin:0 0 18px;padding:18px;border-radius:10px;background:#f8fafc;border:1px solid #e2e8f0;text-align:left;">
+              <p style="margin:0 0 8px;font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;font-weight:600;">
+                Market overview
+              </p>
+              <div style="font-size:14px;line-height:1.7;color:#0f172a;">
+                {{ narrative_html|safe }}
               </div>
             </div>
 

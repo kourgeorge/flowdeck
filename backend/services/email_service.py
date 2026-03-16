@@ -2,6 +2,7 @@
 
 import os
 import json
+import html
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -568,6 +569,119 @@ def notify_subscribers_new_report(
     )
 
 
+BRIEF_SECTION_TOKENS = {"market_highlights", "key_signals", "what_to_watch", "risks_opportunities"}
+
+
+def _format_brief_narrative_for_email(narrative: str) -> str:
+    """
+    Format the digest narrative into HTML that roughly matches the Dashboard brief tab styling.
+    - If the narrative uses structured sections (## headings + special tokens), render one block per section.
+    - Otherwise, render a simple paragraph with preserved line breaks.
+    """
+    if not narrative:
+        return ""
+
+    lines = narrative.splitlines()
+    # Remove standalone special-token lines.
+    filtered = [ln for ln in lines if ln.strip() not in BRIEF_SECTION_TOKENS]
+
+    text = "\n".join(filtered).strip()
+    if not text:
+        return ""
+
+    # Detect markdown-style sections (## Heading)
+    has_headings = any(ln.lstrip().startswith("## ") for ln in filtered)
+    if not has_headings:
+        escaped = html.escape(text)
+        # Preserve paragraphs and simple line breaks.
+        parts = [f"<p style=\"margin:0 0 8px;font-size:14px;line-height:1.7;color:#0f172a;\">{p}</p>"
+                 for p in (escaped.replace("\r", "").split("\n\n"))]
+        return "".join(parts)
+
+    sections = []
+    current_title = None
+    current_body: list[str] = []
+
+    def flush():
+        if current_title is None:
+            return
+        body_text = "\n".join(current_body).strip()
+        sections.append((current_title, body_text))
+
+    for raw in filtered:
+        line = raw.rstrip()
+        if line.lstrip().startswith("## "):
+            # New section.
+            flush()
+            current_title = line.lstrip()[3:].strip()
+            current_body = []
+        else:
+            if current_title is None:
+                # Ignore preamble lines before the first heading.
+                continue
+            current_body.append(line)
+    flush()
+
+    # Map section titles to colors that mirror the dashboard brief tab feel.
+    def section_styles(title: str) -> dict[str, str]:
+        key = title.lower()
+        if "market highlight" in key:
+            return {
+                "bg": "#0f172a",
+                "border": "#fbbf24",
+                "title": "#fde68a",
+                "text": "#e5e7eb",
+            }
+        if "key signal" in key:
+            return {
+                "bg": "#111827",
+                "border": "#a855f7",
+                "title": "#e9d5ff",
+                "text": "#e5e7eb",
+            }
+        if "what to watch" in key:
+            return {
+                "bg": "#1f2937",
+                "border": "#f59e0b",
+                "title": "#fed7aa",
+                "text": "#e5e7eb",
+            }
+        if "risk" in key:
+            return {
+                "bg": "#111827",
+                "border": "#f97373",
+                "title": "#fecaca",
+                "text": "#e5e7eb",
+            }
+        # Default neutral section.
+        return {
+            "bg": "#0f172a",
+            "border": "#4b5563",
+            "title": "#e5e7eb",
+            "text": "#e5e7eb",
+        }
+
+    html_sections: list[str] = []
+    for title, body in sections:
+        styles = section_styles(title)
+        escaped_title = html.escape(title)
+        escaped_body = html.escape(body)
+        body_html = "<br>".join(escaped_body.replace("\r", "").split("\n"))
+        html_sections.append(
+            (
+                f"<div style=\"margin:0 0 12px;padding:12px 14px;border-radius:10px;"
+                f"background:{styles['bg']};border:1px solid {styles['border']};\">"
+                f"<p style=\"margin:0 0 4px;font-size:13px;font-weight:600;"
+                f"letter-spacing:0.14em;text-transform:uppercase;color:{styles['title']};\">"
+                f"{escaped_title}</p>"
+                f"<div style=\"font-size:13px;line-height:1.7;color:{styles['text']};\">"
+                f"{body_html}</div></div>"
+            )
+        )
+
+    return "".join(html_sections)
+
+
 def send_daily_digest_email_to_user(execution_id: int, user_email: str) -> bool:
     """
     Send a User Daily Brief (daily_digest execution) to the given user email.
@@ -649,11 +763,13 @@ def send_daily_digest_email_to_user(execution_id: int, user_email: str) -> bool:
         # Render from shared template to match other emails
         try:
             template = _jinja_env.get_template("daily_digest_email.html")
+            # Format narrative so section headings and colors roughly match the dashboard Brief card.
+            narrative_html = _format_brief_narrative_for_email(narrative)
             html_body = template.render(
                 digest_date=digest_date,
                 span_label=span_label,
                 priority_tickers=priority_tickers,
-                narrative=narrative,
+                narrative_html=narrative_html,
                 what_to_watch=what_to_watch,
                 brief_url=brief_url,
                 preheader=f"Your User Daily Brief for {digest_date} is ready." if digest_date else "Your User Daily Brief is ready.",

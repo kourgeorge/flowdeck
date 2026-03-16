@@ -35,7 +35,7 @@ function narrativeForDisplay(narrative: string): string {
 const briefMarkdownComponents = {
     h2: ({ children, ...props }: ComponentProps<'h2'>) => (
         <h2
-          className="text-[13px] font-semibold text-amber-200 mb-1 mt-4 first:mt-0 tracking-wide"
+          className="text-[13px] font-semibold text-emerald-200 mb-1 mt-4 first:mt-0 tracking-wide"
           {...props}
         >
           {children}
@@ -345,9 +345,9 @@ export default function DashboardPage() {
         ? "This week's overview"
         : "Today's overview";
     return (
-      <div className="rounded-xl border border-amber-700/60 bg-[#020617]/90 text-sm p-4 space-y-4">
+      <div className="rounded-xl border border-slate-700 bg-[#020617]/90 text-sm p-4 space-y-4">
         <div>
-          <div className="text-[11px] font-mono text-amber-300 uppercase tracking-[0.18em] mb-1">
+          <div className="text-[11px] font-mono text-emerald-300 uppercase tracking-[0.18em] mb-1">
             {overviewLabel}
           </div>
           <div className="prose prose-invert prose-sm max-w-none text-gray-100">
@@ -380,7 +380,7 @@ export default function DashboardPage() {
               <span className="text-[11px] font-mono text-slate-300 uppercase tracking-[0.18em]">
                 Focus tickers
               </span>
-              <span className="text-[11px] text-amber-300 font-mono">
+              <span className="text-[11px] text-emerald-300 font-mono">
                 Style: {styleLabel} · Span: {spanLabel}
               </span>
             </div>
@@ -762,14 +762,14 @@ export default function DashboardPage() {
               <div className="flex flex-col lg:flex-row gap-6">
                 {/* Left: calendar panel (with New brief integrated) */}
                 <div className="lg:w-72 xl:w-80 shrink-0">
-                  <div className="bg-[#020617] rounded-xl border border-amber-700/70 overflow-hidden shadow-lg">
+                  <div className="bg-[#020617] rounded-xl border border-slate-700 overflow-hidden shadow-lg">
                     {/* Top bar: New brief action integrated into panel */}
-                    <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-amber-700/70 bg-slate-950/80">
-                      <span className="text-xs font-medium uppercase tracking-wider text-amber-300">Briefs</span>
+                    <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-700 bg-slate-950/80">
+                      <span className="text-xs font-medium uppercase tracking-wider text-emerald-300">Briefs</span>
                       <button
                         type="button"
                         onClick={() => setNewBriefModalOpen(true)}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-amber-200 hover:text-black hover:bg-amber-400 rounded-md transition-colors focus:outline-none focus:ring-1 focus:ring-amber-400/70"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-emerald-100 hover:text-slate-950 hover:bg-emerald-400 rounded-md transition-colors focus:outline-none focus:ring-1 focus:ring-emerald-400/70"
                         title="Create new brief"
                         aria-label="Create new brief"
                       >
@@ -786,20 +786,20 @@ export default function DashboardPage() {
                       <button
                         type="button"
                         onClick={goToPrevMonth}
-                        className="p-1.5 text-amber-200 hover:text-black hover:bg-amber-400 rounded"
+                        className="p-1.5 text-emerald-200 hover:text-white hover:bg-slate-800 rounded"
                         aria-label="Previous month"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                         </svg>
                       </button>
-                      <span className="text-sm font-semibold text-amber-100">
+                      <span className="text-sm font-semibold text-emerald-100">
                         {calendarMonth.toLocaleString(undefined, { month: 'long', year: 'numeric' })}
                       </span>
                       <button
                         type="button"
                         onClick={goToNextMonth}
-                        className="p-1.5 text-amber-200 hover:text-black hover:bg-amber-400 rounded"
+                        className="p-1.5 text-emerald-200 hover:text-white hover:bg-slate-800 rounded"
                         aria-label="Next month"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -834,8 +834,8 @@ export default function DashboardPage() {
                                 'h-8 relative flex items-center justify-center rounded cursor-pointer border text-xs font-mono';
                               const variant = hasDigest
                                 ? isSelected
-                                  ? 'bg-amber-500 border-amber-400 text-black'
-                                  : 'bg-amber-900/40 border-amber-600/70 text-amber-100 hover:bg-amber-700/70'
+                                  ? 'bg-emerald-400 border-emerald-300 text-slate-950'
+                                  : 'bg-slate-900/80 border-emerald-500/60 text-emerald-100 hover:bg-slate-800'
                                 : 'bg-slate-900 border-slate-800 text-slate-500';
                               return (
                                 <button
@@ -862,7 +862,7 @@ export default function DashboardPage() {
                       })()}
                     </div>
                     <p className="mt-2 text-xs text-slate-400">
-                      Amber = briefs. Click a day to view.
+                      Green = briefs. Click a day to view.
                     </p>
                     {weeklyDigestSlots.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-slate-800">
@@ -878,7 +878,7 @@ export default function DashboardPage() {
                                 onClick={() => handleSelectDigestDate(slot)}
                                 className={`px-2 py-0.5 text-xs rounded border transition-colors font-mono ${
                                   isSelected
-                                    ? 'bg-amber-500 border-amber-400 text-black'
+                                    ? 'bg-emerald-400 border-emerald-300 text-slate-950'
                                     : 'bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800'
                                 }`}
                                 title={endDate}
@@ -903,7 +903,7 @@ export default function DashboardPage() {
                               onClick={() => setSelectedBrief(brief)}
                               className={`px-2 py-0.5 text-xs rounded border transition-colors font-mono ${
                                 selectedBrief?.execution_id === brief.execution_id
-                                  ? 'bg-amber-500 border-amber-400 text-black'
+                                  ? 'bg-emerald-400 border-emerald-300 text-slate-950'
                                   : 'bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800'
                               }`}
                               title={brief.created_at}
@@ -928,17 +928,17 @@ export default function DashboardPage() {
                     aria-labelledby="new-brief-modal-title"
                   >
                     <div
-                      className="bg-[#020617] border border-amber-700/70 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+                      className="bg-[#020617] border border-slate-700 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <div className="sticky top-0 flex justify-between items-center px-4 py-3 border-b border-amber-700/70 bg-slate-950 z-10">
-                        <h2 id="new-brief-modal-title" className="text-base font-semibold text-amber-100 tracking-wide">
+                      <div className="sticky top-0 flex justify-between items-center px-4 py-3 border-b border-slate-700 bg-slate-950 z-10">
+                        <h2 id="new-brief-modal-title" className="text-base font-semibold text-emerald-100 tracking-wide">
                           Create new brief
                         </h2>
                         <button
                           type="button"
                           onClick={() => setNewBriefModalOpen(false)}
-                          className="p-1.5 text-amber-200 hover:text-white rounded-lg transition-colors"
+                          className="p-1.5 text-emerald-200 hover:text-white rounded-lg transition-colors"
                           aria-label="Close"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -971,22 +971,22 @@ export default function DashboardPage() {
                 )}
 
                 {/* Right: brief content */}
-                <div className="flex-1 min-w-0 bg-[#020617] rounded-xl border border-amber-700/70 overflow-hidden shadow-lg">
+                <div className="flex-1 min-w-0 bg-[#020617] rounded-xl border border-slate-700 overflow-hidden shadow-lg">
                   <div className="bg-slate-950/60 min-h-[200px] px-4 sm:px-6 pt-3 sm:pt-4 pb-4 sm:pb-6 space-y-3">
                   {digestLoading && (
                     <div className="flex flex-col items-center justify-center min-h-[280px] py-12 px-4">
                       <div className="relative">
-                        <div className="w-16 h-16 rounded-2xl border-2 border-amber-400/40 bg-amber-900/30 flex items-center justify-center">
-                          <svg className="w-8 h-8 text-amber-300/90 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                        <div className="w-16 h-16 rounded-2xl border-2 border-emerald-400/40 bg-emerald-900/20 flex items-center justify-center">
+                          <svg className="w-8 h-8 text-emerald-300/90 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>
                         </div>
-                        <span className="absolute -inset-1 rounded-2xl border border-amber-400/30 animate-ping opacity-40" aria-hidden />
+                        <span className="absolute -inset-1 rounded-2xl border border-emerald-400/30 animate-ping opacity-40" aria-hidden />
                       </div>
-                      <p className="mt-5 text-base font-semibold text-amber-50">Generating your brief</p>
+                      <p className="mt-5 text-base font-semibold text-emerald-50">Generating your brief</p>
                       <p className="mt-1 text-sm text-slate-400">Analyzing market and portfolio…</p>
                       <div className="mt-6 w-48 h-1 rounded-full bg-slate-800 overflow-hidden">
-                        <div className="h-full w-1/2 rounded-full bg-amber-400 [animation:briefShimmer_1.8s_ease-in-out_infinite]" />
+                        <div className="h-full w-1/2 rounded-full bg-emerald-400 [animation:briefShimmer_1.8s_ease-in-out_infinite]" />
                       </div>
                       <style>{`@keyframes briefShimmer { 0%, 100% { transform: translateX(-100%); } 50% { transform: translateX(200%); } }`}</style>
                     </div>
@@ -1000,7 +1000,7 @@ export default function DashboardPage() {
                         <div className="space-y-4">
                           <div className="flex items-center justify-between gap-2 flex-nowrap">
                             <span className="text-xs sm:text-sm text-gray-500 whitespace-nowrap shrink-0">
-                              <span className="font-mono text-[11px] text-amber-300 uppercase tracking-wider">
+                              <span className="font-mono text-[11px] text-emerald-300 uppercase tracking-wider">
                                 {selectedBrief.span_label && selectedBrief.span_label !== 'Daily'
                                   ? selectedBrief.span_label
                                   : 'Daily'}
@@ -1016,7 +1016,7 @@ export default function DashboardPage() {
                               <button
                                 type="button"
                                 onClick={() => handleCopyBrief(selectedBrief)}
-                                className={`inline-flex items-center justify-center p-1.5 rounded border hover:bg-gray-800/80 ${copyBriefCopied ? 'border-green-500/70 text-green-400' : 'border-gray-500 text-gray-300'}`}
+                                className={`inline-flex items-center justify-center p-1.5 rounded border hover:bg-gray-800/80 ${copyBriefCopied ? 'border-emerald-500/70 text-emerald-400' : 'border-gray-500 text-gray-300'}`}
                                 title={copyBriefCopied ? 'Copied!' : 'Copy brief'}
                                 aria-label="Copy brief"
                               >
@@ -1035,7 +1035,7 @@ export default function DashboardPage() {
                                   type="button"
                                   onClick={() => handleSendBriefEmail(selectedBrief.execution_id)}
                                   className={`inline-flex items-center justify-center p-1.5 rounded border hover:bg-gray-800/80 ${
-                                    emailBriefSent ? 'border-green-500/70 text-green-400' : 'border-gray-500 text-gray-300'
+                                    emailBriefSent ? 'border-emerald-500/70 text-emerald-400' : 'border-gray-500 text-gray-300'
                                   }`}
                                   title={emailBriefSent ? 'Emailed!' : 'Email this brief to me'}
                                   aria-label={emailBriefSent ? 'Emailed!' : 'Email this brief to me'}
@@ -1056,7 +1056,7 @@ export default function DashboardPage() {
                                 <button
                                   type="button"
                                   onClick={() => handleCopyShareLink(selectedBrief.share_url!)}
-                                  className={`inline-flex items-center justify-center p-1.5 rounded border hover:bg-gray-800/80 ${shareLinkCopied ? 'border-green-500/70 text-green-400' : 'border-gray-500 text-gray-300'}`}
+                                  className={`inline-flex items-center justify-center p-1.5 rounded border hover:bg-gray-800/80 ${shareLinkCopied ? 'border-emerald-500/70 text-emerald-400' : 'border-gray-500 text-gray-300'}`}
                                   title={shareLinkCopied ? 'Link copied!' : 'Copy share link'}
                                   aria-label="Copy share link"
                                 >
@@ -1175,7 +1175,7 @@ export default function DashboardPage() {
                     <div className="space-y-4">
                       <div className="flex items-center justify-between gap-2 flex-nowrap">
                         <span className="text-xs sm:text-sm text-gray-500 whitespace-nowrap shrink-0">
-                          <span className="font-mono text-[11px] text-amber-300 uppercase tracking-wider">
+                          <span className="font-mono text-[11px] text-emerald-300 uppercase tracking-wider">
                             {digest.span_label && digest.span_label !== 'Daily' ? digest.span_label : 'Daily'}
                           </span>
                           {digest.digest_date && (
@@ -1186,7 +1186,7 @@ export default function DashboardPage() {
                           <button
                             type="button"
                             onClick={() => handleCopyBrief(digest)}
-                            className={`inline-flex items-center justify-center p-1.5 rounded border hover:bg-gray-800/80 ${copyBriefCopied ? 'border-green-500/70 text-green-400' : 'border-gray-500 text-gray-300'}`}
+                            className={`inline-flex items-center justify-center p-1.5 rounded border hover:bg-gray-800/80 ${copyBriefCopied ? 'border-emerald-500/70 text-emerald-400' : 'border-gray-500 text-gray-300'}`}
                             title={copyBriefCopied ? 'Copied!' : 'Copy brief'}
                             aria-label="Copy brief"
                           >
@@ -1205,7 +1205,7 @@ export default function DashboardPage() {
                               type="button"
                               onClick={() => handleSendBriefEmail(digest.execution_id!)}
                               className={`inline-flex items-center justify-center p-1.5 rounded border hover:bg-gray-800/80 ${
-                                emailBriefSent ? 'border-green-500/70 text-green-400' : 'border-gray-500 text-gray-300'
+                                emailBriefSent ? 'border-emerald-500/70 text-emerald-400' : 'border-gray-500 text-gray-300'
                               }`}
                               title={emailBriefSent ? 'Emailed!' : 'Email this brief to me'}
                               aria-label={emailBriefSent ? 'Emailed!' : 'Email this brief to me'}
@@ -1226,7 +1226,7 @@ export default function DashboardPage() {
                             <button
                               type="button"
                               onClick={() => handleCopyShareLink(digest.share_url!)}
-                              className={`inline-flex items-center justify-center p-1.5 rounded border hover:bg-gray-800/80 ${shareLinkCopied ? 'border-green-500/70 text-green-400' : 'border-gray-500 text-gray-300'}`}
+                              className={`inline-flex items-center justify-center p-1.5 rounded border hover:bg-gray-800/80 ${shareLinkCopied ? 'border-emerald-500/70 text-emerald-400' : 'border-gray-500 text-gray-300'}`}
                               title={shareLinkCopied ? 'Link copied!' : 'Copy share link'}
                               aria-label="Copy share link"
                             >
