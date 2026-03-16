@@ -255,7 +255,6 @@ export default function BriefPage() {
 
   const renderBriefContentCard = (brief: DigestResponse | DigestBriefItem) => {
     const focusTickers = brief.priority_tickers ?? [];
-    const styleLabel = (brief as any)?.narrative_style ?? 'Balanced';
     const spanLabel = brief.span_label && brief.span_label !== 'Daily' ? brief.span_label : 'Daily';
     const overviewLabel =
       spanLabel.toLowerCase().startsWith('week') || brief.span_type === 'weekly'
@@ -310,11 +309,8 @@ export default function BriefPage() {
         {focusTickers.length > 0 && (
           <div className="pt-3 border-t border-slate-700/80 space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-mono font-semibold text-white uppercase tracking-[0.18em]">
+              <span className="text-sm font-mono font-semibold text-emerald-300 uppercase tracking-[0.18em]">
                 Focus tickers
-              </span>
-              <span className="text-sm text-emerald-300 font-mono">
-                Style: {styleLabel} · Span: {spanLabel}
               </span>
             </div>
             <div className="space-y-1">
@@ -337,13 +333,13 @@ export default function BriefPage() {
                     : 'text-slate-400';
                 return (
                   <div key={t} className="flex items-center justify-between text-sm text-slate-100">
-                    <span className="mr-3 flex items-center gap-2">
-                      <span>{t}</span>
+                    <span className="mr-3">{t}</span>
+                    <span className="flex items-center gap-3">
                       {typeof price === 'number' && (
                         <span className="text-sm text-slate-400">${price.toFixed(2)}</span>
                       )}
+                      {changeStr && <span className={changeClass}>{changeStr}</span>}
                     </span>
-                    {changeStr && <span className={changeClass}>{changeStr}</span>}
                   </div>
                 );
               })}
@@ -422,7 +418,7 @@ export default function BriefPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <PageHeader title="Briefing" icon={<BriefIcon />} />
+      <PageHeader title="Briefing Desk" icon={<BriefIcon />} />
 
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="px-4 py-6 sm:p-6 lg:p-8">

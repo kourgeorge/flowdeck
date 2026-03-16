@@ -86,7 +86,7 @@ const navItems: { to: string; label: string; icon: () => JSX.Element; authOnly?:
   { to: '/', label: 'FlowDeck', icon: FlowDeckIcon },
   { to: '/market', label: 'Market View', icon: MarketIcon },
   { to: '/dashboard', label: 'Dashboard', icon: DashboardIcon, authOnly: true },
-  { to: '/brief', label: 'Brief', icon: BriefIcon, authOnly: true },
+  { to: '/brief', label: 'Briefing Desk', icon: BriefIcon, authOnly: true },
   { to: '/copilot', label: 'Trading Copilot', icon: CopilotIcon, authOnly: true },
   { to: '/chat', label: 'AI Analyst Agent', icon: ChatIcon, authOnly: true },
 ];
