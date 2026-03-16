@@ -1,6 +1,6 @@
 Non-functional
 ────────────────
-- [ ] Run analysis on top 200 stocks
+- [ ] Run analysis on top 200 stocks. create a process to rank and select the stocks to analyze.
 - [ ] Make backend LLM configurable (allow switching provider/model)
 
 
@@ -39,6 +39,11 @@ Copilot / chat
 
 Data layer
 ──────────
-- Use Yahoo Query recommendations
 - Token accounting in DB: track earnings, usage, purchases — No (skip)
 - use gartner and other sources for analyst recommendations and to understand sectors and industries.
+
+Functional/UI:
+────────────
+- Add Intro tutorial for new users.
+- The news should be srted by time and displayed in a more ingaging way.
+-  amonitor page, that shows real time news and events for the stocks on the watchlist.
