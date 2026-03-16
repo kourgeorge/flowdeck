@@ -11,7 +11,7 @@ from models.db_models import User, Execution, ReportView
 INITIAL_BALANCE = 1000
 COST_PER_ANALYSIS = 200
 # Cost per User Daily Brief (daily or weekly)
-COST_PER_DIGEST = 200
+COST_PER_DIGEST = 20
 EARNINGS_PER_UNIQUE_VIEW = 1
 MAX_REWARD_PER_REPORT = 400
 REWARD_WINDOW_DAYS = 14  # 0 = no window
