@@ -86,7 +86,7 @@ const navItems: { to: string; label: string; icon: () => JSX.Element; authOnly?:
   { to: '/', label: 'FlowDeck', icon: FlowDeckIcon },
   { to: '/market', label: 'Market View', icon: MarketIcon },
   { to: '/dashboard', label: 'Dashboard', icon: DashboardIcon, authOnly: true },
-  { to: '/dashboard?tab=digest', label: 'Brief', icon: BriefIcon, authOnly: true },
+  { to: '/brief', label: 'Brief', icon: BriefIcon, authOnly: true },
   { to: '/copilot', label: 'Trading Copilot', icon: CopilotIcon, authOnly: true },
   { to: '/chat', label: 'AI Analyst Agent', icon: ChatIcon, authOnly: true },
 ];
@@ -239,13 +239,6 @@ export default function Layout() {
               {navItems.map(({ to, label, icon: Icon, authOnly }) => {
                 const disabled = authOnly && !user;
                 const title = !sidebarExpanded ? (disabled ? `Sign in to access ${label}` : label) : undefined;
-                const tab = new URLSearchParams(location.search).get('tab');
-                const navActive =
-                  to === '/dashboard'
-                    ? location.pathname === '/dashboard' && tab !== 'digest'
-                    : to.startsWith('/dashboard?')
-                      ? location.pathname === '/dashboard' && tab === 'digest'
-                      : undefined;
                 if (disabled) {
                   return (
                     <li key={to}>
@@ -261,7 +254,8 @@ export default function Layout() {
                     </li>
                   );
                 }
-                const isBrief = to === '/dashboard?tab=digest';
+                const navActive = to === '/dashboard' ? location.pathname === '/dashboard' : undefined;
+                const isBrief = to === '/brief';
                 const showNoBrief = isBrief && hasBriefForToday === false;
                 return (
                   <li key={to}>

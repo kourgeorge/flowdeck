@@ -605,7 +605,7 @@ export default function HomePage() {
                 ))}
               </ul>
               <Link
-                to={user ? '/dashboard?tab=digest' : '#'}
+                to={user ? '/brief' : '#'}
                 onClick={!user ? () => setShowAuthModal(true) : undefined}
                 className="inline-flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-400 text-gray-900 rounded-lg font-semibold transition-colors"
               >
@@ -759,7 +759,7 @@ export default function HomePage() {
             </div>
             <div className="bg-amber-900/20 border border-amber-700/60 rounded-xl p-6">
               <h4 className="text-lg font-semibold text-white mb-2">
-                <Link to={user ? '/dashboard?tab=digest' : '#'} onClick={!user ? () => setShowAuthModal(true) : undefined} className="hover:text-amber-300 transition-colors">Briefing</Link>
+                <Link to={user ? '/brief' : '#'} onClick={!user ? () => setShowAuthModal(true) : undefined} className="hover:text-amber-300 transition-colors">Briefing</Link>
               </h4>
               <p className="text-gray-400 text-sm">
                 Get a personalized <strong className="text-white">daily or weekly brief</strong> that turns your watchlist into a concise, readable narrative. Control the tone (Balanced, Concise, Professional, Technical), add your own note, and let FlowDeck highlight what changed and what to watch next across your subscribed tickers. Runs directly from your dashboard using the same AI analysis stack that powers full reports.

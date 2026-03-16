@@ -7,6 +7,7 @@ import TickerPage from './pages/StockPage';
 import TermsOfUsePage from './pages/TermsOfUsePage';
 import ContactUsPage from './pages/ContactUsPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
+import BriefPage from './pages/BriefPage';
 import DashboardPage from './pages/DashboardPage';
 import MarketPage from './pages/MarketPage';
 import PaymentSuccessPage from './pages/PaymentSuccessPage';
@@ -28,6 +29,7 @@ function App() {
           <Route path="tickers/:ticker" element={<TickerPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="brief" element={<BriefPage />} />
           <Route path="market" element={<MarketPage />} />
           <Route path="chat" element={<ChatPage />} />
           <Route path="copilot" element={<CopilotPage />} />
