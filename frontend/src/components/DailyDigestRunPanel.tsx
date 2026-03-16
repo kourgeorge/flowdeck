@@ -1,6 +1,5 @@
 /**
- * Panel with Briefing title, collapsible brief options (style, note, focus tickers), and Run digest button.
- * Rendered above the Brief history panel on the digest tab.
+ * Panel with Briefing title, collapsible brief options (style, note, focus tickers), and create-brief action.
  */
 import { type ChangeEvent, useState, useRef, useEffect } from 'react';
 
@@ -244,6 +243,7 @@ export default function DailyDigestRunPanel({
       </div>
 
       <div>
+        <div className="flex justify-end">
         <button
           type="button"
           onClick={onRunDigest}
@@ -268,10 +268,11 @@ export default function DailyDigestRunPanel({
                   d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                 />
               </svg>
-              Run digest
+              Create brief
             </>
           )}
         </button>
+        </div>
         <div className="mt-1 space-y-0.5">
           <p className="text-[11px] text-slate-400">
             Each brief (daily or weekly) costs <span className="font-semibold text-emerald-200">20 DECK tokens</span>.

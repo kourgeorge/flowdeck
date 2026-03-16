@@ -1006,7 +1006,7 @@ export default function BriefPage() {
                     !digest &&
                     (!selectedDigestDate || digestBriefsForDay.length === 0) && (
                       <p className="text-sm text-gray-400">
-                        Click &ldquo;Run digest&rdquo; to generate today&apos;s summary, or select a highlighted day in
+                        Click &ldquo;Create brief&rdquo; to generate today&apos;s summary, or select a highlighted day in
                         the calendar to view that day&apos;s briefs.
                       </p>
                     )}
