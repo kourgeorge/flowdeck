@@ -84,7 +84,7 @@ async def run_and_store_digest(
 
     deduct_ok, execution_id = token_service.deduct_for_digest(user_id, subject_id, db)
     if not deduct_ok or execution_id is None:
-        raise RuntimeError("Insufficient token balance for User Daily Brief.")
+        raise RuntimeError("Insufficient token balance for User Daily Brief. Please Purchase Tokens.")
 
     parsed_span_type, start_date, end_date = _parse_span(span_type)
 
