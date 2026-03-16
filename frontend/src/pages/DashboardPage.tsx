@@ -80,6 +80,7 @@ export default function DashboardPage() {
   const [showRawDigest, setShowRawDigest] = useState<boolean>(false);
   const [digestInputExpanded, setDigestInputExpanded] = useState<boolean>(false);
   const [shareLinkCopied, setShareLinkCopied] = useState<boolean>(false);
+  const [copyBriefCopied, setCopyBriefCopied] = useState<boolean>(false);
   const [newBriefModalOpen, setNewBriefModalOpen] = useState<boolean>(false);
   const [hasBriefForToday, setHasBriefForToday] = useState<boolean | null>(null);
   const [briefPromptDismissed, setBriefPromptDismissed] = useState<boolean>(() => {
@@ -355,10 +356,11 @@ export default function DashboardPage() {
 
   const handleCopyBrief = (brief: DigestResponse | DigestBriefItem) => {
     const text = formatBriefForClipboard(brief);
-    if (navigator && 'clipboard' in navigator && navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(text).catch(() => {
-        // best-effort; ignore copy failures
-      });
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        setCopyBriefCopied(true);
+        setTimeout(() => setCopyBriefCopied(false), 2000);
+      }).catch(() => {});
     }
   };
 
@@ -874,7 +876,7 @@ className={`px-2 py-0.5 text-xs rounded border transition-colors ${
 
                 {/* Right: brief content */}
                 <div className="flex-1 min-w-0 bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-                  <div className="bg-gray-900/40 min-h-[200px] p-4 sm:p-6 space-y-3">
+                  <div className="bg-gray-900/40 min-h-[200px] px-4 sm:px-6 pt-2 sm:pt-3 pb-4 sm:pb-6 space-y-3">
                   {digestLoading && (
                     <div className="flex flex-col items-center justify-center min-h-[280px] py-12 px-4">
                       <div className="relative">
@@ -899,7 +901,78 @@ className={`px-2 py-0.5 text-xs rounded border transition-colors ${
                   {/* Selected day brief content (hours list is in Brief history panel) */}
                   {!digestLoading && selectedDigestDate && digestBriefsForDay.length > 0 && selectedBrief && (
                     <>
-                        <div className="space-y-3 pt-2">
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between gap-2 flex-nowrap">
+                            <span className="text-sm text-gray-500 whitespace-nowrap shrink-0">
+                              {selectedBrief.span_label && selectedBrief.span_label !== 'Daily' && (
+                                <span className="mr-1.5">{selectedBrief.span_label}</span>
+                              )}
+                              {selectedBrief.digest_date}
+                              {selectedBrief.created_at && (
+                                <span className="ml-1.5">· {formatBriefTime(selectedBrief.created_at)}</span>
+                              )}
+                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleCopyBrief(selectedBrief)}
+                                className={`inline-flex items-center justify-center p-1.5 rounded border hover:bg-gray-800/80 ${copyBriefCopied ? 'border-green-500/70 text-green-400' : 'border-gray-500 text-gray-300'}`}
+                                title={copyBriefCopied ? 'Copied!' : 'Copy brief'}
+                                aria-label="Copy brief"
+                              >
+                                {copyBriefCopied ? (
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.5 12.75l6 6 9-13.5" />
+                                  </svg>
+                                ) : (
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                  </svg>
+                                )}
+                              </button>
+                              {selectedBrief.share_url && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyShareLink(selectedBrief.share_url!)}
+                                  className={`inline-flex items-center justify-center p-1.5 rounded border hover:bg-gray-800/80 ${shareLinkCopied ? 'border-green-500/70 text-green-400' : 'border-gray-500 text-gray-300'}`}
+                                  title={shareLinkCopied ? 'Link copied!' : 'Copy share link'}
+                                  aria-label="Copy share link"
+                                >
+                                  {shareLinkCopied ? (
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.5 12.75l6 6 9-13.5" />
+                                    </svg>
+                                  ) : (
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                    </svg>
+                                  )}
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setShowRawDigest((v) => !v)}
+                                className="inline-flex items-center justify-center p-1.5 rounded border border-gray-500 text-gray-300 hover:bg-gray-800/80"
+                                title={showRawDigest ? 'Hide raw' : 'Show raw'}
+                                aria-label={showRawDigest ? 'Hide raw' : 'Show raw'}
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+                                </svg>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleDeleteBrief}
+                                className="inline-flex items-center justify-center p-1.5 rounded border border-red-500/70 text-red-300 hover:bg-red-600/20"
+                                title="Delete this brief"
+                                aria-label="Delete this brief"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
                           {(selectedBrief.user_note ||
                             selectedBrief.narrative_style ||
                             selectedBrief.user_focus_tickers?.length) && (
@@ -916,85 +989,19 @@ className={`px-2 py-0.5 text-xs rounded border transition-colors ${
                                 )}
                               </div>
                             )}
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="space-y-1">
-                              <p className="text-sm text-gray-500">
-                                {selectedBrief.span_label && selectedBrief.span_label !== 'Daily' && (
-                                  <span className="mr-2">{selectedBrief.span_label}</span>
-                                )}
-                                {selectedBrief.digest_date}
-                                {selectedBrief.created_at && (
-                                  <span className="ml-2">· {formatBriefTime(selectedBrief.created_at)}</span>
-                                )}
-                              </p>
-                              {selectedBrief.priority_tickers?.length > 0 && (
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                  <span className="text-xs uppercase tracking-wide text-gray-500">Focus</span>
-                                  {selectedBrief.priority_tickers.map((t) => (
-                                    <span
-                                      key={t}
-                                      className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-600/60 text-sm text-emerald-100"
-                                    >
-                                      {t}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleCopyBrief(selectedBrief)}
-                                className="inline-flex items-center justify-center p-2 rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-600/10"
-                                title="Copy brief"
-                                aria-label="Copy brief"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                                  />
-                                </svg>
-                              </button>
-                              {selectedBrief.share_url && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleCopyShareLink(selectedBrief.share_url!)}
-                                  className="inline-flex items-center justify-center p-2 rounded border border-gray-500 text-gray-300 hover:bg-gray-800/80"
-                                  title={shareLinkCopied ? 'Link copied!' : 'Copy share link'}
-                                  aria-label="Copy share link"
+                          {selectedBrief.priority_tickers?.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-xs uppercase tracking-wide text-gray-500">Focus</span>
+                              {selectedBrief.priority_tickers.map((t) => (
+                                <span
+                                  key={t}
+                                  className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-600/60 text-sm text-emerald-100"
                                 >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                                  </svg>
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => setShowRawDigest((v) => !v)}
-                                className="inline-flex items-center justify-center p-2 rounded border border-gray-500 text-gray-300 hover:bg-gray-800/80"
-                                title={showRawDigest ? 'Hide raw' : 'Show raw'}
-                                aria-label={showRawDigest ? 'Hide raw' : 'Show raw'}
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
-                                </svg>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={handleDeleteBrief}
-                                className="inline-flex items-center justify-center p-2 rounded border border-red-500/70 text-red-300 hover:bg-red-600/20"
-                                title="Delete this brief"
-                                aria-label="Delete this brief"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                              </button>
+                                  {t}
+                                </span>
+                              ))}
                             </div>
-                          </div>
+                          )}
                           <div className="prose prose-invert prose-sm max-w-none text-gray-200">
                             {briefHasStructuredSections(selectedBrief.narrative) ? (
                               <ReactMarkdown components={briefMarkdownComponents}>{narrativeForDisplay(selectedBrief.narrative)}</ReactMarkdown>
@@ -1073,6 +1080,63 @@ className={`px-2 py-0.5 text-xs rounded border transition-colors ${
                   {/* Freshly run digest (shown when no list/selection yet, e.g. right after run or list fetch failed) */}
                   {!digestLoading && digest && (!selectedDigestDate || digestBriefsForDay.length === 0) && (
                     <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-2 flex-nowrap">
+                        <span className="text-sm text-gray-500 whitespace-nowrap shrink-0">
+                          {digest.span_label && digest.span_label !== 'Daily' && (
+                            <span className="mr-1.5">{digest.span_label}</span>
+                          )}
+                          {digest.digest_date}
+                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleCopyBrief(digest)}
+                            className={`inline-flex items-center justify-center p-1.5 rounded border hover:bg-gray-800/80 ${copyBriefCopied ? 'border-green-500/70 text-green-400' : 'border-gray-500 text-gray-300'}`}
+                            title={copyBriefCopied ? 'Copied!' : 'Copy brief'}
+                            aria-label="Copy brief"
+                          >
+                            {copyBriefCopied ? (
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.5 12.75l6 6 9-13.5" />
+                              </svg>
+                            ) : (
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                              </svg>
+                            )}
+                          </button>
+                          {digest.share_url && (
+                            <button
+                              type="button"
+                              onClick={() => handleCopyShareLink(digest.share_url!)}
+                              className={`inline-flex items-center justify-center p-1.5 rounded border hover:bg-gray-800/80 ${shareLinkCopied ? 'border-green-500/70 text-green-400' : 'border-gray-500 text-gray-300'}`}
+                              title={shareLinkCopied ? 'Link copied!' : 'Copy share link'}
+                              aria-label="Copy share link"
+                            >
+                              {shareLinkCopied ? (
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.5 12.75l6 6 9-13.5" />
+                                </svg>
+                              ) : (
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                </svg>
+                              )}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setShowRawDigest((v) => !v)}
+                            className="inline-flex items-center justify-center p-1.5 rounded border border-gray-500 text-gray-300 hover:bg-gray-800/80"
+                            title={showRawDigest ? 'Hide raw' : 'Show raw'}
+                            aria-label={showRawDigest ? 'Hide raw' : 'Show raw'}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
                       {(digest.user_note || digest.narrative_style || digest.user_focus_tickers?.length) && (
                         <div className="space-y-1 text-sm text-gray-300 bg-gray-900/60 border border-gray-700 rounded px-3 py-2">
                           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Run inputs</p>
@@ -1087,71 +1151,19 @@ className={`px-2 py-0.5 text-xs rounded border transition-colors ${
                           )}
                         </div>
                       )}
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-1">
-                          <p className="text-sm text-gray-500">
-                            {digest.span_label && digest.span_label !== 'Daily' && (
-                              <span className="mr-2">{digest.span_label}</span>
-                            )}
-                            {digest.digest_date}
-                          </p>
-                          {digest.priority_tickers?.length > 0 && (
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="text-xs uppercase tracking-wide text-gray-500">Focus</span>
-                              {digest.priority_tickers.map((t) => (
-                                <span
-                                  key={t}
-                                  className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-600/60 text-sm text-emerald-100"
-                                >
-                                  {t}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleCopyBrief(digest)}
-                            className="inline-flex items-center justify-center p-2 rounded border border-emerald-500 text-emerald-300 hover:bg-emerald-600/10"
-                            title="Copy brief"
-                            aria-label="Copy brief"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                              />
-                            </svg>
-                          </button>
-                          {digest.share_url && (
-                            <button
-                              type="button"
-                              onClick={() => handleCopyShareLink(digest.share_url!)}
-                              className="inline-flex items-center justify-center p-2 rounded border border-gray-500 text-gray-300 hover:bg-gray-800/80"
-                              title={shareLinkCopied ? 'Link copied!' : 'Copy share link'}
-                              aria-label="Copy share link"
+                      {digest.priority_tickers?.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-xs uppercase tracking-wide text-gray-500">Focus</span>
+                          {digest.priority_tickers.map((t) => (
+                            <span
+                              key={t}
+                              className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-600/60 text-sm text-emerald-100"
                             >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                              </svg>
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => setShowRawDigest((v) => !v)}
-                            className="inline-flex items-center justify-center p-2 rounded border border-gray-500 text-gray-300 hover:bg-gray-800/80"
-                            title={showRawDigest ? 'Hide raw' : 'Show raw'}
-                            aria-label={showRawDigest ? 'Hide raw' : 'Show raw'}
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
-                            </svg>
-                          </button>
+                              {t}
+                            </span>
+                          ))}
                         </div>
-                      </div>
+                      )}
                       <div className="prose prose-invert prose-sm max-w-none text-gray-200">
                         {briefHasStructuredSections(digest.narrative) ? (
                           <ReactMarkdown components={briefMarkdownComponents}>{narrativeForDisplay(digest.narrative)}</ReactMarkdown>
