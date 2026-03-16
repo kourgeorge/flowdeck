@@ -5,7 +5,6 @@ Uses ai_engine.llm_provider for LLM access (OpenAI, Azure, etc.).
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -16,29 +15,10 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 
-def _watchlist_llm_config() -> Dict[str, Any]:
-    """Build LLM provider config from env (Azure vs OpenAI, model names)."""
-    cfg: Dict[str, Any] = {}
-    provider = (os.environ.get("LLM_PROVIDER") or "").strip().lower()
-    azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "").strip()
-    azure_key = os.environ.get("AZURE_OPENAI_API_KEY", "").strip()
-    if provider == "azure" or (not provider and azure_endpoint and azure_key):
-        cfg["llm_provider"] = "azure"
-        cfg["quick_think_llm"] = (
-            os.environ.get("AZURE_QUICK_THINK_MODEL")
-            or os.environ.get("WATCHLIST_REPORT_LLM_MODEL")
-            or "gpt-4o-mini"
-        )
-    else:
-        cfg["llm_provider"] = provider or "openai"
-        cfg["quick_think_llm"] = os.environ.get("WATCHLIST_REPORT_LLM_MODEL") or "gpt-4o-mini"
-    return cfg
-
-
 def _get_llm():
     """Return LLM via ai_engine.llm_provider (quick role). Raises if not configured."""
-    from ai_engine.llm_provider import get_llm
-    config = _watchlist_llm_config()
+    from ai_engine.llm_provider import get_config_from_env, get_llm
+    config = get_config_from_env()
     return get_llm(
         "quick",
         config,

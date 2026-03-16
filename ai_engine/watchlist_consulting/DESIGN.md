@@ -47,7 +47,7 @@ After Stage 8, the conductor:
 
 ## 3. LLM parts
 
-LLM access is centralized in **report_agent._get_llm()**, which delegates to **ai_engine.llm_provider** (quick role). Supported backends: OpenAI, Azure, Ollama, OpenRouter, Anthropic, Google, Perplexity (see `ai_engine/llm_provider.py`). Config is derived from env: `LLM_PROVIDER`, `WATCHLIST_REPORT_LLM_MODEL` / `AZURE_QUICK_THINK_MODEL`, and provider-specific vars. Temperature 0.3; timeout 120s. No dependency on `tradingagents`.
+LLM access is centralized in **report_agent._get_llm()**, which delegates to **ai_engine.llm_provider** (quick role). Config comes from **get_config_from_env()**; env vars `DEEP_THINK_MODEL` and `QUICK_THINK_MODEL` set model names for all providers (see `ai_engine/llm_provider.py`). Supported backends: OpenAI, Azure, Ollama, OpenRouter, Anthropic, Google, Perplexity. Temperature 0.3; timeout 120s. No dependency on `tradingagents`.
 
 ### 3.1 Stage 1 — User intent
 

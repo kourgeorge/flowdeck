@@ -39,7 +39,6 @@ def get_config_from_env(overrides: Optional[Dict[str, Any]] = None) -> Dict[str,
     provider = (
         overrides.get("llm_provider")
         or os.environ.get("LLM_PROVIDER")
-        or os.environ.get("CONFIG_LLM_PROVIDER")
         or ""
     ).strip().lower()
     azure_endpoint = (
@@ -48,47 +47,42 @@ def get_config_from_env(overrides: Optional[Dict[str, Any]] = None) -> Dict[str,
         or ""
     ).strip()
     azure_key = (os.environ.get("AZURE_OPENAI_API_KEY") or "").strip()
+    deep_default = "gpt-4o" if provider != "cerebras" else "gpt-oss-120b"
+    quick_default = "gpt-4o-mini" if provider != "cerebras" else "gpt-oss-120b"
     if provider == "azure" or (not provider and azure_endpoint and azure_key):
         cfg["llm_provider"] = "azure"
         cfg["deep_think_llm"] = (
             overrides.get("deep_think_llm")
-            or os.environ.get("AZURE_DEEP_THINK_MODEL")
-            or os.environ.get("PORTFOLIO_DEEP_MODEL")
-            or "gpt-4o"
+            or os.environ.get("DEEP_THINK_MODEL")
+            or deep_default
         )
         cfg["quick_think_llm"] = (
             overrides.get("quick_think_llm")
-            or os.environ.get("AZURE_QUICK_THINK_MODEL")
-            or os.environ.get("PORTFOLIO_QUICK_MODEL")
-            or os.environ.get("WATCHLIST_REPORT_LLM_MODEL")
-            or "gpt-4o-mini"
+            or os.environ.get("QUICK_THINK_MODEL")
+            or quick_default
         )
     elif provider == "cerebras":
         cfg["llm_provider"] = "cerebras"
         cfg["deep_think_llm"] = (
             overrides.get("deep_think_llm")
-            or os.environ.get("CEREBRAS_DEEP_THINK_MODEL")
-            or os.environ.get("PORTFOLIO_DEEP_MODEL")
+            or os.environ.get("DEEP_THINK_MODEL")
             or "gpt-oss-120b"
         )
         cfg["quick_think_llm"] = (
             overrides.get("quick_think_llm")
-            or os.environ.get("CEREBRAS_QUICK_THINK_MODEL")
-            or os.environ.get("PORTFOLIO_QUICK_MODEL")
-            or os.environ.get("WATCHLIST_REPORT_LLM_MODEL")
+            or os.environ.get("QUICK_THINK_MODEL")
             or "gpt-oss-120b"
         )
     else:
         cfg["llm_provider"] = provider or "openai"
         cfg["deep_think_llm"] = (
             overrides.get("deep_think_llm")
-            or os.environ.get("PORTFOLIO_DEEP_MODEL")
+            or os.environ.get("DEEP_THINK_MODEL")
             or "gpt-4o"
         )
         cfg["quick_think_llm"] = (
             overrides.get("quick_think_llm")
-            or os.environ.get("PORTFOLIO_QUICK_MODEL")
-            or os.environ.get("WATCHLIST_REPORT_LLM_MODEL")
+            or os.environ.get("QUICK_THINK_MODEL")
             or "gpt-4o-mini"
         )
     if overrides.get("backend_url"):

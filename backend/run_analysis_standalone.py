@@ -28,6 +28,7 @@ for p in (str(REPO_ROOT), str(BACKEND_DIR)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
+from ai_engine.llm_provider import get_config_from_env
 from ai_engine.tradingagents.graph.trading_graph import TradingAgentsGraph
 from ai_engine.tradingagents.default_config import DEFAULT_CONFIG
 
@@ -87,8 +88,8 @@ def main() -> None:
     parser.add_argument("--llm-provider", default="azure", help="LLM provider")
     parser.add_argument("--results-dir", default="results", help="Results directory (absolute or relative to repo)")
     parser.add_argument("--info-service-url", required=True, help="Node backend URL for /api/data")
-    parser.add_argument("--shallow-thinker", default="", help="Azure quick-thinking model (optional)")
-    parser.add_argument("--deep-thinker", default="", help="Azure deep-thinking model (optional)")
+    parser.add_argument("--shallow-thinker", default="", help="Override quick-thinking model for this run (optional)")
+    parser.add_argument("--deep-thinker", default="", help="Override deep-thinking model for this run (optional)")
     parser.add_argument("--initiator-email", default="", help="Email of user who started the analysis (notified when done)")
     args = parser.parse_args()
 
@@ -121,19 +122,14 @@ def main() -> None:
     config = DEFAULT_CONFIG.copy()
     config["max_debate_rounds"] = args.research_depth
     config["max_risk_discuss_rounds"] = args.research_depth
-    config["llm_provider"] = args.llm_provider.lower()
     config["results_dir"] = str(results_dir)
     config["info_service_url"] = args.info_service_url.strip().rstrip("/")
-
-    if args.llm_provider.lower() == "azure":
-        if args.shallow_thinker:
-            config["quick_think_llm"] = args.shallow_thinker
-        else:
-            config["quick_think_llm"] = os.getenv("AZURE_QUICK_THINK_MODEL", "gpt-4o-mini-2024-07-18")
-        if args.deep_thinker:
-            config["deep_think_llm"] = args.deep_thinker
-        else:
-            config["deep_think_llm"] = os.getenv("AZURE_DEEP_THINK_MODEL", "gpt-4o-2024-08-06")
+    env_cfg = get_config_from_env(overrides={"llm_provider": args.llm_provider.lower()})
+    config.update(env_cfg)
+    if args.shallow_thinker:
+        config["quick_think_llm"] = args.shallow_thinker
+    if args.deep_thinker:
+        config["deep_think_llm"] = args.deep_thinker
 
     logger.info(
         "Standalone analysis starting analysis_run_id=%s ticker=%s date=%s models=%s",

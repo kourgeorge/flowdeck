@@ -154,7 +154,7 @@ class EdgarService:
         azure_key = os.environ.get("AZURE_OPENAI_API_KEY", "").strip()
         if azure_endpoint and azure_key:
             from langchain_openai import AzureChatOpenAI
-            model = os.environ.get("AZURE_QUICK_THINK_MODEL", "gpt-4o-mini")
+            model = os.environ.get("QUICK_THINK_MODEL", "gpt-4o-mini")
             self._extraction_llm = AzureChatOpenAI(
                 azure_deployment=model,
                 model=model,
@@ -172,7 +172,7 @@ class EdgarService:
                     "EDGAR extraction requires OPENAI_API_KEY or (AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY)"
                 )
             self._extraction_llm = ChatOpenAI(
-                model=os.environ.get("EDGAR_EXTRACTION_MODEL", "gpt-4o-mini"),
+                model=os.environ.get("EDGAR_EXTRACTION_MODEL") or os.environ.get("QUICK_THINK_MODEL") or "gpt-4o-mini",
                 temperature=0.0,
                 request_timeout=90,
             )

@@ -40,6 +40,7 @@ try:
 except ImportError:
     pass
 
+from ai_engine.llm_provider import get_config_from_env
 from ai_engine.tradingagents.graph.trading_graph import TradingAgentsGraph
 from ai_engine.tradingagents.default_config import DEFAULT_CONFIG
 
@@ -299,10 +300,7 @@ def main() -> None:
     config = DEFAULT_CONFIG.copy()
     config["max_debate_rounds"] = args.research_depth
     config["max_risk_discuss_rounds"] = args.research_depth
-    config["llm_provider"] = args.llm_provider.lower()
-    if config["llm_provider"] == "azure":
-        config["quick_think_llm"] = os.getenv("AZURE_QUICK_THINK_MODEL", "gpt-4o-mini-2024-07-18")
-        config["deep_think_llm"] = os.getenv("AZURE_DEEP_THINK_MODEL", "gpt-4o-2024-08-06")
+    config.update(get_config_from_env(overrides={"llm_provider": args.llm_provider.lower()}))
 
     analysis_date = args.date.strip()
     n_runs = max(1, args.runs)
