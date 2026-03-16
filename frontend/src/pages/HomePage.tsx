@@ -14,6 +14,9 @@ interface PublicStats {
   unique_tickers_analyzed: number;
 }
 
+const HOME_MAJOR_TICKER_ORDER = ['NVDA', 'AAPL', 'GOOGL', 'MSFT', 'AMZN', 'META', 'TSLA'];
+const HOME_MAJOR_TICKER_RANK = new Map<string, number>(HOME_MAJOR_TICKER_ORDER.map((ticker, index) => [ticker, index]));
+
 export default function HomePage() {
   const { user } = useAuth();
   const [widgets, setWidgets] = useState<StockWidgetType[]>([]);
@@ -76,7 +79,14 @@ export default function HomePage() {
   const majorFiltered = hasMajorFlag
     ? widgets.filter((w) => w.is_major === true)
     : widgets;
-  const majorWidgets = majorFiltered.slice(0, MAJOR_STOCKS_LIMIT);
+  const majorWidgets = [...majorFiltered]
+    .sort((a, b) => {
+      const aRank = HOME_MAJOR_TICKER_RANK.get(a.ticker) ?? Number.MAX_SAFE_INTEGER;
+      const bRank = HOME_MAJOR_TICKER_RANK.get(b.ticker) ?? Number.MAX_SAFE_INTEGER;
+      if (aRank !== bRank) return aRank - bRank;
+      return a.ticker.localeCompare(b.ticker);
+    })
+    .slice(0, MAJOR_STOCKS_LIMIT);
 
   if (isLoading && widgets.length === 0) {
     return (
@@ -208,7 +218,7 @@ export default function HomePage() {
               </button>
             </div>
           ) : (
-            <TickerListView widgets={majorWidgets} tickerToName={tickerToName} />
+            <TickerListView widgets={majorWidgets} tickerToName={tickerToName} preserveOrder />
           )}
         </div>
       </section>
