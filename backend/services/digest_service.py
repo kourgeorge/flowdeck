@@ -155,12 +155,13 @@ def get_digest_dates(
 ) -> tuple[List[str], dict[str, int]]:
     """
     Return (dates, count_by_date) for the user's digest history in the last `days`.
-    dates = sorted list of slot keys (YYYY-MM-DD or w:YYYY-MM-DD).
+    dates = list of slot keys (YYYY-MM-DD or w:YYYY-MM-DD) ordered by oldest first,
+    so the last slot is the one with the most recent brief (daily or weekly, whichever is later).
     """
     now = datetime.now(timezone.utc)
     since = now - timedelta(days=days - 1)
     rows = (
-        db.query(Execution.subject_id)
+        db.query(Execution.subject_id, Execution.created_at)
         .filter(
             Execution.execution_type == "daily_digest",
             Execution.subject_type == "user_date",
@@ -170,7 +171,8 @@ def get_digest_dates(
         .all()
     )
     count_by_date: dict[str, int] = {}
-    for (subject_id,) in rows:
+    latest_created_by_slot: dict[str, datetime] = {}
+    for subject_id, created_at in rows:
         if not subject_id:
             continue
         parts = str(subject_id).split(":", 2)
@@ -179,7 +181,18 @@ def get_digest_dates(
         date_str = parts[1] if len(parts) == 2 else f"{parts[1]}:{parts[2]}"
         if date_str:
             count_by_date[date_str] = count_by_date.get(date_str, 0) + 1
-    dates = sorted(count_by_date.keys())
+            # Keep the latest created_at for this slot (for ordering)
+            if created_at:
+                ts = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
+                prev = latest_created_by_slot.get(date_str)
+                if prev is None or ts > prev:
+                    latest_created_by_slot[date_str] = ts
+    # Order slots by latest brief time ascending so the last element is the most recent
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    dates = sorted(
+        count_by_date.keys(),
+        key=lambda s: (latest_created_by_slot.get(s) or epoch),
+    )
     return dates, count_by_date
 
 
