@@ -121,6 +121,10 @@ async def run_and_store_digest(
         "priority_tickers": getattr(result, "priority_tickers", []),
         "what_to_watch": getattr(result, "what_to_watch", ""),
     }
+    # Optional per-ticker snapshot for UI: price + span-aware percent change.
+    focus_snapshot = getattr(result, "focus_snapshot", None)
+    if isinstance(focus_snapshot, dict) and focus_snapshot:
+        metadata["focus_snapshot"] = focus_snapshot
     if user_note:
         metadata["user_note"] = user_note
     if narrative_style:

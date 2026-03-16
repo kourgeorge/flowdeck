@@ -650,8 +650,8 @@ export default function HomePage() {
                 </div>
                 <div className="pt-2 border-t border-gray-700/80 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-gray-300 uppercase tracking-wider">What to watch next</span>
-                    <span className="text-[11px] text-amber-300 font-mono">Focus tickers</span>
+                    <span className="text-xs font-semibold text-white uppercase tracking-wider">What to watch next</span>
+                    <span className="text-[11px] font-mono font-semibold text-white">Focus tickers</span>
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center justify-between text-xs text-gray-200">

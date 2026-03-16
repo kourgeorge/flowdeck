@@ -344,17 +344,25 @@ export default function DashboardPage() {
       spanLabel.toLowerCase().startsWith('week') || brief.span_type === 'weekly'
         ? "This week's overview"
         : "Today's overview";
+    // Optional per-ticker snapshot from backend: price + span-aware percent change at brief creation time.
+    const anyBrief = brief as any;
+    const focusSnapshot = (anyBrief?.focus_snapshot ?? anyBrief?.raw_metadata?.focus_snapshot) as
+      | Record<string, { price?: number | null; change_pct?: number | null; span_type?: string }>
+      | undefined;
+
     return (
-      <div className="rounded-xl border border-slate-700 bg-[#020617]/90 text-sm p-4 space-y-4">
+      <div className="mt-3 pt-3 border-t border-slate-800 space-y-4 text-base">
         <div>
-          <div className="text-[11px] font-mono text-emerald-300 uppercase tracking-[0.18em] mb-1">
+          <div className="text-xs font-mono text-emerald-300 uppercase tracking-[0.18em] mb-1">
             {overviewLabel}
           </div>
           <div className="prose prose-invert prose-sm max-w-none text-gray-100">
             {briefHasStructuredSections(brief.narrative) ? (
-              <ReactMarkdown components={briefMarkdownComponents}>{narrativeForDisplay(brief.narrative)}</ReactMarkdown>
+              <ReactMarkdown components={briefMarkdownComponents}>
+                {narrativeForDisplay(brief.narrative)}
+              </ReactMarkdown>
             ) : (
-              <p className="whitespace-pre-wrap leading-relaxed text-[13px]">
+              <p className="whitespace-pre-wrap leading-relaxed text-sm">
                 {brief.narrative}
               </p>
             )}
@@ -362,32 +370,36 @@ export default function DashboardPage() {
         </div>
 
         {brief.what_to_watch && !briefHasStructuredSections(brief.narrative) && (
-          <div className="pt-2 border-t border-slate-700/80 space-y-1.5">
+          <div className="pt-3 border-t border-slate-700/80 space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-mono text-slate-300 uppercase tracking-[0.18em]">
+              <span className="text-xs font-mono text-slate-300 uppercase tracking-[0.18em]">
                 What to watch next
               </span>
             </div>
-            <p className="text-[13px] text-slate-100 whitespace-pre-wrap leading-relaxed">
+            <p className="text-sm text-slate-100 whitespace-pre-wrap leading-relaxed">
               {brief.what_to_watch}
             </p>
           </div>
         )}
 
         {focusTickers.length > 0 && (
-          <div className="pt-2 border-t border-slate-700/80 space-y-1.5">
+          <div className="pt-3 border-t border-slate-700/80 space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-mono text-slate-300 uppercase tracking-[0.18em]">
+              <span className="text-xs font-mono font-semibold text-white uppercase tracking-[0.18em]">
                 Focus tickers
               </span>
-              <span className="text-[11px] text-emerald-300 font-mono">
+              <span className="text-xs text-emerald-300 font-mono">
                 Style: {styleLabel} · Span: {spanLabel}
               </span>
             </div>
             <div className="space-y-1">
               {focusTickers.map((t) => {
-                const w = tickerWidgetByTicker.get(t.toUpperCase());
-                const change = w?.daily_change_percent;
+                const upper = t.toUpperCase();
+                const snap = focusSnapshot?.[upper] ?? focusSnapshot?.[t];
+                const price = typeof snap?.price === 'number' ? snap.price : undefined;
+                const change = typeof snap?.change_pct === 'number'
+                  ? snap.change_pct
+                  : tickerWidgetByTicker.get(upper)?.daily_change_percent;
                 const changeStr =
                   typeof change === 'number'
                     ? `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`
@@ -399,8 +411,13 @@ export default function DashboardPage() {
                       : 'text-red-300'
                     : 'text-slate-400';
                 return (
-                  <div key={t} className="flex items-center justify-between text-[13px] text-slate-100">
-                    <span className="mr-3">{t}</span>
+                  <div key={t} className="flex items-center justify-between text-sm text-slate-100">
+                    <span className="mr-3 flex items-center gap-2">
+                      <span>{t}</span>
+                      {typeof price === 'number' && (
+                        <span className="text-xs text-slate-400">${price.toFixed(2)}</span>
+                      )}
+                    </span>
                     {changeStr && <span className={changeClass}>{changeStr}</span>}
                   </div>
                 );
@@ -971,8 +988,8 @@ export default function DashboardPage() {
                 )}
 
                 {/* Right: brief content */}
-                <div className="flex-1 min-w-0 bg-[#020617] rounded-xl border border-slate-700 overflow-hidden shadow-lg">
-                  <div className="bg-slate-950/60 min-h-[200px] px-4 sm:px-6 pt-3 sm:pt-4 pb-4 sm:pb-6 space-y-3">
+                <div className="flex-1 min-w-0 bg-black rounded-xl border border-slate-800 overflow-hidden shadow-lg">
+                  <div className="bg-slate-950 min-h-[200px] px-4 sm:px-6 pt-3 sm:pt-4 pb-4 sm:pb-6 space-y-3">
                   {digestLoading && (
                     <div className="flex flex-col items-center justify-center min-h-[280px] py-12 px-4">
                       <div className="relative">
@@ -1124,7 +1141,7 @@ export default function DashboardPage() {
                               <button
                                 type="button"
                                 onClick={() => setShowReferences((v) => !v)}
-                                className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-300 hover:text-white"
+                                className="inline-flex items-center gap-1.5 text-sm font-medium text-white"
                               >
                                 <svg
                                   className={`w-3 h-3 transition-transform ${
@@ -1279,7 +1296,7 @@ export default function DashboardPage() {
                       {digest.what_to_watch && !briefHasStructuredSections(digest.narrative) && (
                         <div className="pt-3 border-t border-gray-700 space-y-2">
                           <div>
-                            <h3 className="text-sm font-semibold text-emerald-300 mb-1">What to watch</h3>
+                            <h3 className="text-sm font-semibold text-white mb-1">What to watch</h3>
                             <p className="text-gray-200 text-sm whitespace-pre-wrap leading-relaxed">
                               {digest.what_to_watch}
                             </p>
@@ -1291,7 +1308,7 @@ export default function DashboardPage() {
                           <button
                             type="button"
                             onClick={() => setShowReferences((v) => !v)}
-                            className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-300 hover:text-white"
+                            className="inline-flex items-center gap-1.5 text-sm font-medium text-white"
                           >
                             <svg
                               className={`w-3 h-3 transition-transform ${

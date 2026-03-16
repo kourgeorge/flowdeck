@@ -190,6 +190,10 @@ class DigestResult(BaseModel):
         description="Human-readable span for UI, e.g. 'Daily', 'Weekly', 'Mar 6–12, 2025'.",
     )
     priority_tickers: List[str] = Field(default_factory=list, description="Tickers that were analyzed in depth.")
+    focus_snapshot: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Per-ticker snapshot used by the brief UI: ticker -> {price, change_pct, span_type}.",
+    )
     references: List[ReferenceItem] = Field(
         default_factory=list,
         description="Structured list of sources used for this brief.",

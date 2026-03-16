@@ -301,7 +301,11 @@ export default function Layout() {
                 );
               })}
               {user?.is_admin && (
-                <li>
+                <>
+                  <li aria-hidden="true">
+                    <div className="my-2 border-t border-gray-700" />
+                  </li>
+                  <li>
                   <NavLink
                     to="/admin"
                     title={!sidebarExpanded ? 'Admin' : undefined}
@@ -318,6 +322,7 @@ export default function Layout() {
                     {sidebarExpanded && <span>Admin</span>}
                   </NavLink>
                 </li>
+                </>
               )}
             </ul>
           </div>

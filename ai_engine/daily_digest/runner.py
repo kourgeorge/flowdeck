@@ -241,6 +241,33 @@ def run_digest(
     state.digest_narrative = narrative
     state.what_to_watch = what_to_watch
 
+    # Build per-ticker snapshot for UI: actual price and span-aware percent change.
+    focus_snapshot: Dict[str, Any] = {}
+    try:
+        quotes = getattr(ctx, "quotes", {}) or {}
+        returns_1d = getattr(ctx, "returns_1d", {}) or {}
+        returns_5d = getattr(ctx, "returns_5d", {}) or {}
+        returns_span = getattr(ctx, "returns_span", {}) or {}
+        for t in ctx.priority_tickers:
+            q = quotes.get(t) or {}
+            price = q.get("current_price") or q.get("price")
+            change_pct = None
+            if span_type == "daily":
+                change_pct = returns_1d.get(t)
+            elif span_type == "weekly":
+                change_pct = returns_span.get(t)
+                if change_pct is None:
+                    change_pct = returns_5d.get(t)
+            else:
+                change_pct = returns_span.get(t)
+            focus_snapshot[t] = {
+                "price": float(price) if price is not None else None,
+                "change_pct": float(change_pct) if change_pct is not None else None,
+                "span_type": span_type,
+            }
+    except Exception:
+        focus_snapshot = {}
+
     models_used = {
         "provider": cfg.get("llm_provider"),
         "quick_think": cfg.get("quick_think_llm"),
@@ -253,6 +280,7 @@ def run_digest(
         span_type=span_type,
         span_label=span_label,
         priority_tickers=ctx.priority_tickers,
+        focus_snapshot=focus_snapshot,
         references=state.references,
         input_tokens=input_tokens,
         output_tokens=output_tokens,

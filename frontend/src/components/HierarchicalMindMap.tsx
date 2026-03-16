@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ReportData } from '../services/types';
+import { getScoreColor } from './AspectSpiderChart';
 
 const REPORT_LABELS: Record<string, string> = {
   market_report: 'Market',
@@ -25,13 +26,6 @@ export interface HierarchicalMindMapProps {
   reports: Record<string, ReportData>;
   /** When provided, the modal shows a "Read full report" link that opens this report tab */
   onOpenReport?: (reportKey: string) => void;
-}
-
-function getScoreClass(score: number | null | undefined): string {
-  if (score === null || score === undefined) return 'text-gray-400';
-  if (score < 5) return 'text-red-400';
-  if (score <= 7) return 'text-yellow-400';
-  return 'text-green-400';
 }
 
 function getRecommendationClass(rec: string | null): string {
@@ -80,7 +74,7 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
       >
         <div className="flex items-center justify-between gap-2 shrink-0 min-w-0 w-full">
           <span className="text-sm font-semibold text-slate-400 min-w-0 break-words">{label}</span>
-          <span className={`text-xs font-bold flex-shrink-0 ${getScoreClass(score)}`}>{scoreLabel}</span>
+          <span className={`text-xs font-bold flex-shrink-0 ${getScoreColor(score)}`}>{scoreLabel}</span>
         </div>
         {keyPoints.length > 0 && (
           <>

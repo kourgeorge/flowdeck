@@ -40,6 +40,7 @@ class DigestResponse(BaseModel):
     user_focus_tickers: Optional[list[str]] = None
     raw_metadata: Optional[dict] = None
     share_url: Optional[str] = None
+    focus_snapshot: Optional[dict[str, dict]] = None
 
 
 class DigestDatesResponse(BaseModel):
@@ -62,6 +63,7 @@ class DigestBriefItem(BaseModel):
     references: Optional[list[dict]] = None
     raw_metadata: Optional[dict] = None
     share_url: Optional[str] = None
+    focus_snapshot: Optional[dict[str, dict]] = None
 
 
 class DigestListForDateResponse(BaseModel):
@@ -147,6 +149,7 @@ async def get_digest(
         user_focus_tickers=user_focus_tickers,
         raw_metadata=metadata,
         share_url=share_url,
+        focus_snapshot=getattr(result, "focus_snapshot", None),
     )
 
 
@@ -189,6 +192,7 @@ def _brief_item_to_response(b) -> DigestBriefItem:
         references=b.references,
         raw_metadata=b.raw_metadata,
         share_url=share_url,
+        focus_snapshot=(b.raw_metadata or {}).get("focus_snapshot") if b.raw_metadata else None,
     )
 
 
