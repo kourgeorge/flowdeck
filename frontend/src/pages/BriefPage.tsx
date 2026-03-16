@@ -432,12 +432,12 @@ export default function BriefPage() {
                     <button
                       type="button"
                       onClick={() => setNewBriefModalOpen(true)}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-emerald-100 hover:text-slate-950 hover:bg-emerald-400 rounded-md transition-colors focus:outline-none focus:ring-1 focus:ring-emerald-400/70"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300/80 bg-emerald-400 px-3 py-1.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-300/70"
                       title="Create new brief"
                       aria-label="Create new brief"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
                       </svg>
                       <span>New</span>
                     </button>
