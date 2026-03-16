@@ -622,43 +622,43 @@ def _format_brief_narrative_for_email(narrative: str) -> str:
             current_body.append(line)
     flush()
 
-    # Map section titles to colors that mirror the dashboard brief tab feel.
+    # Map section titles to colors with light backgrounds suitable for email.
     def section_styles(title: str) -> dict[str, str]:
         key = title.lower()
         if "market highlight" in key:
             return {
-                "bg": "#0f172a",
+                "bg": "#fef3c7",
                 "border": "#fbbf24",
-                "title": "#fde68a",
-                "text": "#e5e7eb",
+                "title": "#92400e",
+                "text": "#451a03",
             }
         if "key signal" in key:
             return {
-                "bg": "#111827",
+                "bg": "#f3e8ff",
                 "border": "#a855f7",
-                "title": "#e9d5ff",
-                "text": "#e5e7eb",
+                "title": "#6b21a8",
+                "text": "#4c1d95",
             }
         if "what to watch" in key:
             return {
-                "bg": "#1f2937",
+                "bg": "#fed7aa",
                 "border": "#f59e0b",
-                "title": "#fed7aa",
-                "text": "#e5e7eb",
+                "title": "#92400e",
+                "text": "#78350f",
             }
         if "risk" in key:
             return {
-                "bg": "#111827",
-                "border": "#f97373",
-                "title": "#fecaca",
-                "text": "#e5e7eb",
+                "bg": "#fee2e2",
+                "border": "#f87171",
+                "title": "#991b1b",
+                "text": "#7f1d1d",
             }
-        # Default neutral section.
+        # Default neutral section with light background.
         return {
-            "bg": "#0f172a",
-            "border": "#4b5563",
-            "title": "#e5e7eb",
-            "text": "#e5e7eb",
+            "bg": "#f1f5f9",
+            "border": "#94a3b8",
+            "title": "#334155",
+            "text": "#0f172a",
         }
 
     html_sections: list[str] = []
