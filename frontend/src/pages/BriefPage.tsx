@@ -47,6 +47,15 @@ function BriefIcon() {
   );
 }
 
+function SpinnerIcon() {
+  return (
+    <svg className="w-3.5 h-3.5 text-blue-400 animate-spin shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden>
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+    </svg>
+  );
+}
+
 export default function BriefPage() {
   const { user } = useAuth();
   const { widgets } = useDashboardData({ enableRecentAnalyzed: false });
@@ -70,7 +79,8 @@ export default function BriefPage() {
   const [digestInputExpanded, setDigestInputExpanded] = useState<boolean>(false);
   const [shareLinkCopied, setShareLinkCopied] = useState<boolean>(false);
   const [copyBriefCopied, setCopyBriefCopied] = useState<boolean>(false);
-  const [emailBriefSent, setEmailBriefSent] = useState<boolean>(false);
+  const [emailBriefSentId, setEmailBriefSentId] = useState<number | null>(null);
+  const [emailBriefSendingId, setEmailBriefSendingId] = useState<number | null>(null);
   const [newBriefModalOpen, setNewBriefModalOpen] = useState<boolean>(false);
 
   useEffect(() => {
@@ -353,13 +363,18 @@ export default function BriefPage() {
 
   const handleSendBriefEmail = async (executionId: number) => {
     setDigestError(null);
+    setEmailBriefSendingId(executionId);
     try {
       await digestApi.sendBriefToEmail(executionId);
-      setEmailBriefSent(true);
-      setTimeout(() => setEmailBriefSent(false), 2000);
+      setEmailBriefSentId(executionId);
+      window.setTimeout(() => {
+        setEmailBriefSentId((currentId) => (currentId === executionId ? null : currentId));
+      }, 2000);
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       setDigestError(message);
+    } finally {
+      setEmailBriefSendingId((currentId) => (currentId === executionId ? null : currentId));
     }
   };
 
@@ -698,13 +713,30 @@ export default function BriefPage() {
                             <button
                               type="button"
                               onClick={() => handleSendBriefEmail(selectedBrief.execution_id)}
+                              disabled={emailBriefSendingId === selectedBrief.execution_id}
                               className={`inline-flex items-center justify-center p-1.5 rounded border hover:bg-gray-800/80 ${
-                                emailBriefSent ? 'border-emerald-500/70 text-emerald-400' : 'border-gray-500 text-gray-300'
-                              }`}
-                              title={emailBriefSent ? 'Emailed!' : 'Email this brief to me'}
-                              aria-label={emailBriefSent ? 'Emailed!' : 'Email this brief to me'}
+                                emailBriefSentId === selectedBrief.execution_id
+                                  ? 'border-emerald-500/70 text-emerald-400'
+                                  : 'border-gray-500 text-gray-300'
+                              } disabled:opacity-60 disabled:cursor-not-allowed`}
+                              title={
+                                emailBriefSendingId === selectedBrief.execution_id
+                                  ? 'Sending email…'
+                                  : emailBriefSentId === selectedBrief.execution_id
+                                    ? 'Emailed!'
+                                    : 'Email this brief to me'
+                              }
+                              aria-label={
+                                emailBriefSendingId === selectedBrief.execution_id
+                                  ? 'Sending email'
+                                  : emailBriefSentId === selectedBrief.execution_id
+                                    ? 'Emailed!'
+                                    : 'Email this brief to me'
+                              }
                             >
-                              {emailBriefSent ? (
+                              {emailBriefSendingId === selectedBrief.execution_id ? (
+                                <SpinnerIcon />
+                              ) : emailBriefSentId === selectedBrief.execution_id ? (
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.5 12.75l6 6 9-13.5" />
                                 </svg>
@@ -868,13 +900,30 @@ export default function BriefPage() {
                             <button
                               type="button"
                               onClick={() => handleSendBriefEmail(digest.execution_id!)}
+                              disabled={emailBriefSendingId === digest.execution_id}
                               className={`inline-flex items-center justify-center p-1.5 rounded border hover:bg-gray-800/80 ${
-                                emailBriefSent ? 'border-emerald-500/70 text-emerald-400' : 'border-gray-500 text-gray-300'
-                              }`}
-                              title={emailBriefSent ? 'Emailed!' : 'Email this brief to me'}
-                              aria-label={emailBriefSent ? 'Emailed!' : 'Email this brief to me'}
+                                emailBriefSentId === digest.execution_id
+                                  ? 'border-emerald-500/70 text-emerald-400'
+                                  : 'border-gray-500 text-gray-300'
+                              } disabled:opacity-60 disabled:cursor-not-allowed`}
+                              title={
+                                emailBriefSendingId === digest.execution_id
+                                  ? 'Sending email…'
+                                  : emailBriefSentId === digest.execution_id
+                                    ? 'Emailed!'
+                                    : 'Email this brief to me'
+                              }
+                              aria-label={
+                                emailBriefSendingId === digest.execution_id
+                                  ? 'Sending email'
+                                  : emailBriefSentId === digest.execution_id
+                                    ? 'Emailed!'
+                                    : 'Email this brief to me'
+                              }
                             >
-                              {emailBriefSent ? (
+                              {emailBriefSendingId === digest.execution_id ? (
+                                <SpinnerIcon />
+                              ) : emailBriefSentId === digest.execution_id ? (
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.5 12.75l6 6 9-13.5" />
                                 </svg>
