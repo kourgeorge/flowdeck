@@ -874,7 +874,7 @@ export interface DigestScheduleUpdatePayload {
 }
 
 export const digestApi = {
-  getDigest: async (params?: { date?: string; span?: DigestSpan; max_priority_tickers?: number; user_note?: string; narrative_style?: string; user_focus_tickers?: string[] }): Promise<DigestResponse> => {
+  getDigest: async (params?: { date?: string; span?: DigestSpan; max_priority_tickers?: number; user_note?: string; narrative_style?: string; user_focus_tickers?: string[]; timezone?: string }): Promise<DigestResponse> => {
     const token = getStoredToken();
     if (!token) throw new Error('Sign in to get your Briefing');
     const searchParams = new URLSearchParams();
@@ -884,6 +884,7 @@ export const digestApi = {
       if (params.max_priority_tickers != null) searchParams.set('max_priority_tickers', String(params.max_priority_tickers));
       if (params.user_note != null && params.user_note !== '') searchParams.set('user_note', params.user_note);
       if (params.narrative_style != null && params.narrative_style !== '') searchParams.set('narrative_style', params.narrative_style);
+      if (params.timezone != null && params.timezone !== '') searchParams.set('timezone', params.timezone);
       if (params.user_focus_tickers?.length) {
         for (const t of params.user_focus_tickers) {
           searchParams.append('user_focus_tickers', t);
@@ -897,21 +898,22 @@ export const digestApi = {
     return response.data;
   },
 
-  getDigestDates: async (days: number = 90): Promise<DigestDatesResponse> => {
+  getDigestDates: async (days: number = 90, timezone?: string): Promise<DigestDatesResponse> => {
     const token = getStoredToken();
     if (!token) throw new Error('Sign in to view your Briefing history');
     const response = await api.get<DigestDatesResponse>('/api/digest/history/dates', {
       headers: { Authorization: `Bearer ${token}` },
-      params: { days },
+      params: { days, ...(timezone ? { timezone } : {}) },
     });
     return response.data;
   },
 
-  getDigestsForDate: async (date: string): Promise<DigestListForDateResponse> => {
+  getDigestsForDate: async (date: string, timezone?: string): Promise<DigestListForDateResponse> => {
     const token = getStoredToken();
     if (!token) throw new Error('Sign in to view your Briefing history');
     const response = await api.get<DigestListForDateResponse>(`/api/digest/history/${date}`, {
       headers: { Authorization: `Bearer ${token}` },
+      params: timezone ? { timezone } : undefined,
     });
     return response.data;
   },

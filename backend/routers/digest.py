@@ -1,8 +1,9 @@
 """User Daily Brief API: generate and retrieve tailored daily market briefs for the current user."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -71,6 +72,16 @@ class DigestListForDateResponse(BaseModel):
     briefs: list[DigestBriefItem]
 
 
+def _today_for_timezone(timezone_name: Optional[str]) -> str:
+    """Return today's date in the user's timezone, falling back to UTC."""
+    if timezone_name:
+        try:
+            return datetime.now(ZoneInfo(timezone_name)).date().isoformat()
+        except Exception:
+            pass
+    return datetime.now(timezone.utc).date().isoformat()
+
+
 @router.get("/digest", response_model=DigestResponse)
 async def get_digest(
     current_user=Depends(get_current_user),
@@ -101,6 +112,12 @@ async def get_digest(
             "If provided, this strongly guides focus selection."
         ),
     ),
+    timezone_name: Optional[str] = Query(
+        None,
+        alias="timezone",
+        max_length=64,
+        description="Optional IANA timezone name from the client, e.g. 'Asia/Jerusalem'.",
+    ),
 ):
     """
     Generate a short, tailored User Daily Brief for the current user's portfolio (and persist it).
@@ -109,7 +126,7 @@ async def get_digest(
     evidence and platform reports, then runs interpretation agents to produce a
     narrative brief and a "what to watch" section. Use span=daily (default) or span=weekly.
     """
-    digest_date = date or datetime.utcnow().strftime("%Y-%m-%d")
+    digest_date = date or _today_for_timezone(timezone_name)
     span_type = span or "daily"
 
     try:
@@ -159,11 +176,17 @@ def get_digest_dates(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
     days: int = Query(90, ge=1, le=365, description="Look back this many days from today for digest history"),
+    timezone_name: Optional[str] = Query(
+        None,
+        alias="timezone",
+        max_length=64,
+        description="Optional IANA timezone name from the client, used to group daily briefs by local day.",
+    ),
 ):
     """
     Return dates (YYYY-MM-DD) that have at least one digest, and how many briefs per date.
     """
-    dates, count_by_date = svc_get_digest_dates(db, current_user.id, days)
+    dates, count_by_date = svc_get_digest_dates(db, current_user.id, days, timezone_name=timezone_name)
     return DigestDatesResponse(dates=dates, count_by_date=count_by_date)
 
 
@@ -202,6 +225,12 @@ def get_digests_for_date(
     date: str,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
+    timezone_name: Optional[str] = Query(
+        None,
+        alias="timezone",
+        max_length=64,
+        description="Optional IANA timezone name from the client, used for daily local-day history lookup.",
+    ),
 ):
     """
     Return all stored briefs for the given slot for the current user, newest first.
@@ -212,7 +241,7 @@ def get_digests_for_date(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid slot format, expected YYYY-MM-DD or w:YYYY-MM-DD")
 
-    brief_objs = svc_get_digests_for_date(db, current_user.id, date)
+    brief_objs = svc_get_digests_for_date(db, current_user.id, date, timezone_name=timezone_name)
     briefs = [_brief_item_to_response(b) for b in brief_objs]
     return DigestListForDateResponse(date=date, briefs=briefs)
 

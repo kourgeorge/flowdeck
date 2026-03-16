@@ -81,6 +81,7 @@ export default function BriefPage() {
   const { user } = useAuth();
   const { widgets } = useDashboardData({ enableRecentAnalyzed: false });
   const canViewRawDigest = user?.is_admin === true;
+  const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
 
   const [digest, setDigest] = useState<DigestResponse | null>(null);
   const [digestLoading, setDigestLoading] = useState(false);
@@ -108,7 +109,7 @@ export default function BriefPage() {
     if (!user || digestDates.length > 0) return;
     (async () => {
       try {
-        const res = await digestApi.getDigestDates(90);
+        const res = await digestApi.getDigestDates(90, browserTimezone);
         const dates = res.dates ?? [];
         setDigestDates(dates);
         setDigestCountByDate(res.count_by_date ?? {});
@@ -118,7 +119,7 @@ export default function BriefPage() {
           setDigest(null);
           setDigestLoading(true);
           try {
-            const listRes = await digestApi.getDigestsForDate(latestSlot);
+            const listRes = await digestApi.getDigestsForDate(latestSlot, browserTimezone);
             setDigestBriefsForDay(listRes.briefs);
             setSelectedBrief(listRes.briefs[0] ?? null);
           } catch {
@@ -132,7 +133,7 @@ export default function BriefPage() {
         // History is best-effort.
       }
     })();
-  }, [digestDates.length, user]);
+  }, [browserTimezone, digestDates.length, user]);
 
   const handleRunDigest = async () => {
     setDigestError(null);
@@ -146,12 +147,14 @@ export default function BriefPage() {
         user_note?: string;
         narrative_style?: string;
         user_focus_tickers?: string[];
+        timezone?: string;
       } = {};
       if (digestSpan !== 'daily') params.span = digestSpan;
       if (trimmedNote) params.user_note = trimmedNote;
       if (styleParam) params.narrative_style = styleParam;
       if (selectedFocusTickers.length > 0) params.user_focus_tickers = selectedFocusTickers;
-      const data = await digestApi.getDigest(Object.keys(params).length ? params : undefined);
+      params.timezone = browserTimezone;
+      const data = await digestApi.getDigest(params);
       setDigest(data);
       const slot = data.span_type === 'weekly' ? `w:${data.digest_date}` : data.digest_date;
       setSelectedDigestDate(slot);
@@ -163,7 +166,7 @@ export default function BriefPage() {
       if (trimmedNote) {
         setDigestUserNote('');
       }
-      const listRes = await digestApi.getDigestsForDate(slot);
+      const listRes = await digestApi.getDigestsForDate(slot, browserTimezone);
       setDigestBriefsForDay(listRes.briefs);
       setSelectedBrief(listRes.briefs[0] ?? null);
     } catch (e: unknown) {
@@ -178,7 +181,7 @@ export default function BriefPage() {
     setDigestLoading(true);
     setSelectedDigestDate(date);
     try {
-      const res = await digestApi.getDigestsForDate(date);
+      const res = await digestApi.getDigestsForDate(date, browserTimezone);
       setDigestBriefsForDay(res.briefs);
       setSelectedBrief(res.briefs[0] ?? null);
       setDigest(null);
@@ -396,10 +399,10 @@ export default function BriefPage() {
     setDigestError(null);
     try {
       await digestApi.deleteBrief(selectedBrief.execution_id);
-      const listRes = await digestApi.getDigestsForDate(selectedDigestDate);
+      const listRes = await digestApi.getDigestsForDate(selectedDigestDate, browserTimezone);
       setDigestBriefsForDay(listRes.briefs);
       setSelectedBrief(listRes.briefs[0] ?? null);
-      const datesRes = await digestApi.getDigestDates(90);
+      const datesRes = await digestApi.getDigestDates(90, browserTimezone);
       setDigestDates(datesRes.dates);
       setDigestCountByDate(datesRes.count_by_date);
       if (listRes.briefs.length === 0) {

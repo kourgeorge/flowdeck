@@ -3,6 +3,7 @@
 import json
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
@@ -42,6 +43,65 @@ class DigestBriefItem:
         self.user_focus_tickers = user_focus_tickers
         self.references = references
         self.raw_metadata = raw_metadata
+
+
+def _to_utc_iso(value: Optional[datetime]) -> str:
+    """Serialize DB datetimes as explicit UTC so clients convert correctly."""
+    if value is None:
+        return ""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+    return value.isoformat()
+
+
+def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
+    """Normalize DB datetimes to aware UTC for downstream timezone conversion."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _get_zone(timezone_name: Optional[str]) -> Optional[ZoneInfo]:
+    """Return a validated ZoneInfo or None when the timezone is absent/invalid."""
+    if not timezone_name:
+        return None
+    try:
+        return ZoneInfo(timezone_name)
+    except Exception:
+        return None
+
+
+def _local_day_for_execution(subject_id: str, created_at: Optional[datetime], timezone_name: Optional[str]) -> Optional[str]:
+    """Map a stored daily brief execution to the user's local day when possible."""
+    parts = str(subject_id).split(":", 2)
+    if len(parts) < 2:
+        return None
+    slot = parts[1] if len(parts) == 2 else f"{parts[1]}:{parts[2]}"
+    if slot.startswith("w:"):
+        return slot
+
+    ts = _as_utc(created_at)
+    tz = _get_zone(timezone_name)
+    if ts is not None and tz is not None:
+        return ts.astimezone(tz).date().isoformat()
+    return slot
+
+
+def _utc_bounds_for_local_day(slot: str, timezone_name: Optional[str]) -> Optional[tuple[datetime, datetime]]:
+    """Return naive UTC DB bounds for a local calendar day."""
+    tz = _get_zone(timezone_name)
+    if tz is None:
+        return None
+
+    local_start = datetime.strptime(slot, "%Y-%m-%d").replace(tzinfo=tz)
+    local_end = local_start + timedelta(days=1)
+    start_utc = local_start.astimezone(timezone.utc).replace(tzinfo=None)
+    end_utc = local_end.astimezone(timezone.utc).replace(tzinfo=None)
+    return start_utc, end_utc
 
 
 def _build_slot(span_type: str, digest_date: str) -> str:
@@ -166,7 +226,7 @@ async def run_and_store_digest(
 
 
 def get_digest_dates(
-    db: Session, user_id: int, days: int
+    db: Session, user_id: int, days: int, timezone_name: Optional[str] = None
 ) -> tuple[List[str], dict[str, int]]:
     """
     Return (dates, count_by_date) for the user's digest history in the last `days`.
@@ -190,15 +250,12 @@ def get_digest_dates(
     for subject_id, created_at in rows:
         if not subject_id:
             continue
-        parts = str(subject_id).split(":", 2)
-        if len(parts) < 2:
-            continue
-        date_str = parts[1] if len(parts) == 2 else f"{parts[1]}:{parts[2]}"
+        date_str = _local_day_for_execution(str(subject_id), created_at, timezone_name)
         if date_str:
             count_by_date[date_str] = count_by_date.get(date_str, 0) + 1
             # Keep the latest created_at for this slot (for ordering)
-            if created_at:
-                ts = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
+            ts = _as_utc(created_at)
+            if ts:
                 prev = latest_created_by_slot.get(date_str)
                 if prev is None or ts > prev:
                     latest_created_by_slot[date_str] = ts
@@ -234,7 +291,7 @@ def _report_to_brief_item(ex: Execution, report: Report, slot: str) -> DigestBri
     refs = meta.get("references")
     if refs is not None and not isinstance(refs, list):
         refs = None
-    created_at = ex.created_at.isoformat() if ex.created_at else ""
+    created_at = _to_utc_iso(ex.created_at)
     return DigestBriefItem(
         execution_id=ex.id,
         created_at=created_at,
@@ -253,24 +310,42 @@ def _report_to_brief_item(ex: Execution, report: Report, slot: str) -> DigestBri
 
 
 def get_digests_for_date(
-    db: Session, user_id: int, slot: str
+    db: Session, user_id: int, slot: str, timezone_name: Optional[str] = None
 ) -> List[DigestBriefItem]:
     """
     Return all stored briefs for the given slot for the user, newest first.
     slot: YYYY-MM-DD (daily) or w:YYYY-MM-DD (weekly).
     """
-    subject_id = f"{user_id}:{slot}"
-    executions = (
+    query = (
         db.query(Execution)
         .filter(
             Execution.execution_type == "daily_digest",
             Execution.subject_type == "user_date",
-            Execution.subject_id == subject_id,
             Execution.creator_id == user_id,
         )
         .order_by(Execution.created_at.desc())
-        .all()
     )
+
+    if slot.startswith("w:"):
+        subject_id = f"{user_id}:{slot}"
+        executions = query.filter(Execution.subject_id == subject_id).all()
+    else:
+        bounds = _utc_bounds_for_local_day(slot, timezone_name)
+        if bounds is not None:
+            start_utc, end_utc = bounds
+            executions = (
+                query
+                .filter(
+                    Execution.created_at >= start_utc,
+                    Execution.created_at < end_utc,
+                    ~Execution.subject_id.like(f"{user_id}:w:%"),
+                )
+                .all()
+            )
+        else:
+            subject_id = f"{user_id}:{slot}"
+            executions = query.filter(Execution.subject_id == subject_id).all()
+
     briefs: List[DigestBriefItem] = []
     for ex in executions:
         report = (
