@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import HumanMessage
@@ -17,6 +18,31 @@ from .state import DigestContext, DigestWorkflowState, MarketInterpretation, Tic
 from . import prompts
 
 logger = logging.getLogger(__name__)
+
+
+def _invoke_with_timeout(chain: Any, messages: list, timeout_seconds: int = 180) -> Any:
+    """
+    Invoke a LangChain chain with a timeout using ThreadPoolExecutor.
+    
+    Args:
+        chain: The LangChain chain to invoke
+        messages: Messages to pass to the chain
+        timeout_seconds: Timeout in seconds (default 180 = 3 minutes)
+    
+    Returns:
+        The chain result
+    
+    Raises:
+        FuturesTimeoutError: If the operation times out
+    """
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(chain.invoke, messages)
+        try:
+            result = future.result(timeout=timeout_seconds)
+            return result
+        except FuturesTimeoutError:
+            logger.error("LLM invocation timed out after %d seconds", timeout_seconds)
+            raise
 
 
 def _format_ticker_context(ctx: DigestContext, ticker: str) -> str:
@@ -182,6 +208,7 @@ def run_ticker_interpreter(
 
     interpretations: Dict[str, TickerInterpretation] = {}
     for ticker in ctx.priority_tickers:
+        logger.info("Digest: starting ticker_interpreter for %s", ticker)
         try:
             context_text = _format_ticker_context(ctx, ticker)
             prompt_text = prompts.build_ticker_interpreter_prompt(
@@ -191,8 +218,19 @@ def run_ticker_interpreter(
                 period_label=state.period_label,
             )
             message = HumanMessage(content=prompts.TICKER_INTERPRETER_SYSTEM + "\n\n" + prompt_text)
+            logger.info("Digest: invoking LLM for ticker_interpreter %s", ticker)
             chain = llm.with_structured_output(TickerInterpretation)
-            result = chain.invoke([message])
+            try:
+                result = _invoke_with_timeout(chain, [message], timeout_seconds=180)
+            except FuturesTimeoutError:
+                logger.error("Digest: ticker_interpreter timed out for %s after 180 seconds", ticker)
+                interpretations[ticker] = TickerInterpretation(
+                    explanation=f"(Interpretation timed out after 3 minutes)",
+                    driver="unclear",
+                    thesis_comparison="",
+                )
+                continue
+            logger.info("Digest: LLM response received for ticker_interpreter %s", ticker)
             if isinstance(result, TickerInterpretation):
                 interpretations[ticker] = result
             else:
@@ -203,7 +241,7 @@ def run_ticker_interpreter(
                 )
             logger.info("Digest: ticker_interpreter done for %s", ticker)
         except Exception as e:
-            logger.warning("Digest: ticker_interpreter failed for %s: %s", ticker, e)
+            logger.exception("Digest: ticker_interpreter failed for %s: %s", ticker, e)
             interpretations[ticker] = TickerInterpretation(
                 explanation=f"(Interpretation unavailable: {e})",
                 driver="unclear",
