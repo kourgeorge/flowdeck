@@ -273,7 +273,7 @@ export default function BriefPage() {
         : "Today's overview";
     const anyBrief = brief as any;
     const focusSnapshot = (anyBrief?.focus_snapshot ?? anyBrief?.raw_metadata?.focus_snapshot) as
-      | Record<string, { price?: number | null; change_pct?: number | null; span_type?: string }>
+      | Record<string, { name?: string | null; price?: number | null; change_pct?: number | null; span_type?: string }>
       | undefined;
 
     return (
@@ -328,6 +328,7 @@ export default function BriefPage() {
               {focusTickers.map((t) => {
                 const upper = t.toUpperCase();
                 const snap = focusSnapshot?.[upper] ?? focusSnapshot?.[t];
+                const displayName = typeof snap?.name === 'string' && snap.name.trim() ? snap.name.trim() : null;
                 const price = typeof snap?.price === 'number' ? snap.price : undefined;
                 const change = typeof snap?.change_pct === 'number'
                   ? snap.change_pct
@@ -344,7 +345,9 @@ export default function BriefPage() {
                     : 'text-slate-400';
                 return (
                   <div key={t} className="flex items-center justify-between text-sm text-slate-100">
-                    <span className="mr-3">{t}</span>
+                    <span className="mr-3">
+                      {displayName ? `${displayName} (${t})` : t}
+                    </span>
                     <span className="flex items-center gap-3">
                       {typeof price === 'number' && (
                         <span className="text-sm text-slate-400">${price.toFixed(2)}</span>
@@ -647,11 +650,11 @@ export default function BriefPage() {
               )}
 
               <div className="flex-1 min-w-0 bg-black rounded-xl border border-slate-800 overflow-hidden shadow-lg">
-                <div className="bg-slate-950 min-h-[200px] px-4 sm:px-6 pt-3 sm:pt-4 pb-4 sm:pb-6 space-y-3">
+                <div className={`${digestLoading ? 'bg-transparent' : 'bg-slate-950'} min-h-[200px] px-4 sm:px-6 pt-3 sm:pt-4 pb-4 sm:pb-6 space-y-3`}>
                   {digestLoading && (
                     <div className="flex flex-col items-center justify-center min-h-[280px] py-12 px-4">
                       <div className="relative">
-                        <div className="w-16 h-16 rounded-2xl border-2 border-emerald-400/40 bg-emerald-900/20 flex items-center justify-center">
+                        <div className="w-16 h-16 rounded-2xl border-2 border-emerald-400/40 bg-transparent flex items-center justify-center">
                           <svg className="w-8 h-8 text-emerald-300/90 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>

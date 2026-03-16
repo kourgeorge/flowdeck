@@ -183,6 +183,47 @@ def _fetch_web_snippet() -> Optional[str]:
     return None
 
 
+def _fetch_market_context(fetcher: Any, digest_date: str, lookback_days: int) -> tuple[Dict[str, Any], Any, Optional[str]]:
+    """Fetch market-wide context independent of the user's subscribed tickers."""
+    try:
+        market_movers = fetcher.get_daily_market_movers(10)
+    except Exception:
+        market_movers = {}
+    global_news = _fetch_global_news(digest_date, lookback_days=min(lookback_days + 5, 14))
+    web_search_snippet = _fetch_web_snippet()
+    return market_movers, global_news, web_search_snippet
+
+
+def _extract_market_focus_rows(market_movers: Dict[str, Any], max_n: int) -> List[Dict[str, Any]]:
+    """Select fallback focus rows from market movers when the user has no portfolio."""
+    rows: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for key in ("gainers", "losers", "most_active"):
+        for row in (market_movers or {}).get(key) or []:
+            if not isinstance(row, dict):
+                continue
+            symbol = str(row.get("symbol") or "").strip().upper()
+            if not symbol or symbol in seen:
+                continue
+            rows.append(row)
+            seen.add(symbol)
+    rows.sort(
+        key=lambda row: abs(float(row.get("regularMarketChangePercent") or 0.0)),
+        reverse=True,
+    )
+    return rows[:max_n]
+
+
+def _quote_from_market_mover(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Map a market mover row to the quote-like shape used by the digest UI."""
+    return {
+        "current_price": row.get("regularMarketPrice"),
+        "daily_change": row.get("regularMarketChange"),
+        "daily_change_percent": row.get("regularMarketChangePercent"),
+        "name": row.get("shortName"),
+    }
+
+
 def build_digest_context(
     user_id: int,
     digest_date: str,
@@ -208,23 +249,124 @@ def build_digest_context(
         from services.info_fetcher import get_info_fetcher  # type: ignore[import-untyped]
         fetcher = get_info_fetcher()
 
-    tickers = _load_portfolio_tickers(user_id, db)
-    if not tickers:
-        logger.info("Digest: no portfolio tickers for user_id=%s", user_id)
-        return DigestContext(
-            tickers=[],
-            user_context_snapshot=_get_user_context_snapshot(user_id, db),
-            priority_tickers=[],
-            attention_scores={},
-        )
-
-    user_context_snapshot = _get_user_context_snapshot(user_id, db)
-
-    # Span lookback for news: 2 days for daily, else span length (cap for sanity)
+    # Market-wide context should exist even when the user has no subscribed tickers.
     if span_trading_days is not None and span_trading_days > 0:
         lookback_days = min(span_trading_days + 2, 31)
     else:
         lookback_days = 2
+    market_movers, global_news, web_search_snippet = _fetch_market_context(fetcher, digest_date, lookback_days)
+
+    tickers = _load_portfolio_tickers(user_id, db)
+    if not tickers:
+        user_context_snapshot = _get_user_context_snapshot(user_id, db)
+        fallback_rows = _extract_market_focus_rows(market_movers, max_priority_tickers)
+        priority_tickers = [
+            str(row.get("symbol") or "").strip().upper()
+            for row in fallback_rows
+            if str(row.get("symbol") or "").strip()
+        ]
+        quotes = {
+            ticker: _quote_from_market_mover(row)
+            for ticker, row in zip(priority_tickers, fallback_rows)
+        }
+        returns_1d = {
+            ticker: row.get("regularMarketChangePercent")
+            for ticker, row in zip(priority_tickers, fallback_rows)
+        }
+        abnormal_signal = {
+            ticker: abs(float(returns_1d.get(ticker) or 0.0)) > ABNORMAL_THRESHOLD_PCT
+            for ticker in priority_tickers
+        }
+        attention_scores = {
+            ticker: abs(float(returns_1d.get(ticker) or 0.0))
+            for ticker in priority_tickers
+        }
+
+        news_lookback = min(lookback_days + 5, 31)
+        news: Dict[str, Any] = {}
+        fundamentals: Dict[str, Any] = {}
+        analyst_rec: Dict[str, Any] = {}
+        insider: Dict[str, Any] = {}
+        indicators: Dict[str, Any] = {}
+        for t in priority_tickers:
+            try:
+                news[t] = fetcher.get_news(t, lookback_days=news_lookback)
+            except Exception:
+                news[t] = {}
+            try:
+                fundamentals[t] = fetcher.get_fundamentals(t)
+            except Exception:
+                fundamentals[t] = {}
+            try:
+                analyst_rec[t] = fetcher.get_analyst_recommendations(t)
+            except Exception:
+                analyst_rec[t] = {}
+            try:
+                insider[t] = fetcher.get_insider_transactions(t, limit=20)
+            except Exception:
+                insider[t] = {}
+
+        from services.report_service import ReportService  # type: ignore[import-untyped]
+        from services.share_service import get_share_url  # type: ignore[import-untyped]
+        report_svc = ReportService()
+        platform_reports: Dict[str, Dict[str, Any]] = {}
+        share_urls: Dict[str, str] = {}
+        for t in priority_tickers:
+            try:
+                latest = report_svc.get_latest_execution_for_ticker(t)
+                if latest:
+                    ar_id, _ = latest
+                    platform_reports[t] = report_svc.get_reports_with_scores(ar_id)
+                    url = get_share_url(ar_id)
+                    if url:
+                        share_urls[t] = url
+                else:
+                    platform_reports[t] = {}
+            except Exception:
+                platform_reports[t] = {}
+
+        try:
+            company_batch = fetcher.get_company_info_batch(priority_tickers)
+        except Exception:
+            company_batch = {}
+        sector_industry: Dict[str, Dict[str, str]] = {}
+        for t in priority_tickers:
+            info = (company_batch or {}).get(t) or {}
+            sector_industry[t] = {
+                "sector": (info.get("sector") or "N/A"),
+                "industry": (info.get("industry") or "N/A"),
+            }
+
+        peer_tickers = {t: [] for t in priority_tickers}
+        peer_quotes: Dict[str, Any] = {}
+
+        logger.info("Digest: no portfolio tickers for user_id=%s", user_id)
+        return DigestContext(
+            tickers=[],
+            user_context_snapshot=user_context_snapshot,
+            priority_tickers=priority_tickers,
+            attention_scores=attention_scores,
+            quotes=quotes,
+            returns_1d=returns_1d,
+            returns_5d={},
+            returns_span={},
+            abnormal_signal=abnormal_signal,
+            news=news,
+            fundamentals=fundamentals,
+            analyst_rec=analyst_rec,
+            insider=insider,
+            indicators=indicators,
+            platform_reports=platform_reports,
+            share_urls=share_urls,
+            sector_industry=sector_industry,
+            peer_tickers=peer_tickers,
+            peer_quotes=peer_quotes,
+            market_movers=market_movers,
+            global_news=global_news,
+            web_search_snippet=web_search_snippet,
+        )
+
+    user_context_snapshot = _get_user_context_snapshot(user_id, db)
 
     # Base market data (returns_span when span_trading_days e.g. 7 for weekly)
     quotes = fetcher.get_quotes_batch(tickers) or {}
@@ -290,14 +432,6 @@ def build_digest_context(
                 platform_reports[t] = {}
         except Exception:
             platform_reports[t] = {}
-
-    # Market context
-    try:
-        market_movers = fetcher.get_daily_market_movers(10)
-    except Exception:
-        market_movers = {}
-    global_news = _fetch_global_news(digest_date, lookback_days=min(lookback_days + 5, 14))
-    web_search_snippet = _fetch_web_snippet()
 
     # Sector/peer
     try:

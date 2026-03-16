@@ -40,7 +40,9 @@ MARKET_INTERPRETER_SYSTEM = """You are a market strategist for the User Daily Br
 
 Your tasks:
 1. Summarize the overall market backdrop in a few sentences (what drove the market in the period, key themes, risk-on/risk-off).
-2. Explain why this context matters for the user's portfolio (sector exposure, holdings that may be affected, what to watch).
+2. Call out the most notable movers and the most important recent market news if they materially shaped the session.
+   When citing movers, mention both the company name and ticker if available.
+3. Explain why this context matters for the user's portfolio. If the portfolio is empty, explain why it matters for a general equities investor instead.
 
 Respond in the structured format required (summary, relevance_to_portfolio). Be concise."""
 
@@ -70,8 +72,8 @@ def build_market_interpreter_prompt(
     lines.extend([
         "",
         "## Portfolio",
-        f"All tickers: {', '.join(portfolio_tickers)}",
-        f"Priority tickers (analyzed in depth): {', '.join(priority_tickers)}",
+        f"All tickers: {', '.join(portfolio_tickers) or '(none)'}",
+        f"Priority tickers (analyzed in depth): {', '.join(priority_tickers) or '(none)'}",
     ])
     if ticker_one_liners:
         lines.append("")
@@ -82,7 +84,8 @@ def build_market_interpreter_prompt(
         "",
         f"You have access to these tools if you need more context: {', '.join(tool_names)}.",
         "",
-        "Provide: summary (market backdrop) and relevance_to_portfolio.",
+        "Even if the portfolio is empty or there are no priority tickers, provide a useful market-level briefing.",
+        "Provide: summary (market backdrop, notable movers, important recent news) and relevance_to_portfolio.",
     ])
     return "\n".join(lines)
 
@@ -116,20 +119,20 @@ def _normalize_style_key(narrative_style: Optional[str]) -> Optional[str]:
 
 
 # Default block when no style or unknown style: short narrative + what_to_watch.
-BASIC_NARRATIVE_BLOCK = f"""Write a short, narrative, portfolio-centered brief (a few paragraphs). Use a conversational but informative tone. Avoid long bullet lists. End with a brief "What to watch" section (2–4 sentences) highlighting what the user should monitor next.
+BASIC_NARRATIVE_BLOCK = f"""Write a short, narrative brief (a few paragraphs) that starts with the overall market backdrop, notable movers, and important recent news, then connects that context to the user's holdings when relevant. If there are no ticker interpretations, write a market-only brief. Use a conversational but informative tone. Avoid long bullet lists. End with a brief "What to watch" section (2–4 sentences) highlighting what the user should monitor next.
 
 {_OUTPUT_FIELDS_BASIC}"""
 
 
 # Style name (lowercase) -> full block injected into the narrative writer prompt.
 NARRATIVE_STYLE_BLOCKS: Dict[str, str] = {
-    "balanced": f"""**Style: Balanced.** Mix context with actionable takeaways. Cover what happened and what it means without leaning too narrative or too terse. Suitable for readers who want both story and next steps in one flow. Keep to a few paragraphs plus a short forward-looking close.
+    "balanced": f"""**Style: Balanced.** Mix context with actionable takeaways. Start with the market backdrop and major movers, then connect that context to the portfolio. Cover what happened and what it means without leaning too narrative or too terse. Suitable for readers who want both story and next steps in one flow. Keep to a few paragraphs plus a short forward-looking close.
 
 {_basic_tail()}""",
-    "concise": f"""**Style: Concise.** Short and scannable. Lead with the most important moves and implications; cut filler and repetition. Use short sentences and clear subordination. Suitable for busy readers who want the gist in under a minute.
+    "concise": f"""**Style: Concise.** Short and scannable. Lead with the market backdrop, the most important movers, and the main implications; cut filler and repetition. Use short sentences and clear subordination. Suitable for busy readers who want the gist in under a minute.
 
 {_basic_tail("2–3 sentences")}""",
-    "professional": f"""**Style: Professional.** Formal, measured tone. Emphasize clarity and objectivity; avoid colloquialisms and hype. Suitable for institutional or advisory contexts. Structure as a brief report: context, interpretation, and forward-looking view.
+    "professional": f"""**Style: Professional.** Formal, measured tone. Open with a high-level market summary, then move to portfolio implications. Emphasize clarity and objectivity; avoid colloquialisms and hype. Suitable for institutional or advisory contexts. Structure as a brief report: context, interpretation, and forward-looking view.
 
 {_basic_tail()}""",
     "technical": f"""**Style: Technical.** Use precise language; focus on data, levels, and catalysts. Suitable for active traders who want a clear, scannable structure.
@@ -148,7 +151,14 @@ NARRATIVE_WRITER_SYSTEM = """You are the writer for a short User Daily Brief. Yo
 - Per-ticker interpretations (explanation, driver, thesis comparison) for the user's priority holdings.
 - A market interpretation (overall backdrop and relevance to the portfolio).
 
-A style/structure block will be injected below: follow it exactly for tone, structure, and output fields."""
+A style/structure block will be injected below: follow it exactly for tone, structure, and output fields.
+
+Hard requirements:
+- Always anchor the brief in the market interpretation first. The reader should immediately understand what is happening in the market overall.
+- Include notable movers and important recent news when they are available.
+- When the brief references specific movers, include the company name and ticker if available.
+- If ticker interpretations exist, use them to personalize the brief after the market-level summary.
+- If ticker interpretations do not exist, still produce a complete market briefing rather than a placeholder."""
 
 
 def get_style_block_for_narrative(narrative_style: Optional[str]) -> str:

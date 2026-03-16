@@ -111,10 +111,29 @@ def _format_market_movers(movers: Dict[str, Any]) -> str:
     if not movers:
         return "(none)"
     lines = []
-    for label, key in [("Gainers", "gainers"), ("Losers", "losers")]:
+    for label, key in [("Gainers", "gainers"), ("Losers", "losers"), ("Most active", "most_active")]:
         arr = movers.get(key) or []
         if arr:
-            lines.append(f"{label}: {json.dumps(arr[:5], default=str)}")
+            lines.append(f"{label}:")
+            for row in arr[:5]:
+                if not isinstance(row, dict):
+                    lines.append(f"- {row}")
+                    continue
+                symbol = str(row.get("symbol") or "").strip().upper()
+                short_name = str(row.get("shortName") or "").strip()
+                name_part = f"{short_name} ({symbol})" if short_name and symbol else (short_name or symbol or "Unknown")
+                price = row.get("regularMarketPrice")
+                change_pct = row.get("regularMarketChangePercent")
+                sector = row.get("sector")
+                detail_parts: List[str] = []
+                if price is not None:
+                    detail_parts.append(f"price={price}")
+                if change_pct is not None:
+                    detail_parts.append(f"change={change_pct}%")
+                if sector:
+                    detail_parts.append(f"sector={sector}")
+                details = f" [{', '.join(detail_parts)}]" if detail_parts else ""
+                lines.append(f"- {name_part}{details}")
     return "\n".join(lines) if lines else "(none)"
 
 

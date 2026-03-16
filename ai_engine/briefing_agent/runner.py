@@ -74,10 +74,9 @@ def run_digest(
 
     Steps:
     1. Build DigestContext (algorithmic: portfolio, base data, rank, evidence, reports, market, sector/peer).
-    2. If no portfolio tickers, return a minimal result.
-    3. Ticker Interpreter (per priority ticker).
-    4. Market Interpreter.
-    5. Narrative Writer.
+    2. Ticker Interpreter (per priority ticker, if any).
+    3. Market Interpreter.
+    4. Narrative Writer.
 
     Args:
         user_id: User ID for portfolio and preferences.
@@ -168,28 +167,6 @@ def run_digest(
     )
     state.digest_context = ctx
 
-    if not ctx.tickers:
-        return DigestResult(
-            narrative="You have no subscribed stocks. Subscribe to tickers on the platform to receive your User Daily Brief.",
-            what_to_watch="Add tickers to your portfolio to get personalized insights.",
-            digest_date=digest_date,
-            span_type=span_type,
-            span_label=span_label,
-            priority_tickers=[],
-        )
-
-    if not ctx.priority_tickers:
-        return DigestResult(
-            narrative=f"Your portfolio had no significant moves or news {period_label}. Check back later for updates."
-            if span_type != "daily"
-            else "Your portfolio had no significant moves or news today. Check back tomorrow for updates.",
-            what_to_watch="Watch for earnings and macro events that may affect your holdings.",
-            digest_date=digest_date,
-            span_type=span_type,
-            span_label=span_label,
-            priority_tickers=[],
-        )
-
     llm = get_llm("quick", cfg)
 
     # Track token usage where supported (OpenAI/Azure via LangChain callbacks).
@@ -251,6 +228,7 @@ def run_digest(
         for t in ctx.priority_tickers:
             q = quotes.get(t) or {}
             price = q.get("current_price") or q.get("price")
+            name = q.get("name") or q.get("shortName")
             change_pct = None
             if span_type == "daily":
                 change_pct = returns_1d.get(t)
@@ -261,6 +239,7 @@ def run_digest(
             else:
                 change_pct = returns_span.get(t)
             focus_snapshot[t] = {
+                "name": str(name) if name else None,
                 "price": float(price) if price is not None else None,
                 "change_pct": float(change_pct) if change_pct is not None else None,
                 "span_type": span_type,
