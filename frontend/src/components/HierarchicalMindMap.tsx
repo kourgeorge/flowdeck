@@ -68,7 +68,7 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
         key={reportKey}
         type="button"
         onClick={() => setSelectedReportKey((prev) => (prev === reportKey ? null : reportKey))}
-        className={`w-full h-[8rem] text-left bg-gray-800 border rounded-md p-2.5 mb-1.5 last:mb-0 transition-colors flex flex-col gap-1.5 min-w-0 ${
+        className={`w-full h-[10rem] text-left bg-gray-800 border rounded-md p-2.5 mb-1.5 last:mb-0 transition-colors flex flex-col gap-1.5 min-w-0 ${
           isSelected ? 'border-blue-500 ring-1 ring-blue-500/50' : 'border-gray-700 hover:border-gray-600'
         }`}
       >
@@ -81,7 +81,7 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
             <ul className="w-full min-w-0 list-none pl-0 space-y-1 shrink-0">
               {keyPoints.map((item, i) => (
                 <li key={i} className="w-full min-w-0">
-                  <span className="text-xs text-slate-300 leading-snug line-clamp-3 break-words block">{item}</span>
+                  <span className="text-sm text-slate-300 leading-snug line-clamp-3 break-words block">{item}</span>
                 </li>
               ))}
             </ul>
