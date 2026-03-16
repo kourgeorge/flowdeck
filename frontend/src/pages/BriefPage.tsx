@@ -32,6 +32,27 @@ const briefMarkdownComponents = {
       {children}
     </h2>
   ),
+  p: ({ children, ...props }: ComponentProps<'p'>) => (
+    <p
+      className="whitespace-pre-wrap leading-relaxed text-sm my-0"
+      style={{ fontFamily: 'Menlo, Monaco, "Courier New", monospace' }}
+      {...props}
+    >
+      {children}
+    </p>
+  ),
+  ul: ({ children, ...props }: ComponentProps<'ul'>) => (
+    <ul
+      className="list-disc pl-5 my-0 space-y-1 text-sm"
+      style={{ fontFamily: 'Menlo, Monaco, "Courier New", monospace' }}
+      {...props}
+    >
+      {children}
+    </ul>
+  ),
+  li: ({ children, ...props }: ComponentProps<'li'>) => (
+    <li className="leading-relaxed" {...props}>{children}</li>
+  ),
 };
 
 function BriefIcon() {
@@ -286,18 +307,9 @@ export default function BriefPage() {
             className="prose prose-invert prose-sm max-w-none text-gray-100 text-sm"
             style={{ fontFamily: 'Menlo, Monaco, "Courier New", monospace' }}
           >
-            {briefHasStructuredSections(brief.narrative) ? (
-              <ReactMarkdown components={briefMarkdownComponents}>
-                {narrativeForDisplay(brief.narrative)}
-              </ReactMarkdown>
-            ) : (
-              <p
-                className="whitespace-pre-wrap leading-relaxed text-sm"
-                style={{ fontFamily: 'Menlo, Monaco, "Courier New", monospace' }}
-              >
-                {brief.narrative}
-              </p>
-            )}
+            <ReactMarkdown components={briefMarkdownComponents}>
+              {briefHasStructuredSections(brief.narrative) ? narrativeForDisplay(brief.narrative) : brief.narrative}
+            </ReactMarkdown>
           </div>
         </div>
 
@@ -308,12 +320,9 @@ export default function BriefPage() {
                 What to watch next
               </span>
             </div>
-            <p
-              className="text-sm text-slate-100 whitespace-pre-wrap leading-relaxed"
-              style={{ fontFamily: 'Menlo, Monaco, "Courier New", monospace' }}
-            >
+            <ReactMarkdown components={briefMarkdownComponents}>
               {brief.what_to_watch}
-            </p>
+            </ReactMarkdown>
           </div>
         )}
 

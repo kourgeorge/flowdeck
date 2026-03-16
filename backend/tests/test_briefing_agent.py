@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
+from ai_engine.briefing_agent import prompts
 from ai_engine.briefing_agent.context_builder import build_digest_context
 from ai_engine.briefing_agent.runner import run_digest
 from ai_engine.briefing_agent.state import DigestContext, MarketInterpretation
@@ -162,6 +163,57 @@ class TestRunDigest(unittest.TestCase):
         self.assertEqual(result.priority_tickers, [])
         mock_market.assert_called_once()
         mock_narrative.assert_called_once()
+
+
+class TestNarrativePromptComposition(unittest.TestCase):
+    def test_default_prompt_composes_base_and_default_style_prompt(self) -> None:
+        instructions = prompts.build_narrative_prompt_instructions(None)
+
+        self.assertIn("### Base narrative prompt", instructions)
+        self.assertIn(prompts.BASIC_NARRATIVE_WRITING_PROMPT, instructions)
+        self.assertIn("valid Markdown", instructions)
+        self.assertIn("explicitly name the relevant ticker symbol", instructions)
+        self.assertIn("### Style prompt", instructions)
+        self.assertIn(prompts.DEFAULT_NARRATIVE_STYLE_PROMPT, instructions)
+
+    def test_technical_prompt_composes_base_and_technical_style_prompt(self) -> None:
+        instructions = prompts.build_narrative_prompt_instructions("technical")
+
+        self.assertIn(prompts.BASIC_NARRATIVE_WRITING_PROMPT, instructions)
+        self.assertIn(prompts.NARRATIVE_STYLE_PROMPTS["technical"], instructions)
+        self.assertNotIn(prompts.DEFAULT_NARRATIVE_STYLE_PROMPT, instructions)
+
+    def test_concise_prompt_requests_bulleted_sections(self) -> None:
+        instructions = prompts.build_narrative_prompt_instructions("concise")
+
+        self.assertIn("exactly four sections", instructions)
+        self.assertIn("valid Markdown bullet list of key insights with 2–3 bullets", instructions)
+        self.assertIn("Every bullet must begin with `- `", instructions)
+        self.assertIn("Each bullet must be a single short sentence", instructions)
+        self.assertIn("Market Highlights", instructions)
+        self.assertIn("Risks & Opportunities", instructions)
+
+    def test_concise_uses_structured_output(self) -> None:
+        self.assertTrue(prompts.style_uses_structured_output("concise"))
+
+    def test_writer_system_requires_markdown(self) -> None:
+        self.assertIn("Return valid Markdown only.", prompts.NARRATIVE_WRITER_SYSTEM)
+        self.assertIn("Treat the user note as a high-priority instruction", prompts.NARRATIVE_WRITER_SYSTEM)
+        self.assertIn("If the user note requests a language, write the entire brief in that language.", prompts.NARRATIVE_WRITER_SYSTEM)
+
+    def test_narrative_writer_prompt_marks_user_note_high_priority(self) -> None:
+        prompt = prompts.build_narrative_writer_prompt(
+            ticker_interpretations_text="(none)",
+            market_interpretation_text="Summary: Mixed session\nRelevance to portfolio: Relevant.",
+            tool_names=["get_ticker_quote"],
+            user_note="in spanish",
+            narrative_style="concise",
+            period_label="today",
+        )
+
+        self.assertIn("## User note for this brief", prompt)
+        self.assertIn("This note is a high-priority instruction for this run.", prompt)
+        self.assertIn("in spanish", prompt)
 
 
 if __name__ == "__main__":

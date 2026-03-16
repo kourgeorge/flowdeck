@@ -91,7 +91,7 @@ def build_market_interpreter_prompt(
 
 
 # ---------------------------------------------------------------------------
-# Narrative writer: output field tokens and style blocks
+# Narrative writer: base prompt + style overlay composition
 # ---------------------------------------------------------------------------
 
 # Phrase used in every style block so the model maps content to the right output fields.
@@ -104,7 +104,7 @@ def _basic_tail(what_to_watch_sentences: str = "2–4 sentences") -> str:
 
 
 # Styles that use four-section structured output; agent uses the structured schema for these.
-STRUCTURED_OUTPUT_STYLES: set[str] = {"technical"}
+STRUCTURED_OUTPUT_STYLES: set[str] = {"concise", "technical"}
 
 # Style key normalization: UI sends "default" for Balanced; accept common typos.
 _STYLE_ALIASES: Dict[str, str] = {"default": "balanced", "profesional": "professional"}
@@ -118,24 +118,40 @@ def _normalize_style_key(narrative_style: Optional[str]) -> Optional[str]:
     return _STYLE_ALIASES.get(key, key)
 
 
-# Default block when no style or unknown style: short narrative + what_to_watch.
-BASIC_NARRATIVE_BLOCK = f"""Write a short, narrative brief (a few paragraphs) that starts with the overall market backdrop, notable movers, and important recent news, then connects that context to the user's holdings when relevant. If there are no ticker interpretations, write a market-only brief. Use a conversational but informative tone. Avoid long bullet lists. End with a brief "What to watch" section (2–4 sentences) highlighting what the user should monitor next.
+def get_normalized_narrative_style(narrative_style: Optional[str]) -> Optional[str]:
+    """Public helper for normalized narrative style lookup."""
+    return _normalize_style_key(narrative_style)
+
+
+# Shared narrative-writing instructions. Style prompts are appended to this block.
+BASIC_NARRATIVE_WRITING_PROMPT = """Write the brief as valid Markdown. Write a short, narrative brief that starts with the overall market backdrop, notable movers, and important recent news, then connects that context to the user's holdings when relevant. When making a company-specific or stock-specific claim, explicitly name the relevant ticker symbol the claim refers to. If there are no ticker interpretations, write a market-only brief."""
+
+
+# Default style overlay when no style or unknown style is provided.
+DEFAULT_NARRATIVE_STYLE_PROMPT = f"""Use a conversational but informative tone. Keep the output as valid Markdown. End with a brief "What to watch" section (2–4 sentences) highlighting what the user should monitor next.
 
 {_OUTPUT_FIELDS_BASIC}"""
 
 
-# Style name (lowercase) -> full block injected into the narrative writer prompt.
-NARRATIVE_STYLE_BLOCKS: Dict[str, str] = {
-    "balanced": f"""**Style: Balanced.** Mix context with actionable takeaways. Start with the market backdrop and major movers, then connect that context to the portfolio. Cover what happened and what it means without leaning too narrative or too terse. Suitable for readers who want both story and next steps in one flow. Keep to a few paragraphs plus a short forward-looking close.
+# Style name (lowercase) -> style overlay appended to the base narrative-writing prompt.
+NARRATIVE_STYLE_PROMPTS: Dict[str, str] = {
+    "balanced": f"""**Style overlay: Balanced.** Mix context with actionable takeaways. Cover what happened and what it means without leaning too narrative or too terse. Suitable for readers who want both story and next steps in one flow. Keep to a few paragraphs plus a short forward-looking close. Return valid Markdown.
 
 {_basic_tail()}""",
-    "concise": f"""**Style: Concise.** Short and scannable. Lead with the market backdrop, the most important movers, and the main implications; cut filler and repetition. Use short sentences and clear subordination. Suitable for busy readers who want the gist in under a minute.
+    "concise": f"""**Style overlay: Concise.** Short and scannable. Lead with the market backdrop, the most important movers, and the main implications; cut filler and repetition. Suitable for busy readers who want the gist in under a minute.
 
-{_basic_tail("2–3 sentences")}""",
-    "professional": f"""**Style: Professional.** Formal, measured tone. Open with a high-level market summary, then move to portfolio implications. Emphasize clarity and objectivity; avoid colloquialisms and hype. Suitable for institutional or advisory contexts. Structure as a brief report: context, interpretation, and forward-looking view.
+Write the brief in exactly four sections, and make each section a valid Markdown bullet list of key insights with 2–3 bullets. Every bullet must begin with `- `. Do not write prose paragraphs. Each bullet must be a single short sentence. Prefer about 8-16 words. Avoid long clauses, stacked qualifiers, and multi-part sentences.
+
+1. **Market Highlights** — What happened in the market and the most notable movers.
+2. **Key Signals** — What it means for the user's portfolio and the main drivers/themes.
+3. **What to Watch** — The next catalysts, levels, events, or developments to monitor.
+4. **Risks & Opportunities** — The clearest downside risks and upside setups from here.
+
+{_OUTPUT_FIELDS_STRUCTURED}""",
+    "professional": f"""**Style overlay: Professional.** Formal, measured tone. Open with a high-level market summary, then move to portfolio implications. Emphasize clarity and objectivity; avoid colloquialisms and hype. Suitable for institutional or advisory contexts. Structure as a brief report: context, interpretation, and forward-looking view. Return valid Markdown.
 
 {_basic_tail()}""",
-    "technical": f"""**Style: Technical.** Use precise language; focus on data, levels, and catalysts. Suitable for active traders who want a clear, scannable structure.
+    "technical": f"""**Style overlay: Technical.** Use precise language; focus on data, levels, and catalysts. Suitable for active traders who want a clear, scannable structure. Return valid Markdown.
 
 Write the brief in exactly four sections, each as a short block of text (a few sentences). Avoid long bullet lists. Each section will be stored with the special tokens market_highlights, key_signals, what_to_watch, risks_opportunities so that formatting can be applied by section.
 
@@ -150,10 +166,15 @@ Write the brief in exactly four sections, each as a short block of text (a few s
 NARRATIVE_WRITER_SYSTEM = """You are the writer for a short User Daily Brief. You receive:
 - Per-ticker interpretations (explanation, driver, thesis comparison) for the user's priority holdings.
 - A market interpretation (overall backdrop and relevance to the portfolio).
+- An optional user note with explicit preferences for this brief.
 
-A style/structure block will be injected below: follow it exactly for tone, structure, and output fields.
+A base narrative-writing prompt and a style overlay will be injected below: follow both exactly for tone, structure, and output fields.
 
 Hard requirements:
+- Return valid Markdown only.
+- Treat the user note as a high-priority instruction for this specific brief.
+- If the user note requests a language, write the entire brief in that language.
+- If the user note requests emphasis, focus, or constraints, reflect that clearly in the brief unless it conflicts with the required format or the available evidence.
 - Always anchor the brief in the market interpretation first. The reader should immediately understand what is happening in the market overall.
 - Include notable movers and important recent news when they are available.
 - When the brief references specific movers, include the company name and ticker if available.
@@ -161,17 +182,28 @@ Hard requirements:
 - If ticker interpretations do not exist, still produce a complete market briefing rather than a placeholder."""
 
 
-def get_style_block_for_narrative(narrative_style: Optional[str]) -> str:
-    """Return the block to inject into the narrative writer prompt. Uses BASIC_NARRATIVE_BLOCK when no/unknown style."""
-    key = _normalize_style_key(narrative_style)
-    if key is not None and key in NARRATIVE_STYLE_BLOCKS:
-        return NARRATIVE_STYLE_BLOCKS[key]
-    return BASIC_NARRATIVE_BLOCK
+def get_style_prompt_for_narrative(narrative_style: Optional[str]) -> str:
+    """Return the style overlay appended to the base narrative-writing prompt."""
+    key = get_normalized_narrative_style(narrative_style)
+    if key is not None and key in NARRATIVE_STYLE_PROMPTS:
+        return NARRATIVE_STYLE_PROMPTS[key]
+    return DEFAULT_NARRATIVE_STYLE_PROMPT
+
+
+def build_narrative_prompt_instructions(narrative_style: Optional[str]) -> str:
+    """Compose the final narrative-writing instructions from the base prompt and style overlay."""
+    style_prompt = get_style_prompt_for_narrative(narrative_style)
+    return (
+        "### Base narrative prompt\n"
+        f"{BASIC_NARRATIVE_WRITING_PROMPT}\n\n"
+        "### Style prompt\n"
+        f"{style_prompt}"
+    )
 
 
 def style_uses_structured_output(narrative_style: Optional[str]) -> bool:
     """True if this style uses the four-section structured output (market_highlights, key_signals, what_to_watch, risks_opportunities)."""
-    key = _normalize_style_key(narrative_style)
+    key = get_normalized_narrative_style(narrative_style)
     return key is not None and key in STRUCTURED_OUTPUT_STYLES
 
 
@@ -186,9 +218,13 @@ def build_narrative_writer_prompt(
 ) -> str:
     user_note_block = ""
     if user_note:
-        user_note_block = f"\n\n## User note for this brief\n{user_note[:1500]}"
+        user_note_block = (
+            "\n\n## User note for this brief\n"
+            "This note is a high-priority instruction for this run. Follow it closely for language, emphasis, and framing unless it conflicts with the required output structure or the evidence.\n"
+            f"{user_note[:1500]}"
+        )
 
-    style_block = get_style_block_for_narrative(narrative_style)
+    narrative_prompt_instructions = build_narrative_prompt_instructions(narrative_style)
 
     period_block = f"\n\n## Period\nThis brief covers **{period_label}**."
 
@@ -202,8 +238,8 @@ def build_narrative_writer_prompt(
 ## Market interpretation
 {market_interpretation_text}{period_block}{user_note_block}{resources_block}
 
-## Style and structure
-{style_block}
+## Narrative prompt composition
+{narrative_prompt_instructions}
 
 You may use these tools to insert exact prices or report dates if needed: {', '.join(tool_names)}."""
 

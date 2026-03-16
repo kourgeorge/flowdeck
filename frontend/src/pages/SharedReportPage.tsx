@@ -145,30 +145,53 @@ export default function SharedReportPage() {
               </p>
             )}
             <div className="prose prose-invert prose-sm max-w-none text-gray-200">
-              {/##\s*(Market Highlights|What to Watch|Risks\s*&\s*Opportunities)/i.test(data.narrative) ? (
-                <ReactMarkdown
-                  components={{
-                    h2: ({ children, ...props }: ComponentProps<'h2'>) => (
-                      <h2 className="text-sm font-semibold text-emerald-300 mb-1 mt-4 first:mt-0" {...props}>{children}</h2>
-                    ),
-                  }}
-                >
-                  {(() => {
-                    const tokens = new Set(['market_highlights', 'key_signals', 'what_to_watch', 'risks_opportunities']);
-                    return data.narrative
-                      .split('\n')
-                      .filter((line) => !tokens.has(line.trim()))
-                      .join('\n');
-                  })()}
-                </ReactMarkdown>
-              ) : (
-                <p className="whitespace-pre-wrap leading-relaxed">{data.narrative}</p>
-              )}
+              <ReactMarkdown
+                components={{
+                  h2: ({ children, ...props }: ComponentProps<'h2'>) => (
+                    <h2 className="text-sm font-semibold text-emerald-300 mb-1 mt-4 first:mt-0" {...props}>{children}</h2>
+                  ),
+                  p: ({ children, ...props }: ComponentProps<'p'>) => (
+                    <p className="whitespace-pre-wrap leading-relaxed my-0" {...props}>{children}</p>
+                  ),
+                  ul: ({ children, ...props }: ComponentProps<'ul'>) => (
+                    <ul className="list-disc pl-5 my-0 space-y-1" {...props}>{children}</ul>
+                  ),
+                  li: ({ children, ...props }: ComponentProps<'li'>) => (
+                    <li className="leading-relaxed" {...props}>{children}</li>
+                  ),
+                }}
+              >
+                {/##\s*(Market Highlights|What to Watch|Risks\s*&\s*Opportunities)/i.test(data.narrative)
+                  ? (() => {
+                      const tokens = new Set(['market_highlights', 'key_signals', 'what_to_watch', 'risks_opportunities']);
+                      return data.narrative
+                        .split('\n')
+                        .filter((line) => !tokens.has(line.trim()))
+                        .join('\n');
+                    })()
+                  : data.narrative}
+              </ReactMarkdown>
             </div>
             {data.what_to_watch && !/##\s*(Market Highlights|What to Watch|Risks\s*&\s*Opportunities)/i.test(data.narrative) && (
               <div className="mt-6 pt-4 border-t border-gray-700">
                 <h2 className="text-sm font-semibold text-white mb-2">What to watch</h2>
-                <p className="text-gray-300 text-sm whitespace-pre-wrap">{data.what_to_watch}</p>
+                <div className="prose prose-invert prose-sm max-w-none text-gray-300">
+                  <ReactMarkdown
+                    components={{
+                      p: ({ children, ...props }: ComponentProps<'p'>) => (
+                        <p className="text-sm whitespace-pre-wrap leading-relaxed my-0" {...props}>{children}</p>
+                      ),
+                      ul: ({ children, ...props }: ComponentProps<'ul'>) => (
+                        <ul className="list-disc pl-5 my-0 space-y-1 text-sm" {...props}>{children}</ul>
+                      ),
+                      li: ({ children, ...props }: ComponentProps<'li'>) => (
+                        <li className="leading-relaxed" {...props}>{children}</li>
+                      ),
+                    }}
+                  >
+                    {data.what_to_watch}
+                  </ReactMarkdown>
+                </div>
               </div>
             )}
             {data.references && data.references.length > 0 && (
