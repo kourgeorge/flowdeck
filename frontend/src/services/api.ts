@@ -786,7 +786,7 @@ export const contactApi = {
   },
 };
 
-/** User Daily Brief: narrative + what to watch. Requires auth. */
+/** Briefing: narrative + what to watch. Requires auth. */
 export type DigestSpan = 'daily' | 'weekly';
 
 export interface DigestResponse {
@@ -876,7 +876,7 @@ export interface DigestScheduleUpdatePayload {
 export const digestApi = {
   getDigest: async (params?: { date?: string; span?: DigestSpan; max_priority_tickers?: number; user_note?: string; narrative_style?: string; user_focus_tickers?: string[] }): Promise<DigestResponse> => {
     const token = getStoredToken();
-    if (!token) throw new Error('Sign in to get your User Daily Brief');
+    if (!token) throw new Error('Sign in to get your Briefing');
     const searchParams = new URLSearchParams();
     if (params) {
       if (params.date != null) searchParams.set('date', params.date);
@@ -899,7 +899,7 @@ export const digestApi = {
 
   getDigestDates: async (days: number = 90): Promise<DigestDatesResponse> => {
     const token = getStoredToken();
-    if (!token) throw new Error('Sign in to view your User Daily Brief history');
+    if (!token) throw new Error('Sign in to view your Briefing history');
     const response = await api.get<DigestDatesResponse>('/api/digest/history/dates', {
       headers: { Authorization: `Bearer ${token}` },
       params: { days },
@@ -909,7 +909,7 @@ export const digestApi = {
 
   getDigestsForDate: async (date: string): Promise<DigestListForDateResponse> => {
     const token = getStoredToken();
-    if (!token) throw new Error('Sign in to view your User Daily Brief history');
+    if (!token) throw new Error('Sign in to view your Briefing history');
     const response = await api.get<DigestListForDateResponse>(`/api/digest/history/${date}`, {
       headers: { Authorization: `Bearer ${token}` },
     });

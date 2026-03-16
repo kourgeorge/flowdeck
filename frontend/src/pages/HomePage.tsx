@@ -568,7 +568,7 @@ export default function HomePage() {
                     d="M12 8v4l2.5 2.5M12 3a9 9 0 100 18 9 9 0 000-18z"
                   />
                 </svg>
-                <span className="text-amber-200 text-xs font-semibold uppercase tracking-wider">User Daily Brief</span>
+                <span className="text-amber-200 text-xs font-semibold uppercase tracking-wider">Briefing</span>
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4 leading-tight">
                 Your Market Briefing,<br />
@@ -624,7 +624,7 @@ export default function HomePage() {
                   <span className="w-3 h-3 rounded-full bg-red-500/70" />
                   <span className="w-3 h-3 rounded-full bg-yellow-500/70" />
                   <span className="w-3 h-3 rounded-full bg-green-500/70" />
-                  <span className="ml-3 text-xs text-gray-300 font-medium">User Daily Brief</span>
+                  <span className="ml-3 text-xs text-gray-300 font-medium">Briefing</span>
                 </div>
                 <span className="text-[10px] text-amber-200 font-mono uppercase">Daily · Balanced</span>
               </div>
@@ -755,6 +755,14 @@ export default function HomePage() {
               </h4>
               <p className="text-gray-400 text-sm">
                 A comprehensive API guide for AI agents to autonomously interact with FlowDeck. Agents can register, fetch market data, chat with the AI analyst, and start analyses — all without human intervention. <a href="https://flowdeck.biz/api/SKILL.md" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 underline">View SKILL.md →</a>
+              </p>
+            </div>
+            <div className="bg-amber-900/20 border border-amber-700/60 rounded-xl p-6">
+              <h4 className="text-lg font-semibold text-white mb-2">
+                <Link to={user ? '/dashboard?tab=digest' : '#'} onClick={!user ? () => setShowAuthModal(true) : undefined} className="hover:text-amber-300 transition-colors">Briefing</Link>
+              </h4>
+              <p className="text-gray-400 text-sm">
+                Get a personalized <strong className="text-white">daily or weekly brief</strong> that turns your watchlist into a concise, readable narrative. Control the tone (Balanced, Concise, Professional, Technical), add your own note, and let FlowDeck highlight what changed and what to watch next across your subscribed tickers. Runs directly from your dashboard using the same AI analysis stack that powers full reports.
               </p>
             </div>
           </div>

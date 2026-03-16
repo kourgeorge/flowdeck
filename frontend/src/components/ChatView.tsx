@@ -8,6 +8,7 @@ import {
 import { chatApi, type ChatMessage, type ModelMetadataApi, type ToolCallEvent, type ChartSpec, type SkillActivationEvent } from '../services/api';
 import { convertAsciiTableToMarkdown } from '../utils/chatMarkdown';
 import TickerMentionInput from './TickerMentionInput';
+import { getErrorMessage, isInsufficientTokensError, isAuthenticationError } from '../utils/errorHandling';
 
 // ── RTL Detection Utility ──────────────────────────────────────────────────
 /**
@@ -927,23 +928,27 @@ export function useChatState(
           return updated;
         });
       },
-      (message) => {
+      (error) => {
         if (ignoreStreamRef.current) return;
         setIsStreaming(false);
         setIsLoading(false);
         setThinkingStatus(null);
+        
         // Suppress network/connection errors when app was recently in background (e.g. user left and came back).
-        const isNetworkError = /network|fetch|failed|load failed|connection|stream failed/i.test(message);
+        const errorMessage = typeof error === 'string' ? error : '';
+        const isNetworkError = /network|fetch|failed|load failed|connection|stream failed/i.test(errorMessage);
         const recentlyHidden = Date.now() - lastHiddenAtRef.current < 3000;
         if (isNetworkError && (document.hidden || recentlyHidden)) {
           return;
         }
-        if (message.includes('402') || message.toLowerCase().includes('insufficient')) {
-          setError('Insufficient token balance. Please purchase more tokens to continue chatting.');
-        } else if (message.includes('401') || message.toLowerCase().includes('sign')) {
+        
+        // Use the error handling utility for consistent messaging
+        if (isInsufficientTokensError(error)) {
+          setError('Insufficient DECK coins. Please purchase more tokens to continue chatting.');
+        } else if (isAuthenticationError(error)) {
           setError('You must be signed in to use the AI chat.');
         } else {
-          setError(message || 'Failed to get a response. Please try again.');
+          setError(getErrorMessage(error, 'Failed to get a response. Please try again.'));
         }
       },
       (status) => {

@@ -661,9 +661,9 @@ export default function ProfilePage() {
       return (
         <>
           <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
-            <h2 className="text-lg font-semibold text-white mb-2">User Daily Brief schedule</h2>
+            <h2 className="text-lg font-semibold text-white mb-2">Briefing schedule</h2>
             <p className="text-sm text-gray-400 mb-4">
-              Configure automatic email delivery of your User Daily Brief. The brief uses your subscribed tickers
+              Configure automatic email delivery of your Briefing. The briefing uses your subscribed tickers
               and the same engine as the dashboard tab, but runs on a schedule in your local timezone.
             </p>
             <div className="mb-4 flex flex-col gap-3">

@@ -1,5 +1,5 @@
 /**
- * Panel with User Daily Brief title, collapsible brief options (style, note, focus tickers), and Run digest button.
+ * Panel with Briefing title, collapsible brief options (style, note, focus tickers), and Run digest button.
  * Rendered above the Brief history panel on the digest tab.
  */
 import { type ChangeEvent, useState, useRef, useEffect } from 'react';
@@ -70,7 +70,7 @@ export default function DailyDigestRunPanel({
     <div className="bg-[#020617] rounded-xl border border-slate-700 p-5 space-y-4">
       <div>
         <h2 className="text-sm font-semibold text-emerald-100 mb-1 flex items-center justify-between">
-          <span>User Daily Brief</span>
+          <span>Briefing</span>
           <span className="text-[11px] font-mono text-emerald-300 uppercase tracking-widest">
             {spanLabel}
           </span>

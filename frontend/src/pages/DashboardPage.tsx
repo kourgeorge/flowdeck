@@ -12,6 +12,7 @@ import { useDashboardData } from '../hooks/useDashboardData';
 import { useAuth } from '../contexts/AuthContext';
 import ReactMarkdown from 'react-markdown';
 import { digestApi, type DigestResponse, type DigestBriefItem } from '../services/api';
+import { getErrorMessage } from '../utils/errorHandling';
 
 /** Special tokens used in technical-style briefs for formatting by section. */
 const BRIEF_SECTION_TOKENS = ['market_highlights', 'key_signals', 'what_to_watch', 'risks_opportunities'];
@@ -164,8 +165,7 @@ export default function DashboardPage() {
       setDigestBriefsForDay(listRes.briefs);
       setSelectedBrief(listRes.briefs[0] ?? null);
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e);
-      setDigestError(message);
+      setDigestError(getErrorMessage(e, 'Failed to generate brief. Please try again.'));
     } finally {
       setDigestLoading(false);
     }
@@ -273,9 +273,9 @@ export default function DashboardPage() {
   const formatBriefForClipboard = (brief: DigestResponse | DigestBriefItem) => {
     const lines: string[] = [];
     if (brief.digest_date) {
-      lines.push(`User Daily Brief – ${brief.digest_date}`);
+      lines.push(`Briefing – ${brief.digest_date}`);
     } else {
-      lines.push('User Daily Brief');
+      lines.push('Briefing');
     }
     if (brief.priority_tickers && brief.priority_tickers.length > 0) {
       lines.push(`Focus: ${brief.priority_tickers.join(', ')}`);
@@ -543,7 +543,7 @@ export default function DashboardPage() {
                 { id: 'overview', label: 'Overview' },
                 { id: 'portfolio', label: 'Portfolio' },
                 { id: 'news', label: 'News' },
-                { id: 'digest', label: 'User Daily Brief' },
+                { id: 'digest', label: 'Briefing' },
               ] as { id: DashboardTab; label: string }[]).map((tab) => (
               <button
                 key={tab.id}

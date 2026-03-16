@@ -8,6 +8,7 @@ import { useQuoteRefresh } from '../hooks/useQuoteRefresh';
 import { useAuth } from '../contexts/AuthContext';
 import { subscriptionApi, type Subscription } from '../services/subscriptionApi';
 import ReportTabs, { OVERVIEW_TAB_KEY, CHAT_TAB_KEY } from './ReportTabs';
+import { getErrorMessage } from '../utils/errorHandling';
 import ReportViewer from './ReportViewer';
 import HierarchicalMindMap from './HierarchicalMindMap';
 import SubscribeButton from './SubscribeButton';
@@ -693,9 +694,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       await loadStockData({ showGlobalLoading: false, refreshSupportingData: false });
     }
     catch (error: unknown) {
-      const axiosError = error as { response?: { status?: number; data?: { detail?: string | string[] } } };
-      const detail = axiosError.response?.data?.detail;
-      setAnalysisError(typeof detail === 'string' ? detail : Array.isArray(detail) && detail.length > 0 ? String(detail[0]) : axiosError.response?.status === 402 ? 'Insufficient token balance. Need 200 tokens to create a report.' : 'Failed to start analysis. Please try again.');
+      setAnalysisError(getErrorMessage(error, 'Failed to start analysis. Please try again.'));
     } finally {
       setIsStartingAnalysis(false);
     }

@@ -134,7 +134,7 @@ export default function SharedReportPage() {
         <main className="max-w-4xl mx-auto px-4 py-6">
           <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 sm:p-6">
             <h1 className="text-lg font-semibold text-white mb-1">
-              User Daily Brief
+              Briefing
               {data.digest_date && (
                 <span className="text-gray-400 font-normal ml-2">{data.digest_date}</span>
               )}
