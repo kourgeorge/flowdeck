@@ -1,6 +1,7 @@
 """Send report notification, welcome, and admin emails via AgentMail (SMTP or HTTP API)."""
 
 import os
+import json
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -12,7 +13,7 @@ from dotenv import load_dotenv
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from database import SessionLocal
-from models.db_models import Subscription, User
+from models.db_models import Subscription, User, Execution, Report
 
 # Load env from backend/.env
 _env_path = Path(__file__).resolve().parent.parent / ".env"
@@ -150,7 +151,7 @@ def get_subscriber_emails_for_ticker(ticker: str) -> List[str]:
         rows = (
             db.query(User.email)
             .join(Subscription, Subscription.user_id == User.id)
-            .filter(Subscription.ticker == ticker_upper, Subscription.email_updates == True)
+            .filter(Subscription.ticker == ticker_upper, Subscription.email_updates)
             .distinct()
             .all()
         )
@@ -202,12 +203,8 @@ def _build_report_email_bodies(
     def safe(s: str) -> str:
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-    rec_html = ""
-    if recommendation:
-        rec_html = f'<p style="margin:0 0 12px;font-size:15px;color:{_TEXT_DARK};"><strong>Recommendation:</strong> <span style="display:inline-block;padding:4px 10px;background:{_BRAND_BG};color:{_TEXT_DARK};border-radius:6px;font-weight:600;">{safe(recommendation)}</span></p>'
-    conf_html = ""
-    if display_confidence is not None:
-        conf_html = f'<p style="margin:0 0 20px;font-size:14px;color:#64748b;">Confidence: <strong>{display_confidence:.1f}/10</strong></p>'
+    # These variables are kept for backwards compatibility with older templates,
+    # but the current template reads data directly from the context.
     
     # Prepare scores data for template
     scores_list = []
@@ -569,3 +566,111 @@ def notify_subscribers_new_report(
         confidence=confidence,
         scores=scores,
     )
+
+
+def send_daily_digest_email_to_user(execution_id: int, user_email: str) -> bool:
+    """
+    Send a User Daily Brief (daily_digest execution) to the given user email.
+    Returns True if sent successfully (or email not configured).
+    """
+    if not user_email or "@" not in user_email:
+        return False
+
+    db = SessionLocal()
+    try:
+        ex = (
+            db.query(Execution)
+            .filter(
+                Execution.id == execution_id,
+                Execution.execution_type == "daily_digest",
+                Execution.subject_type == "user_date",
+            )
+            .first()
+        )
+        if not ex:
+            return False
+
+        report = (
+            db.query(Report)
+            .filter(
+                Report.execution_id == ex.id,
+                Report.report_type == "daily_digest",
+            )
+            .first()
+        )
+        if not report:
+            return False
+
+        meta: dict = {}
+        if report.metadata_json:
+            try:
+                meta = json.loads(report.metadata_json) or {}
+            except Exception:
+                meta = {}
+
+        digest_date = str(meta.get("digest_date") or "")
+        span_label = str(meta.get("span_label") or "Daily")
+        priority_tickers = meta.get("priority_tickers") or []
+        if not isinstance(priority_tickers, list):
+            priority_tickers = []
+        what_to_watch = str(meta.get("what_to_watch") or "")
+        narrative = report.content or ""
+
+        from services.share_service import get_share_url
+
+        share_url = get_share_url(execution_id)
+        brief_url = share_url or f"{_get_frontend_url()}/dashboard?tab=digest"
+
+        subject_parts = ["Your User Daily Brief"]
+        if span_label:
+            subject_parts.append(f"({span_label})")
+        if digest_date:
+            subject_parts.append(f"– {digest_date}")
+        subject = " ".join(part for part in subject_parts if part)
+
+        lines = []
+        header_line = "Your latest User Daily Brief is ready."
+        if digest_date:
+            header_line = f"Your User Daily Brief for {digest_date} is ready."
+        lines.append(header_line)
+        if priority_tickers:
+            lines.append("")
+            lines.append("Focus: " + ", ".join(str(t) for t in priority_tickers))
+        lines.append("")
+        lines.append(narrative.strip())
+        if what_to_watch:
+            lines.append("")
+            lines.append("What to watch")
+            lines.append(what_to_watch.strip())
+        lines.append("")
+        lines.append(f"View this brief in Flowdeck: {brief_url}")
+        text_body = "\n".join(lines)
+
+        # Render from shared template to match other emails
+        try:
+            template = _jinja_env.get_template("daily_digest_email.html")
+            html_body = template.render(
+                digest_date=digest_date,
+                span_label=span_label,
+                priority_tickers=priority_tickers,
+                narrative=narrative,
+                what_to_watch=what_to_watch,
+                brief_url=brief_url,
+                preheader=f"Your User Daily Brief for {digest_date} is ready." if digest_date else "Your User Daily Brief is ready.",
+            )
+        except Exception:
+            # Fallback to simple wrapper if template fails
+            html_body = _html_email_wrapper(
+                title="User Daily Brief",
+                inner_body=f"<p>Your User Daily Brief is ready. <a href='{brief_url}'>Open brief</a></p>",
+                preheader=f"Your User Daily Brief for {digest_date} is ready." if digest_date else "Your User Daily Brief is ready.",
+            )
+
+        to_emails = [user_email]
+        if _get_smtp_password() and _send_via_smtp(to_emails, subject, text_body, html_body):
+            return True
+        if _get_api_key() and _send_via_api(to_emails, subject, text_body, html_body):
+            return True
+        return False
+    finally:
+        db.close()

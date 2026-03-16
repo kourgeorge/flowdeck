@@ -790,6 +790,7 @@ export const contactApi = {
 export type DigestSpan = 'daily' | 'weekly';
 
 export interface DigestResponse {
+  execution_id?: number | null;
   narrative: string;
   what_to_watch: string;
   digest_date: string;
@@ -885,6 +886,18 @@ export const digestApi = {
     await api.delete(`/api/digest/briefs/${executionId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+  },
+
+  sendBriefToEmail: async (executionId: number): Promise<void> => {
+    const token = getStoredToken();
+    if (!token) throw new Error('Sign in to email a brief');
+    await api.post(
+      `/api/digest/briefs/${executionId}/send-email`,
+      {},
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
   },
 };
 

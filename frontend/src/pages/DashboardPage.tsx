@@ -81,6 +81,7 @@ export default function DashboardPage() {
   const [digestInputExpanded, setDigestInputExpanded] = useState<boolean>(false);
   const [shareLinkCopied, setShareLinkCopied] = useState<boolean>(false);
   const [copyBriefCopied, setCopyBriefCopied] = useState<boolean>(false);
+  const [emailBriefSent, setEmailBriefSent] = useState<boolean>(false);
   const [newBriefModalOpen, setNewBriefModalOpen] = useState<boolean>(false);
   const [hasBriefForToday, setHasBriefForToday] = useState<boolean | null>(null);
   const [briefPromptDismissed, setBriefPromptDismissed] = useState<boolean>(() => {
@@ -325,6 +326,18 @@ export default function DashboardPage() {
       return JSON.stringify(payload, null, 2);
     } catch {
       return String(payload);
+    }
+  };
+
+  const handleSendBriefEmail = async (executionId: number) => {
+    setDigestError(null);
+    try {
+      await digestApi.sendBriefToEmail(executionId);
+      setEmailBriefSent(true);
+      setTimeout(() => setEmailBriefSent(false), 2000);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      setDigestError(message);
     }
   };
 
@@ -930,6 +943,28 @@ className={`px-2 py-0.5 text-xs rounded border transition-colors ${
                                   </svg>
                                 )}
                               </button>
+                              {selectedBrief.execution_id && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSendBriefEmail(selectedBrief.execution_id)}
+                                  className={`inline-flex items-center justify-center p-1.5 rounded border hover:bg-gray-800/80 ${
+                                    emailBriefSent ? 'border-green-500/70 text-green-400' : 'border-gray-500 text-gray-300'
+                                  }`}
+                                  title={emailBriefSent ? 'Emailed!' : 'Email this brief to me'}
+                                  aria-label={emailBriefSent ? 'Emailed!' : 'Email this brief to me'}
+                                >
+                                  {emailBriefSent ? (
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.5 12.75l6 6 9-13.5" />
+                                    </svg>
+                                  ) : (
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4h16v12H4z" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4l8 6 8-6" />
+                                    </svg>
+                                  )}
+                                </button>
+                              )}
                               {selectedBrief.share_url && (
                                 <button
                                   type="button"
@@ -1105,6 +1140,28 @@ className={`px-2 py-0.5 text-xs rounded border transition-colors ${
                               </svg>
                             )}
                           </button>
+                          {digest.execution_id && (
+                            <button
+                              type="button"
+                              onClick={() => handleSendBriefEmail(digest.execution_id!)}
+                              className={`inline-flex items-center justify-center p-1.5 rounded border hover:bg-gray-800/80 ${
+                                emailBriefSent ? 'border-green-500/70 text-green-400' : 'border-gray-500 text-gray-300'
+                              }`}
+                              title={emailBriefSent ? 'Emailed!' : 'Email this brief to me'}
+                              aria-label={emailBriefSent ? 'Emailed!' : 'Email this brief to me'}
+                            >
+                              {emailBriefSent ? (
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.5 12.75l6 6 9-13.5" />
+                                </svg>
+                              ) : (
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4h16v12H4z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4l8 6 8-6" />
+                                </svg>
+                              )}
+                            </button>
+                          )}
                           {digest.share_url && (
                             <button
                               type="button"

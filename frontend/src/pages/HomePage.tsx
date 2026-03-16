@@ -553,6 +553,134 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* SECTION 3d: DAILY BRIEFING */}
+      <section className="px-4 py-12 sm:py-16 bg-gray-900 border-t border-gray-700">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+            {/* Left: copy */}
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-900/40 border border-amber-700/60 mb-5">
+                <svg className="w-3.5 h-3.5 text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4l2.5 2.5M12 3a9 9 0 100 18 9 9 0 000-18z"
+                  />
+                </svg>
+                <span className="text-amber-200 text-xs font-semibold uppercase tracking-wider">User Daily Brief</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4 leading-tight">
+                Your Market Briefing,<br />
+                <span className="text-amber-300">Written for You</span>
+              </h2>
+              <p className="text-gray-400 text-base leading-relaxed mb-6">
+                FlowDeck&apos;s briefing capability turns your watchlist and portfolio into a short, readable narrative you can
+                actually keep up with. Choose a <strong className="text-white">daily or weekly</strong> brief, add your own note, and let the
+                system highlight what changed and what to watch next across your subscribed tickers.
+              </p>
+              <ul className="space-y-3 mb-8">
+                {[
+                  {
+                    icon: '📰',
+                    text: 'Concise story of the market plus the moves in your subscribed tickers — not a wall of numbers.',
+                  },
+                  {
+                    icon: '🎛️',
+                    text: 'Control the tone (Balanced, Concise, Professional, Technical) and add a one-off note for each run.',
+                  },
+                  {
+                    icon: '🎯',
+                    text: 'Optionally pick focus tickers or let FlowDeck select the most important names based on moves and news.',
+                  },
+                  {
+                    icon: '⚡',
+                    text: 'Runs directly from your dashboard and uses the same AI analysis stack that powers full reports.',
+                  },
+                ].map(({ icon, text }) => (
+                  <li key={text} className="flex items-start gap-3">
+                    <span className="text-lg leading-none mt-0.5">{icon}</span>
+                    <span className="text-gray-300 text-sm leading-relaxed">{text}</span>
+                  </li>
+                ))}
+              </ul>
+              <Link
+                to={user ? '/dashboard?tab=digest' : '#'}
+                onClick={!user ? () => setShowAuthModal(true) : undefined}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-400 text-gray-900 rounded-lg font-semibold transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 8h5l-1.405 1.405A2 2 0 0118 10.828V17a2 2 0 01-2 2H6a2 2 0 01-2-2V7a2 2 0 012-2h7" />
+                </svg>
+                Open Daily Brief tab
+              </Link>
+            </div>
+
+            {/* Right: visual mockup of a brief */}
+            <div className="rounded-2xl border border-amber-700/60 bg-gray-900/70 overflow-hidden shadow-2xl">
+              {/* Window chrome */}
+              <div className="flex items-center justify-between px-4 py-2.5 bg-gray-800 border-b border-amber-700/50">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-red-500/70" />
+                  <span className="w-3 h-3 rounded-full bg-yellow-500/70" />
+                  <span className="w-3 h-3 rounded-full bg-green-500/70" />
+                  <span className="ml-3 text-xs text-gray-300 font-medium">User Daily Brief</span>
+                </div>
+                <span className="text-[10px] text-amber-200 font-mono uppercase">Daily · Balanced</span>
+              </div>
+              <div className="p-4 space-y-3 text-sm">
+                <div className="text-xs font-mono text-amber-200 uppercase tracking-widest">Today&apos;s overview</div>
+                <div className="space-y-1.5 text-gray-100">
+                  <div className="h-2.5 bg-gray-700 rounded w-11/12" />
+                  <div className="h-2.5 bg-gray-700 rounded w-10/12" />
+                  <div className="h-2.5 bg-gray-700 rounded w-9/12" />
+                </div>
+                <div className="pt-2 border-t border-gray-700/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                      What happened in your portfolio
+                    </span>
+                    <span className="text-[11px] text-emerald-300 font-mono">AAPL · NVDA · MSFT</span>
+                  </div>
+                  <div className="space-y-1.5 text-gray-100">
+                    <div className="h-2.5 bg-gray-700 rounded w-10/12" />
+                    <div className="h-2.5 bg-gray-700 rounded w-9/12" />
+                    <div className="h-2.5 bg-gray-700 rounded w-8/12" />
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-gray-700/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-gray-300 uppercase tracking-wider">What to watch next</span>
+                    <span className="text-[11px] text-amber-300 font-mono">Focus tickers</span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-xs text-gray-200">
+                      <span>AAPL earnings next week</span>
+                      <span className="text-emerald-300">+1.8%</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-gray-200">
+                      <span>NVDA breaks to new highs</span>
+                      <span className="text-emerald-300">+3.2%</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-gray-200">
+                      <span>MSFT pulls back to support</span>
+                      <span className="text-red-300">-0.9%</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-gray-700/80 flex items-center justify-between">
+                  <span className="text-[11px] text-gray-400">
+                    Style: <span className="text-gray-200">Balanced</span> · Span:{' '}
+                    <span className="text-gray-200 capitalize">daily</span>
+                  </span>
+                  <span className="text-[11px] text-amber-300">Built with your note</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* SECTION 4: PLATFORM OVERVIEW (How It Works + Features) */}
       <section className="px-4 py-12 sm:py-16 bg-gray-900 border-t border-gray-700">
         <div className="max-w-6xl mx-auto">

@@ -19,6 +19,8 @@ from services.digest_service import (
 )
 from services.report_service import save_report
 from services.share_service import get_share_url
+from services.email_service import send_daily_digest_email_to_user
+from models.db_models import Execution
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,7 @@ router = APIRouter(prefix="/api", tags=["digest"])
 
 
 class DigestResponse(BaseModel):
+    execution_id: Optional[int] = None
     narrative: str
     what_to_watch: str
     digest_date: str
@@ -291,3 +294,31 @@ def delete_brief(
     """Delete a User Daily Brief by execution_id. Only the creator can delete. Returns 204 on success, 404 if not found."""
     if not svc_delete_brief(db, current_user.id, execution_id):
         raise HTTPException(status_code=404, detail="Brief not found or you do not have permission to delete it")
+
+
+@router.post("/digest/briefs/{execution_id}/send-email", status_code=204)
+def send_brief_email(
+    execution_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Email a User Daily Brief to the current user's email address.
+    Only the brief owner can trigger this.
+    """
+    ex = (
+        db.query(Execution)
+        .filter(
+            Execution.id == execution_id,
+            Execution.execution_type == "daily_digest",
+            Execution.subject_type == "user_date",
+            Execution.creator_id == current_user.id,
+        )
+        .first()
+    )
+    if not ex:
+        raise HTTPException(status_code=404, detail="Brief not found or you do not have permission to email it")
+
+    ok = send_daily_digest_email_to_user(execution_id, current_user.email or "")
+    if not ok:
+        raise HTTPException(status_code=503, detail="Digest email service unavailable")
