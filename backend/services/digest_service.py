@@ -77,7 +77,7 @@ async def run_and_store_digest(
     - Persists the Report with metadata.
     - Returns (result, metadata, execution_id, slot).
     """
-    from ai_engine.daily_digest import run_digest  # imported lazily
+    from ai_engine.briefing_agent import run_digest  # imported lazily
 
     slot = _build_slot(span_type, digest_date)
     subject_id = f"{user_id}:{slot}"

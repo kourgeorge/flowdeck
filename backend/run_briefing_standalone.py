@@ -52,7 +52,7 @@ def main() -> None:
     init_db()
     db = SessionLocal()
     try:
-        from ai_engine.daily_digest import run_digest
+        from ai_engine.briefing_agent import run_digest
         from services import token_service
         from services.report_service import save_report
 
