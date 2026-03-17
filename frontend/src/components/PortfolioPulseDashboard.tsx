@@ -1,4 +1,5 @@
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ComponentProps, type ReactNode, useEffect, useMemo, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Bar,
@@ -97,6 +98,30 @@ const SCORE_ORDER = [
   'investment_plan',
   'final_trade_decision',
 ];
+
+const BRIEF_FONT_FAMILY = 'Menlo, Monaco, "Courier New", monospace';
+const BRIEF_SECTION_TOKENS = ['market_highlights', 'key_signals', 'what_to_watch', 'risks_opportunities'];
+
+const latestBriefMarkdownComponents = {
+  h2: ({ children, ...props }: ComponentProps<'h2'>) => (
+    <h2 className="mb-1 mt-4 text-sm font-semibold tracking-wide text-emerald-200 first:mt-0" {...props}>
+      {children}
+    </h2>
+  ),
+  p: ({ children, ...props }: ComponentProps<'p'>) => (
+    <p className="my-0 whitespace-pre-wrap text-xs leading-5 text-slate-200" style={{ fontFamily: BRIEF_FONT_FAMILY }} {...props}>
+      {children}
+    </p>
+  ),
+  ul: ({ children, ...props }: ComponentProps<'ul'>) => (
+    <ul className="my-0 list-disc space-y-1 pl-5 text-xs text-slate-200" style={{ fontFamily: BRIEF_FONT_FAMILY }} {...props}>
+      {children}
+    </ul>
+  ),
+  li: ({ children, ...props }: ComponentProps<'li'>) => (
+    <li className="leading-5" {...props}>{children}</li>
+  ),
+};
 
 function average(values: Array<number | null | undefined>): number | null {
   const valid = values.filter((value): value is number => value != null && Number.isFinite(value));
@@ -212,6 +237,28 @@ function getExcerpt(text: string, maxLength: number): string {
   const trimmed = text.trim().replace(/\s+/g, ' ');
   if (trimmed.length <= maxLength) return trimmed;
   return `${trimmed.slice(0, maxLength).trimEnd()}...`;
+}
+
+function briefHasStructuredSections(narrative: string): boolean {
+  return /##\s*(Market Highlights|What to Watch|Risks\s*&\s*Opportunities)/i.test(narrative);
+}
+
+function narrativeForDisplay(narrative: string): string {
+  if (!briefHasStructuredSections(narrative)) return narrative;
+  const tokenSet = new Set(BRIEF_SECTION_TOKENS);
+  return narrative
+    .split('\n')
+    .filter((line) => !tokenSet.has(line.trim()))
+    .join('\n');
+}
+
+function getMarkdownExcerpt(text: string, maxLength: number): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= maxLength) return trimmed;
+  const slice = trimmed.slice(0, maxLength);
+  const lastBreak = Math.max(slice.lastIndexOf('\n'), slice.lastIndexOf(' '));
+  const cutoff = lastBreak >= Math.floor(maxLength * 0.6) ? lastBreak : maxLength;
+  return `${slice.slice(0, cutoff).trimEnd()}\n\n...`;
 }
 
 function DashboardPanel({
@@ -768,6 +815,15 @@ export default function PortfolioPulseDashboard({
   }, [overview]);
 
   const activeBrief = latestBriefs[latestBriefMode];
+  const briefNarrativePreview = activeBrief
+    ? getMarkdownExcerpt(
+      briefHasStructuredSections(activeBrief.narrative)
+        ? narrativeForDisplay(activeBrief.narrative)
+        : activeBrief.narrative,
+      800,
+    )
+    : '';
+  const briefWatchPreview = activeBrief ? getExcerpt(activeBrief.what_to_watch, 120) : '';
   const focusSnapshotEntries = useMemo(() => {
     if (!activeBrief?.focus_snapshot) return [];
     return Object.entries(activeBrief.focus_snapshot).slice(0, 5);
@@ -856,8 +912,12 @@ export default function PortfolioPulseDashboard({
             <span className="rounded-full border border-slate-600/80 bg-slate-900/70 px-2.5 py-1">{activeBrief.span_label || activeBrief.span_type || (latestBriefMode === 'weekly' ? 'Weekly' : 'Daily')}</span>
             <span>{activeBrief.digest_date}</span>
           </div>
-          <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
-            <p className="text-sm leading-6 text-slate-200">{getExcerpt(activeBrief.narrative, 250)}</p>
+          <div className="min-h-[240px] rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
+            <div className="prose prose-invert prose-sm max-w-none">
+              <ReactMarkdown components={latestBriefMarkdownComponents}>
+                {briefNarrativePreview}
+              </ReactMarkdown>
+            </div>
           </div>
           {focusSnapshotEntries.length > 0 && (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -884,7 +944,12 @@ export default function PortfolioPulseDashboard({
           )}
           <div className="rounded-[1rem] border border-emerald-500/20 bg-emerald-500/10 px-3 py-2.5">
             <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-100/80">Watch</p>
-            <p className="mt-1.5 text-sm leading-6 text-emerald-50">{getExcerpt(activeBrief.what_to_watch, 120)}</p>
+            <p
+              className="mt-1.5 text-sm leading-6 text-emerald-50"
+              style={{ fontFamily: BRIEF_FONT_FAMILY }}
+            >
+              {briefWatchPreview}
+            </p>
           </div>
         </div>
       ) : (
