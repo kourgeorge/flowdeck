@@ -16,6 +16,7 @@ import { digestApi, tickerApi, type DigestBriefItem } from '../services/api';
 import type { TickerWidget } from '../services/types';
 import AspectSpiderChart, { formatReportKey, getAnalysisScoreEntries, getScoreColor } from './AspectSpiderChart';
 import DashboardPriceTrendsChart from './DashboardPriceTrendsChart';
+import { SubscribedChangeColumnsChart } from './OverviewStatsPanel';
 import WorldMapRegionalStocks from './WorldMapRegionalStocks';
 import { formatPrice } from '../utils/currency';
 
@@ -1286,8 +1287,11 @@ export default function PortfolioPulseDashboard({
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <div className="min-h-[360px]">
+        <div className="flex min-h-[360px] flex-col gap-4">
           <DashboardPriceTrendsChart tickers={tickers} period="6mo" height={360} />
+          <div className="min-h-[320px]">
+            <SubscribedChangeColumnsChart widgets={widgets} height={320} />
+          </div>
         </div>
 
         {latestBriefPanel}
