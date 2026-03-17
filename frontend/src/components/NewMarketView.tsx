@@ -198,12 +198,14 @@ function PulseCard({
           };
 
   return (
-    <div className="flex min-w-0 items-start gap-3 rounded-lg border border-white/10 bg-slate-950/90 px-3 py-2.5 backdrop-blur-sm">
-      <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${toneClasses.dot}`} />
-      <div className="min-w-0">
-        <div className={`text-[9px] font-semibold uppercase tracking-[0.16em] ${toneClasses.eyebrow}`}>{eyebrow}</div>
-        <div className={`mt-0.5 text-sm font-semibold tracking-tight ${toneClasses.value}`}>{value}</div>
-        <div className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-slate-500">{detail}</div>
+    <div className="flex min-w-0 items-center gap-2.5 rounded-xl border border-white/10 bg-slate-950/90 px-3 py-2 backdrop-blur-sm">
+      <span className={`h-2 w-2 shrink-0 rounded-full ${toneClasses.dot}`} />
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-baseline justify-between gap-2">
+          <div className={`truncate text-[9px] font-semibold uppercase tracking-[0.16em] ${toneClasses.eyebrow}`}>{eyebrow}</div>
+          <div className={`shrink-0 text-sm font-semibold tracking-tight ${toneClasses.value}`}>{value}</div>
+        </div>
+        <div className="mt-0.5 truncate text-[11px] leading-snug text-slate-500">{detail}</div>
       </div>
     </div>
   );

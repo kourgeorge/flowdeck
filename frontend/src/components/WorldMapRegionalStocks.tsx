@@ -215,9 +215,11 @@ function StatCard({
 }) {
   return (
     <div className="rounded-[1.1rem] bg-white/[0.03] px-3 py-2.5 backdrop-blur-sm">
-      <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</div>
-      <div className="mt-1.5 text-base font-semibold tracking-tight text-white">{value}</div>
-      <div className="mt-0.5 text-[11px] leading-snug text-slate-400">{detail}</div>
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="truncate text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</div>
+        <div className="shrink-0 text-base font-semibold tracking-tight text-white">{value}</div>
+      </div>
+      <div className="mt-0.5 truncate text-[11px] leading-snug text-slate-400">{detail}</div>
     </div>
   );
 }
