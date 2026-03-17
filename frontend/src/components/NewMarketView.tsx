@@ -1,0 +1,1643 @@
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { tickerApi } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import TickerSearch from './TickerSearch';
+import WorldMapRegionalStocks from './WorldMapRegionalStocks';
+
+export type HeadlineArticle = {
+  uuid: string;
+  title: string;
+  summary?: string | null;
+  publisher?: string;
+  link: string;
+  published_time: string | null;
+  published_timestamp: number;
+  type?: string;
+  thumbnail?: string | null;
+  /** Related tickers (deduplicated; multiple when same story appears for several tickers) */
+  tickers: string[];
+};
+
+export type MarketMoverRow = {
+  symbol: string | null;
+  shortName: string | null;
+  sector?: string | null;
+  industry?: string | null;
+  regularMarketPrice: number | null;
+  regularMarketChange: number | null;
+  regularMarketChangePercent: number | null;
+  regularMarketPreviousClose: number | null;
+  regularMarketVolume: number | null;
+};
+
+type OverviewItem = {
+  ticker: string;
+  name: string;
+  price: number | null;
+  change: number | null;
+  changePercent: number | null;
+};
+
+interface MarketViewProps {
+  onSelectTicker?: (ticker: string) => void;
+}
+
+function formatPrice(n: number | null): string {
+  if (n == null) return '—';
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatPct(n: number | null): string {
+  if (n == null) return '—';
+  const s = n >= 0 ? `+${n.toFixed(2)}` : n.toFixed(2);
+  return `${s}%`;
+}
+
+function formatVolume(n: number | null): string {
+  if (n == null) return '—';
+  if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(2)}K`;
+  return String(n);
+}
+
+function formatDelta(n: number | null): string {
+  if (n == null) return 'Awaiting move';
+  const s = n >= 0 ? `+${n.toFixed(2)}` : n.toFixed(2);
+  return `${s} pts`;
+}
+
+function formatPublishedLabel(article: HeadlineArticle): string {
+  const rawTimestamp = article.published_timestamp;
+  const timestampMs = rawTimestamp > 1e12 ? rawTimestamp : rawTimestamp > 0 ? rawTimestamp * 1000 : NaN;
+  const date = Number.isFinite(timestampMs) ? new Date(timestampMs) : article.published_time ? new Date(article.published_time) : null;
+  if (!date || Number.isNaN(date.getTime())) return article.publisher || 'Latest';
+
+  const diffMinutes = Math.round((date.getTime() - Date.now()) / 60000);
+  const absoluteMinutes = Math.abs(diffMinutes);
+  if (absoluteMinutes < 1) return 'Just now';
+  if (absoluteMinutes < 60) return `${absoluteMinutes}m ago`;
+  if (absoluteMinutes < 1440) return `${Math.round(absoluteMinutes / 60)}h ago`;
+  if (absoluteMinutes < 10080) return `${Math.round(absoluteMinutes / 1440)}d ago`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function getRangeLabel(range: '1d' | '1w' | '1mo' | '6mo' | 'ytd'): string {
+  switch (range) {
+    case '1d':
+      return 'Today';
+    case '1w':
+      return 'This week';
+    case '1mo':
+      return 'This month';
+    case '6mo':
+      return 'Last 6 months';
+    case 'ytd':
+      return 'Year to date';
+    default:
+      return 'Current range';
+  }
+}
+
+function getChangeSurface(changePercent: number | null) {
+  if (changePercent == null) {
+    return {
+      border: 'border-white/10',
+      glow: 'bg-white/[0.02]',
+      badge: 'border-white/10 bg-white/[0.06] text-slate-300',
+      text: 'text-slate-300',
+    };
+  }
+  if (changePercent >= 0) {
+    return {
+      border: 'border-emerald-900/40',
+      glow: 'bg-emerald-950/20',
+      badge: 'border-emerald-900/40 bg-emerald-950/40 text-emerald-300',
+      text: 'text-emerald-300',
+    };
+  }
+  return {
+    border: 'border-red-900/40',
+    glow: 'bg-red-950/20',
+    badge: 'border-red-900/40 bg-red-950/40 text-red-300',
+    text: 'text-red-300',
+  };
+}
+
+function getMoverTheme(changeColor: 'gainers' | 'losers' | 'neutral') {
+  if (changeColor === 'gainers') {
+    return {
+      dot: 'bg-emerald-600',
+      glow: 'bg-emerald-950/20',
+      badge: 'border-emerald-900/40 bg-emerald-950/40 text-emerald-300',
+    };
+  }
+  if (changeColor === 'losers') {
+    return {
+      dot: 'bg-red-700',
+      glow: 'bg-red-950/20',
+      badge: 'border-red-900/40 bg-red-950/40 text-red-300',
+    };
+  }
+  return {
+    dot: 'bg-sky-400',
+    glow: 'bg-sky-400/[0.04]',
+    badge: 'border-sky-400/20 bg-sky-400/10 text-sky-200',
+  };
+}
+
+function SectionHeading({
+  eyebrow,
+  title,
+  description,
+}: {
+  eyebrow: string;
+  title: string;
+  description?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-sky-300/80">{eyebrow}</div>
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <h2 className="text-lg font-semibold text-white sm:text-xl">{title}</h2>
+        {description ? <p className="max-w-2xl text-xs leading-relaxed text-slate-400 sm:text-sm">{description}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function PulseCard({
+  eyebrow,
+  value,
+  detail,
+  tone = 'sky',
+}: {
+  eyebrow: string;
+  value: string;
+  detail: string;
+  tone?: 'sky' | 'emerald' | 'rose';
+}) {
+  const toneClasses =
+    tone === 'emerald'
+      ? {
+          dot: 'bg-emerald-600',
+          value: 'text-emerald-300',
+          eyebrow: 'text-emerald-300/80',
+        }
+      : tone === 'rose'
+        ? {
+            dot: 'bg-red-700',
+            value: 'text-red-300',
+            eyebrow: 'text-red-300/80',
+          }
+        : {
+            dot: 'bg-sky-400',
+            value: 'text-sky-200',
+            eyebrow: 'text-sky-200/80',
+          };
+
+  return (
+    <div className="flex min-w-0 items-start gap-3 rounded-lg border border-white/10 bg-slate-950/90 px-3 py-2.5 backdrop-blur-sm">
+      <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${toneClasses.dot}`} />
+      <div className="min-w-0">
+        <div className={`text-[9px] font-semibold uppercase tracking-[0.16em] ${toneClasses.eyebrow}`}>{eyebrow}</div>
+        <div className={`mt-0.5 text-sm font-semibold tracking-tight ${toneClasses.value}`}>{value}</div>
+        <div className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-slate-500">{detail}</div>
+      </div>
+    </div>
+  );
+}
+
+function NewsBriefingPanel({
+  articles,
+  isLoading,
+  tickerChangeMap,
+  compact = false,
+}: {
+  articles: HeadlineArticle[];
+  isLoading: boolean;
+  tickerChangeMap: Record<string, number | null>;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`rounded-[1.6rem] bg-[linear-gradient(180deg,rgba(2,6,23,0.9),rgba(15,23,42,0.82))] shadow-[0_18px_38px_-28px_rgba(15,23,42,0.95)] backdrop-blur-sm ${compact ? 'p-3' : 'p-3.5'}`}>
+      <div className="mb-3 flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">News briefing</div>
+          <div className="mt-1 text-xs font-medium text-white sm:text-sm">Lead coverage, quick briefings, and linked market context.</div>
+        </div>
+        <div className="inline-flex w-fit rounded-full bg-white/[0.05] px-2.5 py-1 text-[11px] font-medium text-slate-400">
+          {isLoading ? 'Refreshing headlines' : `${articles.length} headlines`}
+        </div>
+      </div>
+      <RunningHeadlinesStrip articles={articles} isLoading={isLoading} tickerChangeMap={tickerChangeMap} />
+    </div>
+  );
+}
+
+function OverviewCard({
+  item,
+  onSelectTicker,
+}: {
+  item: OverviewItem;
+  onSelectTicker?: (ticker: string) => void;
+}) {
+  const tone = getChangeSurface(item.changePercent);
+  const clickable = onSelectTicker && item.ticker && !item.ticker.startsWith('^');
+
+  return (
+    <div
+      role={clickable ? 'button' : undefined}
+      onClick={() => clickable && onSelectTicker(item.ticker)}
+      className={`group relative flex min-h-[5.5rem] min-w-0 flex-col justify-between overflow-hidden rounded-xl border bg-slate-950/88 px-2.5 py-2.5 backdrop-blur-sm transition duration-200 ${
+        tone.border
+      } ${
+        clickable ? 'cursor-pointer hover:border-white/20 hover:bg-slate-900/95' : ''
+      }`}
+    >
+      <div className={`absolute inset-0 ${tone.glow}`} />
+      <div className="relative">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 truncate text-[11px] font-semibold tracking-[0.12em] text-slate-200 sm:text-xs" title={item.ticker}>
+            {item.ticker}
+          </div>
+          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold tabular-nums ${tone.badge}`}>
+            {formatPct(item.changePercent)}
+          </span>
+        </div>
+        <div className="mt-1 truncate text-[11px] font-medium leading-none text-slate-400 sm:text-xs" title={item.name}>
+          {item.name}
+        </div>
+      </div>
+      <div className="relative mt-2">
+        <div className="truncate text-sm font-semibold tracking-tight text-white tabular-nums sm:text-[15px]" title={formatPrice(item.price)}>
+          {formatPrice(item.price)}
+        </div>
+        <div className="mt-0.5 truncate text-[10px] text-slate-500">{formatDelta(item.change)}</div>
+      </div>
+    </div>
+  );
+}
+
+const TILES_PER_PAGE = 6;
+const MOVERS_PAGE_SIZE = 8;
+const MOVERS_TOTAL_PAGES = 3;
+
+function OverviewSection({
+  title,
+  items,
+  currentPage,
+  totalPages,
+  onPrev,
+  onNext,
+  paginationLoading,
+  onSelectTicker,
+}: {
+  title: string;
+  items: OverviewItem[];
+  currentPage: number;
+  totalPages: number;
+  onPrev: () => void;
+  onNext: () => void;
+  paginationLoading?: boolean;
+  onSelectTicker?: (ticker: string) => void;
+}) {
+  const canPrev = totalPages > 1 && currentPage > 0;
+  const canNext = totalPages > 1 && currentPage < totalPages - 1;
+  if (items.length === 0 && totalPages === 0) return null;
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950/88 shadow-[0_14px_36px_-28px_rgba(15,23,42,0.9)] backdrop-blur-sm">
+      <div className="relative flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+        <div>
+          <h3 className="text-xs font-semibold text-white sm:text-sm">{title}</h3>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[11px] font-medium tabular-nums text-slate-400">
+            {totalPages > 0 ? `${currentPage + 1} / ${totalPages}` : '—'}
+          </span>
+          <button
+            type="button"
+            onClick={onPrev}
+            disabled={!canPrev || paginationLoading}
+            className="rounded-full border border-white/10 bg-white/[0.04] p-2 text-slate-400 transition hover:border-white/20 hover:bg-white/[0.08] hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-white/10 disabled:hover:bg-white/[0.04]"
+            aria-label="Previous page"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={onNext}
+            disabled={!canNext || paginationLoading}
+            className="rounded-full border border-white/10 bg-white/[0.04] p-2 text-slate-400 transition hover:border-white/20 hover:bg-white/[0.08] hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-white/10 disabled:hover:bg-white/[0.04]"
+            aria-label="Next page"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div className="relative min-h-[7rem] p-3">
+        {paginationLoading && (
+          <div
+            className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-slate-950/70 backdrop-blur-[2px]"
+            aria-live="polite"
+            aria-busy="true"
+          >
+            <svg className="h-6 w-6 animate-spin shrink-0 text-sky-400" fill="none" viewBox="0 0 24 24" aria-hidden>
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          {items.map((item) => (
+            <OverviewCard key={item.ticker} item={item} onSelectTicker={onSelectTicker} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MoversTable({
+  rows,
+  title,
+  changeColor,
+  onSelectTicker,
+  currentPage = 0,
+  totalPages = 1,
+  onPrev,
+  onNext,
+  pageSize = MOVERS_PAGE_SIZE,
+  paginationLoading,
+}: {
+  rows: MarketMoverRow[];
+  title: string;
+  changeColor: 'gainers' | 'losers' | 'neutral';
+  onSelectTicker?: (ticker: string) => void;
+  currentPage?: number;
+  totalPages?: number;
+  onPrev?: () => void;
+  onNext?: () => void;
+  pageSize?: number;
+  paginationLoading?: boolean;
+}) {
+  const changeClass =
+    changeColor === 'gainers' ? 'text-emerald-300' : changeColor === 'losers' ? 'text-red-300' : 'text-gray-300';
+  const theme = getMoverTheme(changeColor);
+  const canPrev = totalPages > 1 && currentPage > 0 && !paginationLoading;
+  const canNext = !paginationLoading && currentPage < totalPages - 1;
+  const pageRows = totalPages > 1
+    ? rows.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
+    : rows;
+  return (
+    <div className="relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-950/88 shadow-[0_14px_36px_-28px_rgba(15,23,42,0.9)] backdrop-blur-sm">
+      <div className={`absolute inset-0 ${theme.glow}`} />
+      <div className="relative flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 shrink-0">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
+            <span className={`h-2 w-2 rounded-full ${theme.dot}`} />
+            {title}
+          </h3>
+        </div>
+        {totalPages > 1 && onPrev != null && onNext != null && (
+          <div className="flex items-center gap-1.5">
+            <span className={`rounded-full border px-2.5 py-1 text-[11px] font-medium tabular-nums ${theme.badge}`}>
+              {currentPage + 1} / {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={onPrev}
+              disabled={!canPrev}
+              className="rounded-full border border-white/10 bg-white/[0.04] p-2 text-slate-400 transition hover:border-white/20 hover:bg-white/[0.08] hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-white/10 disabled:hover:bg-white/[0.04]"
+              aria-label="Previous page"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={onNext}
+              disabled={!canNext}
+              className="rounded-full border border-white/10 bg-white/[0.04] p-2 text-slate-400 transition hover:border-white/20 hover:bg-white/[0.08] hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-white/10 disabled:hover:bg-white/[0.04]"
+              aria-label="Next page"
+              aria-busy={paginationLoading}
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
+      <div className="relative min-h-0 flex-1 overflow-x-auto">
+        {paginationLoading && (
+          <div
+            className="absolute inset-0 z-10 flex items-center justify-center rounded-b-2xl bg-slate-950/80"
+            aria-live="polite"
+            aria-busy="true"
+          >
+            <span className="flex items-center gap-1.5 text-xs text-slate-300">
+              <svg className="h-4 w-4 animate-spin shrink-0 text-sky-400" fill="none" viewBox="0 0 24 24" aria-hidden>
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              Updating…
+            </span>
+          </div>
+        )}
+        <table className="w-full text-left text-xs">
+          <thead>
+            <tr className="border-b border-white/10 text-slate-500">
+              <th className="px-4 py-2.5 font-medium text-[10px] uppercase tracking-[0.16em]">Symbol</th>
+              <th className="px-4 py-2.5 font-medium text-[10px] uppercase tracking-[0.16em] min-w-0 truncate max-w-[140px]">Name</th>
+              <th className="px-4 py-2.5 font-medium text-[10px] uppercase tracking-[0.16em] text-right">Price</th>
+              <th className="px-4 py-2.5 font-medium text-[10px] uppercase tracking-[0.16em] text-right">Change</th>
+              <th className="px-4 py-2.5 font-medium text-[10px] uppercase tracking-[0.16em] text-right">Volume</th>
+              <th className="px-4 py-2.5 font-medium text-[10px] uppercase tracking-[0.16em] w-0 max-w-[90px]">Sector</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageRows.map((row, i) => {
+              const sym = row.symbol ?? '';
+              const clickable = onSelectTicker && sym;
+              const pct = row.regularMarketChangePercent ?? null;
+              const rowChangeClass =
+                changeColor === 'neutral'
+                  ? pct != null && pct > 0
+                    ? 'text-emerald-300'
+                    : pct != null && pct < 0
+                      ? 'text-red-300'
+                      : 'text-gray-400'
+                  : changeClass;
+              return (
+                <tr
+                  key={sym || i}
+                  onClick={() => clickable && onSelectTicker(sym)}
+                  className={`border-b border-white/5 ${clickable ? 'cursor-pointer transition-colors hover:bg-white/[0.04]' : ''}`}
+                >
+                  <td className="px-4 py-3 font-medium text-white">
+                    <span className="inline-flex rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] text-slate-100">
+                      {sym || '—'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-300 truncate max-w-[140px] sm:text-[13px]" title={row.shortName ?? undefined}>
+                    {row.shortName || '—'}
+                  </td>
+                  <td className="px-4 py-3 text-right text-xs text-slate-200 tabular-nums sm:text-[13px]">{formatPrice(row.regularMarketPrice)}</td>
+                  <td className={`px-4 py-3 text-right text-xs font-medium tabular-nums sm:text-[13px] ${rowChangeClass}`}>
+                    {formatPct(row.regularMarketChangePercent)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-xs text-slate-400 tabular-nums sm:text-[13px]">{formatVolume(row.regularMarketVolume)}</td>
+                  <td className="px-4 py-3 text-xs text-slate-400 truncate max-w-[90px] sm:text-[13px]" title={row.industry ?? undefined}>
+                    {row.sector || '—'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const HEADLINES_REFRESH_MS = 300000; // 5 minutes (was 2 min)
+
+function HeadlineTickerPill({
+  ticker,
+  changePercent,
+}: {
+  ticker: string;
+  changePercent: number | null;
+}) {
+  const toneClass =
+    changePercent != null && changePercent > 0
+      ? 'border-emerald-900/40 bg-emerald-950/40 text-emerald-300'
+      : changePercent != null && changePercent < 0
+        ? 'border-red-900/40 bg-red-950/40 text-red-300'
+        : 'border-white/10 bg-white/[0.05] text-slate-300';
+
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium tracking-[0.12em] ${toneClass}`}>
+      {ticker}
+    </span>
+  );
+}
+
+function HeadlineMeta({
+  article,
+  compact = false,
+}: {
+  article: HeadlineArticle;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-slate-500 ${compact ? 'text-[11px]' : 'text-xs'}`}>
+      {article.publisher && <span className="font-medium text-slate-400">{article.publisher}</span>}
+      <span>{formatPublishedLabel(article)}</span>
+      {article.type && <span className="uppercase tracking-[0.14em]">{article.type}</span>}
+    </div>
+  );
+}
+
+function RunningHeadlinesStrip({
+  articles,
+  isLoading,
+  tickerChangeMap = {},
+}: {
+  articles: HeadlineArticle[];
+  isLoading: boolean;
+  tickerChangeMap?: Record<string, number | null>;
+}) {
+  if (isLoading) {
+    return (
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]" aria-live="polite" aria-busy="true">
+        <div className="animate-pulse rounded-[1.35rem] bg-white/[0.04] p-4">
+          <div className="h-28 rounded-lg bg-white/[0.05]" />
+          <div className="mt-3 h-3 w-32 rounded bg-white/[0.05]" />
+          <div className="mt-2 h-5 w-4/5 rounded bg-white/[0.06]" />
+          <div className="mt-2 h-5 w-3/5 rounded bg-white/[0.06]" />
+          <div className="mt-3 h-3 w-full rounded bg-white/[0.04]" />
+          <div className="mt-2 h-3 w-5/6 rounded bg-white/[0.04]" />
+        </div>
+        <div className="space-y-2">
+          {[1, 2, 3, 4].map((item) => (
+            <div key={item} className="animate-pulse rounded-[1.15rem] bg-white/[0.04] p-3">
+              <div className="h-3 w-24 rounded bg-white/[0.05]" />
+              <div className="mt-2 h-4 w-full rounded bg-white/[0.06]" />
+              <div className="mt-2 h-4 w-4/5 rounded bg-white/[0.06]" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (articles.length === 0) {
+    return (
+      <div className="rounded-[1.25rem] bg-white/[0.04] px-4 py-5 text-sm text-slate-500" aria-live="polite">
+        No headlines
+      </div>
+    );
+  }
+
+  const featured = articles[0];
+  const briefing = articles.slice(1, 6);
+  const moreStories = articles.slice(6, 12);
+  const featuredTickers = featured.tickers.slice(0, 4);
+  const featuredSummary = featured.summary?.trim();
+
+  return (
+    <div className="space-y-3" aria-live="polite">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
+        <a
+          href={featured.link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group overflow-hidden rounded-[1.4rem] bg-white/[0.04] transition hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-sky-500"
+        >
+          <div className="grid min-h-full gap-0 md:grid-cols-[minmax(0,1fr)_220px]">
+            <div className="p-4">
+              <div className="flex items-center justify-between gap-3">
+                <HeadlineMeta article={featured} />
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-300">
+                  Lead story
+                </span>
+              </div>
+              <h3 className="mt-3 text-base font-semibold leading-snug text-white sm:text-lg">
+                {featured.title}
+              </h3>
+              {featuredSummary && (
+                <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-slate-400">
+                  {featuredSummary}
+                </p>
+              )}
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {featuredTickers.length > 0 ? featuredTickers.map((ticker) => (
+                  <HeadlineTickerPill
+                    key={ticker}
+                    ticker={ticker}
+                    changePercent={tickerChangeMap[ticker] ?? tickerChangeMap[ticker.toUpperCase()] ?? null}
+                  />
+                )) : (
+                  <span className="text-[11px] text-slate-500">Broad market coverage</span>
+                )}
+              </div>
+            </div>
+            <div className="relative hidden bg-slate-900/70 md:block">
+              {featured.thumbnail ? (
+                <>
+                  <img
+                    src={featured.thumbnail}
+                    alt=""
+                    className="h-full w-full object-cover opacity-75 transition duration-300 group-hover:scale-[1.02]"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/35 to-transparent" />
+                </>
+              ) : (
+                <div className="flex h-full items-end bg-[linear-gradient(135deg,rgba(15,23,42,1),rgba(30,41,59,0.95))] p-4">
+                  <div className="space-y-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Market pulse</div>
+                    <div className="text-sm font-medium text-slate-200">
+                      Curated lead coverage with context, source, and linked tickers.
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </a>
+
+        <div className="overflow-hidden rounded-[1.35rem] bg-white/[0.03]">
+          {briefing.map((article, index) => (
+            <a
+              key={article.uuid}
+              href={article.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`block px-3.5 py-3 transition hover:bg-white/[0.04] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-sky-500 ${
+                index < briefing.length - 1 ? 'border-b border-white/6' : ''
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <HeadlineMeta article={article} compact />
+                  <div className="mt-1.5 line-clamp-2 text-sm font-medium leading-snug text-slate-100">
+                    {article.title}
+                  </div>
+                  {article.summary && (
+                    <div className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-slate-500">
+                      {article.summary}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {article.tickers.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {article.tickers.slice(0, 3).map((ticker) => (
+                    <HeadlineTickerPill
+                      key={ticker}
+                      ticker={ticker}
+                      changePercent={tickerChangeMap[ticker] ?? tickerChangeMap[ticker.toUpperCase()] ?? null}
+                    />
+                  ))}
+                </div>
+              )}
+            </a>
+          ))}
+        </div>
+      </div>
+
+      {moreStories.length > 0 && (
+        <div className="overflow-x-auto">
+          <div className="flex gap-2.5 pb-1">
+            {moreStories.map((article) => (
+              <a
+                key={article.uuid}
+                href={article.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block min-w-[220px] max-w-[240px] shrink-0 rounded-[1.05rem] bg-white/[0.04] px-3 py-3 transition hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-sky-500"
+              >
+                <HeadlineMeta article={article} compact />
+                <div className="mt-1.5 line-clamp-3 text-xs font-medium leading-relaxed text-slate-200">
+                  {article.title}
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function MarketView({ onSelectTicker }: MarketViewProps) {
+  const { user } = useAuth();
+  const [overview, setOverview] = useState<{
+    indices: OverviewItem[];
+    sectors: OverviewItem[];
+    international: OverviewItem[];
+    commodities: OverviewItem[];
+  } | null>(null);
+  const [totals, setTotals] = useState({ totalIndices: 0, totalSectors: 0, totalRegions: 0, totalCommodities: 0 });
+  const [pages, setPages] = useState({ indices: 0, sectors: 0, regions: 0, commodities: 0 });
+  const [gainers, setGainers] = useState<MarketMoverRow[]>([]);
+  const [losers, setLosers] = useState<MarketMoverRow[]>([]);
+  const [mostActive, setMostActive] = useState<MarketMoverRow[]>([]);
+  const [moversPageGainers, setMoversPageGainers] = useState(0);
+  const [moversPageLosers, setMoversPageLosers] = useState(0);
+  const [moversPageMostActive, setMoversPageMostActive] = useState(0);
+  const [moversPaginationLoading, setMoversPaginationLoading] = useState<'gainers' | 'losers' | 'most_active' | null>(null);
+  const [headlines, setHeadlines] = useState<HeadlineArticle[]>([]);
+  const [headlinesLoading, setHeadlinesLoading] = useState(false);
+  const [mapRegions, setMapRegions] = useState<OverviewItem[]>([]);
+  const [mapUsIndices, setMapUsIndices] = useState<OverviewItem[]>([]);
+  const [mapDataLoading, setMapDataLoading] = useState(false);
+  const [overviewDataLoading, setOverviewDataLoading] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<'overview' | 'regional'>('overview');
+  const [range, setRange] = useState<'1d' | '1w' | '1mo' | '6mo' | 'ytd'>('1d');
+  const [mobileNewsExpanded, setMobileNewsExpanded] = useState(false);
+
+  // Sync URL -> tab state (reload / back restores tab)
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'overview' || tabParam === 'regional') {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
+
+  const handleMarketTabChange = useCallback((tab: 'overview' | 'regional') => {
+    setActiveTab(tab);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', tab);
+      return next;
+    }, { replace: false });
+  }, [setSearchParams]);
+
+  const [paginationSection, setPaginationSection] = useState<'indices' | 'sectors' | 'regions' | 'commodities' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Ticker list for headlines: set only on initial load so news does not refresh when navigating sections
+  const [initialHeadlinesTickers, setInitialHeadlinesTickers] = useState<string[]>([]);
+
+  const tickerChangeMap = useMemo(() => {
+    const map: Record<string, number | null> = {};
+    gainers.forEach((r) => {
+      const s = r.symbol?.trim();
+      if (s) map[s] = r.regularMarketChangePercent ?? null;
+    });
+    losers.forEach((r) => {
+      const s = r.symbol?.trim();
+      if (s) map[s] = r.regularMarketChangePercent ?? null;
+    });
+    if (overview) {
+      overview.indices.forEach((i) => {
+        if (i.ticker?.trim()) map[i.ticker.trim()] = i.changePercent ?? null;
+      });
+      overview.sectors.forEach((i) => {
+        if (i.ticker?.trim()) map[i.ticker.trim()] = i.changePercent ?? null;
+      });
+      overview.international.forEach((i) => {
+        if (i.ticker?.trim()) map[i.ticker.trim()] = i.changePercent ?? null;
+      });
+      overview.commodities.forEach((i) => {
+        if (i.ticker?.trim()) map[i.ticker.trim()] = i.changePercent ?? null;
+      });
+    }
+    return map;
+  }, [gainers, losers, overview]);
+
+  const fetchHeadlines = useCallback(async () => {
+    if (initialHeadlinesTickers.length === 0) return;
+    setHeadlinesLoading(true);
+    try {
+      const { articles } = await tickerApi.getNewsBatch(initialHeadlinesTickers);
+      const merged: HeadlineArticle[] = (articles ?? []).map((a) => ({
+        uuid: a.uuid,
+        title: a.title,
+        summary: a.summary ?? null,
+        publisher: a.publisher,
+        link: a.link,
+        published_time: a.published_time ?? null,
+        published_timestamp: a.published_timestamp ?? 0,
+        type: a.type,
+        thumbnail: a.thumbnail ?? null,
+        tickers: a.tickers ?? [],
+      }));
+      setHeadlines(merged);
+    } finally {
+      setHeadlinesLoading(false);
+    }
+  }, [initialHeadlinesTickers]);
+
+  useEffect(() => {
+    fetchHeadlines();
+  }, [fetchHeadlines]);
+
+  useEffect(() => {
+    if (initialHeadlinesTickers.length === 0) return;
+    const id = setInterval(fetchHeadlines, HEADLINES_REFRESH_MS);
+    return () => clearInterval(id);
+  }, [fetchHeadlines, initialHeadlinesTickers.length]);
+
+  const fetchOverview = useCallback(
+    async (
+      pageIndices: number,
+      pageSectors: number,
+      pageRegions: number,
+      pageCommodities: number,
+      updateOnlySection?: 'indices' | 'sectors' | 'regions' | 'commodities',
+      overviewRange?: '1d' | '1w' | '1mo' | '3mo' | 'ytd'
+    ) => {
+      const data = await tickerApi.getMarketOverview({
+        limit_indices: TILES_PER_PAGE,
+        offset_indices: pageIndices * TILES_PER_PAGE,
+        limit_sectors: TILES_PER_PAGE,
+        offset_sectors: pageSectors * TILES_PER_PAGE,
+        limit_regions: TILES_PER_PAGE,
+        offset_regions: pageRegions * TILES_PER_PAGE,
+        limit_commodities: TILES_PER_PAGE,
+        offset_commodities: pageCommodities * TILES_PER_PAGE,
+        range: overviewRange ?? range,
+      });
+      if (updateOnlySection) {
+        setOverview((prev) => {
+          if (!prev) {
+            return {
+              indices: data.indices ?? [],
+              sectors: data.sectors ?? [],
+              international: data.international ?? [],
+              commodities: data.commodities ?? [],
+            };
+          }
+          return {
+            indices: updateOnlySection === 'indices' ? (data.indices ?? []) : prev.indices,
+            sectors: updateOnlySection === 'sectors' ? (data.sectors ?? []) : prev.sectors,
+            international: updateOnlySection === 'regions' ? (data.international ?? []) : prev.international,
+            commodities: updateOnlySection === 'commodities' ? (data.commodities ?? []) : prev.commodities,
+          };
+        });
+        setTotals((prev) => ({
+          totalIndices: updateOnlySection === 'indices' ? (data.totalIndices ?? 0) : prev.totalIndices,
+          totalSectors: updateOnlySection === 'sectors' ? (data.totalSectors ?? 0) : prev.totalSectors,
+          totalRegions: updateOnlySection === 'regions' ? (data.totalRegions ?? 0) : prev.totalRegions,
+          totalCommodities: updateOnlySection === 'commodities' ? (data.totalCommodities ?? 0) : prev.totalCommodities,
+        }));
+      } else {
+        setOverview({
+          indices: data.indices ?? [],
+          sectors: data.sectors ?? [],
+          international: data.international ?? [],
+          commodities: data.commodities ?? [],
+        });
+        setTotals({
+          totalIndices: data.totalIndices ?? 0,
+          totalSectors: data.totalSectors ?? 0,
+          totalRegions: data.totalRegions ?? 0,
+          totalCommodities: data.totalCommodities ?? 0,
+        });
+      }
+      setPages({ indices: pageIndices, sectors: pageSectors, regions: pageRegions, commodities: pageCommodities });
+      return data;
+    },
+    [range]
+  );
+
+  const applyOverviewAndMoversData = useCallback(
+    (overviewData: Awaited<ReturnType<typeof tickerApi.getMarketOverview>>, moversData: { gainers?: MarketMoverRow[]; losers?: MarketMoverRow[]; most_active?: MarketMoverRow[] }) => {
+      const gainersList = moversData.gainers ?? [];
+      const losersList = moversData.losers ?? [];
+      const mostActiveList = moversData.most_active ?? [];
+      const indices = overviewData.indices ?? [];
+      const sectors = overviewData.sectors ?? [];
+      const international = overviewData.international ?? [];
+      const commodities = overviewData.commodities ?? [];
+      const raw: string[] = [];
+      gainersList.forEach((r) => {
+        const s = r.symbol?.trim();
+        if (s) raw.push(s);
+      });
+      losersList.forEach((r) => {
+        const s = r.symbol?.trim();
+        if (s) raw.push(s);
+      });
+      mostActiveList.forEach((r) => {
+        const s = r.symbol?.trim();
+        if (s) raw.push(s);
+      });
+      [...indices, ...sectors, ...international, ...commodities].forEach((i) => {
+        if (i.ticker?.trim()) raw.push(i.ticker.trim());
+      });
+      setInitialHeadlinesTickers([...new Set(raw)].slice(0, 50));
+      setMapRegions([]);
+      setMapUsIndices([]);
+      setOverview({ indices, sectors, international, commodities });
+      setTotals({
+        totalIndices: overviewData.totalIndices ?? 0,
+        totalSectors: overviewData.totalSectors ?? 0,
+        totalRegions: overviewData.totalRegions ?? 0,
+        totalCommodities: overviewData.totalCommodities ?? 0,
+      });
+      setPages({ indices: 0, sectors: 0, regions: 0, commodities: 0 });
+      setGainers(gainersList);
+      setLosers(losersList);
+      setMostActive(mostActiveList);
+      setMoversPageGainers(0);
+      setMoversPageLosers(0);
+      setMoversPageMostActive(0);
+    },
+    []
+  );
+
+  const fetchAll = useCallback(async () => {
+    setError(null);
+    try {
+      const [overviewData, moversData] = await Promise.all([
+        tickerApi.getMarketOverview({
+          limit_indices: TILES_PER_PAGE,
+          offset_indices: 0,
+          limit_sectors: TILES_PER_PAGE,
+          offset_sectors: 0,
+          limit_regions: TILES_PER_PAGE,
+          offset_regions: 0,
+          limit_commodities: TILES_PER_PAGE,
+          offset_commodities: 0,
+          range,
+        }),
+        tickerApi.getMarketMovers(MOVERS_PAGE_SIZE),
+      ]);
+      applyOverviewAndMoversData(overviewData, moversData);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load market data');
+      setOverview(null);
+      setMapRegions([]);
+      setMapUsIndices([]);
+      setGainers([]);
+      setLosers([]);
+      setMostActive([]);
+      setInitialHeadlinesTickers([]);
+    }
+  }, [range, applyOverviewAndMoversData]);
+
+  const fetchMapOverview = useCallback(async () => {
+    if (!user) return;
+    setMapDataLoading(true);
+    try {
+      // Fetch only regions and indices (no sectors/commodities) so the backend does not call yfinance for unused groups.
+      const [regionsRes, indicesRes] = await Promise.all([
+        tickerApi.getMarketOverviewSection('regions', { limit: 100, offset: 0, range }),
+        tickerApi.getMarketOverviewSection('indices', { limit: 15, offset: 0, range }),
+      ]);
+      setMapRegions(regionsRes.items ?? []);
+      setMapUsIndices(indicesRes.items ?? []);
+    } finally {
+      setMapDataLoading(false);
+    }
+  }, [user, range]);
+
+  useEffect(() => {
+    if (activeTab === 'regional' && user) {
+      fetchMapOverview();
+    }
+  }, [activeTab, user, fetchMapOverview]);
+
+  const totalPagesIndices = Math.max(1, Math.ceil(totals.totalIndices / TILES_PER_PAGE));
+  const totalPagesSectors = Math.max(1, Math.ceil(totals.totalSectors / TILES_PER_PAGE));
+  const totalPagesRegions = Math.max(1, Math.ceil(totals.totalRegions / TILES_PER_PAGE));
+  const totalPagesCommodities = Math.max(1, Math.ceil(totals.totalCommodities / TILES_PER_PAGE));
+
+  const handlePrevIndices = useCallback(async () => {
+    if (paginationSection || pages.indices <= 0) return;
+    const nextPage = pages.indices - 1;
+    setPaginationSection('indices');
+    try {
+      await fetchOverview(nextPage, pages.sectors, pages.regions, pages.commodities, 'indices');
+    } finally {
+      setPaginationSection(null);
+    }
+  }, [paginationSection, pages, fetchOverview]);
+
+  const handleNextIndices = useCallback(async () => {
+    if (paginationSection || pages.indices >= totalPagesIndices - 1) return;
+    const nextPage = pages.indices + 1;
+    setPaginationSection('indices');
+    try {
+      await fetchOverview(nextPage, pages.sectors, pages.regions, pages.commodities, 'indices');
+    } finally {
+      setPaginationSection(null);
+    }
+  }, [paginationSection, pages, totalPagesIndices, fetchOverview]);
+
+  const handlePrevSectors = useCallback(async () => {
+    if (paginationSection || pages.sectors <= 0) return;
+    const nextPage = pages.sectors - 1;
+    setPaginationSection('sectors');
+    try {
+      await fetchOverview(pages.indices, nextPage, pages.regions, pages.commodities, 'sectors');
+    } finally {
+      setPaginationSection(null);
+    }
+  }, [paginationSection, pages, fetchOverview]);
+
+  const handleNextSectors = useCallback(async () => {
+    if (paginationSection || pages.sectors >= totalPagesSectors - 1) return;
+    const nextPage = pages.sectors + 1;
+    setPaginationSection('sectors');
+    try {
+      await fetchOverview(pages.indices, nextPage, pages.regions, pages.commodities, 'sectors');
+    } finally {
+      setPaginationSection(null);
+    }
+  }, [paginationSection, pages, totalPagesSectors, fetchOverview]);
+
+  const handlePrevRegions = useCallback(async () => {
+    if (paginationSection || pages.regions <= 0) return;
+    const nextPage = pages.regions - 1;
+    setPaginationSection('regions');
+    try {
+      await fetchOverview(pages.indices, pages.sectors, nextPage, pages.commodities, 'regions');
+    } finally {
+      setPaginationSection(null);
+    }
+  }, [paginationSection, pages, fetchOverview]);
+
+  const handleNextRegions = useCallback(async () => {
+    if (paginationSection || pages.regions >= totalPagesRegions - 1) return;
+    const nextPage = pages.regions + 1;
+    setPaginationSection('regions');
+    try {
+      await fetchOverview(pages.indices, pages.sectors, nextPage, pages.commodities, 'regions');
+    } finally {
+      setPaginationSection(null);
+    }
+  }, [paginationSection, pages, totalPagesRegions, fetchOverview]);
+
+  const handlePrevCommodities = useCallback(async () => {
+    if (paginationSection || pages.commodities <= 0) return;
+    const nextPage = pages.commodities - 1;
+    setPaginationSection('commodities');
+    try {
+      await fetchOverview(pages.indices, pages.sectors, pages.regions, nextPage, 'commodities');
+    } finally {
+      setPaginationSection(null);
+    }
+  }, [paginationSection, pages, fetchOverview]);
+
+  const handleNextCommodities = useCallback(async () => {
+    if (paginationSection || pages.commodities >= totalPagesCommodities - 1) return;
+    const nextPage = pages.commodities + 1;
+    setPaginationSection('commodities');
+    try {
+      await fetchOverview(pages.indices, pages.sectors, pages.regions, nextPage, 'commodities');
+    } finally {
+      setPaginationSection(null);
+    }
+  }, [paginationSection, pages, totalPagesCommodities, fetchOverview]);
+
+  const totalPagesGainers = MOVERS_TOTAL_PAGES;
+  const totalPagesLosers = MOVERS_TOTAL_PAGES;
+  const totalPagesMostActive = MOVERS_TOTAL_PAGES;
+
+  const fetchMoreMovers = useCallback(async (requiredCount: number, table: 'gainers' | 'losers' | 'most_active') => {
+    const capped = Math.min(requiredCount, MOVERS_TOTAL_PAGES * MOVERS_PAGE_SIZE);
+    if (capped <= gainers.length) return;
+    setMoversPaginationLoading(table);
+    try {
+      const data = await tickerApi.getMarketMovers(capped);
+      setGainers(data.gainers ?? []);
+      setLosers(data.losers ?? []);
+      setMostActive(data.most_active ?? []);
+    } finally {
+      setMoversPaginationLoading(null);
+    }
+  }, [gainers.length]);
+
+  const handlePrevGainers = useCallback(() => {
+    setMoversPageGainers((p) => Math.max(0, p - 1));
+  }, []);
+  const handleNextGainers = useCallback(async () => {
+    const nextPage = moversPageGainers + 1;
+    const requiredCount = (nextPage + 1) * MOVERS_PAGE_SIZE;
+    if (gainers.length < requiredCount) {
+      await fetchMoreMovers(requiredCount, 'gainers');
+    }
+    setMoversPageGainers(nextPage);
+  }, [moversPageGainers, gainers.length, fetchMoreMovers]);
+  const handlePrevLosers = useCallback(() => {
+    setMoversPageLosers((p) => Math.max(0, p - 1));
+  }, []);
+  const handleNextLosers = useCallback(async () => {
+    const nextPage = moversPageLosers + 1;
+    const requiredCount = (nextPage + 1) * MOVERS_PAGE_SIZE;
+    if (losers.length < requiredCount) {
+      await fetchMoreMovers(requiredCount, 'losers');
+    }
+    setMoversPageLosers(nextPage);
+  }, [moversPageLosers, losers.length, fetchMoreMovers]);
+  const handlePrevMostActive = useCallback(() => {
+    setMoversPageMostActive((p) => Math.max(0, p - 1));
+  }, []);
+  const handleNextMostActive = useCallback(async () => {
+    const nextPage = moversPageMostActive + 1;
+    const requiredCount = (nextPage + 1) * MOVERS_PAGE_SIZE;
+    if (mostActive.length < requiredCount) {
+      await fetchMoreMovers(requiredCount, 'most_active');
+    }
+    setMoversPageMostActive(nextPage);
+  }, [moversPageMostActive, mostActive.length, fetchMoreMovers]);
+
+  const hasInitialFetched = useRef(false);
+  const prevRangeRef = useRef(range);
+
+  useEffect(() => {
+    if (hasInitialFetched.current) return;
+    hasInitialFetched.current = true;
+    setError(null);
+    const r = range;
+    const overviewPromise = tickerApi.getMarketOverview({
+      limit_indices: TILES_PER_PAGE,
+      offset_indices: 0,
+      limit_sectors: TILES_PER_PAGE,
+      offset_sectors: 0,
+      limit_regions: TILES_PER_PAGE,
+      offset_regions: 0,
+      limit_commodities: TILES_PER_PAGE,
+      offset_commodities: 0,
+      range: r,
+    });
+    const moversPromise = tickerApi.getMarketMovers(MOVERS_PAGE_SIZE);
+
+    // Show market movers as soon as they load
+    moversPromise
+      .then((moversData) => {
+        setGainers(moversData.gainers ?? []);
+        setLosers(moversData.losers ?? []);
+        setMostActive(moversData.most_active ?? []);
+        setMoversPageGainers(0);
+        setMoversPageLosers(0);
+        setMoversPageMostActive(0);
+      })
+      .catch(() => {});
+
+    // Show overview tiles as soon as they load
+    overviewPromise
+      .then((overviewData) => {
+        setOverview({
+          indices: overviewData.indices ?? [],
+          sectors: overviewData.sectors ?? [],
+          international: overviewData.international ?? [],
+          commodities: overviewData.commodities ?? [],
+        });
+        setTotals({
+          totalIndices: overviewData.totalIndices ?? 0,
+          totalSectors: overviewData.totalSectors ?? 0,
+          totalRegions: overviewData.totalRegions ?? 0,
+          totalCommodities: overviewData.totalCommodities ?? 0,
+        });
+        setPages({ indices: 0, sectors: 0, regions: 0, commodities: 0 });
+      })
+      .catch(() => {});
+
+    // When both are ready, set merged headlines and ensure full state
+    Promise.all([overviewPromise, moversPromise])
+      .then(([overviewData, moversData]) => {
+        applyOverviewAndMoversData(overviewData, moversData);
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : 'Failed to load market data');
+        setOverview(null);
+        setMapRegions([]);
+        setMapUsIndices([]);
+        setGainers([]);
+        setLosers([]);
+        setMostActive([]);
+        setInitialHeadlinesTickers([]);
+      });
+  }, [applyOverviewAndMoversData]);
+
+  useEffect(() => {
+    if (prevRangeRef.current === range) return;
+    prevRangeRef.current = range;
+    if (activeTab === 'overview') {
+      setOverviewDataLoading(true);
+      fetchOverview(0, 0, 0, 0).finally(() => setOverviewDataLoading(false));
+    } else if (activeTab === 'regional' && user) {
+      fetchMapOverview();
+    }
+  }, [range, activeTab, user, fetchOverview, fetchMapOverview]);
+
+  const overviewItems = useMemo(
+    () => (overview ? [...overview.indices, ...overview.sectors, ...overview.international, ...overview.commodities] : []),
+    [overview]
+  );
+
+  const positiveOverviewCount = useMemo(
+    () => overviewItems.filter((item) => (item.changePercent ?? 0) >= 0).length,
+    [overviewItems]
+  );
+
+  const breadthPercent = overviewItems.length > 0 ? Math.round((positiveOverviewCount / overviewItems.length) * 100) : null;
+
+  const topPerformer = useMemo(() => {
+    const candidates = [
+      ...overviewItems.map((item) => ({
+        ticker: item.ticker,
+        name: item.name,
+        changePercent: item.changePercent,
+      })),
+      ...gainers.map((row) => ({
+        ticker: row.symbol ?? '',
+        name: row.shortName ?? row.symbol ?? 'Top mover',
+        changePercent: row.regularMarketChangePercent,
+      })),
+    ]
+      .filter((item) => item.changePercent != null)
+      .sort((a, b) => (b.changePercent ?? Number.NEGATIVE_INFINITY) - (a.changePercent ?? Number.NEGATIVE_INFINITY));
+
+    return candidates[0] ?? null;
+  }, [overviewItems, gainers]);
+
+  const volumeLeader = mostActive[0] ?? null;
+  const marketTone: 'emerald' | 'sky' | 'rose' =
+    breadthPercent == null ? 'sky' : breadthPercent >= 60 ? 'emerald' : breadthPercent >= 45 ? 'sky' : 'rose';
+  const heroDescription =
+    activeTab === 'overview'
+      ? `${getRangeLabel(range)} across indices, sectors, global benchmarks, and commodities.`
+      : `${getRangeLabel(range)} performance mapped across regional exchanges and major U.S. anchors.`;
+
+  if (error) {
+    return (
+      <div className="bg-gray-800 rounded-xl border border-gray-700 p-8 text-center">
+        <p className="text-red-400 text-xs mb-2">{error}</p>
+        <button
+          type="button"
+          onClick={fetchAll}
+          className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded-lg transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 pb-4">
+      <section className="rounded-2xl border border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.98),rgba(30,41,59,0.94))] shadow-[0_18px_42px_-34px_rgba(15,23,42,0.95)] backdrop-blur-sm">
+        <div className="space-y-4 p-4 sm:p-5">
+          <div className="space-y-3">
+            <div className="space-y-4 xl:grid xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.95fr)] xl:items-start xl:gap-4 xl:space-y-0">
+              <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300">
+                <span className="h-2 w-2 rounded-full bg-sky-400" />
+                Market view
+              </div>
+              <div className="space-y-2">
+                <h1 className="max-w-3xl text-xl font-semibold tracking-tight text-white sm:text-2xl">
+                  Market overview, movers, and regional context in one screen.
+                </h1>
+                <p className="max-w-2xl text-xs leading-relaxed text-slate-400 sm:text-sm">
+                  {heroDescription} Scan the market quickly, then drill into the names or regions that matter.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[11px] font-medium text-slate-300">
+                  {activeTab === 'overview' ? 'Cross-asset overview' : 'Regional heat map'}
+                </span>
+                <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[11px] font-medium text-slate-300">
+                  Range: {getRangeLabel(range)}
+                </span>
+              </div>
+              <div className="max-w-2xl">
+                <TickerSearch compact />
+              </div>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
+                <PulseCard
+                  eyebrow="Breadth"
+                  value={breadthPercent != null ? `${breadthPercent}% green` : 'Loading'}
+                  detail={
+                    overviewItems.length > 0
+                      ? `${positiveOverviewCount} of ${overviewItems.length} tracked benchmarks are positive.`
+                      : 'Collecting cross-asset performance.'
+                  }
+                  tone={marketTone}
+                />
+                <PulseCard
+                  eyebrow="Leader"
+                  value={topPerformer?.ticker || '—'}
+                  detail={
+                    topPerformer
+                      ? `${topPerformer.name} · ${formatPct(topPerformer.changePercent)}`
+                      : 'Scanning for the strongest move.'
+                  }
+                  tone={topPerformer ? ((topPerformer.changePercent ?? 0) >= 0 ? 'emerald' : 'rose') : 'sky'}
+                />
+                <PulseCard
+                  eyebrow="Volume"
+                  value={volumeLeader?.symbol || '—'}
+                  detail={
+                    volumeLeader
+                      ? `${volumeLeader.shortName || 'Most active'} · Vol ${formatVolume(volumeLeader.regularMarketVolume)}`
+                      : 'Waiting for active tape data.'
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-white/10 bg-slate-950/92 p-3 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.9)] backdrop-blur-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => handleMarketTabChange('overview')}
+              className={`rounded-full border px-4 py-1.5 text-xs font-medium transition sm:text-sm ${
+                activeTab === 'overview'
+                  ? 'border-sky-400/25 bg-sky-400/10 text-white'
+                  : 'border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:bg-white/[0.06] hover:text-slate-200'
+              }`}
+            >
+              Overview
+            </button>
+            <button
+              type="button"
+              onClick={() => handleMarketTabChange('regional')}
+              className={`rounded-full border px-4 py-1.5 text-xs font-medium transition sm:text-sm ${
+                activeTab === 'regional'
+                  ? 'border-sky-400/25 bg-sky-400/10 text-white'
+                  : 'border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:bg-white/[0.06] hover:text-slate-200'
+              }`}
+            >
+              Regional Map
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Timeframe">
+            {activeTab === 'overview' && overviewDataLoading && (
+              <span className="mr-1 flex items-center gap-1.5 text-xs text-slate-400" aria-live="polite">
+                <svg className="h-3.5 w-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden>
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Updating…
+              </span>
+            )}
+            {activeTab === 'regional' && mapDataLoading && (
+              <span className="mr-1 flex items-center gap-1.5 text-xs text-slate-400" aria-live="polite">
+                <svg className="h-3.5 w-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden>
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Updating…
+              </span>
+            )}
+            {(['1d', '1w', '1mo', '6mo', 'ytd'] as const).map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setRange(r)}
+                className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] transition sm:text-xs ${
+                  range === r
+                    ? 'border-white/20 bg-white/[0.12] text-white'
+                    : 'border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:bg-white/[0.06] hover:text-slate-200'
+                }`}
+              >
+                {r === '1d'
+                  ? '1D'
+                  : r === '1w'
+                    ? '1W'
+                    : r === '1mo'
+                      ? '1M'
+                      : r === '6mo'
+                        ? '6M'
+                        : 'YTD'}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {activeTab === 'overview' && (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start">
+          <div className="space-y-6">
+            <section className="space-y-4">
+              <SectionHeading
+                eyebrow="Snapshot"
+                title="Cross-asset overview"
+              />
+
+              {overview ? (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-4">
+                  <OverviewSection
+                    title="Indices"
+                    items={overview.indices}
+                    currentPage={pages.indices}
+                    totalPages={totalPagesIndices}
+                    onPrev={handlePrevIndices}
+                    onNext={handleNextIndices}
+                    paginationLoading={paginationSection === 'indices'}
+                    onSelectTicker={onSelectTicker}
+                  />
+                  <OverviewSection
+                    title="Sectors"
+                    items={overview.sectors}
+                    currentPage={pages.sectors}
+                    totalPages={totalPagesSectors}
+                    onPrev={handlePrevSectors}
+                    onNext={handleNextSectors}
+                    paginationLoading={paginationSection === 'sectors'}
+                    onSelectTicker={onSelectTicker}
+                  />
+                  <OverviewSection
+                    title="Regions"
+                    items={overview.international}
+                    currentPage={pages.regions}
+                    totalPages={totalPagesRegions}
+                    onPrev={handlePrevRegions}
+                    onNext={handleNextRegions}
+                    paginationLoading={paginationSection === 'regions'}
+                    onSelectTicker={onSelectTicker}
+                  />
+                  <OverviewSection
+                    title="Commodities"
+                    items={overview.commodities}
+                    currentPage={pages.commodities}
+                    totalPages={totalPagesCommodities}
+                    onPrev={handlePrevCommodities}
+                    onNext={handleNextCommodities}
+                    paginationLoading={paginationSection === 'commodities'}
+                    onSelectTicker={onSelectTicker}
+                  />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 animate-pulse sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-4">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="overflow-hidden rounded-[1.7rem] border border-white/10 bg-slate-950/55">
+                      <div className="h-14 border-b border-white/10 bg-white/[0.05]" />
+                      <div className="grid grid-cols-2 gap-2.5 p-3">
+                        {[1, 2, 3, 4, 5, 6].map((j) => (
+                          <div key={j} className="h-32 rounded-[1.2rem] bg-white/[0.06]" />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="space-y-4">
+              <SectionHeading
+                eyebrow="Momentum"
+                title="Today&apos;s market movers"
+              />
+
+              {gainers.length > 0 || losers.length > 0 || mostActive.length > 0 ? (
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 2xl:grid-cols-3">
+                  <MoversTable
+                    rows={gainers}
+                    title="Top gainers"
+                    changeColor="gainers"
+                    onSelectTicker={onSelectTicker}
+                    currentPage={moversPageGainers}
+                    totalPages={totalPagesGainers}
+                    onPrev={handlePrevGainers}
+                    onNext={handleNextGainers}
+                    pageSize={MOVERS_PAGE_SIZE}
+                    paginationLoading={moversPaginationLoading === 'gainers'}
+                  />
+                  <MoversTable
+                    rows={losers}
+                    title="Top losers"
+                    changeColor="losers"
+                    onSelectTicker={onSelectTicker}
+                    currentPage={moversPageLosers}
+                    totalPages={totalPagesLosers}
+                    onPrev={handlePrevLosers}
+                    onNext={handleNextLosers}
+                    pageSize={MOVERS_PAGE_SIZE}
+                    paginationLoading={moversPaginationLoading === 'losers'}
+                  />
+                  <MoversTable
+                    rows={mostActive}
+                    title="Most active"
+                    changeColor="neutral"
+                    onSelectTicker={onSelectTicker}
+                    currentPage={moversPageMostActive}
+                    totalPages={totalPagesMostActive}
+                    onPrev={handlePrevMostActive}
+                    onNext={handleNextMostActive}
+                    pageSize={MOVERS_PAGE_SIZE}
+                    paginationLoading={moversPaginationLoading === 'most_active'}
+                  />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-6 animate-pulse lg:grid-cols-2 2xl:grid-cols-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="overflow-hidden rounded-[1.7rem] border border-white/10 bg-slate-950/55">
+                      <div className="h-16 border-b border-white/10 bg-white/[0.05]" />
+                      <div className="space-y-2 p-3">
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map((j) => (
+                          <div key={j} className="h-12 rounded-[1rem] bg-white/[0.06]" />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="space-y-3 xl:hidden">
+              <button
+                type="button"
+                onClick={() => setMobileNewsExpanded((prev) => !prev)}
+                className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-slate-950/92 px-4 py-3 text-left shadow-[0_12px_28px_-24px_rgba(15,23,42,0.9)] transition hover:border-white/20 hover:bg-slate-900/95"
+                aria-expanded={mobileNewsExpanded}
+              >
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Briefing</div>
+                  <div className="mt-1 text-sm font-medium text-white">Market news</div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate-500">
+                    {headlinesLoading ? 'Refreshing' : `${headlines.length} headlines`}
+                  </span>
+                  <svg
+                    className={`h-4 w-4 text-slate-400 transition-transform ${mobileNewsExpanded ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </button>
+
+              {mobileNewsExpanded && (
+                <NewsBriefingPanel
+                  articles={headlines}
+                  isLoading={headlinesLoading}
+                  tickerChangeMap={tickerChangeMap}
+                />
+              )}
+            </section>
+          </div>
+
+          <aside className="hidden xl:block">
+            <div className="sticky top-4 space-y-4">
+              <NewsBriefingPanel
+                articles={headlines}
+                isLoading={headlinesLoading}
+                tickerChangeMap={tickerChangeMap}
+                compact
+              />
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {activeTab === 'regional' && (
+        <section className="space-y-4">
+          <SectionHeading
+            eyebrow="Atlas"
+            title="Regional market map"
+            description="Use the map to compare how leadership is spreading across regions, then drill into any marker for the underlying benchmark."
+          />
+
+          <div className="relative rounded-2xl border border-white/10 bg-slate-950/92 p-3 shadow-[0_14px_36px_-28px_rgba(15,23,42,0.9)] backdrop-blur-sm sm:p-4">
+            {!user ? (
+              <>
+                <WorldMapRegionalStocks regionalItems={[]} usIndices={[]} />
+                <div
+                  className="absolute inset-3 flex flex-col items-center justify-center rounded-xl bg-slate-950/88 backdrop-blur-[3px]"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <p className="text-sm font-medium text-slate-200">Sign in to unlock the regional map</p>
+                  <p className="mt-1 max-w-md text-center text-xs leading-relaxed text-slate-500">
+                    Regional market data for the map is only requested for logged-in users.
+                  </p>
+                </div>
+              </>
+            ) : mapDataLoading && mapRegions.length === 0 && mapUsIndices.length === 0 ? (
+              <>
+                <div className="overflow-hidden rounded-xl border border-white/10 bg-slate-950/88">
+                  <div className="h-12 border-b border-white/10 bg-white/[0.05]" />
+                  <div className="w-full animate-pulse bg-white/[0.05]" style={{ aspectRatio: '2 / 1' }} />
+                </div>
+                <div className="absolute left-6 right-6 top-6 z-10 rounded-xl border border-white/10 bg-slate-950/92 px-4 py-3 shadow-[0_14px_32px_-24px_rgba(0,0,0,0.95)] backdrop-blur-sm">
+                  <div className="flex items-center gap-3">
+                    <svg className="h-5 w-5 animate-spin shrink-0 text-sky-400" fill="none" viewBox="0 0 24 24" aria-hidden>
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-slate-200">Preparing Regional Map…</div>
+                      <div className="mt-0.5 text-xs text-slate-400">Loading regional indices and U.S. anchors.</div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <WorldMapRegionalStocks
+                regionalItems={mapRegions}
+                usIndices={mapUsIndices}
+                onSelectTicker={onSelectTicker}
+              />
+            )}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}

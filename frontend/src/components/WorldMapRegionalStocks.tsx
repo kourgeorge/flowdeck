@@ -1,7 +1,6 @@
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { ComposableMap, Geographies, Geography, Marker } from 'react-simple-maps';
 
-/** GeoJSON-like feature used by Geographies render prop */
 type GeoFeature = {
   rsmKey: string;
   properties?: { name?: string; NAME?: string; [key: string]: unknown };
@@ -15,148 +14,284 @@ type OverviewItem = {
   changePercent: number | null;
 };
 
-/** Ticker -> [lon, lat]. Coordinates are [longitude, latitude]. */
-const REGION_COORDS: Record<string, [number, number]> = {
-  // US indices – spread along the East Coast (city [lon, lat])
-  '^GSPC': [-71.06, 42.36],   // Boston
-  '^DJI': [-74.01, 40.71],    // New York
-  '^RUT': [-75.17, 39.95],    // Philadelphia
-  SPY: [-76.61, 39.29],       // Baltimore
-  DIA: [-77.04, 38.91],       // Washington DC
-  IWM: [-80.84, 35.23],       // Charlotte
-  MDY: [-84.39, 33.75],       // Atlanta
-  VOO: [-81.66, 30.33],       // Jacksonville
-  VTI: [-80.19, 25.77],       // Miami
-  '^IXIC': [-74.17, 40.74],   // Newark (NYC metro)
-  '^NDX': [-74.08, 40.72],   // Jersey City (NYC metro)
-  QQQ: [-73.98, 40.76],       // New York midtown
-  '^VIX': [-87.65, 41.88],    // Chicago (CBOE)
-  // Israel
-  '^TA125.TA': [34.78, 32.08],
-  // Gulf / Middle East
-  '^TASI.SR': [46.72, 24.71],
-  KSA: [46.72, 24.71],
-  UAE: [55.27, 25.2],
-  QAT: [51.53, 25.28],   // iShares MSCI Qatar ETF
-  BAX: [50.58, 26.23],
-  KWT: [47.98, 29.38],
-  // Europe
-  '^FTSE': [-0.13, 51.51],
-  '^GDAXI': [8.68, 50.11],
-  '^FCHI': [2.35, 48.86],
-  '^STOXX50E': [4.35, 50.85],
-  EWG: [8.68, 50.11],
-  EWU: [-0.13, 51.51],
-  '^IBEX': [-3.70, 40.42],
-  '^AEX': [4.9, 52.37],
-  '^SSMI': [8.54, 47.38],
-  '^OMXSPI': [18.07, 59.33],
-  '^ATX': [16.37, 48.21],
-  '^BFX': [4.35, 50.85],
-  '^OMXC20': [12.57, 55.68],   // Denmark Copenhagen
-  '^OMXH25': [24.94, 60.17],
-  'GD.AT': [23.73, 37.98],
-  EIRL: [-6.26, 53.35],
-  '^OSEAX': [10.75, 59.91],
-  // Asia-Pacific
-  '^N225': [139.69, 35.69],
-  '^HSI': [114.17, 22.32],
-  '^STI': [103.85, 1.29],
-  '^AXJO': [151.21, -33.87],
-  '^KS11': [126.98, 37.57],
-  '^TWII': [121.57, 25.03],
-  '^BSESN': [72.88, 19.08],
-  '^NSEI': [77.21, 28.61],
-  '^JKSE': [106.83, -6.21],
-  '^KLSE': [101.69, 3.14],
-  '000001.SS': [121.47, 31.23],   // Shanghai (SSE)
-  '^SET.BK': [100.5, 13.76],
-  'PSEI.PS': [121.0, 14.6],
-  VNM: [106.7, 10.78],
-  'XBAK.DE': [67.01, 24.86],
-  '^NZ50': [174.78, -41.29],
-  ENZL: [174.78, -41.29],
-  EWJ: [139.69, 35.69],
-  FXI: [104.2, 35.9],              // iShares China – central China
-  INDA: [77.21, 28.61],
-  EWM: [101.69, 3.14],
-  EIDO: [106.83, -6.21],
-  // Turkey
-  'XU100.IS': [28.98, 41.01],
-  TUR: [28.98, 41.01],
-  // Americas
-  '^GSPTSE': [-79.38, 43.65],
-  '^BVSP': [-46.63, -23.55],
-  '^MXX': [-99.13, 19.43],
-  '^IPSA': [-70.65, -33.45],   // Chile Santiago
-  '^MERV': [-58.38, -34.6],
-  'ICOLCAP.CL': [-74.07, 4.71],
-  EPU: [-77.04, -12.05],
-  EWC: [-79.38, 43.65],
-  EWZ: [-46.63, -23.55],
-  EWA: [151.21, -33.87],
-  // Africa
-  AFK: [15, -8],              // Pan-Africa ETF
-  '^JN0U.JO': [28.05, -26.2],
-  EZA: [28.05, -26.2],
-  // Generic ETFs - place at representative locations
-  EFA: [-0.13, 51.51],
-  EEM: [114.17, 22.32],
-  VEA: [2.35, 48.86],
-  VWO: [106.83, -6.21],
+type RegionMeta = {
+  coords: [number, number];
+  location: string;
+  market: string;
 };
 
-function getCoords(item: OverviewItem): [number, number] | null {
-  const t = item.ticker?.trim();
-  if (!t) return null;
-  return REGION_COORDS[t] ?? REGION_COORDS[t.toUpperCase()] ?? null;
-}
+type MappedItem = OverviewItem & {
+  coords: [number, number];
+  location: string;
+  market: string;
+  category: 'region' | 'anchor';
+};
 
-// Primary ticker to show when multiple items share the same location (US exchanges, South Africa, etc.)
+const REGION_META: Record<string, RegionMeta> = {
+  '^GSPC': { coords: [-71.06, 42.36], location: 'Boston, United States', market: 'S&P 500 anchor' },
+  '^DJI': { coords: [-74.01, 40.71], location: 'New York, United States', market: 'Dow Jones anchor' },
+  '^RUT': { coords: [-75.17, 39.95], location: 'Philadelphia, United States', market: 'Russell 2000 anchor' },
+  SPY: { coords: [-76.61, 39.29], location: 'Baltimore, United States', market: 'S&P 500 ETF' },
+  DIA: { coords: [-77.04, 38.91], location: 'Washington, D.C., United States', market: 'Dow ETF' },
+  IWM: { coords: [-80.84, 35.23], location: 'Charlotte, United States', market: 'Russell 2000 ETF' },
+  MDY: { coords: [-84.39, 33.75], location: 'Atlanta, United States', market: 'Mid-cap ETF' },
+  VOO: { coords: [-81.66, 30.33], location: 'Jacksonville, United States', market: 'S&P 500 ETF' },
+  VTI: { coords: [-80.19, 25.77], location: 'Miami, United States', market: 'Total market ETF' },
+  '^IXIC': { coords: [-74.17, 40.74], location: 'Newark, United States', market: 'Nasdaq Composite anchor' },
+  '^NDX': { coords: [-74.08, 40.72], location: 'Jersey City, United States', market: 'Nasdaq 100 anchor' },
+  QQQ: { coords: [-73.98, 40.76], location: 'New York, United States', market: 'Nasdaq 100 ETF' },
+  '^VIX': { coords: [-87.65, 41.88], location: 'Chicago, United States', market: 'Volatility index' },
+  '^TA125.TA': { coords: [34.78, 32.08], location: 'Tel Aviv, Israel', market: 'TA-125' },
+  '^TASI.SR': { coords: [46.72, 24.71], location: 'Riyadh, Saudi Arabia', market: 'Tadawul' },
+  KSA: { coords: [46.72, 24.71], location: 'Riyadh, Saudi Arabia', market: 'Saudi Arabia ETF' },
+  UAE: { coords: [55.27, 25.2], location: 'Dubai, United Arab Emirates', market: 'UAE ETF' },
+  QAT: { coords: [51.53, 25.28], location: 'Doha, Qatar', market: 'Qatar ETF' },
+  BAX: { coords: [50.58, 26.23], location: 'Manama, Bahrain', market: 'Bahrain market' },
+  KWT: { coords: [47.98, 29.38], location: 'Kuwait City, Kuwait', market: 'Kuwait market' },
+  '^FTSE': { coords: [-0.13, 51.51], location: 'London, United Kingdom', market: 'FTSE 100' },
+  '^GDAXI': { coords: [8.68, 50.11], location: 'Frankfurt, Germany', market: 'DAX' },
+  '^FCHI': { coords: [2.35, 48.86], location: 'Paris, France', market: 'CAC 40' },
+  '^STOXX50E': { coords: [4.35, 50.85], location: 'Brussels, Belgium', market: 'Euro Stoxx 50' },
+  EWG: { coords: [8.68, 50.11], location: 'Frankfurt, Germany', market: 'Germany ETF' },
+  EWU: { coords: [-0.13, 51.51], location: 'London, United Kingdom', market: 'United Kingdom ETF' },
+  '^IBEX': { coords: [-3.7, 40.42], location: 'Madrid, Spain', market: 'IBEX 35' },
+  '^AEX': { coords: [4.9, 52.37], location: 'Amsterdam, Netherlands', market: 'AEX' },
+  '^SSMI': { coords: [8.54, 47.38], location: 'Zurich, Switzerland', market: 'SMI' },
+  '^OMXSPI': { coords: [18.07, 59.33], location: 'Stockholm, Sweden', market: 'OMX Stockholm' },
+  '^ATX': { coords: [16.37, 48.21], location: 'Vienna, Austria', market: 'ATX' },
+  '^BFX': { coords: [4.35, 50.85], location: 'Brussels, Belgium', market: 'BEL 20' },
+  '^OMXC20': { coords: [12.57, 55.68], location: 'Copenhagen, Denmark', market: 'OMX Copenhagen' },
+  '^OMXH25': { coords: [24.94, 60.17], location: 'Helsinki, Finland', market: 'OMX Helsinki' },
+  'GD.AT': { coords: [23.73, 37.98], location: 'Athens, Greece', market: 'Athens index' },
+  EIRL: { coords: [-6.26, 53.35], location: 'Dublin, Ireland', market: 'Ireland ETF' },
+  '^OSEAX': { coords: [10.75, 59.91], location: 'Oslo, Norway', market: 'Oslo market' },
+  '^N225': { coords: [139.69, 35.69], location: 'Tokyo, Japan', market: 'Nikkei 225' },
+  '^HSI': { coords: [114.17, 22.32], location: 'Hong Kong', market: 'Hang Seng' },
+  '^STI': { coords: [103.85, 1.29], location: 'Singapore', market: 'Straits Times' },
+  '^AXJO': { coords: [151.21, -33.87], location: 'Sydney, Australia', market: 'ASX 200' },
+  '^KS11': { coords: [126.98, 37.57], location: 'Seoul, South Korea', market: 'KOSPI' },
+  '^TWII': { coords: [121.57, 25.03], location: 'Taipei, Taiwan', market: 'Taiwan Weighted' },
+  '^BSESN': { coords: [72.88, 19.08], location: 'Mumbai, India', market: 'Sensex' },
+  '^NSEI': { coords: [77.21, 28.61], location: 'New Delhi, India', market: 'Nifty 50' },
+  '^JKSE': { coords: [106.83, -6.21], location: 'Jakarta, Indonesia', market: 'Jakarta Composite' },
+  '^KLSE': { coords: [101.69, 3.14], location: 'Kuala Lumpur, Malaysia', market: 'Malaysia market' },
+  '000001.SS': { coords: [121.47, 31.23], location: 'Shanghai, China', market: 'Shanghai Composite' },
+  '^SET.BK': { coords: [100.5, 13.76], location: 'Bangkok, Thailand', market: 'SET index' },
+  'PSEI.PS': { coords: [121, 14.6], location: 'Manila, Philippines', market: 'PSEi' },
+  VNM: { coords: [106.7, 10.78], location: 'Ho Chi Minh City, Vietnam', market: 'Vietnam ETF' },
+  'XBAK.DE': { coords: [67.01, 24.86], location: 'Karachi, Pakistan', market: 'Pakistan market' },
+  '^NZ50': { coords: [174.78, -41.29], location: 'Wellington, New Zealand', market: 'NZX 50' },
+  ENZL: { coords: [174.78, -41.29], location: 'Wellington, New Zealand', market: 'New Zealand ETF' },
+  EWJ: { coords: [139.69, 35.69], location: 'Tokyo, Japan', market: 'Japan ETF' },
+  FXI: { coords: [104.2, 35.9], location: 'Central China', market: 'China large-cap ETF' },
+  INDA: { coords: [77.21, 28.61], location: 'New Delhi, India', market: 'India ETF' },
+  EWM: { coords: [101.69, 3.14], location: 'Kuala Lumpur, Malaysia', market: 'Malaysia ETF' },
+  EIDO: { coords: [106.83, -6.21], location: 'Jakarta, Indonesia', market: 'Indonesia ETF' },
+  'XU100.IS': { coords: [28.98, 41.01], location: 'Istanbul, Turkey', market: 'BIST 100' },
+  TUR: { coords: [28.98, 41.01], location: 'Istanbul, Turkey', market: 'Turkey ETF' },
+  '^GSPTSE': { coords: [-79.38, 43.65], location: 'Toronto, Canada', market: 'S&P/TSX' },
+  '^BVSP': { coords: [-46.63, -23.55], location: 'Sao Paulo, Brazil', market: 'Ibovespa' },
+  '^MXX': { coords: [-99.13, 19.43], location: 'Mexico City, Mexico', market: 'IPC Mexico' },
+  '^IPSA': { coords: [-70.65, -33.45], location: 'Santiago, Chile', market: 'IPSA' },
+  '^MERV': { coords: [-58.38, -34.6], location: 'Buenos Aires, Argentina', market: 'MERVAL' },
+  'ICOLCAP.CL': { coords: [-74.07, 4.71], location: 'Bogota, Colombia', market: 'Colombia market' },
+  EPU: { coords: [-77.04, -12.05], location: 'Lima, Peru', market: 'Peru ETF' },
+  EWC: { coords: [-79.38, 43.65], location: 'Toronto, Canada', market: 'Canada ETF' },
+  EWZ: { coords: [-46.63, -23.55], location: 'Sao Paulo, Brazil', market: 'Brazil ETF' },
+  EWA: { coords: [151.21, -33.87], location: 'Sydney, Australia', market: 'Australia ETF' },
+  AFK: { coords: [15, -8], location: 'Pan-Africa', market: 'Africa ETF' },
+  '^JN0U.JO': { coords: [28.05, -26.2], location: 'Johannesburg, South Africa', market: 'JSE All Share' },
+  EZA: { coords: [28.05, -26.2], location: 'Johannesburg, South Africa', market: 'South Africa ETF' },
+  EFA: { coords: [-0.13, 51.51], location: 'Developed markets', market: 'Developed markets ETF' },
+  EEM: { coords: [114.17, 22.32], location: 'Emerging markets', market: 'Emerging markets ETF' },
+  VEA: { coords: [2.35, 48.86], location: 'Developed ex-US markets', market: 'Developed markets ETF' },
+  VWO: { coords: [106.83, -6.21], location: 'Emerging markets', market: 'Emerging markets ETF' },
+};
+
 const PRIMARY_TICKERS = new Set(['^GSPC', '^IXIC', '^VIX', '^JN0U.JO']);
 
-// Dedupe by approximate coords (same rounded lon,lat) to avoid stacked markers.
-// For US exchanges we keep the primary index (e.g. ^GSPC for NYSE, ^IXIC for NASDAQ).
-function dedupeByLocation(items: OverviewItem[]): OverviewItem[] {
+const MIN_RADIUS = 4;
+const MAX_RADIUS = 12;
+const MAX_CHANGE_FOR_SCALE = 5;
+const FLAT_MOVE_THRESHOLD = 0.15;
+
+function getMeta(ticker: string | null | undefined): RegionMeta | null {
+  const normalized = ticker?.trim();
+  if (!normalized) return null;
+  return REGION_META[normalized] ?? REGION_META[normalized.toUpperCase()] ?? null;
+}
+
+function toMappedItem(item: OverviewItem, category: 'region' | 'anchor'): MappedItem | null {
+  const meta = getMeta(item.ticker);
+  if (!meta) return null;
+  return {
+    ...item,
+    coords: meta.coords,
+    location: meta.location,
+    market: meta.market,
+    category,
+  };
+}
+
+function dedupeByLocation(items: MappedItem[]): MappedItem[] {
   const seen = new Set<string>();
   const sorted = [...items].sort((a, b) => {
-    const tickerA = (a.ticker ?? '').trim();
-    const tickerB = (b.ticker ?? '').trim();
-    const primaryA = PRIMARY_TICKERS.has(tickerA) ? 0 : 1;
-    const primaryB = PRIMARY_TICKERS.has(tickerB) ? 0 : 1;
-    return primaryA - primaryB;
+    const primaryA = PRIMARY_TICKERS.has(a.ticker) ? 0 : 1;
+    const primaryB = PRIMARY_TICKERS.has(b.ticker) ? 0 : 1;
+    if (primaryA !== primaryB) return primaryA - primaryB;
+    return Math.abs(b.changePercent ?? 0) - Math.abs(a.changePercent ?? 0);
   });
+
   return sorted.filter((item) => {
-    const c = getCoords(item);
-    if (!c) return false;
-    const key = `${Math.round(c[0] * 2) / 2},${Math.round(c[1] * 2) / 2}`;
+    const key = `${Math.round(item.coords[0] * 2) / 2},${Math.round(item.coords[1] * 2) / 2}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
 }
 
-function formatPrice(n: number | null): string {
-  if (n == null) return '—';
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function formatPrice(value: number | null): string {
+  if (value == null) return '—';
+  return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function formatPct(n: number | null): string {
-  if (n == null) return '—';
-  const s = n >= 0 ? `+${n.toFixed(2)}` : n.toFixed(2);
-  return `${s}%`;
+function formatPct(value: number | null): string {
+  if (value == null) return '—';
+  const sign = value >= 0 ? '+' : '';
+  return `${sign}${value.toFixed(2)}%`;
 }
 
-const MIN_RADIUS = 2;
-const MAX_RADIUS = 9;
-const MAX_CHANGE_FOR_SCALE = 5;
+function formatMove(value: number | null): string {
+  if (value == null) return 'No move data';
+  const sign = value >= 0 ? '+' : '';
+  return `${sign}${value.toFixed(2)} pts`;
+}
 
 function getMarkerRadius(changePercent: number | null): number {
   if (changePercent == null) return MIN_RADIUS;
-  const abs = Math.abs(changePercent);
-  if (abs <= 0) return MIN_RADIUS;
-  const t = Math.min(abs / MAX_CHANGE_FOR_SCALE, 1);
-  return MIN_RADIUS + t * (MAX_RADIUS - MIN_RADIUS);
+  const scale = Math.min(Math.abs(changePercent) / MAX_CHANGE_FOR_SCALE, 1);
+  return MIN_RADIUS + scale * (MAX_RADIUS - MIN_RADIUS);
+}
+
+function getTone(changePercent: number | null) {
+  if (changePercent == null) {
+    return {
+      badge: 'border-white/10 bg-white/[0.05] text-slate-300',
+      card: 'border-white/10 bg-slate-950/75',
+      text: 'text-slate-300',
+      fill: 'rgba(148, 163, 184, 0.6)',
+      stroke: 'rgba(226, 232, 240, 0.55)',
+      glow: 'rgba(148, 163, 184, 0.14)',
+    };
+  }
+  if (changePercent >= 0) {
+    return {
+      badge: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200',
+      card: 'border-emerald-500/20 bg-emerald-950/20',
+      text: 'text-emerald-200',
+      fill: 'rgba(16, 185, 129, 0.78)',
+      stroke: 'rgba(167, 243, 208, 0.92)',
+      glow: 'rgba(16, 185, 129, 0.22)',
+    };
+  }
+  return {
+    badge: 'border-rose-400/20 bg-rose-400/10 text-rose-200',
+    card: 'border-rose-500/20 bg-rose-950/20',
+    text: 'text-rose-200',
+    fill: 'rgba(244, 63, 94, 0.78)',
+    stroke: 'rgba(254, 205, 211, 0.92)',
+    glow: 'rgba(244, 63, 94, 0.24)',
+  };
+}
+
+function StatCard({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-[1.1rem] bg-white/[0.03] px-3 py-2.5 backdrop-blur-sm">
+      <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</div>
+      <div className="mt-1.5 text-base font-semibold tracking-tight text-white">{value}</div>
+      <div className="mt-0.5 text-[11px] leading-snug text-slate-400">{detail}</div>
+    </div>
+  );
+}
+
+function SelectedMarketCard({
+  item,
+  onClear,
+  onSelectTicker,
+  compact = false,
+}: {
+  item: MappedItem;
+  onClear: () => void;
+  onSelectTicker?: (ticker: string) => void;
+  compact?: boolean;
+}) {
+  const tone = getTone(item.changePercent);
+  const shellClass = compact ? 'rounded-[1.2rem] p-3.5' : 'rounded-[1.15rem] p-3';
+  const statGridClass = compact ? 'grid-cols-1' : 'grid-cols-2';
+
+  return (
+    <div className={`border shadow-[0_22px_48px_-28px_rgba(2,6,23,1)] backdrop-blur-md ${tone.card} ${shellClass}`}>
+      <div className="flex items-start justify-between gap-2.5">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold tracking-tight text-white">{item.ticker}</span>
+            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${tone.badge}`}>
+              {formatPct(item.changePercent)}
+            </span>
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+              {item.category === 'anchor' ? 'U.S. anchor' : 'Regional'}
+            </span>
+          </div>
+          <div className="mt-1.5 text-sm font-medium leading-snug text-slate-100">{item.name}</div>
+          <div className="mt-1 text-[11px] leading-snug text-slate-400">{item.market}</div>
+          <div className={`mt-1 flex ${compact ? 'flex-col items-start gap-2' : 'flex-wrap items-center gap-2'} text-[11px] leading-snug text-slate-500`}>
+            <span>{item.location}</span>
+            {onSelectTicker && item.ticker && !item.ticker.startsWith('^') ? (
+              <button
+                type="button"
+                onClick={() => onSelectTicker(item.ticker)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-sky-400/25 bg-sky-400/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-100 transition hover:border-sky-300/35 hover:bg-sky-400/15"
+              >
+                Open
+                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M13 5l7 7-7 7" />
+                </svg>
+              </button>
+            ) : null}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClear}
+          className="rounded-full border border-white/10 bg-white/[0.04] p-1.5 text-slate-400 transition hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+          aria-label="Clear selection"
+        >
+          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18 18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div className={`mt-3 grid gap-2 ${statGridClass}`}>
+        <div className="rounded-xl border border-white/10 bg-black/20 px-2.5 py-2">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Price</div>
+          <div className="mt-1 text-[13px] font-semibold text-white">{formatPrice(item.price)}</div>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-black/20 px-2.5 py-2">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Point move</div>
+          <div className={`mt-1 text-[13px] font-semibold ${tone.text}`}>{formatMove(item.change)}</div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 interface WorldMapRegionalStocksProps {
@@ -167,253 +302,328 @@ interface WorldMapRegionalStocksProps {
 
 type CountryTooltip = { name: string; x: number; y: number };
 
-export default function WorldMapRegionalStocks({ regionalItems, usIndices = [], onSelectTicker }: WorldMapRegionalStocksProps) {
-  const [selectedItem, setSelectedItem] = useState<OverviewItem | null>(null);
+export default function WorldMapRegionalStocks({
+  regionalItems,
+  usIndices = [],
+  onSelectTicker,
+}: WorldMapRegionalStocksProps) {
+  const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [countryTooltip, setCountryTooltip] = useState<CountryTooltip | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
-  const handleCountryMouseEnter = useCallback((name: string) => (evt: React.MouseEvent) => {
-    const el = mapContainerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
+  const handleCountryMouseEnter = useCallback((name: string) => (event: React.MouseEvent) => {
+    const container = mapContainerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
     setCountryTooltip({
       name,
-      x: evt.clientX - rect.left,
-      y: evt.clientY - rect.top,
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
     });
   }, []);
 
-  const handleCountryMouseMove = useCallback((evt: React.MouseEvent) => {
-    const el = mapContainerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    setCountryTooltip((prev) => prev ? { ...prev, x: evt.clientX - rect.left, y: evt.clientY - rect.top } : null);
+  const handleCountryMouseMove = useCallback((event: React.MouseEvent) => {
+    const container = mapContainerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    setCountryTooltip((current) =>
+      current
+        ? {
+            ...current,
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top,
+          }
+        : null
+    );
   }, []);
 
   const handleCountryMouseLeave = useCallback(() => {
     setCountryTooltip(null);
   }, []);
 
-  const combined = useMemo(() => [...regionalItems, ...usIndices], [regionalItems, usIndices]);
+  const allItems = useMemo(() => {
+    const regionalMapped = regionalItems
+      .map((item) => toMappedItem(item, 'region'))
+      .filter((item): item is MappedItem => item != null);
+    const anchorMapped = usIndices
+      .map((item) => toMappedItem(item, 'anchor'))
+      .filter((item): item is MappedItem => item != null);
+    return dedupeByLocation([...regionalMapped, ...anchorMapped]);
+  }, [regionalItems, usIndices]);
 
-  const withCoords = useMemo(
-    () => combined.filter((i) => getCoords(i) != null),
-    [combined]
+  const filteredItems = useMemo(
+    () => [...allItems].sort((a, b) => Math.abs(b.changePercent ?? 0) - Math.abs(a.changePercent ?? 0)),
+    [allItems]
   );
 
-  const mappable = useMemo(() => dedupeByLocation(withCoords), [withCoords]);
+  useEffect(() => {
+    if (filteredItems.length === 0) {
+      setSelectedTicker(null);
+      return;
+    }
+
+    const selectedStillVisible = selectedTicker && filteredItems.some((item) => item.ticker === selectedTicker);
+    if (!selectedStillVisible) {
+      setSelectedTicker(filteredItems[0].ticker);
+    }
+  }, [filteredItems, selectedTicker]);
+
+  const selectedItem = useMemo(
+    () => filteredItems.find((item) => item.ticker === selectedTicker) ?? null,
+    [filteredItems, selectedTicker]
+  );
+
+  const positiveCount = useMemo(
+    () => filteredItems.filter((item) => (item.changePercent ?? 0) >= FLAT_MOVE_THRESHOLD).length,
+    [filteredItems]
+  );
+
+  const negativeCount = useMemo(
+    () => filteredItems.filter((item) => (item.changePercent ?? 0) <= -FLAT_MOVE_THRESHOLD).length,
+    [filteredItems]
+  );
+
+  const strongestItem = filteredItems[0] ?? null;
+  const averageAbsMove = useMemo(() => {
+    const withMoves = filteredItems.filter((item) => item.changePercent != null);
+    if (withMoves.length === 0) return null;
+    const total = withMoves.reduce((sum, item) => sum + Math.abs(item.changePercent ?? 0), 0);
+    return total / withMoves.length;
+  }, [filteredItems]);
 
   return (
-    <div className="rounded-lg border border-gray-700 bg-gray-800/60 overflow-hidden">
-      <div className="px-2.5 py-1.5 border-b border-gray-700 bg-gray-800/80">
-        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Regional markets</h3>
+    <div className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Coverage"
+          value={`${filteredItems.length}`}
+          detail="Mapped regional markets and U.S. anchors."
+        />
+        <StatCard
+          label="Advancers"
+          value={`${positiveCount}`}
+          detail={`${negativeCount} red, ${Math.max(filteredItems.length - positiveCount - negativeCount, 0)} flat.`}
+        />
+        <StatCard
+          label="Avg swing"
+          value={averageAbsMove == null ? '—' : `${averageAbsMove.toFixed(2)}%`}
+          detail="Average absolute move."
+        />
+        <StatCard
+          label="Strongest"
+          value={strongestItem?.ticker || '—'}
+          detail={strongestItem ? `${strongestItem.name} at ${formatPct(strongestItem.changePercent)}` : 'No mapped benchmarks match the current filters.'}
+        />
       </div>
-      <div className="flex flex-col sm:flex-row gap-0 sm:gap-4 p-2 sm:p-4">
-        <div ref={mapContainerRef} className="relative flex-1 min-w-0" style={{ aspectRatio: '2 / 1' }}>
-        <ComposableMap
-          projection="geoMercator"
-          projectionConfig={{
-            // Slight zoom-in over the original, but not enough to clip New Zealand
-            scale: 235,
-            center: [20, 15],
-          }}
-          className="w-full h-full"
-        >
-          <Geographies geography="https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json">
-            {({ geographies }: { geographies: GeoFeature[] }) =>
-              geographies.map((geo: GeoFeature) => {
-                const countryName = (geo.properties?.name ?? geo.properties?.NAME ?? '') as string;
-                return (
-                  <Geography
-                    key={geo.rsmKey}
-                    geography={geo}
-                    fill="#374151"
-                    stroke="#4b5563"
-                    strokeWidth={0.25}
-                    style={{
-                      default: { outline: 'none' },
-                      hover: { outline: 'none', fill: '#4b5563' },
-                      pressed: { outline: 'none' },
-                    }}
-                    onMouseEnter={countryName ? handleCountryMouseEnter(countryName) : undefined}
-                    onMouseMove={handleCountryMouseMove}
-                    onMouseLeave={handleCountryMouseLeave}
-                  />
-                );
-              })
-            }
-          </Geographies>
-          {mappable.length === 0 ? null : mappable.map((item) => {
-            const coords = getCoords(item);
-            if (!coords) return null;
-            const hasChange = item.changePercent != null;
-            const positive = (item.changePercent ?? 0) >= 0;
-            const fillColor = !hasChange
-              ? 'rgba(156, 163, 175, 0.45)'
-              : positive
-                ? 'rgba(34, 197, 94, 0.5)'
-                : 'rgba(239, 68, 68, 0.5)';
-            const radius = getMarkerRadius(item.changePercent);
-            return (
-              <Marker key={item.ticker} coordinates={coords}>
-                <g
-                  role="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedItem((prev) => (prev?.ticker === item.ticker ? null : item));
-                  }}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <circle r={radius} fill={fillColor} />
-                  <title>{item.name}</title>
-                </g>
-              </Marker>
-            );
-          })}
-        </ComposableMap>
-        {countryTooltip && (
+
+      <div className="overflow-hidden rounded-[1.75rem] bg-slate-950/80 shadow-[0_24px_64px_-36px_rgba(15,23,42,0.95)]">
+        <div className="grid gap-4 p-4 sm:p-5 xl:grid-cols-[minmax(0,1fr)_330px]">
           <div
-            className="pointer-events-none absolute z-10 rounded border border-gray-600 bg-gray-800 px-2 py-1 text-xs font-medium text-gray-200 shadow-lg"
-            style={{
-              left: countryTooltip.x + 12,
-              top: countryTooltip.y + 8,
-            }}
+            ref={mapContainerRef}
+            className="relative overflow-hidden rounded-[1.5rem] bg-slate-950/90"
           >
-            {countryTooltip.name}
-          </div>
-        )}
-        {selectedItem && (
-          <div
-            className="absolute top-3 right-3 min-w-[180px] rounded border border-gray-600 bg-gray-800 px-2.5 py-2 shadow-lg"
-            role="dialog"
-            aria-label="Market details"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-baseline justify-between gap-1 min-w-0">
-                  <span className="text-gray-300 text-xs font-medium truncate min-w-0" title={selectedItem.name}>
-                    {selectedItem.name}
-                  </span>
-                  {selectedItem.ticker && (
-                    <span className="text-gray-500 text-xs shrink-0 tabular-nums">{selectedItem.ticker}</span>
-                  )}
+            <div className="relative border-b border-white/10 px-4 py-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Mapped benchmarks</div>
+                  <div className="mt-1 text-sm font-medium text-white">
+                    {filteredItems.length === 0 ? 'No visible markets' : `${filteredItems.length} visible markers`}
+                  </div>
                 </div>
-                <div className="mt-0.5 flex items-baseline justify-between gap-1 min-w-0">
-                  <span
-                    className="text-white text-xs font-semibold tabular-nums min-w-0 truncate"
-                    title={formatPrice(selectedItem.price)}
-                  >
-                    {formatPrice(selectedItem.price)}
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
+                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
+                    Up
                   </span>
-                  <span
-                    className={`text-xs font-medium tabular-nums shrink-0 ${
-                      selectedItem.changePercent == null
-                        ? 'text-gray-400'
-                        : (selectedItem.changePercent ?? 0) >= 0
-                          ? 'text-green-400'
-                          : 'text-red-400'
-                    }`}
-                  >
-                    {formatPct(selectedItem.changePercent)}
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
+                    <span className="h-2.5 w-2.5 rounded-full bg-rose-400/80" />
+                    Down
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
+                    <span className="h-2.5 w-2.5 rounded-full bg-slate-300/60" />
+                    Flat / no data
                   </span>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedItem(null)}
-                className="shrink-0 p-0.5 rounded text-gray-500 hover:text-gray-300 hover:bg-gray-700 transition-colors"
-                aria-label="Close"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
             </div>
-            {onSelectTicker && selectedItem.ticker && !selectedItem.ticker.startsWith('^') && (
-              <button
-                type="button"
-                onClick={() => onSelectTicker(selectedItem.ticker)}
-                className="mt-2 w-full py-1.5 text-xs font-medium text-center rounded border border-gray-600 bg-gray-700 text-gray-300 hover:border-gray-500 hover:bg-gray-600 hover:text-white transition-colors"
+
+            <div className="relative" style={{ aspectRatio: '16 / 9' }}>
+              <ComposableMap
+                projection="geoMercator"
+                projectionConfig={{
+                  scale: 235,
+                  center: [20, 15],
+                }}
+                className="h-full w-full"
               >
-                View
-              </button>
-            )}
-          </div>
-        )}
-        {/* Legend overlay */}
-        <div className="absolute bottom-2 right-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-gray-500">
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-green-500/50" aria-hidden />
-            Up
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-red-500/50" aria-hidden />
-            Down
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-gray-400/45" aria-hidden />
-            No data
-          </span>
-          <span className="flex items-center gap-2">
-            Size ∝ |change|
-            <span className="flex items-center gap-1">
-              <span className="inline-block rounded-full bg-gray-500/50" style={{ width: 4, height: 4 }} aria-hidden />
-              small
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="inline-block rounded-full bg-gray-500/50" style={{ width: 9, height: 9 }} aria-hidden />
-              large
-            </span>
-          </span>
-        </div>
-        </div>
-        {/* Tickers on map widget */}
-        <div className="mt-4 sm:mt-0 sm:w-56 shrink-0 max-h-[min(85vh,36rem)] rounded-lg border border-gray-700 bg-gray-800/80 overflow-hidden flex flex-col min-h-0">
-          <div className="px-2.5 py-1.5 border-b border-gray-700 shrink-0">
-            <h4 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">On map ({mappable.length})</h4>
-          </div>
-          <div className="overflow-y-auto flex-1 min-h-0 py-1 overscroll-contain">
-            {mappable.length === 0 ? (
-              <p className="px-2.5 py-2 text-gray-500 text-xs">No tickers to show.</p>
-            ) : (
-              <ul className="space-y-0.5" role="list">
-                {mappable.map((item) => {
-                  const hasChange = item.changePercent != null;
-                  const positive = (item.changePercent ?? 0) >= 0;
-                  const changeClass = !hasChange ? 'text-gray-400' : positive ? 'text-green-400' : 'text-red-400';
-                  const isSelected = selectedItem?.ticker === item.ticker;
+                <Geographies geography="https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json">
+                  {({ geographies }: { geographies: GeoFeature[] }) =>
+                    geographies.map((geo: GeoFeature) => {
+                      const countryName = (geo.properties?.name ?? geo.properties?.NAME ?? '') as string;
+                      return (
+                        <Geography
+                          key={geo.rsmKey}
+                          geography={geo}
+                          fill="rgba(51, 65, 85, 0.85)"
+                          stroke="rgba(100, 116, 139, 0.32)"
+                          strokeWidth={0.35}
+                          style={{
+                            default: { outline: 'none' },
+                            hover: { outline: 'none', fill: 'rgba(71, 85, 105, 0.96)' },
+                            pressed: { outline: 'none' },
+                          }}
+                          onMouseEnter={countryName ? handleCountryMouseEnter(countryName) : undefined}
+                          onMouseMove={handleCountryMouseMove}
+                          onMouseLeave={handleCountryMouseLeave}
+                        />
+                      );
+                    })
+                  }
+                </Geographies>
+
+                {filteredItems.map((item) => {
+                  const tone = getTone(item.changePercent);
+                  const radius = getMarkerRadius(item.changePercent);
+                  const isSelected = item.ticker === selectedTicker;
+
                   return (
-                    <li key={item.ticker}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedItem((prev) => (prev?.ticker === item.ticker ? null : item))}
-                        className={`w-full text-left px-2.5 py-1.5 rounded text-xs transition-colors ${
-                          isSelected ? 'bg-gray-600/80' : 'hover:bg-gray-700/60'
-                        }`}
+                    <Marker key={item.ticker} coordinates={item.coords}>
+                      <g
+                        role="button"
+                        tabIndex={0}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedTicker(item.ticker);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            setSelectedTicker(item.ticker);
+                          }
+                        }}
+                        style={{ cursor: 'pointer' }}
                       >
-                        <div className="flex items-baseline justify-between gap-1 min-w-0">
-                          <span className="font-medium text-gray-200 truncate" title={item.name}>
-                            {item.ticker}
-                          </span>
-                          <span className={`shrink-0 tabular-nums ${changeClass}`}>
-                            {formatPct(item.changePercent)}
-                          </span>
-                        </div>
-                        <div className="mt-0.5 truncate text-gray-500" title={item.name}>
-                          {item.name}
-                        </div>
-                        {item.price != null && (
-                          <div className="mt-0.5 text-gray-400 tabular-nums">
-                            {formatPrice(item.price)}
-                          </div>
-                        )}
-                      </button>
-                    </li>
+                        <circle r={radius + 5} fill={tone.glow} />
+                        {isSelected ? <circle r={radius + 8} fill="none" stroke={tone.stroke} strokeWidth={1.25} opacity={0.95} /> : null}
+                        <circle r={radius} fill={tone.fill} stroke={tone.stroke} strokeWidth={isSelected ? 1.8 : 1.2} />
+                        <circle r={Math.max(radius * 0.35, 1.75)} fill="rgba(255,255,255,0.9)" opacity={0.92} />
+                        <title>{`${item.ticker} · ${item.name} · ${item.location}`}</title>
+                      </g>
+                    </Marker>
                   );
                 })}
-              </ul>
-            )}
+              </ComposableMap>
+
+              {filteredItems.length === 0 ? (
+                <div className="absolute inset-0 flex items-center justify-center px-6">
+                  <div className="max-w-sm rounded-3xl border border-white/10 bg-slate-950/88 px-6 py-5 text-center shadow-[0_18px_40px_-28px_rgba(15,23,42,1)] backdrop-blur-sm">
+                    <div className="text-sm font-medium text-white">No markets match the current filters</div>
+                    <div className="mt-2 text-xs leading-relaxed text-slate-400">
+                      Reset filters or broaden the search to bring benchmarks back onto the map.
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {countryTooltip ? (
+                <div
+                  className="pointer-events-none absolute z-10 rounded-full border border-white/10 bg-slate-950/92 px-2.5 py-1 text-[11px] font-medium text-slate-200 shadow-lg backdrop-blur-sm"
+                  style={{
+                    left: countryTooltip.x + 12,
+                    top: countryTooltip.y + 10,
+                  }}
+                >
+                  {countryTooltip.name}
+                </div>
+              ) : null}
+
+              {selectedItem ? (
+                <div className="absolute right-4 top-4 z-10 hidden w-[min(19rem,calc(100%-2rem))] sm:block">
+                  <SelectedMarketCard
+                    item={selectedItem}
+                    onClear={() => setSelectedTicker(null)}
+                    onSelectTicker={onSelectTicker}
+                  />
+                </div>
+              ) : null}
+            </div>
           </div>
+
+          {selectedItem ? (
+            <div className="sm:hidden">
+              <SelectedMarketCard
+                item={selectedItem}
+                onClear={() => setSelectedTicker(null)}
+                onSelectTicker={onSelectTicker}
+                compact
+              />
+            </div>
+          ) : null}
+
+          <aside className="min-h-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/[0.03]">
+            <div className="border-b border-white/10 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Visible list</div>
+                  <div className="mt-1 text-sm font-medium text-white">Compare mapped markets</div>
+                </div>
+                <span className="rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[11px] font-medium text-slate-300">
+                  {filteredItems.length}
+                </span>
+              </div>
+            </div>
+
+            <div className="max-h-[620px] space-y-2 overflow-y-auto p-3">
+              {filteredItems.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-white/10 bg-black/10 px-4 py-5 text-center text-sm text-slate-500">
+                  Nothing to compare right now.
+                </div>
+              ) : (
+                filteredItems.map((item) => {
+                  const tone = getTone(item.changePercent);
+                  const selected = item.ticker === selectedTicker;
+
+                  return (
+                    <button
+                      key={item.ticker}
+                      type="button"
+                      onClick={() => setSelectedTicker(item.ticker)}
+                      className={`w-full rounded-[1.25rem] border px-3.5 py-3 text-left transition ${
+                        selected
+                          ? `${tone.card} shadow-[0_18px_36px_-30px_rgba(15,23,42,1)]`
+                          : 'border-white/10 bg-black/10 hover:border-white/15 hover:bg-white/[0.04]'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-white">{item.ticker}</span>
+                            <span className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                              {item.category === 'anchor' ? 'Anchor' : 'Regional'}
+                            </span>
+                          </div>
+                          <div className="mt-1 truncate text-sm text-slate-300" title={item.name}>
+                            {item.name}
+                          </div>
+                          <div className="mt-1 truncate text-xs text-slate-500" title={item.location}>
+                            {item.location}
+                          </div>
+                        </div>
+                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold tabular-nums ${tone.badge}`}>
+                          {formatPct(item.changePercent)}
+                        </span>
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between gap-3 text-xs">
+                        <div className="text-slate-400">{formatPrice(item.price)}</div>
+                        <div className={`font-medium ${tone.text}`}>{formatMove(item.change)}</div>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </aside>
         </div>
       </div>
     </div>
