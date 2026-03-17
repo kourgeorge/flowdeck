@@ -386,7 +386,7 @@ function MoversList({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-1.5 2xl:grid-cols-2">
       {rows.map((row) => {
         const symbol = row.symbol ?? '';
         return (
@@ -394,23 +394,19 @@ function MoversList({
             key={`${symbol}-${row.shortName ?? ''}`}
             type="button"
             onClick={() => symbol && onSelectTicker(symbol)}
-            className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 rounded-[0.95rem] border border-slate-700/70 bg-slate-950/40 px-3 py-2 text-left transition-colors hover:border-slate-500/70 hover:bg-slate-900"
+            className="grid w-full min-w-0 gap-1.5 overflow-hidden rounded-[0.95rem] border border-slate-700/70 bg-slate-950/40 px-3 py-2 text-left transition-colors hover:border-slate-500/70 hover:bg-slate-900"
           >
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="text-sm font-semibold text-white">{symbol || '—'}</span>
-                <span className="truncate text-[11px] text-slate-400">{row.shortName || 'Unknown name'}</span>
-              </div>
-              <div className="mt-0.5 truncate text-[10px] text-slate-500">
-                {row.sector || 'Sector n/a'}
-              </div>
+            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+              <span className="truncate text-xs font-semibold text-white">{symbol || '—'}</span>
+              <span className={`shrink-0 whitespace-nowrap text-right text-xs font-semibold ${((row.regularMarketChangePercent ?? 0) >= 0) ? 'text-emerald-300' : 'text-rose-300'}`}>
+                {formatPercent(row.regularMarketChangePercent)}
+              </span>
             </div>
-            <div className="shrink-0 text-right">
-              <div className="text-xs font-semibold text-slate-200">{formatMaybePrice(row.regularMarketPrice)}</div>
-              <div className="text-[10px] text-slate-500">Vol {formatCompactNumber(row.regularMarketVolume)}</div>
-            </div>
-            <div className={`shrink-0 text-right text-xs font-semibold ${((row.regularMarketChangePercent ?? 0) >= 0) ? 'text-emerald-300' : 'text-rose-300'}`}>
-              {formatPercent(row.regularMarketChangePercent)}
+            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+              <span className="min-w-0 text-[11px] leading-4 text-slate-400">{row.shortName || 'Unknown name'}</span>
+              <span className="shrink-0 whitespace-nowrap text-right text-[11px] text-slate-400">
+                {formatCompactNumber(row.regularMarketVolume)}
+              </span>
             </div>
           </button>
         );
