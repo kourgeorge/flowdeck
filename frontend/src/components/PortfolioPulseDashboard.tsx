@@ -17,7 +17,6 @@ import type { TickerWidget } from '../services/types';
 import AspectSpiderChart, { formatReportKey, getAnalysisScoreEntries, getScoreColor } from './AspectSpiderChart';
 import DashboardPriceTrendsChart from './DashboardPriceTrendsChart';
 import { SubscribedChangeColumnsChart } from './OverviewStatsPanel';
-import WorldMapRegionalStocks from './WorldMapRegionalStocks';
 import { formatPrice } from '../utils/currency';
 
 type CompanyInfo = {
@@ -1577,23 +1576,6 @@ export default function PortfolioPulseDashboard({
         </DashboardPanel>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <div className="min-h-[500px] xl:col-span-3">
-          {overview ? (
-            <WorldMapRegionalStocks
-              regionalItems={overview.international}
-              usIndices={overview.indices}
-              onSelectTicker={(ticker) => navigate(`/tickers/${ticker}`)}
-            />
-          ) : (
-            <DashboardPanel title="Regional Market Map" subtitle="Cross-asset view of the international backdrop." className="h-full">
-              <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-4 py-14 text-center text-sm text-slate-500">
-                {isLoadingMarket ? 'Loading regional map...' : 'Regional market map unavailable.'}
-              </div>
-            </DashboardPanel>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
