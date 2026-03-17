@@ -515,6 +515,7 @@ export default function PortfolioPulseDashboard({
   const [isLoadingCompanyInfo, setIsLoadingCompanyInfo] = useState(false);
   const [isLoadingMarket, setIsLoadingMarket] = useState(true);
   const [isLoadingBrief, setIsLoadingBrief] = useState(false);
+  const [selectedNewsTickers, setSelectedNewsTickers] = useState<string[]>([]);
   const [latestBriefMode, setLatestBriefMode] = useState<'daily' | 'weekly'>('daily');
   const [moversTab, setMoversTab] = useState<'gainers' | 'losers' | 'most_active'>('gainers');
   const [marketTapePeriod, setMarketTapePeriod] = useState<(typeof MARKET_TAPE_PERIODS)[number]['period']>('1mo');
@@ -588,7 +589,7 @@ export default function PortfolioPulseDashboard({
         setMarketMovers(moversResult.status === 'fulfilled'
           ? moversResult.value
           : { gainers: [], losers: [], most_active: [] });
-        setPortfolioNews(newsResult.status === 'fulfilled' ? newsResult.value.articles.slice(0, 8) : []);
+        setPortfolioNews(newsResult.status === 'fulfilled' ? newsResult.value.articles.slice(0, 20) : []);
       } finally {
         if (!cancelled) setIsLoadingMarket(false);
       }
@@ -705,6 +706,11 @@ export default function PortfolioPulseDashboard({
       cancelled = true;
     };
   }, [browserTimezone, tickersKey]);
+
+  useEffect(() => {
+    const portfolioTickers = new Set(tickers);
+    setSelectedNewsTickers((current) => current.filter((ticker) => portfolioTickers.has(ticker)));
+  }, [tickersKey, tickers]);
 
   const recommendationBreakdown = useMemo(() => {
     const counts = new Map<string, number>([
@@ -844,6 +850,28 @@ export default function PortfolioPulseDashboard({
       laggard: sortedSectors[sortedSectors.length - 1] ?? null,
     };
   }, [overview]);
+
+  const portfolioNewsTickerCounts = useMemo(
+    () => tickers.reduce<Record<string, number>>((acc, ticker) => {
+      acc[ticker] = portfolioNews.filter((article) => article.tickers.includes(ticker)).length;
+      return acc;
+    }, {}),
+    [portfolioNews, tickers]
+  );
+
+  const newsFilterTickers = useMemo(
+    () => tickers.filter((ticker) => (portfolioNewsTickerCounts[ticker] ?? 0) > 0),
+    [portfolioNewsTickerCounts, tickers]
+  );
+
+  const filteredPortfolioNews = useMemo(
+    () => (
+      selectedNewsTickers.length > 0
+        ? portfolioNews.filter((article) => article.tickers.some((ticker) => selectedNewsTickers.includes(ticker)))
+        : portfolioNews
+    ),
+    [portfolioNews, selectedNewsTickers]
+  );
 
   const activeBrief = latestBriefs[latestBriefMode];
   const briefNarrativePreview = activeBrief
@@ -1435,12 +1463,67 @@ export default function PortfolioPulseDashboard({
             <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-2">
               <div className="mb-2 flex items-center justify-between px-2 py-1">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Portfolio News Feed</p>
-                <span className="text-[11px] text-slate-500">{portfolioNews.length} items</span>
+                <span className="text-[11px] text-slate-500">
+                  {selectedNewsTickers.length > 0 ? `${filteredPortfolioNews.length} filtered` : `${portfolioNews.length} items`}
+                </span>
               </div>
-              {portfolioNews.length > 0 ? (
+              {newsFilterTickers.length > 0 && (
+                <div className="mb-3 px-2">
+                  <div className="mb-2 flex items-center justify-end gap-3">
+                    {selectedNewsTickers.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedNewsTickers([])}
+                        className="text-[11px] font-medium text-slate-400 transition-colors hover:text-white"
+                      >
+                        Clear filters
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedNewsTickers([])}
+                      className={`rounded-full border px-3 py-1 text-[11px] font-medium transition-colors ${
+                        selectedNewsTickers.length === 0
+                          ? 'border-sky-400/60 bg-sky-500/20 text-sky-100'
+                          : 'border-slate-600/80 bg-slate-900/70 text-slate-300 hover:border-slate-500 hover:bg-slate-800'
+                      }`}
+                    >
+                      All tickers
+                    </button>
+                    {newsFilterTickers.map((ticker) => {
+                      const isSelected = selectedNewsTickers.includes(ticker);
+                      return (
+                        <button
+                          key={ticker}
+                          type="button"
+                          onClick={() => setSelectedNewsTickers((current) => (
+                            current.includes(ticker)
+                              ? current.filter((item) => item !== ticker)
+                              : [...current, ticker]
+                          ))}
+                          aria-pressed={isSelected}
+                          className={`rounded-full border px-3 py-1 text-[11px] font-medium transition-colors ${
+                            isSelected
+                              ? 'border-sky-400/60 bg-sky-500/20 text-sky-100'
+                              : 'border-slate-600/80 bg-slate-900/70 text-slate-300 hover:border-slate-500 hover:bg-slate-800'
+                          }`}
+                        >
+                          {ticker}
+                          <span className={`ml-1.5 ${isSelected ? 'text-sky-200' : 'text-slate-400'}`}>
+                            {portfolioNewsTickerCounts[ticker] ?? 0}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {filteredPortfolioNews.length > 0 ? (
                 <div className="max-h-[380px] overflow-y-auto pr-1">
                   <div className="space-y-1.5">
-                    {portfolioNews.slice(0, 10).map((article, index) => (
+                    {filteredPortfolioNews.slice(0, 10).map((article, index) => (
                       <a
                         key={article.uuid || article.link}
                         href={article.link}
@@ -1454,7 +1537,14 @@ export default function PortfolioPulseDashboard({
                       >
                         <div className="flex flex-wrap gap-1.5">
                           {article.tickers.slice(0, 4).map((ticker) => (
-                            <span key={ticker} className="rounded-full border border-slate-600/80 bg-slate-800/80 px-2 py-0.5 text-[10px] font-medium text-slate-200">
+                            <span
+                              key={ticker}
+                              className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                                selectedNewsTickers.includes(ticker)
+                                  ? 'border-sky-400/60 bg-sky-500/20 text-sky-100'
+                                  : 'border-slate-600/80 bg-slate-800/80 text-slate-200'
+                              }`}
+                            >
                               {ticker}
                             </span>
                           ))}
@@ -1475,7 +1565,11 @@ export default function PortfolioPulseDashboard({
                 </div>
               ) : (
                 <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-8 text-sm text-slate-500">
-                  {isLoadingMarket ? 'Loading portfolio news...' : 'No portfolio headlines right now.'}
+                  {isLoadingMarket
+                    ? 'Loading portfolio news...'
+                    : selectedNewsTickers.length > 0
+                      ? `No portfolio headlines match ${selectedNewsTickers.join(', ')}.`
+                      : 'No portfolio headlines right now.'}
                 </div>
               )}
             </div>
