@@ -7,14 +7,15 @@ import TickerListView from '../components/StockListView';
 import DashboardNewsSection from '../components/DashboardNewsSection';
 import DashboardPriceTrendsChart from '../components/DashboardPriceTrendsChart';
 import OverviewStatsPanel, { ByMarketSection, SubscribedChangeColumnsChart } from '../components/OverviewStatsPanel';
+import PortfolioPulseDashboard from '../components/PortfolioPulseDashboard';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useAuth } from '../contexts/AuthContext';
 import { digestApi } from '../services/api';
 
-type DashboardTab = 'overview' | 'portfolio' | 'news';
+type DashboardTab = 'overview' | 'pulse' | 'portfolio' | 'news';
 type StockListTab = 'subscribed' | 'recent';
 
-const DASHBOARD_TAB_IDS: DashboardTab[] = ['overview', 'portfolio', 'news'];
+const DASHBOARD_TAB_IDS: DashboardTab[] = ['overview', 'pulse', 'portfolio', 'news'];
 const STOCK_LIST_TAB_IDS: StockListTab[] = ['subscribed', 'recent'];
 
 export default function DashboardPage() {
@@ -30,6 +31,7 @@ export default function DashboardPage() {
     return false;
   });
   const shouldLoadRecentAnalyzed = dashboardTab === 'overview' && stockListTab === 'recent';
+  const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
 
   useEffect(() => {
     const tabParam = searchParams.get('tab');
@@ -80,7 +82,7 @@ export default function DashboardPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await digestApi.getDigestDates(7);
+        const res = await digestApi.getDigestDates(7, browserTimezone);
         const dates = res.dates ?? [];
         const today = new Date();
         const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -94,7 +96,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [dashboardTab, user]);
+  }, [browserTimezone, dashboardTab, user]);
 
   if (searchParams.get('tab') === 'digest') {
     return <Navigate to="/brief" replace />;
@@ -143,6 +145,7 @@ export default function DashboardPage() {
           <nav className="flex gap-0.5" aria-label="Dashboard views">
             {([
               { id: 'overview', label: 'Overview' },
+              { id: 'pulse', label: 'Portfolio Pulse' },
               { id: 'portfolio', label: 'Portfolio' },
               { id: 'news', label: 'News' },
             ] as { id: DashboardTab; label: string }[]).map((tab) => (
@@ -301,6 +304,16 @@ export default function DashboardPage() {
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {dashboardTab === 'pulse' && (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="px-4 py-6 sm:p-6 lg:p-8">
+            <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
+              <PortfolioPulseDashboard widgets={widgets} tickerToName={tickerToName} />
             </div>
           </div>
         </div>
