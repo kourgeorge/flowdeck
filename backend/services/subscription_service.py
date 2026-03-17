@@ -1,5 +1,6 @@
 """Ticker subscription CRUD. Routers delegate all DB access here."""
 
+from collections.abc import Iterable
 from typing import List, Optional
 
 from sqlalchemy.orm import Session
@@ -39,6 +40,57 @@ def subscribe(
     db.commit()
     db.refresh(sub)
     return sub, True
+
+
+def subscribe_many(
+    db: Session,
+    user_id: int,
+    tickers: Iterable[str],
+    email_updates: bool = True,
+) -> list[Subscription]:
+    """
+    Subscribe a user to many tickers in one transaction.
+
+    Existing subscriptions are preserved and not duplicated.
+    Returns only the newly created subscriptions.
+    """
+    normalized_tickers = []
+    seen = set()
+    for ticker in tickers:
+        ticker_upper = ticker.strip().upper()
+        if not ticker_upper or ticker_upper in seen:
+            continue
+        seen.add(ticker_upper)
+        normalized_tickers.append(ticker_upper)
+
+    if not normalized_tickers:
+        return []
+
+    existing_tickers = {
+        row[0]
+        for row in (
+            db.query(Subscription.ticker)
+            .filter(
+                Subscription.user_id == user_id,
+                Subscription.ticker.in_(normalized_tickers),
+            )
+            .all()
+        )
+    }
+    new_subscriptions = [
+        Subscription(
+            user_id=user_id,
+            ticker=ticker,
+            email_updates=email_updates,
+        )
+        for ticker in normalized_tickers
+        if ticker not in existing_tickers
+    ]
+    if not new_subscriptions:
+        return []
+
+    db.add_all(new_subscriptions)
+    return new_subscriptions
 
 
 def get_by_ticker_for_user(

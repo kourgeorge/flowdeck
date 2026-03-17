@@ -10,8 +10,10 @@ from urllib.parse import urlencode
 from sqlalchemy.orm import Session
 
 from auth import create_access_token, hash_password, verify_password
+from config import MAJOR_TICKERS
 from models.db_models import User
 from services.email_service import send_welcome_email
+from services.subscription_service import subscribe_many
 
 
 class AuthError(Exception):
@@ -28,6 +30,9 @@ DEFAULT_TOKEN_BALANCE = 1000
 
 # Min password length for registration
 MIN_PASSWORD_LENGTH = 6
+
+
+DEFAULT_SIGNUP_TICKERS = tuple(MAJOR_TICKERS)
 
 
 def register(email: str, password: str, db: Session) -> Tuple[str, int, str]:
@@ -47,6 +52,13 @@ def register(email: str, password: str, db: Session) -> Tuple[str, int, str]:
         token_balance=DEFAULT_TOKEN_BALANCE,
     )
     db.add(user)
+    db.flush()
+    subscribe_many(
+        db,
+        user.id,
+        DEFAULT_SIGNUP_TICKERS,
+        email_updates=False,
+    )
     db.commit()
     db.refresh(user)
     try:
@@ -163,6 +175,13 @@ def google_callback(
             token_balance=DEFAULT_TOKEN_BALANCE,
         )
         db.add(user)
+        db.flush()
+        subscribe_many(
+            db,
+            user.id,
+            DEFAULT_SIGNUP_TICKERS,
+            email_updates=False,
+        )
         db.commit()
         db.refresh(user)
         try:
