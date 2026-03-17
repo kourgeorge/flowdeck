@@ -156,16 +156,8 @@ export default function DashboardNewsSection({
             </span>
           </div>
         )}
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Filter by ticker</p>
-            <p className="text-xs text-gray-500">
-              {selectedTickers.length > 0
-                ? `${filtered.length} matching article${filtered.length === 1 ? '' : 's'}`
-                : `${articles.length} article${articles.length === 1 ? '' : 's'} across your watchlist`}
-            </p>
-          </div>
-          {selectedTickers.length > 0 && (
+        {selectedTickers.length > 0 && (
+          <div className="mb-2 flex justify-end gap-3">
             <button
               type="button"
               onClick={() => setSelectedTickers([])}
@@ -173,8 +165,8 @@ export default function DashboardNewsSection({
             >
               Clear filters
             </button>
-          )}
-        </div>
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
