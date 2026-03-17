@@ -100,6 +100,13 @@ const SCORE_ORDER = [
   'final_trade_decision',
 ];
 
+const MARKET_TAPE_PERIODS = [
+  { label: '1D', period: '1d', interval: '5m' },
+  { label: '1W', period: '5d', interval: '1d' },
+  { label: '1M', period: '1mo', interval: '1d' },
+  { label: '1Y', period: '1y', interval: '1d' },
+] as const;
+
 const BRIEF_FONT_FAMILY = 'Menlo, Monaco, "Courier New", monospace';
 const BRIEF_SECTION_TOKENS = ['market_highlights', 'key_signals', 'what_to_watch', 'risks_opportunities'];
 
@@ -142,6 +149,33 @@ function formatCompactNumber(value: number | null | undefined): string {
   if (Math.abs(value) >= 1e6) return `${(value / 1e6).toFixed(1)}M`;
   if (Math.abs(value) >= 1e3) return `${(value / 1e3).toFixed(1)}K`;
   return value.toFixed(0);
+}
+
+function formatSectorAbbreviation(value: string | null | undefined): string {
+  if (!value) return 'UNKN';
+
+  const normalized = value.trim().toLowerCase();
+  const sectorMap: Record<string, string> = {
+    technology: 'TECH',
+    healthcare: 'HLTH',
+    'financial services': 'FINS',
+    'consumer cyclical': 'CYCL',
+    'consumer defensive': 'DEFE',
+    'communication services': 'COMM',
+    industrials: 'INDS',
+    energy: 'ENER',
+    utilities: 'UTIL',
+    'real estate': 'REAL',
+    'basic materials': 'MATR',
+    materials: 'MATR',
+    'consumer staples': 'STAP',
+  };
+
+  if (sectorMap[normalized]) return sectorMap[normalized];
+
+  const compact = normalized.replace(/[^a-z]/g, '').toUpperCase();
+  if (compact.length >= 4) return compact.slice(0, 4);
+  return compact.padEnd(4, 'X');
 }
 
 function formatMaybePrice(value: number | null | undefined, currency?: string | null): string {
@@ -351,7 +385,7 @@ function ScoreFillLine({
     <div className="rounded-[0.95rem] border border-slate-700/70 bg-slate-900/70 px-3 py-2.5">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs text-slate-300">{label}</span>
-        <span className={`text-xs font-semibold ${getScoreColor(clamped)}`}>{clamped.toFixed(1)}/10</span>
+        <span className={`text-xs font-semibold ${getScoreColor(clamped)}`}>{clamped.toFixed(1)}</span>
       </div>
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800">
         <div
@@ -375,15 +409,15 @@ function RecommendationDonut({
   }
 
   return (
-    <div className="relative h-[190px]">
+    <div className="mx-auto h-[160px] w-full max-w-[220px] sm:h-[190px]">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
             data={data}
             dataKey="value"
             nameKey="name"
-            innerRadius={48}
-            outerRadius={74}
+            innerRadius="44%"
+            outerRadius="72%"
             paddingAngle={2}
             stroke="rgba(15, 23, 42, 0.7)"
             strokeWidth={2}
@@ -413,11 +447,6 @@ function RecommendationDonut({
           />
         </PieChart>
       </ResponsiveContainer>
-      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Coverage</span>
-        <span className="text-3xl font-semibold text-white">{total}</span>
-        <span className="text-xs text-slate-500">tracked tickers</span>
-      </div>
     </div>
   );
 }
@@ -434,28 +463,27 @@ function MoversList({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-1.5 2xl:grid-cols-2">
+    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
       {rows.map((row) => {
         const symbol = row.symbol ?? '';
+        const sectorLabel = formatSectorAbbreviation(row.sector || row.industry);
+        const companyName = row.shortName || 'Unknown company';
         return (
           <button
             key={`${symbol}-${row.shortName ?? ''}`}
             type="button"
             onClick={() => symbol && onSelectTicker(symbol)}
-            className="grid w-full min-w-0 gap-1.5 overflow-hidden rounded-[0.95rem] border border-slate-700/70 bg-slate-950/40 px-3 py-2 text-left transition-colors hover:border-slate-500/70 hover:bg-slate-900"
+            className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 overflow-hidden rounded-[0.95rem] border border-slate-700/70 bg-slate-950/40 px-3 py-2.5 text-left transition-colors hover:border-slate-500/70 hover:bg-slate-900"
           >
-            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-              <span className="truncate text-xs font-semibold text-white">{symbol || '—'}</span>
-              <span className={`shrink-0 whitespace-nowrap text-right text-xs font-semibold ${((row.regularMarketChangePercent ?? 0) >= 0) ? 'text-emerald-300' : 'text-rose-300'}`}>
-                {formatPercent(row.regularMarketChangePercent)}
-              </span>
-            </div>
-            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
-              <span className="min-w-0 text-[11px] leading-4 text-slate-400">{row.shortName || 'Unknown name'}</span>
-              <span className="shrink-0 whitespace-nowrap text-right text-[11px] text-slate-400">
-                {formatCompactNumber(row.regularMarketVolume)}
-              </span>
-            </div>
+            <span className="truncate text-[11px] font-semibold text-white">{symbol || '—'}</span>
+            <span className={`shrink-0 whitespace-nowrap text-right text-xs font-semibold ${((row.regularMarketChangePercent ?? 0) >= 0) ? 'text-emerald-300' : 'text-rose-300'}`}>
+              {formatPercent(row.regularMarketChangePercent)}
+            </span>
+            <p className="truncate text-[11px] leading-4 text-slate-400">{sectorLabel}</p>
+            <p className="shrink-0 whitespace-nowrap text-right text-[11px] leading-4 text-slate-400">
+              {formatCompactNumber(row.regularMarketVolume)}
+            </p>
+            <p className="col-span-2 truncate text-[11px] leading-4 text-slate-300">{companyName}</p>
           </button>
         );
       })}
@@ -489,6 +517,7 @@ export default function PortfolioPulseDashboard({
   const [isLoadingBrief, setIsLoadingBrief] = useState(false);
   const [latestBriefMode, setLatestBriefMode] = useState<'daily' | 'weekly'>('daily');
   const [moversTab, setMoversTab] = useState<'gainers' | 'losers' | 'most_active'>('gainers');
+  const [marketTapePeriod, setMarketTapePeriod] = useState<(typeof MARKET_TAPE_PERIODS)[number]['period']>('1mo');
 
   useEffect(() => {
     let cancelled = false;
@@ -582,6 +611,7 @@ export default function PortfolioPulseDashboard({
   useEffect(() => {
     let cancelled = false;
     const tapeTickers = (overview?.indices ?? []).slice(0, 6).map((item) => item.ticker).filter(Boolean);
+    const tapePeriodConfig = MARKET_TAPE_PERIODS.find((option) => option.period === marketTapePeriod) ?? MARKET_TAPE_PERIODS[2];
 
     if (tapeTickers.length === 0) {
       setMarketTapeCharts({});
@@ -594,7 +624,7 @@ export default function PortfolioPulseDashboard({
       try {
         const results = await Promise.allSettled(
           tapeTickers.map(async (ticker) => {
-            const res = await tickerApi.getHistoricalPrices(ticker, '1mo', '1d');
+            const res = await tickerApi.getHistoricalPrices(ticker, tapePeriodConfig.period, tapePeriodConfig.interval);
             const points = (res?.data ?? []).map((item: { open: number; close: number }) => item.close).filter((close: number) => close > 0);
             const firstOpen = res?.data?.[0]?.open;
             if (points.length < 2) return null;
@@ -628,7 +658,7 @@ export default function PortfolioPulseDashboard({
     return () => {
       cancelled = true;
     };
-  }, [overview]);
+  }, [marketTapePeriod, overview]);
 
   useEffect(() => {
     let cancelled = false;
@@ -825,6 +855,7 @@ export default function PortfolioPulseDashboard({
     )
     : '';
   const briefWatchPreview = activeBrief ? getExcerpt(activeBrief.what_to_watch, 120) : '';
+
   const focusSnapshotEntries = useMemo(() => {
     if (!activeBrief?.focus_snapshot) return [];
     return Object.entries(activeBrief.focus_snapshot).slice(0, 5);
@@ -864,7 +895,7 @@ export default function PortfolioPulseDashboard({
     <section className="rounded-[1.1rem] border border-slate-700/80 bg-[linear-gradient(180deg,rgba(15,23,42,0.96),rgba(17,24,39,0.84))] p-4 shadow-[0_14px_40px_rgba(2,6,23,0.28)]">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-300">Latest Brief</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-300">Brief Snapshot</p>
           <p className="mt-0.5 text-xs text-slate-400">Saved AI market-plus-portfolio narrative.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -969,7 +1000,7 @@ export default function PortfolioPulseDashboard({
   const recommendationPanel = (
     <div className="rounded-[1.1rem] border border-white/10 bg-slate-950/30 p-3.5">
       <div className="mb-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Coverage X Recomendations</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Recommendation Mix</p>
       </div>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.18fr_0.82fr] lg:items-center">
         <RecommendationDonut data={recommendationBreakdown} total={widgets.length} />
@@ -995,42 +1026,120 @@ export default function PortfolioPulseDashboard({
       </div>
     </div>
   );
+  const moversControls = (
+    <div className="flex items-center gap-1 rounded-full border border-slate-700/70 bg-slate-950/40 p-1">
+      {([
+        ['gainers', 'Gainers'],
+        ['losers', 'Losers'],
+        ['most_active', 'Active'],
+      ] as const).map(([tabId, label]) => (
+        <button
+          key={tabId}
+          type="button"
+          onClick={() => setMoversTab(tabId)}
+          className={`rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
+            moversTab === tabId
+              ? 'bg-slate-200 text-slate-900'
+              : 'text-slate-300 hover:bg-slate-800'
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+  const sectorExposurePanel = (
+    <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Portfolio Sector Exposure</p>
+        {isLoadingCompanyInfo && <span className="text-[11px] text-slate-500">Refreshing...</span>}
+      </div>
+      {portfolioSummary.sectorExposure.length > 0 ? (
+        <div className="space-y-2">
+          {portfolioSummary.sectorExposure.slice(0, 5).map((item) => (
+            <div key={item.label}>
+              <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+                <span className="truncate text-slate-300">{item.label}</span>
+                <span className="font-semibold text-white">{item.count}</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
+                <div
+                  className="h-full rounded-full bg-[linear-gradient(90deg,#22d3ee,#34d399)]"
+                  style={{ width: `${(item.count / topExposureMax) * 100}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5 text-sm text-slate-500">
+          Subscribe to stocks to reveal sector distribution.
+        </div>
+      )}
+    </div>
+  );
+  const portfolioExtremesPanel = (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className="rounded-[0.95rem] border border-slate-700/70 bg-slate-950/40 p-2.5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Top Gainer</p>
+        {portfolioSummary.bestPerformer ? (
+          <button
+            type="button"
+            onClick={() => navigate(`/tickers/${portfolioSummary.bestPerformer.ticker}`)}
+            className="mt-1.5 flex w-full items-center justify-between rounded-[0.8rem] border border-slate-700/70 bg-slate-900/70 px-2.5 py-2 text-left transition-colors hover:border-slate-500/70"
+          >
+            <div>
+              <p className="text-xs font-semibold text-white">{portfolioSummary.bestPerformer.ticker}</p>
+              <p className="text-[11px] text-slate-500">{portfolioSummary.bestPerformer.name || tickerToName[portfolioSummary.bestPerformer.ticker] || portfolioSummary.bestPerformer.ticker}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[11px] text-slate-200">{formatPrice(portfolioSummary.bestPerformer.current_price, portfolioSummary.bestPerformer.currency)}</p>
+              <p className="text-[11px] font-semibold text-emerald-300">{formatPercent(portfolioSummary.bestPerformer.daily_change_percent)}</p>
+            </div>
+          </button>
+        ) : (
+          <p className="mt-2 text-sm text-slate-500">No tracked tickers yet.</p>
+        )}
+      </div>
+      <div className="rounded-[0.95rem] border border-slate-700/70 bg-slate-950/40 p-2.5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Biggest Decliner</p>
+        {portfolioSummary.worstPerformer ? (
+          <button
+            type="button"
+            onClick={() => navigate(`/tickers/${portfolioSummary.worstPerformer.ticker}`)}
+            className="mt-1.5 flex w-full items-center justify-between rounded-[0.8rem] border border-slate-700/70 bg-slate-900/70 px-2.5 py-2 text-left transition-colors hover:border-slate-500/70"
+          >
+            <div>
+              <p className="text-xs font-semibold text-white">{portfolioSummary.worstPerformer.ticker}</p>
+              <p className="text-[11px] text-slate-500">{portfolioSummary.worstPerformer.name || tickerToName[portfolioSummary.worstPerformer.ticker] || portfolioSummary.worstPerformer.ticker}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[11px] text-slate-200">{formatPrice(portfolioSummary.worstPerformer.current_price, portfolioSummary.worstPerformer.currency)}</p>
+              <p className="text-[11px] font-semibold text-rose-300">{formatPercent(portfolioSummary.worstPerformer.daily_change_percent)}</p>
+            </div>
+          </button>
+        ) : (
+          <p className="mt-2 text-sm text-slate-500">No tracked tickers yet.</p>
+        )}
+      </div>
+    </div>
+  );
+  const marketMoversPanel = (
+    <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Broader Market Movers</p>
+        {moversControls}
+      </div>
+      <MoversList rows={marketMoverRows.slice(0, 6)} onSelectTicker={(ticker) => navigate(`/tickers/${ticker}`)} />
+    </div>
+  );
   const signalsPanel = (
     <DashboardPanel
-      title="Market Context & Exposure"
-      subtitle="Sector concentration, leadership, and index breadth around your tracked tickers."
+      title="Market Snapshot & Movers"
+      subtitle="Sector breadth, standout movers, and index action around your tracked tickers."
     >
       <div className="space-y-3">
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-[0.9fr_1.1fr]">
-          <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Sector exposure</p>
-              {isLoadingCompanyInfo && <span className="text-[11px] text-slate-500">Refreshing...</span>}
-            </div>
-            {portfolioSummary.sectorExposure.length > 0 ? (
-              <div className="space-y-2">
-                {portfolioSummary.sectorExposure.slice(0, 5).map((item) => (
-                  <div key={item.label}>
-                    <div className="mb-1 flex items-center justify-between gap-3 text-xs">
-                      <span className="truncate text-slate-300">{item.label}</span>
-                      <span className="font-semibold text-white">{item.count}</span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
-                      <div
-                        className="h-full rounded-full bg-[linear-gradient(90deg,#22d3ee,#34d399)]"
-                        style={{ width: `${(item.count / topExposureMax) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5 text-sm text-slate-500">
-                Subscribe to stocks to reveal sector distribution.
-              </div>
-            )}
-          </div>
-
           <div className="space-y-3">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <div className="rounded-[0.95rem] border border-emerald-400/20 bg-emerald-500/10 p-3">
@@ -1048,7 +1157,7 @@ export default function PortfolioPulseDashboard({
             {overview ? (
               <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
                 <div className="mb-2 flex items-center justify-between gap-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Sector board</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Sector Breadth</p>
                   <span className="text-[11px] text-slate-400">
                     Breadth {overview.sectors.length > 0 ? `${marketSummary.sectorsUp}/${overview.sectors.length}` : '—'}
                   </span>
@@ -1094,14 +1203,33 @@ export default function PortfolioPulseDashboard({
               </div>
             )}
           </div>
+          {marketMoversPanel}
         </div>
 
         <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Market tape</p>
-            {marketSummary.leader && (
-              <span className="text-[11px] text-slate-400">Leader {marketSummary.leader.ticker}</span>
-            )}
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Index Tape</p>
+              {marketSummary.leader && (
+                <span className="text-[11px] text-slate-400">Leader {marketSummary.leader.ticker}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-1 rounded-full border border-slate-700/70 bg-slate-900/70 p-1">
+              {MARKET_TAPE_PERIODS.map((option) => (
+                <button
+                  key={option.period}
+                  type="button"
+                  onClick={() => setMarketTapePeriod(option.period)}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                    marketTapePeriod === option.period
+                      ? 'bg-slate-200 text-slate-900'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {(overview?.indices ?? []).slice(0, 6).map((indexItem) => (
@@ -1190,7 +1318,7 @@ export default function PortfolioPulseDashboard({
             <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_0.95fr_1.05fr]">
               <div className="rounded-[1.1rem] border border-white/10 bg-slate-950/30 p-3.5">
                 <div className="mb-3 flex items-center justify-between gap-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">AI score ribbon</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Average AI Scores</p>
                   {portfolioSummary.avgConfidence != null && (
                     <div className="rounded-full border border-slate-600/80 bg-slate-900/70 px-2.5 py-1 text-[11px] text-slate-300">
                       Confidence <span className="font-semibold text-white">{portfolioSummary.avgConfidence.toFixed(0)}%</span>
@@ -1217,7 +1345,7 @@ export default function PortfolioPulseDashboard({
               {recommendationPanel}
 
               <div className="rounded-[1.1rem] border border-white/10 bg-slate-950/30 p-3.5">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Highest conviction</p>
+                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Top Conviction Names</p>
                 <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
                   {topConvictionRows.map((row, index) => (
                     row ? (
@@ -1254,7 +1382,7 @@ export default function PortfolioPulseDashboard({
             {radarWidgets.length > 0 && (
               <div className="rounded-[1.1rem] border border-white/10 bg-slate-950/30 p-3.5">
                 <div className="mb-3 flex items-center justify-between gap-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">AI radar</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Analyzed Ticker Radar</p>
                   <span className="text-[11px] text-slate-500">Subscribed tickers with analysis</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
@@ -1297,82 +1425,16 @@ export default function PortfolioPulseDashboard({
         {latestBriefPanel}
 
         <DashboardPanel
-          title="Flow & News"
-          subtitle="Market movers plus a constrained alternating headline feed."
-          action={
-            <div className="flex items-center gap-1 rounded-full border border-slate-700/70 bg-slate-950/40 p-1">
-              {([
-                ['gainers', 'Gainers'],
-                ['losers', 'Losers'],
-                ['most_active', 'Active'],
-              ] as const).map(([tabId, label]) => (
-                <button
-                  key={tabId}
-                  type="button"
-                  onClick={() => setMoversTab(tabId)}
-                  className={`rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
-                    moversTab === tabId
-                      ? 'bg-slate-200 text-slate-900'
-                      : 'text-slate-300 hover:bg-slate-800'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          }
+          title="Portfolio Extremes & News"
+          subtitle="Best and worst performers, sector concentration, and the latest portfolio headlines."
         >
           <div className="space-y-3">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <div className="rounded-[0.95rem] border border-slate-700/70 bg-slate-950/40 p-2.5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Portfolio best</p>
-                {portfolioSummary.bestPerformer ? (
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/tickers/${portfolioSummary.bestPerformer.ticker}`)}
-                    className="mt-1.5 flex w-full items-center justify-between rounded-[0.8rem] border border-slate-700/70 bg-slate-900/70 px-2.5 py-2 text-left transition-colors hover:border-slate-500/70"
-                  >
-                    <div>
-                      <p className="text-xs font-semibold text-white">{portfolioSummary.bestPerformer.ticker}</p>
-                      <p className="text-[11px] text-slate-500">{portfolioSummary.bestPerformer.name || tickerToName[portfolioSummary.bestPerformer.ticker] || portfolioSummary.bestPerformer.ticker}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[11px] text-slate-200">{formatPrice(portfolioSummary.bestPerformer.current_price, portfolioSummary.bestPerformer.currency)}</p>
-                      <p className="text-[11px] font-semibold text-emerald-300">{formatPercent(portfolioSummary.bestPerformer.daily_change_percent)}</p>
-                    </div>
-                  </button>
-                ) : (
-                  <p className="mt-2 text-sm text-slate-500">No tracked tickers yet.</p>
-                )}
-              </div>
-              <div className="rounded-[0.95rem] border border-slate-700/70 bg-slate-950/40 p-2.5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Portfolio weakest</p>
-                {portfolioSummary.worstPerformer ? (
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/tickers/${portfolioSummary.worstPerformer.ticker}`)}
-                    className="mt-1.5 flex w-full items-center justify-between rounded-[0.8rem] border border-slate-700/70 bg-slate-900/70 px-2.5 py-2 text-left transition-colors hover:border-slate-500/70"
-                  >
-                    <div>
-                      <p className="text-xs font-semibold text-white">{portfolioSummary.worstPerformer.ticker}</p>
-                      <p className="text-[11px] text-slate-500">{portfolioSummary.worstPerformer.name || tickerToName[portfolioSummary.worstPerformer.ticker] || portfolioSummary.worstPerformer.ticker}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[11px] text-slate-200">{formatPrice(portfolioSummary.worstPerformer.current_price, portfolioSummary.worstPerformer.currency)}</p>
-                      <p className="text-[11px] font-semibold text-rose-300">{formatPercent(portfolioSummary.worstPerformer.daily_change_percent)}</p>
-                    </div>
-                  </button>
-                ) : (
-                  <p className="mt-2 text-sm text-slate-500">No tracked tickers yet.</p>
-                )}
-              </div>
-            </div>
-
-            <MoversList rows={marketMoverRows.slice(0, 4)} onSelectTicker={(ticker) => navigate(`/tickers/${ticker}`)} />
+            {portfolioExtremesPanel}
+            {sectorExposurePanel}
 
             <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-2">
               <div className="mb-2 flex items-center justify-between px-2 py-1">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">News radar</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Portfolio News Feed</p>
                 <span className="text-[11px] text-slate-500">{portfolioNews.length} items</span>
               </div>
               {portfolioNews.length > 0 ? (
@@ -1430,7 +1492,7 @@ export default function PortfolioPulseDashboard({
               onSelectTicker={(ticker) => navigate(`/tickers/${ticker}`)}
             />
           ) : (
-            <DashboardPanel title="Regional Markets" subtitle="Cross-asset map of the international backdrop." className="h-full">
+            <DashboardPanel title="Regional Market Map" subtitle="Cross-asset view of the international backdrop." className="h-full">
               <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-4 py-14 text-center text-sm text-slate-500">
                 {isLoadingMarket ? 'Loading regional map...' : 'Regional market map unavailable.'}
               </div>
