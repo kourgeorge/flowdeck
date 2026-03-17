@@ -32,17 +32,21 @@ export default function DashboardNewsSection({
   fillHeight = false,
 }: DashboardNewsSectionProps) {
   const [articles, setArticles] = useState<NewsArticleWithTicker[]>([]);
-  const [filterTicker, setFilterTicker] = useState<string | null>(null);
+  const [selectedTickers, setSelectedTickers] = useState<string[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const tickersKey = tickers.join(',');
 
   const fetchNews = useCallback(async () => {
-    if (tickers.length === 0) {
+    const portfolioTickers = tickersKey ? tickersKey.split(',') : [];
+
+    if (portfolioTickers.length === 0) {
       setArticles([]);
+      setSelectedTickers([]);
       setLastUpdated(new Date());
       return;
     }
@@ -50,12 +54,13 @@ export default function DashboardNewsSection({
     setError(null);
     try {
       const results = await Promise.allSettled(
-        tickers.map((t) => tickerApi.getNews(t))
+        portfolioTickers.map((ticker) => tickerApi.getNews(ticker))
       );
       const byKey = new Map<string, NewsArticleWithTicker>();
       results.forEach((result, i) => {
         if (result.status === 'fulfilled' && result.value?.articles?.length) {
-          const ticker = tickers[i];
+          const ticker = portfolioTickers[i];
+          if (!ticker) return;
           result.value.articles.forEach((a) => {
             const key = a.uuid || a.link;
             const existing = byKey.get(key);
@@ -79,7 +84,7 @@ export default function DashboardNewsSection({
     } finally {
       setIsLoading(false);
     }
-  }, [tickers.join(',')]);
+  }, [tickersKey]);
 
   useEffect(() => {
     fetchNews();
@@ -92,14 +97,31 @@ export default function DashboardNewsSection({
   }, [fetchNews, refreshIntervalMs]);
 
   useEffect(() => {
-    setDisplayCount(PAGE_SIZE);
-  }, [filterTicker]);
+    const portfolioTickers = new Set(tickersKey ? tickersKey.split(',') : []);
+    setSelectedTickers((current) => current.filter((ticker) => portfolioTickers.has(ticker)));
+  }, [tickersKey]);
 
-  const filtered = filterTicker
-    ? articles.filter((a) => a.tickers.includes(filterTicker))
+  useEffect(() => {
+    setDisplayCount(PAGE_SIZE);
+  }, [selectedTickers]);
+
+  const toggleTickerTag = useCallback((ticker: string) => {
+    setSelectedTickers((current) => (
+      current.includes(ticker)
+        ? current.filter((item) => item !== ticker)
+        : [...current, ticker]
+    ));
+  }, []);
+
+  const filtered = selectedTickers.length > 0
+    ? articles.filter((article) => article.tickers.some((ticker) => selectedTickers.includes(ticker)))
     : articles;
   const displayList = filtered.slice(0, displayCount);
   const hasMore = displayList.length < filtered.length;
+  const tickerCounts = tickers.reduce<Record<string, number>>((acc, ticker) => {
+    acc[ticker] = articles.filter((article) => article.tickers.includes(ticker)).length;
+    return acc;
+  }, {});
 
   useEffect(() => {
     if (!hasMore || !loadMoreRef.current || !scrollContainerRef.current) return;
@@ -134,38 +156,61 @@ export default function DashboardNewsSection({
             </span>
           </div>
         )}
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Filter by ticker</p>
+            <p className="text-xs text-gray-500">
+              {selectedTickers.length > 0
+                ? `${filtered.length} matching article${filtered.length === 1 ? '' : 's'}`
+                : `${articles.length} article${articles.length === 1 ? '' : 's'} across your watchlist`}
+            </p>
+          </div>
+          {selectedTickers.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedTickers([])}
+              className="text-xs font-medium text-gray-400 transition-colors hover:text-white"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => setFilterTicker(null)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-              filterTicker === null
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            onClick={() => setSelectedTickers([])}
+            className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+              selectedTickers.length === 0
+                ? 'border-blue-500 bg-blue-600 text-white'
+                : 'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500 hover:bg-gray-700'
             }`}
           >
-            All
+            All tickers
           </button>
           {tickers.map((t) => (
             <button
               key={t}
               type="button"
-              onClick={() => setFilterTicker(t)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                filterTicker === t
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              onClick={() => toggleTickerTag(t)}
+              aria-pressed={selectedTickers.includes(t)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                selectedTickers.includes(t)
+                  ? 'border-blue-500 bg-blue-600 text-white'
+                  : 'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500 hover:bg-gray-700'
               }`}
             >
               {t}
+              <span className={`ml-1.5 ${selectedTickers.includes(t) ? 'text-blue-100' : 'text-gray-400'}`}>
+                {tickerCounts[t] ?? 0}
+              </span>
             </button>
           ))}
         </div>
       </div>
       <div
-      ref={scrollContainerRef}
-      className="flex-1 overflow-y-auto min-h-0 p-4"
-    >
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto min-h-0 p-4"
+      >
         {error && (
           <p className="text-amber-400/90 text-sm">{error}</p>
         )}
@@ -179,12 +224,16 @@ export default function DashboardNewsSection({
             ))}
           </div>
         ) : displayList.length === 0 ? (
-          <p className="text-gray-400 text-sm">No news articles for your stocks.</p>
+          <p className="text-gray-400 text-sm">
+            {selectedTickers.length > 0
+              ? `No news articles match ${selectedTickers.join(', ')}.`
+              : 'No news articles for your stocks.'}
+          </p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {displayList.map((article) => (
               <div
-                key={article.uuid}
+                key={article.uuid || article.link}
                 className="bg-gray-700/50 rounded-lg p-4 hover:border-gray-600 border border-transparent transition-colors"
               >
                 <div className="flex gap-4">
@@ -203,12 +252,19 @@ export default function DashboardNewsSection({
                   <div className="flex-1 min-w-0">
                     <div className="mb-1 flex flex-wrap gap-1">
                       {article.tickers.map((t) => (
-                        <span
+                        <button
                           key={t}
-                          className="px-2 py-0.5 rounded text-xs font-medium bg-gray-600 text-gray-200"
+                          type="button"
+                          onClick={() => toggleTickerTag(t)}
+                          aria-pressed={selectedTickers.includes(t)}
+                          className={`rounded-full border px-2 py-0.5 text-xs font-medium transition-colors ${
+                            selectedTickers.includes(t)
+                              ? 'border-blue-500 bg-blue-600 text-white'
+                              : 'border-gray-500 bg-gray-600 text-gray-200 hover:border-gray-400 hover:bg-gray-500'
+                          }`}
                         >
                           {t}
-                        </span>
+                        </button>
                       ))}
                     </div>
                     <a

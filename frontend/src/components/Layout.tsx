@@ -143,6 +143,7 @@ export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
 
   useEffect(() => {
     if (!user) {
@@ -151,7 +152,7 @@ export default function Layout() {
     }
     let cancelled = false;
     digestApi
-      .getDigestDates(7)
+      .getDigestDates(7, browserTimezone)
       .then((res) => {
         if (cancelled) return;
         const dailyDates = (res.dates ?? []).filter((d) => !d.startsWith('w:'));
@@ -163,7 +164,7 @@ export default function Layout() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [browserTimezone, user]);
 
   const closeSidebarIfMobile = () => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
