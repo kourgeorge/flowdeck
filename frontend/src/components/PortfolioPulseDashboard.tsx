@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { digestApi, tickerApi, type DigestBriefItem } from '../services/api';
 import type { TickerWidget } from '../services/types';
-import { formatReportKey, getAnalysisScoreEntries, getScoreColor } from './AspectSpiderChart';
+import AspectSpiderChart, { formatReportKey, getAnalysisScoreEntries, getScoreColor } from './AspectSpiderChart';
 import DashboardPriceTrendsChart from './DashboardPriceTrendsChart';
 import WorldMapRegionalStocks from './WorldMapRegionalStocks';
 import { formatPrice } from '../utils/currency';
@@ -329,10 +329,14 @@ export default function PortfolioPulseDashboard({
     most_active: MarketMoverRow[];
   }>({ gainers: [], losers: [], most_active: [] });
   const [portfolioNews, setPortfolioNews] = useState<NewsArticle[]>([]);
-  const [latestBrief, setLatestBrief] = useState<DigestBriefItem | null>(null);
+  const [latestBriefs, setLatestBriefs] = useState<{ daily: DigestBriefItem | null; weekly: DigestBriefItem | null }>({
+    daily: null,
+    weekly: null,
+  });
   const [isLoadingCompanyInfo, setIsLoadingCompanyInfo] = useState(false);
   const [isLoadingMarket, setIsLoadingMarket] = useState(true);
   const [isLoadingBrief, setIsLoadingBrief] = useState(false);
+  const [latestBriefMode, setLatestBriefMode] = useState<'daily' | 'weekly'>('daily');
   const [moversTab, setMoversTab] = useState<'gainers' | 'losers' | 'most_active'>('gainers');
 
   useEffect(() => {
@@ -431,18 +435,28 @@ export default function PortfolioPulseDashboard({
       setIsLoadingBrief(true);
       try {
         const datesResponse = await digestApi.getDigestDates(21, browserTimezone);
-        const latestSlot = datesResponse.dates[datesResponse.dates.length - 1];
-        if (!latestSlot) {
-          if (!cancelled) setLatestBrief(null);
-          return;
-        }
+        const dailySlots = datesResponse.dates.filter((slot) => !slot.startsWith('w:'));
+        const weeklySlots = datesResponse.dates.filter((slot) => slot.startsWith('w:'));
+        const latestDailySlot = dailySlots[dailySlots.length - 1] ?? null;
+        const latestWeeklySlot = weeklySlots[weeklySlots.length - 1] ?? null;
 
-        const briefsResponse = await digestApi.getDigestsForDate(latestSlot, browserTimezone);
+        const [dailyResponse, weeklyResponse] = await Promise.allSettled([
+          latestDailySlot ? digestApi.getDigestsForDate(latestDailySlot, browserTimezone) : Promise.resolve({ date: '', briefs: [] }),
+          latestWeeklySlot ? digestApi.getDigestsForDate(latestWeeklySlot, browserTimezone) : Promise.resolve({ date: '', briefs: [] }),
+        ]);
+
         if (!cancelled) {
-          setLatestBrief(briefsResponse.briefs[0] ?? null);
+          const dailyBrief = dailyResponse.status === 'fulfilled' ? dailyResponse.value.briefs[0] ?? null : null;
+          const weeklyBrief = weeklyResponse.status === 'fulfilled' ? weeklyResponse.value.briefs[0] ?? null : null;
+          setLatestBriefs({ daily: dailyBrief, weekly: weeklyBrief });
+          setLatestBriefMode((prev) => {
+            if (prev === 'weekly' && !weeklyBrief && dailyBrief) return 'daily';
+            if (prev === 'daily' && !dailyBrief && weeklyBrief) return 'weekly';
+            return prev;
+          });
         }
       } catch {
-        if (!cancelled) setLatestBrief(null);
+        if (!cancelled) setLatestBriefs({ daily: null, weekly: null });
       } finally {
         if (!cancelled) setIsLoadingBrief(false);
       }
@@ -450,7 +464,7 @@ export default function PortfolioPulseDashboard({
 
     fetchLatestBrief().catch(() => {
       if (!cancelled) {
-        setLatestBrief(null);
+        setLatestBriefs({ daily: null, weekly: null });
         setIsLoadingBrief(false);
       }
     });
@@ -592,10 +606,11 @@ export default function PortfolioPulseDashboard({
     };
   }, [overview]);
 
+  const activeBrief = latestBriefs[latestBriefMode];
   const focusSnapshotEntries = useMemo(() => {
-    if (!latestBrief?.focus_snapshot) return [];
-    return Object.entries(latestBrief.focus_snapshot).slice(0, 5);
-  }, [latestBrief]);
+    if (!activeBrief?.focus_snapshot) return [];
+    return Object.entries(activeBrief.focus_snapshot).slice(0, 5);
+  }, [activeBrief]);
 
   const heroSummary = useMemo(() => {
     if (widgets.length === 0) {
@@ -616,6 +631,256 @@ export default function PortfolioPulseDashboard({
 
   const marketMoverRows = marketMovers[moversTab] ?? [];
   const topExposureMax = Math.max(1, ...(portfolioSummary.sectorExposure.slice(0, 6).map((item) => item.count)));
+  const radarWidgets = widgets
+    .map((widget) => ({
+      widget,
+      scoreEntries: getAnalysisScoreEntries(widget.report_scores),
+    }))
+    .filter(({ scoreEntries }) => scoreEntries.some(([, score]) => score.score != null))
+    .slice(0, 8);
+  const latestBriefPanel = (
+    <section className="rounded-[1.1rem] border border-slate-700/80 bg-[linear-gradient(180deg,rgba(15,23,42,0.96),rgba(17,24,39,0.84))] p-4 shadow-[0_14px_40px_rgba(2,6,23,0.28)]">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-300">Latest Brief</p>
+          <p className="mt-0.5 text-xs text-slate-400">Saved AI market-plus-portfolio narrative.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-full border border-slate-700/70 bg-slate-950/40 p-1">
+            {([
+              ['daily', 'Daily'],
+              ['weekly', 'Weekly'],
+            ] as const).map(([mode, label]) => {
+              const hasBrief = latestBriefs[mode] != null;
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => hasBrief && setLatestBriefMode(mode)}
+                  disabled={!hasBrief}
+                  className={`rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
+                    latestBriefMode === mode
+                      ? 'bg-slate-200 text-slate-900'
+                      : hasBrief
+                        ? 'text-slate-300 hover:bg-slate-800'
+                        : 'cursor-not-allowed text-slate-600'
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          <Link
+            to="/brief"
+            className="rounded-full border border-slate-600/80 bg-slate-900/60 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-slate-400 hover:bg-slate-800"
+          >
+            History
+          </Link>
+        </div>
+      </div>
+      {isLoadingBrief ? (
+        <div className="space-y-2.5">
+          <div className="h-4 w-1/3 animate-pulse rounded bg-slate-800" />
+          <div className="h-16 animate-pulse rounded-[1rem] bg-slate-800" />
+          <div className="h-14 animate-pulse rounded-[1rem] bg-slate-800" />
+        </div>
+      ) : activeBrief ? (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+            <span className="rounded-full border border-slate-600/80 bg-slate-900/70 px-2.5 py-1">{activeBrief.span_label || activeBrief.span_type || (latestBriefMode === 'weekly' ? 'Weekly' : 'Daily')}</span>
+            <span>{activeBrief.digest_date}</span>
+          </div>
+          <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
+            <p className="text-sm leading-6 text-slate-200">{getExcerpt(activeBrief.narrative, 250)}</p>
+          </div>
+          {focusSnapshotEntries.length > 0 && (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {focusSnapshotEntries.slice(0, 4).map(([ticker, snapshot]) => (
+                <button
+                  key={ticker}
+                  type="button"
+                  onClick={() => navigate(`/tickers/${ticker}`)}
+                  className="flex items-center justify-between rounded-[0.95rem] border border-slate-700/70 bg-slate-900/60 px-3 py-2 text-left transition-colors hover:border-slate-500/70 hover:bg-slate-900"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-white">{ticker}</p>
+                    <p className="text-[11px] text-slate-500">{snapshot.name || tickerToName[ticker] || 'Focus name'}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-200">{formatMaybePrice(snapshot.price ?? null)}</p>
+                    <p className={`text-[11px] font-semibold ${(snapshot.change_pct ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                      {formatPercent(snapshot.change_pct)}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="rounded-[1rem] border border-emerald-500/20 bg-emerald-500/10 px-3 py-2.5">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-100/80">Watch</p>
+            <p className="mt-1.5 text-sm leading-6 text-emerald-50">{getExcerpt(activeBrief.what_to_watch, 120)}</p>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-[1rem] border border-dashed border-slate-700 px-4 py-7 text-center">
+          <p className="text-sm text-slate-300">No saved {latestBriefMode} brief yet.</p>
+          <Link
+            to="/brief"
+            className="mt-3 inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/15 px-4 py-2 text-sm font-medium text-emerald-100 transition-colors hover:bg-emerald-500/20"
+          >
+            Generate brief
+          </Link>
+        </div>
+      )}
+    </section>
+  );
+  const signalsPanel = (
+    <DashboardPanel
+      title="Signals & Positioning"
+      subtitle="Portfolio call mix, conviction, sector tilt, and market sector leaders."
+    >
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[0.92fr_1.08fr]">
+        <div className="space-y-3">
+          <RecommendationDonut data={recommendationBreakdown} total={widgets.length} />
+          <div className="grid grid-cols-2 gap-2">
+            {recommendationBreakdown.map((entry) => (
+              <div key={entry.name} className="rounded-[0.95rem] border border-slate-700/70 bg-slate-950/40 px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: RECOMMENDATION_COLORS[entry.name] ?? '#64748b' }} />
+                  <span className="text-xs font-medium text-slate-300">{entry.name}</span>
+                </div>
+                <div className="mt-1 text-base font-semibold text-white">{entry.value}</div>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Sector exposure</p>
+              {isLoadingCompanyInfo && <span className="text-[11px] text-slate-500">Refreshing...</span>}
+            </div>
+            {portfolioSummary.sectorExposure.length > 0 ? (
+              <div className="space-y-2">
+                {portfolioSummary.sectorExposure.slice(0, 5).map((item) => (
+                  <div key={item.label}>
+                    <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+                      <span className="truncate text-slate-300">{item.label}</span>
+                      <span className="font-semibold text-white">{item.count}</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
+                      <div
+                        className="h-full rounded-full bg-[linear-gradient(90deg,#22d3ee,#34d399)]"
+                        style={{ width: `${(item.count / topExposureMax) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5 text-sm text-slate-500">
+                Subscribe to stocks to reveal sector distribution.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="rounded-[0.95rem] border border-emerald-400/20 bg-emerald-500/10 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-100/80">Leader</p>
+              <p className="mt-1.5 text-sm font-semibold text-white">{marketSummary.leader?.name || '—'}</p>
+              <p className="mt-1 text-xs text-emerald-100/80">{formatPercent(marketSummary.leader?.changePercent)}</p>
+            </div>
+            <div className="rounded-[0.95rem] border border-rose-400/20 bg-rose-500/10 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-100/80">Laggard</p>
+              <p className="mt-1.5 text-sm font-semibold text-white">{marketSummary.laggard?.name || '—'}</p>
+              <p className="mt-1 text-xs text-rose-100/80">{formatPercent(marketSummary.laggard?.changePercent)}</p>
+            </div>
+          </div>
+
+          <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Highest conviction</p>
+            <div className="space-y-2">
+              {portfolioSummary.convictionRows.length > 0 ? (
+                portfolioSummary.convictionRows.slice(0, 4).map((row) => (
+                  <button
+                    key={row.ticker}
+                    type="button"
+                    onClick={() => navigate(`/tickers/${row.ticker}`)}
+                    className="flex w-full items-center justify-between rounded-[0.95rem] border border-slate-700/70 bg-slate-900/70 px-3 py-2.5 text-left transition-colors hover:border-slate-500/70 hover:bg-slate-900"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-white">{row.ticker}</span>
+                        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${badgeClassForRecommendation(row.recommendation)}`}>
+                          {row.recommendation}
+                        </span>
+                      </div>
+                      <p className="mt-1 truncate text-[11px] text-slate-500">{row.name}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-semibold text-white">{row.signalScore != null ? `${row.signalScore.toFixed(1)}/10` : '—'}</p>
+                      <p className={`text-[11px] font-semibold ${row.dailyChangePercent >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                        {formatPercent(row.dailyChangePercent)}
+                      </p>
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5 text-sm text-slate-500">
+                  Run AI analysis on subscribed names to populate conviction signals.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {overview ? (
+            <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Sector board</p>
+              <div className="h-[180px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={[...overview.sectors]
+                      .sort((a, b) => (b.changePercent ?? -Infinity) - (a.changePercent ?? -Infinity))
+                      .slice(0, 6)
+                      .map((item) => ({
+                        name: item.name.replace(' Select Sector SPDR Fund', '').replace('Communication Services', 'Comm'),
+                        changePercent: item.changePercent ?? 0,
+                      }))}
+                    margin={{ top: 8, right: 8, left: -20, bottom: 0 }}
+                  >
+                    <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                    <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={(value) => `${value}%`} />
+                    <Tooltip
+                      contentStyle={{
+                        background: '#0f172a',
+                        border: '1px solid rgba(71, 85, 105, 0.9)',
+                        borderRadius: '0.75rem',
+                        color: '#e2e8f0',
+                      }}
+                      formatter={(value) => [formatPercent(typeof value === 'number' ? value : null), 'Change']}
+                    />
+                    <Bar dataKey="changePercent" radius={[8, 8, 0, 0]}>
+                      {[...overview.sectors]
+                        .sort((a, b) => (b.changePercent ?? -Infinity) - (a.changePercent ?? -Infinity))
+                        .slice(0, 6)
+                        .map((item) => (
+                          <Cell key={item.ticker} fill={(item.changePercent ?? 0) >= 0 ? '#34d399' : '#f87171'} />
+                        ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5 text-sm text-slate-500">
+              {isLoadingMarket ? 'Loading market pulse...' : 'Market pulse unavailable.'}
+            </div>
+          )}
+        </div>
+      </div>
+    </DashboardPanel>
+  );
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -723,7 +988,12 @@ export default function PortfolioPulseDashboard({
                 </div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {(overview?.indices ?? []).slice(0, 4).map((indexItem) => (
-                    <div key={indexItem.ticker} className="rounded-[0.95rem] border border-slate-700/70 bg-slate-900/70 px-3 py-2">
+                    <button
+                      key={indexItem.ticker}
+                      type="button"
+                      onClick={() => navigate(`/tickers/${indexItem.ticker}`)}
+                      className="rounded-[0.95rem] border border-slate-700/70 bg-slate-900/70 px-3 py-2 text-left transition-colors hover:border-slate-500/70 hover:bg-slate-900"
+                    >
                       <div className="min-w-0">
                         <div className="flex items-center justify-between gap-2">
                           <p className="truncate text-xs font-semibold text-white">{indexItem.ticker}</p>
@@ -732,7 +1002,7 @@ export default function PortfolioPulseDashboard({
                         <p className="mt-0.5 truncate text-[11px] text-slate-400">{indexItem.name}</p>
                         <p className="mt-1 text-xs font-semibold text-slate-200">{formatMaybePrice(indexItem.price)}</p>
                       </div>
-                    </div>
+                    </button>
                   ))}
                   {(!overview || overview.indices.length === 0) && (
                     <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5 text-sm text-slate-500">
@@ -742,77 +1012,40 @@ export default function PortfolioPulseDashboard({
                 </div>
               </div>
             </div>
-          </div>
-        </section>
 
-        <section className="rounded-[1.1rem] border border-slate-700/80 bg-[linear-gradient(180deg,rgba(15,23,42,0.96),rgba(17,24,39,0.84))] p-4 shadow-[0_14px_40px_rgba(2,6,23,0.28)]">
-          <div className="mb-3 flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-300">Latest Brief</p>
-              <p className="mt-0.5 text-xs text-slate-400">Saved AI market-plus-portfolio narrative.</p>
-            </div>
-            <Link
-              to="/brief"
-              className="rounded-full border border-slate-600/80 bg-slate-900/60 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-slate-400 hover:bg-slate-800"
-            >
-              History
-            </Link>
-          </div>
-          {isLoadingBrief ? (
-            <div className="space-y-2.5">
-              <div className="h-4 w-1/3 animate-pulse rounded bg-slate-800" />
-              <div className="h-16 animate-pulse rounded-[1rem] bg-slate-800" />
-              <div className="h-14 animate-pulse rounded-[1rem] bg-slate-800" />
-            </div>
-          ) : latestBrief ? (
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
-                <span className="rounded-full border border-slate-600/80 bg-slate-900/70 px-2.5 py-1">{latestBrief.span_label || latestBrief.span_type || 'Daily'}</span>
-                <span>{latestBrief.digest_date}</span>
-              </div>
-              <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
-                <p className="text-sm leading-6 text-slate-200">{getExcerpt(latestBrief.narrative, 250)}</p>
-              </div>
-              {focusSnapshotEntries.length > 0 && (
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {focusSnapshotEntries.slice(0, 4).map(([ticker, snapshot]) => (
+            {radarWidgets.length > 0 && (
+              <div className="rounded-[1.1rem] border border-white/10 bg-slate-950/30 p-3.5">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">AI radar</p>
+                  <span className="text-[11px] text-slate-500">Subscribed tickers with analysis</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+                  {radarWidgets.map(({ widget, scoreEntries }) => (
                     <button
-                      key={ticker}
+                      key={widget.ticker}
                       type="button"
-                      onClick={() => navigate(`/tickers/${ticker}`)}
-                      className="flex items-center justify-between rounded-[0.95rem] border border-slate-700/70 bg-slate-900/60 px-3 py-2 text-left transition-colors hover:border-slate-500/70 hover:bg-slate-900"
+                      onClick={() => navigate(`/tickers/${widget.ticker}`)}
+                      className="flex items-center gap-3 rounded-[0.95rem] border border-slate-700/70 bg-slate-900/70 px-3 py-2.5 text-left transition-colors hover:border-slate-500/70 hover:bg-slate-900"
                     >
-                      <div>
-                        <p className="text-sm font-semibold text-white">{ticker}</p>
-                        <p className="text-[11px] text-slate-500">{snapshot.name || tickerToName[ticker] || 'Focus name'}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-slate-200">{formatMaybePrice(snapshot.price ?? null)}</p>
-                        <p className={`text-[11px] font-semibold ${(snapshot.change_pct ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
-                          {formatPercent(snapshot.change_pct)}
+                      <AspectSpiderChart scoreEntries={scoreEntries} size={56} />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-white">{widget.ticker}</p>
+                        <p className="mt-0.5 text-[11px] text-slate-400">
+                          {widget.recommendation || 'AI scored'}
+                        </p>
+                        <p className={`mt-1 text-[11px] font-semibold ${widget.daily_change_percent >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                          {formatPercent(widget.daily_change_percent)}
                         </p>
                       </div>
                     </button>
                   ))}
                 </div>
-              )}
-              <div className="rounded-[1rem] border border-emerald-500/20 bg-emerald-500/10 px-3 py-2.5">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-100/80">Watch</p>
-                <p className="mt-1.5 text-sm leading-6 text-emerald-50">{getExcerpt(latestBrief.what_to_watch, 120)}</p>
               </div>
-            </div>
-          ) : (
-            <div className="rounded-[1rem] border border-dashed border-slate-700 px-4 py-7 text-center">
-              <p className="text-sm text-slate-300">No saved brief yet.</p>
-              <Link
-                to="/brief"
-                className="mt-3 inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/15 px-4 py-2 text-sm font-medium text-emerald-100 transition-colors hover:bg-emerald-500/20"
-              >
-                Generate brief
-              </Link>
-            </div>
-          )}
+            )}
+          </div>
         </section>
+
+        {signalsPanel}
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -820,150 +1053,7 @@ export default function PortfolioPulseDashboard({
           <DashboardPriceTrendsChart tickers={tickers} period="6mo" height={360} />
         </div>
 
-        <DashboardPanel
-          title="Signals & Positioning"
-          subtitle="Portfolio call mix, conviction, sector tilt, and market sector leaders."
-        >
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[0.92fr_1.08fr]">
-            <div className="space-y-3">
-              <RecommendationDonut data={recommendationBreakdown} total={widgets.length} />
-              <div className="grid grid-cols-2 gap-2">
-                {recommendationBreakdown.map((entry) => (
-                  <div key={entry.name} className="rounded-[0.95rem] border border-slate-700/70 bg-slate-950/40 px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: RECOMMENDATION_COLORS[entry.name] ?? '#64748b' }} />
-                      <span className="text-xs font-medium text-slate-300">{entry.name}</span>
-                    </div>
-                    <div className="mt-1 text-base font-semibold text-white">{entry.value}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
-                <div className="mb-3 flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Sector exposure</p>
-                  {isLoadingCompanyInfo && <span className="text-[11px] text-slate-500">Refreshing...</span>}
-                </div>
-                {portfolioSummary.sectorExposure.length > 0 ? (
-                  <div className="space-y-2">
-                    {portfolioSummary.sectorExposure.slice(0, 5).map((item) => (
-                      <div key={item.label}>
-                        <div className="mb-1 flex items-center justify-between gap-3 text-xs">
-                          <span className="truncate text-slate-300">{item.label}</span>
-                          <span className="font-semibold text-white">{item.count}</span>
-                        </div>
-                        <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
-                          <div
-                            className="h-full rounded-full bg-[linear-gradient(90deg,#22d3ee,#34d399)]"
-                            style={{ width: `${(item.count / topExposureMax) * 100}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5 text-sm text-slate-500">
-                    Subscribe to stocks to reveal sector distribution.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <div className="rounded-[0.95rem] border border-emerald-400/20 bg-emerald-500/10 p-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-100/80">Leader</p>
-                  <p className="mt-1.5 text-sm font-semibold text-white">{marketSummary.leader?.name || '—'}</p>
-                  <p className="mt-1 text-xs text-emerald-100/80">{formatPercent(marketSummary.leader?.changePercent)}</p>
-                </div>
-                <div className="rounded-[0.95rem] border border-rose-400/20 bg-rose-500/10 p-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-100/80">Laggard</p>
-                  <p className="mt-1.5 text-sm font-semibold text-white">{marketSummary.laggard?.name || '—'}</p>
-                  <p className="mt-1 text-xs text-rose-100/80">{formatPercent(marketSummary.laggard?.changePercent)}</p>
-                </div>
-              </div>
-
-              <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Highest conviction</p>
-                <div className="space-y-2">
-                  {portfolioSummary.convictionRows.length > 0 ? (
-                    portfolioSummary.convictionRows.slice(0, 4).map((row) => (
-                      <button
-                        key={row.ticker}
-                        type="button"
-                        onClick={() => navigate(`/tickers/${row.ticker}`)}
-                        className="flex w-full items-center justify-between rounded-[0.95rem] border border-slate-700/70 bg-slate-900/70 px-3 py-2.5 text-left transition-colors hover:border-slate-500/70 hover:bg-slate-900"
-                      >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-white">{row.ticker}</span>
-                            <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${badgeClassForRecommendation(row.recommendation)}`}>
-                              {row.recommendation}
-                            </span>
-                          </div>
-                          <p className="mt-1 truncate text-[11px] text-slate-500">{row.name}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs font-semibold text-white">{row.signalScore != null ? `${row.signalScore.toFixed(1)}/10` : '—'}</p>
-                          <p className={`text-[11px] font-semibold ${row.dailyChangePercent >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
-                            {formatPercent(row.dailyChangePercent)}
-                          </p>
-                        </div>
-                      </button>
-                    ))
-                  ) : (
-                    <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5 text-sm text-slate-500">
-                      Run AI analysis on subscribed names to populate conviction signals.
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {overview ? (
-                <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Sector board</p>
-                  <div className="h-[180px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={[...overview.sectors]
-                          .sort((a, b) => (b.changePercent ?? -Infinity) - (a.changePercent ?? -Infinity))
-                          .slice(0, 6)
-                          .map((item) => ({
-                            name: item.name.replace(' Select Sector SPDR Fund', '').replace('Communication Services', 'Comm'),
-                            changePercent: item.changePercent ?? 0,
-                          }))}
-                        margin={{ top: 8, right: 8, left: -20, bottom: 0 }}
-                      >
-                        <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 10 }} />
-                        <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={(value) => `${value}%`} />
-                        <Tooltip
-                          contentStyle={{
-                            background: '#0f172a',
-                            border: '1px solid rgba(71, 85, 105, 0.9)',
-                            borderRadius: '0.75rem',
-                            color: '#e2e8f0',
-                          }}
-                          formatter={(value) => [formatPercent(typeof value === 'number' ? value : null), 'Change']}
-                        />
-                        <Bar dataKey="changePercent" radius={[8, 8, 0, 0]}>
-                          {[...overview.sectors]
-                            .sort((a, b) => (b.changePercent ?? -Infinity) - (a.changePercent ?? -Infinity))
-                            .slice(0, 6)
-                            .map((item) => (
-                              <Cell key={item.ticker} fill={(item.changePercent ?? 0) >= 0 ? '#34d399' : '#f87171'} />
-                            ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5 text-sm text-slate-500">
-                  {isLoadingMarket ? 'Loading market pulse...' : 'Market pulse unavailable.'}
-                </div>
-              )}
-            </div>
-          </div>
-        </DashboardPanel>
+        {latestBriefPanel}
 
         <DashboardPanel
           title="Flow & News"
