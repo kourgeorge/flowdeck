@@ -5,17 +5,15 @@ import DashboardTopTiles from '../components/DashboardTopTiles';
 import PageHeader from '../components/PageHeader';
 import TickerListView from '../components/StockListView';
 import DashboardNewsSection from '../components/DashboardNewsSection';
-import DashboardPriceTrendsChart from '../components/DashboardPriceTrendsChart';
-import OverviewStatsPanel, { ByMarketSection, SubscribedChangeColumnsChart } from '../components/OverviewStatsPanel';
 import PortfolioPulseDashboard from '../components/PortfolioPulseDashboard';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useAuth } from '../contexts/AuthContext';
 import { digestApi } from '../services/api';
 
-type DashboardTab = 'overview' | 'pulse' | 'portfolio' | 'news';
+type DashboardTab = 'overview' | 'pulse' | 'news';
 type StockListTab = 'subscribed' | 'recent';
 
-const DASHBOARD_TAB_IDS: DashboardTab[] = ['overview', 'pulse', 'portfolio', 'news'];
+const DASHBOARD_TAB_IDS: DashboardTab[] = ['overview', 'pulse', 'news'];
 const STOCK_LIST_TAB_IDS: StockListTab[] = ['subscribed', 'recent'];
 
 export default function DashboardPage() {
@@ -146,7 +144,6 @@ export default function DashboardPage() {
             {([
               { id: 'overview', label: 'Overview' },
               { id: 'pulse', label: 'Portfolio Pulse' },
-              { id: 'portfolio', label: 'Portfolio' },
               { id: 'news', label: 'News' },
             ] as { id: DashboardTab; label: string }[]).map((tab) => (
               <button
@@ -314,49 +311,6 @@ export default function DashboardPage() {
           <div className="px-4 py-6 sm:p-6 lg:p-8">
             <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
               <PortfolioPulseDashboard widgets={widgets} tickerToName={tickerToName} />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {dashboardTab === 'portfolio' && (
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          <div className="px-4 py-6 sm:p-6 lg:p-8">
-            <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
-              {isLoading && widgets.length === 0 && recentAnalyzedWidgets.length === 0 && (
-                <div className="mb-6 bg-gray-800 rounded-lg border border-gray-700 p-6">
-                  <div className="flex items-center gap-2 text-gray-300 text-sm">
-                    <svg className="w-4 h-4 text-blue-400 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                    </svg>
-                    <span>Loading dashboard data…</span>
-                  </div>
-                </div>
-              )}
-
-              {widgets.length > 0 && (
-                <div className="mb-6">
-                  <OverviewStatsPanel widgets={widgets} tickerToName={tickerToName} hideByMarket />
-                </div>
-              )}
-
-              {subscribedTickers.length > 0 && (
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                  <div className="min-h-[340px]">
-                    <DashboardPriceTrendsChart tickers={subscribedTickers} period="6mo" height={340} />
-                  </div>
-                  <div className="min-h-[340px]">
-                    <SubscribedChangeColumnsChart widgets={widgets} height={340} />
-                  </div>
-                </div>
-              )}
-
-              {widgets.length > 0 && (
-                <div className="mt-6">
-                  <ByMarketSection widgets={widgets} tickerToName={tickerToName} />
-                </div>
-              )}
             </div>
           </div>
         </div>
