@@ -72,6 +72,11 @@ type NewsArticle = {
   tickers: string[];
 };
 
+type SparklineData = {
+  closes: number[];
+  openPrice: number;
+};
+
 interface PortfolioPulseDashboardProps {
   widgets: TickerWidget[];
   tickerToName: Record<string, string>;
@@ -118,11 +123,56 @@ function formatMaybePrice(value: number | null | undefined, currency?: string | 
   return formatPrice(value, currency);
 }
 
+function MiniSparkline({
+  chartData,
+  isPositive,
+}: {
+  chartData: SparklineData | null;
+  isPositive: boolean;
+}) {
+  const width = 72;
+  const height = 18;
+  const pad = 1;
+
+  if (!chartData || chartData.closes.length < 2) {
+    return <div className="h-[18px] w-[72px] shrink-0 rounded bg-slate-800/80" />;
+  }
+
+  const { closes: points, openPrice } = chartData;
+  const min = Math.min(...points, openPrice);
+  const max = Math.max(...points, openPrice);
+  const range = max - min || 1;
+  const xs = points.map((_, i) => pad + (i / (points.length - 1)) * (width - 2 * pad));
+  const ys = points.map((p) => height - pad - ((p - min) / range) * (height - 2 * pad));
+  const d = xs.map((x, i) => `${i === 0 ? 'M' : 'L'} ${x} ${ys[i]}`).join(' ');
+  const stroke = isPositive ? '#34d399' : '#f87171';
+  const openY = height - pad - ((openPrice - min) / range) * (height - 2 * pad);
+
+  return (
+    <svg width={width} height={height} className="shrink-0 overflow-hidden rounded" aria-hidden>
+      <line
+        x1={pad}
+        y1={openY}
+        x2={width - pad}
+        y2={openY}
+        stroke="#64748b"
+        strokeWidth="0.8"
+        strokeDasharray="2 1"
+      />
+      <path d={d} fill="none" stroke={stroke} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function normalizeRecommendation(value: string | null | undefined): 'BUY' | 'HOLD' | 'SELL' | 'NO AI' {
   if (!value) return 'NO AI';
   const upper = value.toUpperCase();
   if (upper === 'BUY' || upper === 'HOLD' || upper === 'SELL') return upper;
   return 'NO AI';
+}
+
+function formatRecommendationLabel(value: string | null | undefined): string {
+  return normalizeRecommendation(value) === 'NO AI' ? 'N/A' : normalizeRecommendation(value);
 }
 
 function badgeClassForRecommendation(value: string | null | undefined): string {
@@ -131,6 +181,13 @@ function badgeClassForRecommendation(value: string | null | undefined): string {
   if (normalized === 'SELL') return 'border-rose-400/40 bg-rose-500/15 text-rose-300';
   if (normalized === 'HOLD') return 'border-amber-400/40 bg-amber-500/15 text-amber-300';
   return 'border-slate-500/40 bg-slate-500/15 text-slate-300';
+}
+
+function cardClassForRecommendation(value: string): string {
+  if (value === 'BUY') return 'border border-emerald-400/20 bg-[linear-gradient(180deg,rgba(16,185,129,0.18),rgba(6,78,59,0.38))] text-emerald-50';
+  if (value === 'SELL') return 'border border-rose-400/20 bg-[linear-gradient(180deg,rgba(244,63,94,0.18),rgba(76,5,25,0.38))] text-rose-50';
+  if (value === 'HOLD') return 'border border-amber-400/20 bg-[linear-gradient(180deg,rgba(245,158,11,0.2),rgba(120,53,15,0.38))] text-amber-50';
+  return 'border border-slate-500/20 bg-[linear-gradient(180deg,rgba(100,116,139,0.18),rgba(30,41,59,0.42))] text-slate-50';
 }
 
 function getWidgetConfidence(widget: TickerWidget): number | null {
@@ -196,10 +253,10 @@ function StatTile({
   accentClass?: string;
 }) {
   return (
-    <div className={`rounded-[1rem] border border-slate-700/70 bg-slate-950/40 px-3.5 py-3 ${accentClass ?? ''}`}>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
-      <p className="mt-1.5 text-[1.35rem] font-semibold text-white">{value}</p>
-      {hint && <p className="mt-1 text-xs text-slate-400">{hint}</p>}
+    <div className={`rounded-[0.9rem] border border-slate-700/70 bg-slate-950/40 px-3 py-2 ${accentClass ?? ''}`}>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</p>
+      <p className="mt-1 text-[1.1rem] font-semibold leading-none text-white">{value}</p>
+      {hint && <p className="mt-1 truncate text-[11px] text-slate-400">{hint}</p>}
     </div>
   );
 }
@@ -219,6 +276,45 @@ function ChangePill({ value }: { value: number | null | undefined }) {
   );
 }
 
+function ScoreFillLine({
+  label,
+  score,
+}: {
+  label: string;
+  score: number | null;
+}) {
+  if (score == null) {
+    return (
+      <div className="rounded-[0.95rem] border border-dashed border-slate-700 bg-slate-950/40 px-3 py-4 text-sm text-slate-500">
+        No score data
+      </div>
+    );
+  }
+
+  const clamped = Math.max(0, Math.min(10, score));
+  const barClass =
+    clamped >= 7
+      ? 'bg-emerald-400'
+      : clamped >= 5
+        ? 'bg-amber-400'
+        : 'bg-rose-400';
+
+  return (
+    <div className="rounded-[0.95rem] border border-slate-700/70 bg-slate-900/70 px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-slate-300">{label}</span>
+        <span className={`text-xs font-semibold ${getScoreColor(clamped)}`}>{clamped.toFixed(1)}/10</span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800">
+        <div
+          className={`h-full rounded-full ${barClass}`}
+          style={{ width: `${(clamped / 10) * 100}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function RecommendationDonut({
   data,
   total,
@@ -227,11 +323,11 @@ function RecommendationDonut({
   total: number;
 }) {
   if (total === 0) {
-    return <div className="flex h-[180px] items-center justify-center text-sm text-slate-500">No portfolio signals yet.</div>;
+    return <div className="flex h-[190px] items-center justify-center text-sm text-slate-500">No portfolio signals yet.</div>;
   }
 
   return (
-    <div className="relative h-[180px]">
+    <div className="relative h-[190px]">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
@@ -239,7 +335,7 @@ function RecommendationDonut({
             dataKey="value"
             nameKey="name"
             innerRadius={48}
-            outerRadius={72}
+            outerRadius={74}
             paddingAngle={2}
             stroke="rgba(15, 23, 42, 0.7)"
             strokeWidth={2}
@@ -249,20 +345,30 @@ function RecommendationDonut({
             ))}
           </Pie>
           <Tooltip
-            contentStyle={{
-              background: '#0f172a',
-              border: '1px solid rgba(71, 85, 105, 0.9)',
-              borderRadius: '0.75rem',
-              color: '#e2e8f0',
+            cursor={false}
+            content={({ active, payload }) => {
+              if (!active || !payload || payload.length === 0) return null;
+              const point = payload[0] as { name?: string; value?: number };
+              const value = point.value ?? 0;
+              const percent = total > 0 ? (value / total) * 100 : 0;
+
+              return (
+                <div className="rounded-xl border border-slate-600/80 bg-slate-950/95 px-3 py-2 shadow-[0_12px_30px_rgba(2,6,23,0.45)]">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    {formatRecommendationLabel(point.name)}
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-white">{value} tracked tickers</div>
+                  <div className="text-[11px] text-slate-400">{percent.toFixed(0)}% of coverage</div>
+                </div>
+              );
             }}
-            formatter={(value, name) => [`${value ?? 0}`, name]}
           />
         </PieChart>
       </ResponsiveContainer>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Coverage</span>
         <span className="text-3xl font-semibold text-white">{total}</span>
-        <span className="text-xs text-slate-500">tracked names</span>
+        <span className="text-xs text-slate-500">tracked tickers</span>
       </div>
     </div>
   );
@@ -333,6 +439,7 @@ export default function PortfolioPulseDashboard({
     daily: null,
     weekly: null,
   });
+  const [marketTapeCharts, setMarketTapeCharts] = useState<Record<string, SparklineData>>({});
   const [isLoadingCompanyInfo, setIsLoadingCompanyInfo] = useState(false);
   const [isLoadingMarket, setIsLoadingMarket] = useState(true);
   const [isLoadingBrief, setIsLoadingBrief] = useState(false);
@@ -430,6 +537,57 @@ export default function PortfolioPulseDashboard({
 
   useEffect(() => {
     let cancelled = false;
+    const tapeTickers = (overview?.indices ?? []).slice(0, 6).map((item) => item.ticker).filter(Boolean);
+
+    if (tapeTickers.length === 0) {
+      setMarketTapeCharts({});
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const fetchTapeCharts = async () => {
+      try {
+        const results = await Promise.allSettled(
+          tapeTickers.map(async (ticker) => {
+            const res = await tickerApi.getHistoricalPrices(ticker, '1mo', '1d');
+            const points = (res?.data ?? []).map((item: { open: number; close: number }) => item.close).filter((close: number) => close > 0);
+            const firstOpen = res?.data?.[0]?.open;
+            if (points.length < 2) return null;
+            return [
+              ticker,
+              {
+                closes: points,
+                openPrice: firstOpen != null && firstOpen > 0 ? firstOpen : points[0],
+              },
+            ] as const;
+          })
+        );
+
+        if (cancelled) return;
+
+        const next: Record<string, SparklineData> = {};
+        results.forEach((result) => {
+          if (result.status === 'fulfilled' && result.value) {
+            const [ticker, data] = result.value;
+            next[ticker] = data;
+          }
+        });
+        setMarketTapeCharts(next);
+      } catch {
+        if (!cancelled) setMarketTapeCharts({});
+      }
+    };
+
+    fetchTapeCharts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [overview]);
+
+  useEffect(() => {
+    let cancelled = false;
 
     const fetchLatestBrief = async () => {
       setIsLoadingBrief(true);
@@ -491,6 +649,13 @@ export default function PortfolioPulseDashboard({
       .map(([name, value]) => ({ name, value }))
       .filter((entry) => entry.value > 0);
   }, [widgets]);
+  const recommendationCards = useMemo(
+    () => ['BUY', 'HOLD', 'SELL', 'NO AI'].map((name) => ({
+      name,
+      value: recommendationBreakdown.find((entry) => entry.name === name)?.value ?? 0,
+    })),
+    [recommendationBreakdown]
+  );
 
   const portfolioSummary = useMemo(() => {
     const reportCoverage = widgets.filter((widget) => widget.has_report).length;
@@ -626,11 +791,15 @@ export default function PortfolioPulseDashboard({
       ? `${marketSummary.leader.name} ${formatPercent(marketSummary.leader.changePercent)}`
       : 'Sector leadership unavailable';
 
-    return `${positiveCount}/${total} tracked names are green today. Best relative move: ${best}. Market leadership is coming from ${leaderSector}.`;
+    return `${positiveCount}/${total} tracked tickers are green today. Best relative move: ${best}. Market leadership is coming from ${leaderSector}.`;
   }, [marketSummary.leader, portfolioSummary.advancers, portfolioSummary.bestPerformer, widgets.length]);
 
   const marketMoverRows = marketMovers[moversTab] ?? [];
   const topExposureMax = Math.max(1, ...(portfolioSummary.sectorExposure.slice(0, 6).map((item) => item.count)));
+  const topConvictionRows = [
+    ...portfolioSummary.convictionRows.slice(0, 6),
+    ...Array.from({ length: Math.max(0, 6 - portfolioSummary.convictionRows.length) }, () => null),
+  ];
   const radarWidgets = widgets
     .map((widget) => ({
       widget,
@@ -673,9 +842,9 @@ export default function PortfolioPulseDashboard({
           </div>
           <Link
             to="/brief"
-            className="rounded-full border border-slate-600/80 bg-slate-900/60 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-slate-400 hover:bg-slate-800"
+            className="rounded-full border border-emerald-400/30 bg-emerald-500/15 px-3 py-1.5 text-xs font-medium text-emerald-100 transition-colors hover:bg-emerald-500/20"
           >
-            History
+            Open Brief
           </Link>
         </div>
       </div>
@@ -735,25 +904,42 @@ export default function PortfolioPulseDashboard({
       )}
     </section>
   );
+  const recommendationPanel = (
+    <div className="rounded-[1.1rem] border border-white/10 bg-slate-950/30 p-3.5">
+      <div className="mb-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Coverage X Recomendations</p>
+      </div>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.18fr_0.82fr] lg:items-center">
+        <RecommendationDonut data={recommendationBreakdown} total={widgets.length} />
+        <div>
+          {widgets.length > 0 ? (
+            <div className="grid grid-cols-2 gap-2">
+              {recommendationCards.map((entry) => (
+                <div
+                  key={entry.name}
+                  className={`flex min-h-[84px] flex-col items-center justify-between rounded-[0.95rem] px-3 py-2 ${cardClassForRecommendation(entry.name)}`}
+                >
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-80">{formatRecommendationLabel(entry.name)}</div>
+                  <div className="text-2xl font-semibold tabular-nums">{entry.value}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5 text-sm text-slate-500">
+              No recommendation mix available yet.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
   const signalsPanel = (
     <DashboardPanel
-      title="Signals & Positioning"
-      subtitle="Portfolio call mix, conviction, sector tilt, and market sector leaders."
+      title="Market Context & Exposure"
+      subtitle="Sector concentration, leadership, and index breadth around your tracked tickers."
     >
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[0.92fr_1.08fr]">
-        <div className="space-y-3">
-          <RecommendationDonut data={recommendationBreakdown} total={widgets.length} />
-          <div className="grid grid-cols-2 gap-2">
-            {recommendationBreakdown.map((entry) => (
-              <div key={entry.name} className="rounded-[0.95rem] border border-slate-700/70 bg-slate-950/40 px-3 py-2">
-                <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: RECOMMENDATION_COLORS[entry.name] ?? '#64748b' }} />
-                  <span className="text-xs font-medium text-slate-300">{entry.name}</span>
-                </div>
-                <div className="mt-1 text-base font-semibold text-white">{entry.value}</div>
-              </div>
-            ))}
-          </div>
+      <div className="space-y-3">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[0.9fr_1.1fr]">
           <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Sector exposure</p>
@@ -782,101 +968,109 @@ export default function PortfolioPulseDashboard({
               </div>
             )}
           </div>
-        </div>
 
-        <div className="space-y-3">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <div className="rounded-[0.95rem] border border-emerald-400/20 bg-emerald-500/10 p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-100/80">Leader</p>
-              <p className="mt-1.5 text-sm font-semibold text-white">{marketSummary.leader?.name || '—'}</p>
-              <p className="mt-1 text-xs text-emerald-100/80">{formatPercent(marketSummary.leader?.changePercent)}</p>
-            </div>
-            <div className="rounded-[0.95rem] border border-rose-400/20 bg-rose-500/10 p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-100/80">Laggard</p>
-              <p className="mt-1.5 text-sm font-semibold text-white">{marketSummary.laggard?.name || '—'}</p>
-              <p className="mt-1 text-xs text-rose-100/80">{formatPercent(marketSummary.laggard?.changePercent)}</p>
-            </div>
-          </div>
-
-          <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Highest conviction</p>
-            <div className="space-y-2">
-              {portfolioSummary.convictionRows.length > 0 ? (
-                portfolioSummary.convictionRows.slice(0, 4).map((row) => (
-                  <button
-                    key={row.ticker}
-                    type="button"
-                    onClick={() => navigate(`/tickers/${row.ticker}`)}
-                    className="flex w-full items-center justify-between rounded-[0.95rem] border border-slate-700/70 bg-slate-900/70 px-3 py-2.5 text-left transition-colors hover:border-slate-500/70 hover:bg-slate-900"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-white">{row.ticker}</span>
-                        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${badgeClassForRecommendation(row.recommendation)}`}>
-                          {row.recommendation}
-                        </span>
-                      </div>
-                      <p className="mt-1 truncate text-[11px] text-slate-500">{row.name}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs font-semibold text-white">{row.signalScore != null ? `${row.signalScore.toFixed(1)}/10` : '—'}</p>
-                      <p className={`text-[11px] font-semibold ${row.dailyChangePercent >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
-                        {formatPercent(row.dailyChangePercent)}
-                      </p>
-                    </div>
-                  </button>
-                ))
-              ) : (
-                <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5 text-sm text-slate-500">
-                  Run AI analysis on subscribed names to populate conviction signals.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {overview ? (
-            <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Sector board</p>
-              <div className="h-[180px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={[...overview.sectors]
-                      .sort((a, b) => (b.changePercent ?? -Infinity) - (a.changePercent ?? -Infinity))
-                      .slice(0, 6)
-                      .map((item) => ({
-                        name: item.name.replace(' Select Sector SPDR Fund', '').replace('Communication Services', 'Comm'),
-                        changePercent: item.changePercent ?? 0,
-                      }))}
-                    margin={{ top: 8, right: 8, left: -20, bottom: 0 }}
-                  >
-                    <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 10 }} />
-                    <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={(value) => `${value}%`} />
-                    <Tooltip
-                      contentStyle={{
-                        background: '#0f172a',
-                        border: '1px solid rgba(71, 85, 105, 0.9)',
-                        borderRadius: '0.75rem',
-                        color: '#e2e8f0',
-                      }}
-                      formatter={(value) => [formatPercent(typeof value === 'number' ? value : null), 'Change']}
-                    />
-                    <Bar dataKey="changePercent" radius={[8, 8, 0, 0]}>
-                      {[...overview.sectors]
-                        .sort((a, b) => (b.changePercent ?? -Infinity) - (a.changePercent ?? -Infinity))
-                        .slice(0, 6)
-                        .map((item) => (
-                          <Cell key={item.ticker} fill={(item.changePercent ?? 0) >= 0 ? '#34d399' : '#f87171'} />
-                        ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="rounded-[0.95rem] border border-emerald-400/20 bg-emerald-500/10 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-100/80">Leader</p>
+                <p className="mt-1.5 text-sm font-semibold text-white">{marketSummary.leader?.name || '—'}</p>
+                <p className="mt-1 text-xs text-emerald-100/80">{formatPercent(marketSummary.leader?.changePercent)}</p>
+              </div>
+              <div className="rounded-[0.95rem] border border-rose-400/20 bg-rose-500/10 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-100/80">Laggard</p>
+                <p className="mt-1.5 text-sm font-semibold text-white">{marketSummary.laggard?.name || '—'}</p>
+                <p className="mt-1 text-xs text-rose-100/80">{formatPercent(marketSummary.laggard?.changePercent)}</p>
               </div>
             </div>
-          ) : (
-            <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5 text-sm text-slate-500">
-              {isLoadingMarket ? 'Loading market pulse...' : 'Market pulse unavailable.'}
-            </div>
-          )}
+
+            {overview ? (
+              <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Sector board</p>
+                  <span className="text-[11px] text-slate-400">
+                    Breadth {overview.sectors.length > 0 ? `${marketSummary.sectorsUp}/${overview.sectors.length}` : '—'}
+                  </span>
+                </div>
+                <div className="h-[180px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={[...overview.sectors]
+                        .sort((a, b) => (b.changePercent ?? -Infinity) - (a.changePercent ?? -Infinity))
+                        .slice(0, 6)
+                        .map((item) => ({
+                          name: item.name.replace(' Select Sector SPDR Fund', '').replace('Communication Services', 'Comm'),
+                          changePercent: item.changePercent ?? 0,
+                        }))}
+                      margin={{ top: 8, right: 8, left: -20, bottom: 0 }}
+                    >
+                      <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                      <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={(value) => `${value}%`} />
+                      <Tooltip
+                        contentStyle={{
+                          background: '#0f172a',
+                          border: '1px solid rgba(71, 85, 105, 0.9)',
+                          borderRadius: '0.75rem',
+                          color: '#e2e8f0',
+                        }}
+                        formatter={(value) => [formatPercent(typeof value === 'number' ? value : null), 'Change']}
+                      />
+                      <Bar dataKey="changePercent" radius={[8, 8, 0, 0]}>
+                        {[...overview.sectors]
+                          .sort((a, b) => (b.changePercent ?? -Infinity) - (a.changePercent ?? -Infinity))
+                          .slice(0, 6)
+                          .map((item) => (
+                            <Cell key={item.ticker} fill={(item.changePercent ?? 0) >= 0 ? '#34d399' : '#f87171'} />
+                          ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5 text-sm text-slate-500">
+                {isLoadingMarket ? 'Loading market pulse...' : 'Market pulse unavailable.'}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Market tape</p>
+            {marketSummary.leader && (
+              <span className="text-[11px] text-slate-400">Leader {marketSummary.leader.ticker}</span>
+            )}
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {(overview?.indices ?? []).slice(0, 6).map((indexItem) => (
+              <button
+                key={indexItem.ticker}
+                type="button"
+                onClick={() => navigate(`/tickers/${indexItem.ticker}`)}
+                className="rounded-[0.95rem] border border-slate-700/70 bg-slate-900/70 px-3 py-2 text-left transition-colors hover:border-slate-500/70 hover:bg-slate-900"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-xs font-semibold text-white">{indexItem.ticker}</p>
+                    <ChangePill value={indexItem.changePercent} />
+                  </div>
+                  <p className="mt-0.5 truncate text-[11px] text-slate-400">{indexItem.name}</p>
+                  <div className="mt-1 flex items-end justify-between gap-2">
+                    <p className="text-xs font-semibold text-slate-200">{formatMaybePrice(indexItem.price)}</p>
+                    <MiniSparkline
+                      chartData={marketTapeCharts[indexItem.ticker] ?? null}
+                      isPositive={(indexItem.changePercent ?? 0) >= 0}
+                    />
+                  </div>
+                </div>
+              </button>
+            ))}
+            {(!overview || overview.indices.length === 0) && (
+              <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5 text-sm text-slate-500">
+                {isLoadingMarket ? 'Loading market overview...' : 'Market overview unavailable.'}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </DashboardPanel>
@@ -892,21 +1086,15 @@ export default function PortfolioPulseDashboard({
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="max-w-2xl">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-200/80">Portfolio x Market Pulse</p>
-                <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-300">{heroSummary}</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Link
-                  to="/brief"
-                  className="inline-flex items-center rounded-full border border-emerald-400/30 bg-emerald-500/15 px-3.5 py-2 text-sm font-medium text-emerald-100 transition-colors hover:bg-emerald-500/20"
-                >
-                  Open Brief
-                </Link>
-                <Link
-                  to="/market"
-                  className="inline-flex items-center rounded-full border border-slate-500/60 bg-slate-900/60 px-3.5 py-2 text-sm font-medium text-slate-100 transition-colors hover:border-slate-400 hover:bg-slate-800"
-                >
-                  Market View
-                </Link>
+                <div className="mt-1.5 flex items-start justify-between gap-4">
+                  <p className="text-sm leading-6 text-slate-300">{heroSummary}</p>
+                  <Link
+                    to="/market"
+                    className="inline-flex shrink-0 items-center rounded-full border border-slate-500/60 bg-slate-900/60 px-3.5 py-2 text-sm font-medium text-slate-100 transition-colors hover:border-slate-400 hover:bg-slate-800"
+                  >
+                    Market View
+                  </Link>
+                </div>
               </div>
             </div>
 
@@ -937,7 +1125,7 @@ export default function PortfolioPulseDashboard({
               />
             </div>
 
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_0.95fr_1.05fr]">
               <div className="rounded-[1.1rem] border border-white/10 bg-slate-950/30 p-3.5">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">AI score ribbon</p>
@@ -947,29 +1135,14 @@ export default function PortfolioPulseDashboard({
                     </div>
                   )}
                 </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {portfolioSummary.averageScores.length > 0 ? (
                     portfolioSummary.averageScores.map((scoreRow) => (
-                      <div key={scoreRow.reportType} className="rounded-[0.95rem] border border-slate-700/70 bg-slate-900/70 px-3 py-2.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs text-slate-300">{scoreRow.label}</span>
-                          <span className={`text-xs font-semibold ${getScoreColor(scoreRow.averageScore ?? null)}`}>
-                            {(scoreRow.averageScore ?? 0).toFixed(1)}/10
-                          </span>
-                        </div>
-                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800">
-                          <div
-                            className={`h-full rounded-full ${
-                              (scoreRow.averageScore ?? 0) >= 7
-                                ? 'bg-emerald-400'
-                                : (scoreRow.averageScore ?? 0) >= 5
-                                  ? 'bg-amber-400'
-                                  : 'bg-rose-400'
-                            }`}
-                            style={{ width: `${((scoreRow.averageScore ?? 0) / 10) * 100}%` }}
-                          />
-                        </div>
-                      </div>
+                      <ScoreFillLine
+                        key={scoreRow.reportType}
+                        label={scoreRow.label}
+                        score={scoreRow.averageScore}
+                      />
                     ))
                   ) : (
                     <div className="rounded-[0.95rem] border border-dashed border-slate-700 bg-slate-950/40 px-3 py-4 text-sm text-slate-500">
@@ -979,36 +1152,39 @@ export default function PortfolioPulseDashboard({
                 </div>
               </div>
 
+              {recommendationPanel}
+
               <div className="rounded-[1.1rem] border border-white/10 bg-slate-950/30 p-3.5">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Market tape</p>
-                  {marketSummary.leader && (
-                    <span className="text-[11px] text-slate-400">Leader {marketSummary.leader.ticker}</span>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {(overview?.indices ?? []).slice(0, 4).map((indexItem) => (
-                    <button
-                      key={indexItem.ticker}
-                      type="button"
-                      onClick={() => navigate(`/tickers/${indexItem.ticker}`)}
-                      className="rounded-[0.95rem] border border-slate-700/70 bg-slate-900/70 px-3 py-2 text-left transition-colors hover:border-slate-500/70 hover:bg-slate-900"
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="truncate text-xs font-semibold text-white">{indexItem.ticker}</p>
-                          <ChangePill value={indexItem.changePercent} />
-                        </div>
-                        <p className="mt-0.5 truncate text-[11px] text-slate-400">{indexItem.name}</p>
-                        <p className="mt-1 text-xs font-semibold text-slate-200">{formatMaybePrice(indexItem.price)}</p>
+                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Highest conviction</p>
+                <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+                  {topConvictionRows.map((row, index) => (
+                    row ? (
+                      <button
+                        key={row.ticker}
+                        type="button"
+                        onClick={() => navigate(`/tickers/${row.ticker}`)}
+                        className="grid min-h-[64px] w-full grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1 rounded-[0.95rem] border border-slate-700/70 bg-slate-900/70 px-2.5 py-2 text-left transition-colors hover:border-slate-500/70 hover:bg-slate-900"
+                      >
+                        <p className="truncate text-[13px] font-semibold text-white">{row.ticker}</p>
+                        <p className="text-right text-[11px] font-semibold text-white">
+                          {row.signalScore != null ? `${row.signalScore.toFixed(1)}/10` : '—'}
+                        </p>
+                        <span className={`inline-flex w-fit rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${badgeClassForRecommendation(row.recommendation)}`}>
+                          {formatRecommendationLabel(row.recommendation)}
+                        </span>
+                        <p className={`text-right text-[10px] font-semibold ${row.dailyChangePercent >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                          {formatPercent(row.dailyChangePercent)}
+                        </p>
+                      </button>
+                    ) : (
+                      <div
+                        key={`conviction-placeholder-${index}`}
+                        className="flex min-h-[64px] items-center rounded-[0.95rem] border border-dashed border-slate-700 px-2.5 py-2 text-[13px] text-slate-500"
+                      >
+                        Run AI analysis to fill this slot.
                       </div>
-                    </button>
+                    )
                   ))}
-                  {(!overview || overview.indices.length === 0) && (
-                    <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5 text-sm text-slate-500">
-                      {isLoadingMarket ? 'Loading market overview...' : 'Market overview unavailable.'}
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
@@ -1025,9 +1201,9 @@ export default function PortfolioPulseDashboard({
                       key={widget.ticker}
                       type="button"
                       onClick={() => navigate(`/tickers/${widget.ticker}`)}
-                      className="flex items-center gap-3 rounded-[0.95rem] border border-slate-700/70 bg-slate-900/70 px-3 py-2.5 text-left transition-colors hover:border-slate-500/70 hover:bg-slate-900"
+                      className="flex items-center gap-3 rounded-[0.95rem] border border-slate-700/70 bg-slate-900/70 px-3 py-3 text-left transition-colors hover:border-slate-500/70 hover:bg-slate-900"
                     >
-                      <AspectSpiderChart scoreEntries={scoreEntries} size={56} />
+                      <AspectSpiderChart scoreEntries={scoreEntries} size={68} />
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-white">{widget.ticker}</p>
                         <p className="mt-0.5 text-[11px] text-slate-400">
@@ -1101,7 +1277,7 @@ export default function PortfolioPulseDashboard({
                     </div>
                   </button>
                 ) : (
-                  <p className="mt-2 text-sm text-slate-500">No tracked names yet.</p>
+                  <p className="mt-2 text-sm text-slate-500">No tracked tickers yet.</p>
                 )}
               </div>
               <div className="rounded-[0.95rem] border border-slate-700/70 bg-slate-950/40 p-2.5">
@@ -1122,7 +1298,7 @@ export default function PortfolioPulseDashboard({
                     </div>
                   </button>
                 ) : (
-                  <p className="mt-2 text-sm text-slate-500">No tracked names yet.</p>
+                  <p className="mt-2 text-sm text-slate-500">No tracked tickers yet.</p>
                 )}
               </div>
             </div>
