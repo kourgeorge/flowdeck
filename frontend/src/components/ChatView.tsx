@@ -5,7 +5,7 @@ import {
   AreaChart, Area, BarChart, Bar, LineChart, Line, ScatterChart, Scatter,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { chatApi, type ChatMessage, type ModelMetadataApi, type ToolCallEvent, type ChartSpec, type SkillActivationEvent } from '../services/api';
+import { chatApi, type ChatMessage, type ModelMetadataApi, type ToolCallEvent, type ChartSpec, type SkillActivationEvent, type ChatTurnStatus } from '../services/api';
 import { convertAsciiTableToMarkdown } from '../utils/chatMarkdown';
 import TickerMentionInput from './TickerMentionInput';
 import { getErrorMessage, isInsufficientTokensError, isAuthenticationError } from '../utils/errorHandling';
@@ -659,8 +659,6 @@ export function MessageBubble({
       <div className="flex-1 min-w-0">
         <div className="mb-1.5 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500">
           <span>AI Analyst</span>
-          <span className="h-1 w-1 rounded-full bg-slate-600" />
-          <span>Research Response</span>
         </div>
         {/* Skill activation blocks — shown above tool calls, with ⚡ icon */}
         {message.skill_activation_events && message.skill_activation_events.length > 0 && (
@@ -806,6 +804,8 @@ export interface UseChatStateReturn {
   clearChat: () => void;
   /** Clear loading/thinking state only (e.g. when switching to another conversation). */
   clearLoadingState: () => void;
+  /** Restore a server-owned running turn when reopening a session. */
+  restorePendingTurn: (status?: string | null) => void;
 }
 
 export function useChatState(
@@ -813,6 +813,8 @@ export function useChatState(
   context?: Record<string, unknown>,
   sessionId?: number | null,
   onStreamDone?: (newSessionId?: number) => void,
+  onStreamStart?: (sessionId: number) => void,
+  onTurnStarted?: (turn: ChatTurnStatus) => void,
   /** When provided and sessionId is null, called before send to create a session and show it in history immediately. */
   createSessionIfNeeded?: () => Promise<number | null>,
 ): UseChatStateReturn {
@@ -825,16 +827,16 @@ export function useChatState(
   const [tokenBalance, setTokenBalance] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
   const lastHiddenAtRef = useRef<number>(0);
-  /** When true, ignore any stream callbacks (e.g. after switching conversation). */
-  const ignoreStreamRef = useRef(false);
+  /** Only callbacks from the current visible stream may update the UI. */
+  const visibleStreamIdRef = useRef<number | null>(null);
+  const nextStreamIdRef = useRef(0);
 
-  // Cancel stream on unmount
+  // When the view unmounts, stop applying stream updates locally but let the
+  // network request continue so the backend can finish and persist the turn.
   useEffect(() => {
     return () => {
-      ignoreStreamRef.current = true;
-      abortRef.current?.abort();
+      visibleStreamIdRef.current = null;
     };
   }, []);
 
@@ -861,7 +863,11 @@ export function useChatState(
     if (!trimmed || isLoading || isStreaming) return;
 
     const doSend = async () => {
-      ignoreStreamRef.current = false;
+      const streamId = nextStreamIdRef.current + 1;
+      nextStreamIdRef.current = streamId;
+      visibleStreamIdRef.current = streamId;
+      const isVisibleStream = () => visibleStreamIdRef.current === streamId;
+
       const userMessage: ChatMessage = { role: 'user', content: trimmed };
       const newMessages = [...messages, userMessage];
       setMessages(newMessages);
@@ -878,6 +884,7 @@ export function useChatState(
         const newId = await createSessionIfNeeded();
         if (newId != null) effectiveSessionId = newId;
       }
+      if (effectiveSessionId != null) onStreamStart?.(effectiveSessionId);
 
       // When sessionId is set, backend loads history from DB; send only the new user message
       const apiMessages =
@@ -894,10 +901,10 @@ export function useChatState(
         ...(mergedTickers.length > 0 ? { tickers: mergedTickers } : {}),
       };
 
-      abortRef.current = chatApi.streamMessage(
+      chatApi.streamMessage(
       apiMessages,
       (chunk) => {
-        if (ignoreStreamRef.current) return;
+        if (!isVisibleStream()) return;
         setIsLoading(false);
         setIsStreaming(true);
         setThinkingStatus(null);
@@ -915,7 +922,8 @@ export function useChatState(
         });
       },
       (tokensUsed, balance, toolsCalled, followUpQuestions, newSessionId, platformTokensUsed, costUsd) => {
-        if (ignoreStreamRef.current) return;
+        if (!isVisibleStream()) return;
+        visibleStreamIdRef.current = null;
         setIsStreaming(false);
         setIsLoading(false);
         setThinkingStatus(null);
@@ -940,7 +948,8 @@ export function useChatState(
         });
       },
       (error) => {
-        if (ignoreStreamRef.current) return;
+        if (!isVisibleStream()) return;
+        visibleStreamIdRef.current = null;
         setIsStreaming(false);
         setIsLoading(false);
         setThinkingStatus(null);
@@ -962,12 +971,13 @@ export function useChatState(
           setError(getErrorMessage(error, 'Failed to get a response. Please try again.'));
         }
       },
+      onTurnStarted,
       (status) => {
-        if (ignoreStreamRef.current) return;
+        if (!isVisibleStream()) return;
         setThinkingStatus(status);
       },
       (toolCall) => {
-        if (ignoreStreamRef.current) return;
+        if (!isVisibleStream()) return;
         // Tool completed — clear the thinking status so the UI doesn't keep
         // showing the stale tool name while the LLM reasons over the results
         setThinkingStatus(null);
@@ -991,7 +1001,7 @@ export function useChatState(
       },
       mergedContext,
       (chartSpec) => {
-        if (ignoreStreamRef.current) return;
+        if (!isVisibleStream()) return;
         // Chart emitted by execute_python — attach to the assistant message
         setMessages((prev) => {
           const updated = [...prev];
@@ -1012,7 +1022,7 @@ export function useChatState(
         });
       },
       (skillEvent) => {
-        if (ignoreStreamRef.current) return;
+        if (!isVisibleStream()) return;
         // Skill workflow completed — attach to the assistant message
         setThinkingStatus(null);
         setMessages((prev) => {
@@ -1046,8 +1056,7 @@ export function useChatState(
   };
 
   const clearChat = () => {
-    abortRef.current?.abort();
-    abortRef.current = null;
+    visibleStreamIdRef.current = null;
     setMessages([]);
     setError(null);
     setIsLoading(false);
@@ -1056,12 +1065,18 @@ export function useChatState(
   };
 
   const clearLoadingState = () => {
-    ignoreStreamRef.current = true;
-    abortRef.current?.abort();
-    abortRef.current = null;
+    visibleStreamIdRef.current = null;
     setIsLoading(false);
     setIsStreaming(false);
     setThinkingStatus(null);
+  };
+
+  const restorePendingTurn = (status?: string | null) => {
+    visibleStreamIdRef.current = null;
+    setIsLoading(true);
+    setIsStreaming(false);
+    setThinkingStatus(status ?? 'Working…');
+    setError(null);
   };
 
   return {
@@ -1081,6 +1096,7 @@ export function useChatState(
     sendMessage,
     clearChat,
     clearLoadingState,
+    restorePendingTurn,
   };
 }
 

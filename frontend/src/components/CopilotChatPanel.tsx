@@ -92,11 +92,13 @@ export default function CopilotChatPanel({
 
   const [internalSessionId, setInternalSessionId] = useState<number | null>(null);
   const [sessions, setSessions] = useState<ChatSessionListItem[]>([]);
+  const [activeTurnId, setActiveTurnId] = useState<number | null>(null);
   // When external chat state: parent owns sessionId; else we use internal state
   const sessionId = useInternalSession ? internalSessionId : (externalSessionId ?? null);
   const setSessionId = useInternalSession ? setInternalSessionId : (onSessionIdChange ?? (() => {}));
   const [historyOpen, setHistoryOpen] = useState(false);
   const historyDropdownRef = useRef<HTMLDivElement>(null);
+  const turnPollTimeoutRef = useRef<number | null>(null);
 
   const refreshSessions = useCallback(() => {
     if (!user) return;
@@ -128,6 +130,16 @@ export default function CopilotChatPanel({
     [setSessionId, refreshSessions],
   );
 
+  const onStreamStart = useCallback(
+    (_runningSessionId: number) => {
+      refreshSessions();
+      if (typeof window === 'undefined') return;
+      window.setTimeout(() => refreshSessions(), 400);
+      window.setTimeout(() => refreshSessions(), 1800);
+    },
+    [refreshSessions],
+  );
+
   const createSessionIfNeeded = useCallback(async () => {
     const { id } = await chatApi.createChatSession();
     setSessionId(id);
@@ -140,9 +152,20 @@ export default function CopilotChatPanel({
     context,
     useInternalSession ? sessionId : undefined,
     useInternalSession ? onStreamDone : undefined,
+    useInternalSession ? onStreamStart : undefined,
+    undefined,
     useInternalSession ? createSessionIfNeeded : undefined,
   );
   const chat = externalChatState ?? internalChat;
+  const { isLoading, isStreaming } = chat;
+
+  const clearTurnPoll = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (turnPollTimeoutRef.current != null) {
+      window.clearTimeout(turnPollTimeoutRef.current);
+      turnPollTimeoutRef.current = null;
+    }
+  }, []);
 
   // Fetch token balance when user logs in
   useEffect(() => {
@@ -157,6 +180,17 @@ export default function CopilotChatPanel({
     if (!user) return;
     refreshSessions();
   }, [user, refreshSessions]);
+
+  useEffect(() => {
+    if (!user || typeof window === 'undefined') return undefined;
+    if (!sessions.some((session) => session.active_turn?.status === 'running')) return undefined;
+
+    const timeoutId = window.setTimeout(() => {
+      refreshSessions();
+    }, 2000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [refreshSessions, sessions, user]);
 
   // When parent provides a ref, let it trigger session list refresh after stream done
   useEffect(() => {
@@ -179,18 +213,27 @@ export default function CopilotChatPanel({
 
   const handleNewChat = useCallback(() => {
     if (!user) return;
+    setActiveTurnId(null);
+    clearTurnPoll();
     setSessionId(null);
     chat.clearChat();
-  }, [user, setSessionId, chat]);
+  }, [chat, clearTurnPoll, setSessionId, user]);
 
   const handleLoadSession = useCallback((id: number) => {
+    clearTurnPoll();
     chat.clearLoadingState();
     chatApi.getChatSession(id).then((detail) => {
       setSessionId(detail.id);
       chat.setMessages(detail.messages.map(apiMessageToChatMessageWithMeta));
+      if (detail.active_turn?.status === 'running') {
+        setActiveTurnId(detail.active_turn.id);
+        chat.restorePendingTurn(detail.active_turn.last_thinking_status ?? 'Working…');
+      } else {
+        setActiveTurnId(null);
+      }
       setHistoryOpen(false);
     }).catch(() => {});
-  }, [chat, setSessionId]);
+  }, [chat, clearTurnPoll, setSessionId]);
 
   const handleDeleteSession = useCallback((id: number, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -198,11 +241,69 @@ export default function CopilotChatPanel({
     chatApi.deleteChatSession(id).then(() => {
       setSessions((prev) => prev.filter((s) => s.id !== id));
       if (sessionId === id) {
+        setActiveTurnId(null);
+        clearTurnPoll();
         setSessionId(null);
         chat.clearChat();
       }
     }).catch(() => {});
-  }, [sessionId, chat]);
+  }, [chat, clearTurnPoll, sessionId, setSessionId]);
+
+  useEffect(() => {
+    if (!user || sessionId == null) return;
+    const runningTurn = sessions.find((session) => session.id === sessionId)?.active_turn;
+    if (runningTurn?.status !== 'running') return;
+
+    if (activeTurnId !== runningTurn.id) {
+      setActiveTurnId(runningTurn.id);
+    }
+    if (!isLoading && !isStreaming) {
+      chat.restorePendingTurn(runningTurn.last_thinking_status ?? 'Working…');
+    }
+  }, [activeTurnId, chat, isLoading, isStreaming, sessionId, sessions, user]);
+
+  useEffect(() => {
+    if (!user || activeTurnId == null || typeof window === 'undefined') return undefined;
+
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const turn = await chatApi.getChatTurn(activeTurnId);
+        if (cancelled) return;
+        if (turn.status === 'running') {
+          chat.restorePendingTurn(turn.last_thinking_status ?? 'Working…');
+          turnPollTimeoutRef.current = window.setTimeout(poll, 2000);
+          return;
+        }
+
+        const detail = await chatApi.getChatSession(turn.session_id);
+        if (cancelled) return;
+        setSessionId(detail.id);
+        chat.setMessages(detail.messages.map(apiMessageToChatMessageWithMeta));
+        setActiveTurnId(null);
+        chat.clearLoadingState();
+        refreshSessions();
+        if (turn.status === 'failed') {
+          chat.setError(turn.error_message ?? 'The agent failed to complete this reply.');
+        }
+      } catch {
+        if (!cancelled) {
+          setActiveTurnId(null);
+          chat.clearLoadingState();
+        }
+      }
+    };
+
+    turnPollTimeoutRef.current = window.setTimeout(poll, 2000);
+
+    return () => {
+      cancelled = true;
+      clearTurnPoll();
+    };
+  }, [activeTurnId, chat, clearTurnPoll, refreshSessions, setSessionId, user]);
+
+  useEffect(() => () => clearTurnPoll(), [clearTurnPoll]);
 
   // Focus input when panel expands
   useEffect(() => {
@@ -322,8 +423,22 @@ export default function CopilotChatPanel({
                                 : 'border-transparent hover:bg-gray-700/40 text-slate-300'
                             }`}
                           >
-                            <span className="block truncate" title={s.title ?? undefined}>
-                              {s.title || 'New chat'}
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span
+                                className={`h-2 w-2 shrink-0 rounded-full ${
+                                  s.active_turn?.status === 'running'
+                                    ? 'animate-pulse bg-emerald-400 shadow-[0_0_0_4px_rgba(74,222,128,0.12)]'
+                                    : sessionId === s.id
+                                      ? 'bg-blue-400'
+                                      : 'bg-slate-600'
+                                }`}
+                              />
+                              <span className="block truncate" title={s.title ?? undefined}>
+                                {s.title || 'New chat'}
+                              </span>
+                            </div>
+                            <span className="mt-0.5 block truncate text-[11px] text-slate-500">
+                              {s.active_turn?.status === 'running' ? 'Working…' : ''}
                             </span>
                           </button>
                           <button

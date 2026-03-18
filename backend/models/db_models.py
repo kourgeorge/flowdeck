@@ -133,6 +133,7 @@ class ChatSession(Base):
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan", order_by="ChatMessage.sort_order")
+    turns = relationship("ChatTurn", back_populates="session", cascade="all, delete-orphan", order_by="ChatTurn.created_at")
 
     __table_args__ = (
         Index("idx_chat_sessions_user_updated", "user_id", "updated_at"),
@@ -160,6 +161,29 @@ class ChatMessage(Base):
 
     __table_args__ = (
         Index("idx_chat_messages_session_id", "session_id"),
+    )
+
+
+class ChatTurn(Base):
+    """Server-owned execution state for one chat turn."""
+    __tablename__ = "chat_turns"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(Integer, ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(32), nullable=False, default="running", index=True)  # running | completed | failed
+    user_message_id = Column(Integer, ForeignKey("chat_messages.id", ondelete="SET NULL"), nullable=True)
+    assistant_message_id = Column(Integer, ForeignKey("chat_messages.id", ondelete="SET NULL"), nullable=True)
+    last_thinking_status = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    session = relationship("ChatSession", back_populates="turns", foreign_keys=[session_id])
+
+    __table_args__ = (
+        Index("idx_chat_turns_session_status", "session_id", "status"),
+        Index("idx_chat_turns_user_created", "user_id", "created_at"),
     )
 
 

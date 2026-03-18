@@ -3,7 +3,7 @@ import ChatView, { useChatState, type ChatMessageWithMeta } from '../components/
 import PageHeader from '../components/PageHeader';
 import { useAuth } from '../contexts/AuthContext';
 import { profileApi } from '../services/authApi';
-import { chatApi, type ChatMessageWithMetaApi, type ChatSessionListItem } from '../services/api';
+import { chatApi, type ChatMessageWithMetaApi, type ChatSessionListItem, type ChatTurnStatus } from '../services/api';
 
 const SUGGESTED_QUESTIONS = [
   "What's the current price and today's performance for AAPL?",
@@ -69,11 +69,13 @@ function getStoredActiveSessionId(): number | null {
 function HistoryList({
   sessions,
   activeSessionId,
+  runningTurnsBySession,
   onOpenSession,
   onDeleteSession,
 }: {
   sessions: ChatSessionListItem[];
   activeSessionId: number | null;
+  runningTurnsBySession: Record<number, ChatTurnStatus>;
   onOpenSession: (id: number) => void;
   onDeleteSession: (id: number, e: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
@@ -89,6 +91,8 @@ function HistoryList({
     <ul className="space-y-2">
       {sessions.map((session) => {
         const isActive = activeSessionId === session.id;
+        const runningTurn = runningTurnsBySession[session.id] ?? session.active_turn;
+        const isRunning = runningTurn?.status === 'running';
 
         return (
           <li
@@ -105,12 +109,22 @@ function HistoryList({
                 onClick={() => onOpenSession(session.id)}
                 className="flex min-w-0 flex-1 items-start gap-3 text-left"
               >
-                <div className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${isActive ? 'bg-blue-400' : 'bg-slate-600 group-hover:bg-slate-400'}`} />
+                <div
+                  className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${
+                    isRunning
+                      ? 'animate-pulse bg-emerald-400 shadow-[0_0_0_4px_rgba(74,222,128,0.12)]'
+                      : isActive
+                        ? 'bg-blue-400'
+                        : 'bg-slate-600 group-hover:bg-slate-400'
+                  }`}
+                />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium text-slate-100" title={session.title ?? undefined}>
                     {session.title || 'New chat'}
                   </div>
-                  <div className="mt-1 text-xs text-slate-500">{formatSessionTimestamp(session.updated_at)}</div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    {isRunning ? 'Working…' : formatSessionTimestamp(session.updated_at)}
+                  </div>
                 </div>
               </button>
               <div>
@@ -144,9 +158,9 @@ export default function ChatPage() {
     if (typeof window === 'undefined') return false;
     return window.innerWidth < 1024;
   });
-  const [pendingRestoredSessionId, setPendingRestoredSessionId] = useState<number | null>(null);
+  const [runningTurnsBySession, setRunningTurnsBySession] = useState<Record<number, ChatTurnStatus>>({});
   const restoreAttemptedRef = useRef(false);
-  const restorePollTimeoutRef = useRef<number | null>(null);
+  const turnPollTimeoutRef = useRef<number | null>(null);
 
   const refreshSessions = useCallback(() => {
     if (!user) return;
@@ -161,6 +175,16 @@ export default function ChatPage() {
     [refreshSessions],
   );
 
+  const onStreamStart = useCallback(
+    (_runningSessionId: number) => {
+      refreshSessions();
+      if (typeof window === 'undefined') return;
+      window.setTimeout(() => refreshSessions(), 400);
+      window.setTimeout(() => refreshSessions(), 1800);
+    },
+    [refreshSessions],
+  );
+
   const createSessionIfNeeded = useCallback(async () => {
     const { id } = await chatApi.createChatSession();
     setSessionId(id);
@@ -168,14 +192,58 @@ export default function ChatPage() {
     return id;
   }, [refreshSessions]);
 
-  const chat = useChatState(undefined, undefined, sessionId, onStreamDone, createSessionIfNeeded);
-  const { inputRef, setTokenBalance, clearLoadingState, setMessages, clearChat, messages } = chat;
+  const upsertRunningTurn = useCallback((turn: ChatTurnStatus) => {
+    setRunningTurnsBySession((prev) => {
+      const current = prev[turn.session_id];
+      if (
+        current &&
+        current.id === turn.id &&
+        current.status === turn.status &&
+        current.last_thinking_status === turn.last_thinking_status &&
+        current.error_message === turn.error_message
+      ) {
+        return prev;
+      }
+      return { ...prev, [turn.session_id]: turn };
+    });
+  }, []);
 
-  const clearRestorePoll = useCallback(() => {
+  const removeRunningTurn = useCallback((targetSessionId: number) => {
+    setRunningTurnsBySession((prev) => {
+      if (!(targetSessionId in prev)) return prev;
+      const next = { ...prev };
+      delete next[targetSessionId];
+      return next;
+    });
+  }, []);
+
+  const chat = useChatState(
+    undefined,
+    undefined,
+    sessionId,
+    onStreamDone,
+    onStreamStart,
+    upsertRunningTurn,
+    createSessionIfNeeded,
+  );
+  const {
+    inputRef,
+    setTokenBalance,
+    clearLoadingState,
+    restorePendingTurn,
+    setMessages,
+    clearChat,
+    messages,
+    setError,
+    isLoading,
+    isStreaming,
+  } = chat;
+
+  const clearTurnPoll = useCallback(() => {
     if (typeof window === 'undefined') return;
-    if (restorePollTimeoutRef.current != null) {
-      window.clearTimeout(restorePollTimeoutRef.current);
-      restorePollTimeoutRef.current = null;
+    if (turnPollTimeoutRef.current != null) {
+      window.clearTimeout(turnPollTimeoutRef.current);
+      turnPollTimeoutRef.current = null;
     }
   }, []);
 
@@ -200,7 +268,7 @@ export default function ChatPage() {
       setDisplayName(null);
       setSessions([]);
       setSessionId(null);
-      setPendingRestoredSessionId(null);
+      setRunningTurnsBySession({});
       setHistoryCollapsed(true);
       if (typeof window !== 'undefined') {
         window.localStorage.removeItem(ACTIVE_CHAT_SESSION_STORAGE_KEY);
@@ -219,9 +287,53 @@ export default function ChatPage() {
   }, [refreshSessions]);
 
   useEffect(() => {
+    setRunningTurnsBySession((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const session of sessions) {
+        const turn = session.active_turn?.status === 'running' ? session.active_turn : null;
+        const current = next[session.id];
+
+        if (!turn) {
+          if (current) {
+            delete next[session.id];
+            changed = true;
+          }
+          continue;
+        }
+
+        if (
+          !current ||
+          current.id !== turn.id ||
+          current.status !== turn.status ||
+          current.last_thinking_status !== turn.last_thinking_status ||
+          current.error_message !== turn.error_message
+        ) {
+          next[turn.session_id] = turn;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [sessions]);
+
+  useEffect(() => {
+    if (!user || typeof window === 'undefined') return undefined;
+    if (Object.keys(runningTurnsBySession).length === 0 && !sessions.some((session) => session.active_turn?.status === 'running')) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      refreshSessions();
+    }, 2000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [refreshSessions, runningTurnsBySession, sessions, user]);
+
+  useEffect(() => {
     restoreAttemptedRef.current = false;
-    clearRestorePoll();
-  }, [clearRestorePoll, user]);
+    clearTurnPoll();
+  }, [clearTurnPoll, user]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -240,18 +352,22 @@ export default function ChatPage() {
   const openSessionById = useCallback(
     async (
       id: number,
-      options?: { collapseHistory?: boolean; pollIfEmpty?: boolean },
+      options?: { collapseHistory?: boolean },
     ) => {
-      clearRestorePoll();
       clearLoadingState();
       const detail = await chatApi.getChatSession(id);
       setSessionId(detail.id);
       setMessages(detail.messages.map(apiMessageToChatMessageWithMeta));
+      if (detail.active_turn?.status === 'running') {
+        upsertRunningTurn(detail.active_turn);
+        restorePendingTurn(detail.active_turn.last_thinking_status ?? 'Working…');
+      } else {
+        removeRunningTurn(detail.id);
+      }
       if ((options?.collapseHistory ?? true) && isMobileHistory) setHistoryCollapsed(true);
-      setPendingRestoredSessionId(options?.pollIfEmpty && detail.messages.length === 0 ? detail.id : null);
       return detail;
     },
-    [clearLoadingState, clearRestorePoll, isMobileHistory, setMessages],
+    [clearLoadingState, isMobileHistory, removeRunningTurn, restorePendingTurn, setMessages, upsertRunningTurn],
   );
 
   useEffect(() => {
@@ -265,51 +381,78 @@ export default function ChatPage() {
     restoreAttemptedRef.current = true;
     if (storedSessionId == null) return;
 
-    openSessionById(storedSessionId, { collapseHistory: false, pollIfEmpty: true }).catch(() => {
+    openSessionById(storedSessionId, { collapseHistory: false }).catch(() => {
       if (typeof window !== 'undefined') {
         window.localStorage.removeItem(ACTIVE_CHAT_SESSION_STORAGE_KEY);
       }
-      setPendingRestoredSessionId(null);
+      removeRunningTurn(storedSessionId);
     });
-  }, [messages.length, openSessionById, sessionId, user]);
+  }, [messages.length, openSessionById, removeRunningTurn, sessionId, user]);
 
   useEffect(() => {
-    if (!user || pendingRestoredSessionId == null || typeof window === 'undefined') return undefined;
+    if (!user || typeof window === 'undefined') return undefined;
+    const runningTurns = Object.values(runningTurnsBySession).filter(
+      (turn) => turn.status === 'running' && turn.id > 0,
+    );
+    if (runningTurns.length === 0) return undefined;
 
     let cancelled = false;
-    let attempts = 0;
 
     const poll = async () => {
-      attempts += 1;
       try {
-        const detail = await chatApi.getChatSession(pendingRestoredSessionId);
+        const results = await Promise.all(runningTurns.map((turn) => chatApi.getChatTurn(turn.id)));
         if (cancelled) return;
-        if (detail.messages.length > 0) {
-          setSessionId(detail.id);
+
+        const completedTurns: ChatTurnStatus[] = [];
+        for (const turn of results) {
+          if (turn.status === 'running') {
+            upsertRunningTurn(turn);
+            continue;
+          }
+          completedTurns.push(turn);
+          removeRunningTurn(turn.session_id);
+        }
+
+        for (const turn of completedTurns) {
+          if (turn.session_id !== sessionId) continue;
+          const detail = await chatApi.getChatSession(turn.session_id);
+          if (cancelled) return;
           setMessages(detail.messages.map(apiMessageToChatMessageWithMeta));
-          setPendingRestoredSessionId(null);
+          clearLoadingState();
+          if (turn.status === 'failed') {
+            setError(turn.error_message ?? 'The agent failed to complete this reply.');
+          }
+        }
+
+        if (completedTurns.length > 0) {
           refreshSessions();
-          return;
         }
-        if (attempts >= 10) {
-          setPendingRestoredSessionId(null);
-          return;
-        }
-        restorePollTimeoutRef.current = window.setTimeout(poll, 2000);
+        turnPollTimeoutRef.current = window.setTimeout(poll, 2000);
       } catch {
-        if (!cancelled) setPendingRestoredSessionId(null);
+        if (!cancelled) {
+          turnPollTimeoutRef.current = window.setTimeout(poll, 2000);
+        }
       }
     };
 
-    restorePollTimeoutRef.current = window.setTimeout(poll, 2000);
+    turnPollTimeoutRef.current = window.setTimeout(poll, 2000);
 
     return () => {
       cancelled = true;
-      clearRestorePoll();
+      clearTurnPoll();
     };
-  }, [clearRestorePoll, pendingRestoredSessionId, refreshSessions, setMessages, user]);
+  }, [clearLoadingState, clearTurnPoll, refreshSessions, removeRunningTurn, runningTurnsBySession, sessionId, setError, setMessages, upsertRunningTurn, user]);
 
-  useEffect(() => () => clearRestorePoll(), [clearRestorePoll]);
+  useEffect(() => {
+    if (!user || sessionId == null) return;
+    const runningTurn = runningTurnsBySession[sessionId] ?? sessions.find((session) => session.id === sessionId)?.active_turn;
+    if (runningTurn?.status !== 'running') return;
+    if (!isLoading && !isStreaming) {
+      restorePendingTurn(runningTurn.last_thinking_status ?? 'Working…');
+    }
+  }, [isLoading, isStreaming, restorePendingTurn, runningTurnsBySession, sessionId, sessions, user]);
+
+  useEffect(() => () => clearTurnPoll(), [clearTurnPoll]);
 
   const handleOpenSession = (id: number) => {
     openSessionById(id).catch(() => {});
@@ -321,9 +464,9 @@ export default function ChatPage() {
 
     chatApi.deleteChatSession(id).then(() => {
       setSessions((prev) => prev.filter((session) => session.id !== id));
+      removeRunningTurn(id);
       if (sessionId === id) {
         setSessionId(null);
-        setPendingRestoredSessionId(null);
         clearChat();
         if (typeof window !== 'undefined') {
           window.localStorage.removeItem(ACTIVE_CHAT_SESSION_STORAGE_KEY);
@@ -349,9 +492,7 @@ export default function ChatPage() {
   const currentSession = sessions.find((session) => session.id === sessionId) ?? null;
   const startNewChat = () => {
     setSessionId(null);
-    setPendingRestoredSessionId(null);
     clearChat();
-    clearRestorePoll();
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem(ACTIVE_CHAT_SESSION_STORAGE_KEY);
     }
@@ -461,6 +602,7 @@ export default function ChatPage() {
               <HistoryList
                 sessions={sessionsByRecency}
                 activeSessionId={sessionId}
+                runningTurnsBySession={runningTurnsBySession}
                 onOpenSession={handleOpenSession}
                 onDeleteSession={handleDeleteSession}
               />
@@ -537,6 +679,7 @@ export default function ChatPage() {
                   <HistoryList
                     sessions={sessionsByRecency}
                     activeSessionId={sessionId}
+                    runningTurnsBySession={runningTurnsBySession}
                     onOpenSession={handleOpenSession}
                     onDeleteSession={handleDeleteSession}
                   />

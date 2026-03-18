@@ -75,6 +75,13 @@ export default function CopilotPage() {
     chatRefreshSessionsRef.current?.();
   }, []);
 
+  const onStreamStart = useCallback((_runningSessionId: number) => {
+    chatRefreshSessionsRef.current?.();
+    if (typeof window === 'undefined') return;
+    window.setTimeout(() => chatRefreshSessionsRef.current?.(), 400);
+    window.setTimeout(() => chatRefreshSessionsRef.current?.(), 1800);
+  }, []);
+
   const createSessionIfNeeded = useCallback(async () => {
     const { id } = await chatApi.createChatSession();
     setSessionId(id);
@@ -83,7 +90,7 @@ export default function CopilotPage() {
   }, []);
 
   // Lift chat state to parent component so it persists across tab switches in mobile mode
-  const chatState = useChatState(undefined, context, sessionId, onStreamDone, createSessionIfNeeded);
+  const chatState = useChatState(undefined, context, sessionId, onStreamDone, onStreamStart, undefined, createSessionIfNeeded);
 
   const startChatResize = useCallback((clientX: number) => {
     isResizing.current = true;

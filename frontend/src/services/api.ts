@@ -972,6 +972,7 @@ export interface ChatResponse {
   balance: number;
   follow_up_questions?: string[];
   session_id?: number | null;
+  turn_id?: number | null;
   llm_usage?: { cost_usd?: number };
 }
 
@@ -1008,7 +1009,7 @@ export interface ChartSpec {
 }
 
 export interface ChatStreamEvent {
-  type: 'token' | 'done' | 'error' | 'thinking' | 'tool_call' | 'chart' | 'skill_start' | 'skill_step' | 'skill_done';
+  type: 'started' | 'token' | 'done' | 'error' | 'thinking' | 'tool_call' | 'chart' | 'skill_start' | 'skill_step' | 'skill_done';
   content?: string;
   tokens_used?: number;
   /** Platform tokens deducted (show this in the UI) */
@@ -1017,6 +1018,7 @@ export interface ChatStreamEvent {
   balance?: number;
   follow_up_questions?: string[];
   session_id?: number;
+  turn_id?: number;
   llm_usage?: { cost_usd?: number };
   // tool_call fields
   name?: string;
@@ -1037,6 +1039,7 @@ export interface ChatSessionListItem {
   id: number;
   title: string | null;
   updated_at: string;
+  active_turn?: ChatTurnStatus | null;
 }
 
 /** Model metadata stored per assistant message (provider, tokens, cost) */
@@ -1076,6 +1079,17 @@ export interface ChatSessionDetail {
   created_at: string;
   updated_at: string;
   messages: ChatMessageWithMetaApi[];
+  active_turn?: ChatTurnStatus | null;
+}
+
+export interface ChatTurnStatus {
+  id: number;
+  session_id: number;
+  status: 'running' | 'completed' | 'failed';
+  last_thinking_status?: string | null;
+  error_message?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 export const chatApi = {
@@ -1119,6 +1133,14 @@ export const chatApi = {
     return res.data;
   },
 
+  getChatTurn: async (turnId: number): Promise<ChatTurnStatus> => {
+    const token = getStoredToken();
+    const res = await api.get<ChatTurnStatus>(`/api/chat/turns/${turnId}`, {
+      headers: { ...(token && { Authorization: `Bearer ${token}` }) },
+    });
+    return res.data;
+  },
+
   deleteChatSession: async (sessionId: number): Promise<void> => {
     const token = getStoredToken();
     await api.delete(`/api/chat/sessions/${sessionId}`, {
@@ -1128,7 +1150,7 @@ export const chatApi = {
 
   /**
    * Stream a chat response via SSE.
-   * When sessionId is set, backend loads session history and persists new messages on done.
+   * The server now owns persistence and turn lifecycle. The SSE stream is only a live view.
    * Calls `onToken` for each incremental text chunk,
    * `onThinking` for tool-call progress status messages,
    * `onToolCall` for each tool execution (name, input, output),
@@ -1143,6 +1165,7 @@ export const chatApi = {
     onToken: (chunk: string) => void,
     onDone: (tokensUsed: number, balance: number, toolsCalled: number, followUpQuestions?: string[], sessionId?: number, platformTokensUsed?: number, costUsd?: number) => void,
     onError: (message: string) => void,
+    onTurnStarted?: (turn: ChatTurnStatus) => void,
     onThinking?: (status: string) => void,
     onToolCall?: (toolCall: ToolCallEvent) => void,
     context?: Record<string, unknown>,
@@ -1200,7 +1223,13 @@ export const chatApi = {
             if (!jsonStr) continue;
             try {
               const event: ChatStreamEvent = JSON.parse(jsonStr);
-              if (event.type === 'token' && event.content) {
+              if (event.type === 'started' && event.turn_id != null && event.session_id != null) {
+                onTurnStarted?.({
+                  id: event.turn_id,
+                  session_id: event.session_id,
+                  status: 'running',
+                });
+              } else if (event.type === 'token' && event.content) {
                 onToken(event.content);
               } else if (event.type === 'thinking' && event.content) {
                 onThinking?.(event.content);

@@ -32,6 +32,7 @@ def init_db() -> None:
         ApiKey,
         ChatMessage,
         ChatSession,
+        ChatTurn,
         Execution,
         Report,
         ReportView,

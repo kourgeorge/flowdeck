@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from auth import get_current_user
-from database import get_db, SessionLocal
+from database import get_db
 from models.db_models import ChatMessage
 from services import token_service
 from services.chat_persistence import (
@@ -26,20 +26,13 @@ from services.chat_persistence import (
     delete_session_for_user,
     get_session_for_user,
     list_sessions_for_user,
-    save_assistant_message,
-    save_user_message,
-    update_session_after_messages,
 )
-from services.chat_service import get_chat_service
-
-
-def _build_model_metadata(llm_usage: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """Build model_metadata dict from agent llm_usage + provider for storage."""
-    if not llm_usage:
-        return None
-    from ai_engine.llm_provider import get_config_from_env
-    provider = get_config_from_env().get("llm_provider", "openai")
-    return {**llm_usage, "provider": provider}
+from services.chat_turn_service import (
+    get_active_turn_for_session,
+    get_chat_turn_service,
+    get_turn_for_user,
+    turn_to_payload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +57,7 @@ class ChatResponse(BaseModel):
     balance: int
     follow_up_questions: Optional[List[str]] = None
     session_id: Optional[int] = None  # set when backend created a new session for this turn
+    turn_id: Optional[int] = None
     llm_usage: Optional[Dict[str, Any]] = None  # input_tokens, output_tokens, cost_usd, per_call
 
 
@@ -93,10 +87,21 @@ class ChatSessionOut(BaseModel):
     updated_at: str
 
 
+class ChatTurnStatusOut(BaseModel):
+    id: int
+    session_id: int
+    status: str
+    last_thinking_status: Optional[str] = None
+    error_message: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
 class SessionListItem(BaseModel):
     id: int
     title: Optional[str] = None
     updated_at: str
+    active_turn: Optional[ChatTurnStatusOut] = None
 
 
 class SessionListResponse(BaseModel):
@@ -109,6 +114,7 @@ class SessionDetailResponse(BaseModel):
     created_at: str
     updated_at: str
     messages: List[ChatMessageOut]
+    active_turn: Optional[ChatTurnStatusOut] = None
 
 
 def _message_to_out(m: ChatMessage) -> ChatMessageOut:
@@ -168,64 +174,6 @@ def _message_to_out(m: ChatMessage) -> ChatMessageOut:
     )
 
 
-def _persist_turn_on_done(
-    db: Session,
-    user_id: int,
-    session_id_for_persist: Optional[int],
-    existing_message_count: int,
-    body_messages: List[ChatMessageIn],
-    acc_content: List[str],
-    acc_tool_calls: List[Dict[str, Any]],
-    acc_skill_events: List[Dict[str, Any]],
-    acc_charts: List[Dict[str, Any]],
-    tokens_used: int,
-    model_metadata: Optional[Dict[str, Any]] = None,
-    tools_called: Optional[int] = None,
-    follow_up_questions: Optional[List[str]] = None,
-) -> Optional[int]:
-    """
-    Deduct tokens, create session if needed, save user + assistant messages, update session.
-    Returns session id (new or existing) or None.
-    """
-    try:
-        token_service.deduct_for_chat(user_id, tokens_used, db)
-    except Exception as deduct_err:
-        logger.warning("Failed to deduct tokens for user_id=%s: %s", user_id, deduct_err)
-    sid: Optional[int] = session_id_for_persist
-    if not body_messages:
-        return sid
-    try:
-        if sid is None:
-            new_session = create_session_for_user(db, user_id)
-            sid = new_session.id
-        base_order = existing_message_count if session_id_for_persist is not None else 0
-        for i, um in enumerate(body_messages):
-            save_user_message(db, sid, um.content, base_order + i)
-        assistant_content = "".join(acc_content)
-        save_assistant_message(
-            db,
-            sid,
-            assistant_content,
-            base_order + len(body_messages),
-            model_metadata=model_metadata,
-            tools_called=tools_called,
-            tool_calls=acc_tool_calls if acc_tool_calls else None,
-            skill_events=acc_skill_events if acc_skill_events else None,
-            charts=acc_charts if acc_charts else None,
-            follow_up_questions=follow_up_questions,
-        )
-        update_session_after_messages(
-            db,
-            sid,
-            first_user_content=body_messages[0].content if body_messages else None,
-        )
-        db.commit()
-    except Exception as persist_err:
-        logger.exception("Failed to persist chat turn: %s", persist_err)
-        db.rollback()
-    return sid
-
-
 @router.get("/chat/sessions", response_model=SessionListResponse)
 async def list_sessions(
     current_user=Depends(get_current_user),
@@ -240,6 +188,11 @@ async def list_sessions(
                 id=s.id,
                 title=s.title,
                 updated_at=s.updated_at.isoformat() if s.updated_at else "",
+                active_turn=(
+                    ChatTurnStatusOut(**turn_to_payload(active_turn))
+                    if (active_turn := get_active_turn_for_session(db, s.id, current_user.id)) is not None
+                    else None
+                ),
             )
             for s in sessions
         ]
@@ -280,7 +233,24 @@ async def get_session(
         created_at=session.created_at.isoformat() if session.created_at else "",
         updated_at=session.updated_at.isoformat() if session.updated_at else "",
         messages=[_message_to_out(m) for m in messages],
+        active_turn=(
+            ChatTurnStatusOut(**turn_to_payload(active_turn))
+            if (active_turn := get_active_turn_for_session(db, session.id, current_user.id)) is not None
+            else None
+        ),
     )
+
+
+@router.get("/chat/turns/{turn_id}", response_model=ChatTurnStatusOut)
+async def get_turn_status(
+    turn_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    turn = get_turn_for_user(db, turn_id, current_user.id)
+    if turn is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Turn not found")
+    return ChatTurnStatusOut(**turn_to_payload(turn))
 
 
 @router.delete("/chat/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -308,7 +278,6 @@ async def chat(
     - Minimum cost: 1 token per message.
     - Returns 402 if the user has insufficient token balance.
     """
-    # Check user has at least 1 token
     balance = token_service.get_balance(current_user.id, db)
     if balance < 1:
         raise HTTPException(
@@ -318,81 +287,44 @@ async def chat(
 
     user_id = current_user.id
     context = body.context or {}
+    turn_service = get_chat_turn_service()
 
-    # When session_id is set, load session messages and prepend to request messages
-    if body.session_id is not None:
-        session = get_session_for_user(db, body.session_id, user_id)
-        if session is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
-        db_messages = [{"role": m.role, "content": m.content} for m in session.messages]
-        messages = db_messages + [{"role": m.role, "content": m.content} for m in body.messages]
-        existing_message_count = len(db_messages)
-    else:
-        messages = [{"role": m.role, "content": m.content} for m in body.messages]
-        existing_message_count = 0
-
-    # Run the agent in a thread pool (blocking LangChain calls)
     try:
-        service = get_chat_service()
-        result = await asyncio.to_thread(service.chat, messages, user_id, db, context)
+        turn_id, session_id, messages = turn_service.prepare_turn(
+            user_id=user_id,
+            body_messages=[{"role": m.role, "content": m.content} for m in body.messages],
+            session_id=body.session_id,
+        )
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
     except Exception as e:
-        logger.exception("Chat agent failed for user_id=%s: %s", current_user.id, e)
+        logger.exception("Failed to prepare chat turn for user_id=%s: %s", current_user.id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Chat agent error: {str(e)}",
+            detail="Failed to prepare chat turn",
         )
 
-    reply = result.get("reply", "")
-    tokens_used = result.get("tokens_used", 1)
-    platform_tokens_used = token_service.llm_tokens_to_platform_tokens(tokens_used)
-    follow_up_questions = result.get("follow_up_questions")
-
-    # Deduct tokens (best-effort; don't fail the response if deduction fails)
-    try:
-        token_service.deduct_for_chat(current_user.id, tokens_used, db)
-    except Exception as e:
-        logger.warning("Failed to deduct tokens for user_id=%s: %s", current_user.id, e)
-
-    new_balance = token_service.get_balance(current_user.id, db)
-
-    # Persist on first input: use existing session or create one
-    persisted_session_id: Optional[int] = None
-    if body.messages:
-        try:
-            sid = body.session_id
-            if sid is None:
-                new_session = create_session_for_user(db, user_id)
-                sid = new_session.id
-                persisted_session_id = sid
-            base_order = existing_message_count
-            for i, um in enumerate(body.messages):
-                save_user_message(db, sid, um.content, base_order + i)
-            save_assistant_message(
-                db,
-                sid,
-                reply,
-                base_order + len(body.messages),
-                model_metadata=_build_model_metadata(result.get("llm_usage")),
-                tools_called=result.get("tools_called"),
-                follow_up_questions=follow_up_questions,
-            )
-            update_session_after_messages(
-                db,
-                sid,
-                first_user_content=body.messages[0].content if body.messages else None,
-            )
-            db.commit()
-        except Exception as persist_err:
-            logger.exception("Failed to persist chat turn: %s", persist_err)
-            db.rollback()
+    result = turn_service.run_turn_sync(
+        turn_id=turn_id,
+        session_id=session_id,
+        user_id=user_id,
+        messages=messages,
+        context=context,
+    )
+    if result.get("type") == "error":
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=result.get("content") or "Chat agent error",
+        )
 
     return ChatResponse(
-        reply=reply,
-        tokens_used=tokens_used,
-        platform_tokens_used=platform_tokens_used,
-        balance=new_balance,
-        follow_up_questions=follow_up_questions,
-        session_id=persisted_session_id,
+        reply=result.get("content", ""),
+        tokens_used=result.get("tokens_used", 1),
+        platform_tokens_used=result.get("platform_tokens_used", 1),
+        balance=result.get("balance", 0),
+        follow_up_questions=result.get("follow_up_questions"),
+        session_id=result.get("session_id"),
+        turn_id=result.get("turn_id"),
         llm_usage=result.get("llm_usage"),
     )
 
@@ -424,194 +356,44 @@ async def chat_stream(
 
     user_id = current_user.id
     context = body.context or {}
+    turn_service = get_chat_turn_service()
 
-    # When session_id is set, load session messages and prepend to request messages
-    session_id_for_persist: Optional[int] = None
-    existing_message_count = 0
-    if body.session_id is not None:
-        session = get_session_for_user(db, body.session_id, user_id)
-        if session is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
-        db_messages = [{"role": m.role, "content": m.content} for m in session.messages]
-        existing_message_count = len(db_messages)
-        messages = db_messages + [{"role": m.role, "content": m.content} for m in body.messages]
-        session_id_for_persist = body.session_id
-    else:
-        messages = [{"role": m.role, "content": m.content} for m in body.messages]
+    try:
+        turn_id, session_id, messages = turn_service.prepare_turn(
+            user_id=user_id,
+            body_messages=[{"role": m.role, "content": m.content} for m in body.messages],
+            session_id=body.session_id,
+        )
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    except Exception as e:
+        logger.exception("Failed to prepare streamed chat turn for user_id=%s: %s", current_user.id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to prepare chat turn",
+        )
 
     async def event_generator() -> AsyncIterator[str]:
-        service = get_chat_service()
-        tokens_used = 1
-        # Accumulators for persistence when session_id is set
-        acc_content: List[str] = []
-        acc_tool_calls: List[Dict[str, Any]] = []
-        acc_charts: List[Dict[str, Any]] = []
-        acc_skill_events: List[Dict[str, Any]] = []
-        pending_skill_steps: List[Dict[str, Any]] = []
+        subscriber = turn_service.subscribe(turn_id)
+        turn_service.run_turn_async(
+            turn_id=turn_id,
+            session_id=session_id,
+            user_id=user_id,
+            messages=messages,
+            context=context,
+        )
         try:
-            loop = asyncio.get_event_loop()
-            queue: asyncio.Queue[str | None] = asyncio.Queue()
-
-            def run_generator():
-                try:
-                    for chunk in service.chat_stream(messages, user_id=user_id, db=db, context=context):
-                        loop.call_soon_threadsafe(queue.put_nowait, chunk)
-                except Exception as exc:
-                    err_event = f"data: {json.dumps({'type': 'error', 'content': str(exc)})}\n\n"
-                    loop.call_soon_threadsafe(queue.put_nowait, err_event)
-                finally:
-                    loop.call_soon_threadsafe(queue.put_nowait, None)
-
-            thread_task = asyncio.get_event_loop().run_in_executor(None, run_generator)
-            client_disconnected = False
-
+            yield f"data: {json.dumps({'type': 'started', 'turn_id': turn_id, 'session_id': session_id, 'status': 'running'})}\n\n"
             while True:
-                item = await queue.get()
-                if item is None:
+                payload = await asyncio.to_thread(subscriber.get)
+                if payload is None:
                     break
-                # Parse SSE payload once; if not valid JSON, forward as-is
-                payload: Optional[Dict[str, Any]] = None
-                try:
-                    raw = item.removeprefix("data: ").strip()
-                    payload = json.loads(raw)
-                except Exception:
-                    try:
-                        yield item
-                    except (asyncio.CancelledError, Exception):
-                        client_disconnected = True
-                        break
-                    continue
-
-                typ = payload.get("type")
-
-                # Accumulate for persistence
-                if typ == "token" and payload.get("content"):
-                    acc_content.append(payload["content"])
-                elif typ == "tool_call" and payload.get("name"):
-                    acc_tool_calls.append({
-                        "name": payload.get("name", ""),
-                        "input": payload.get("input", ""),
-                        "output": payload.get("output", ""),
-                    })
-                elif typ == "chart" and payload.get("spec"):
-                    acc_charts.append(payload["spec"])
-                elif typ == "skill_step":
-                    pending_skill_steps.append({
-                        "tool": payload.get("tool", ""),
-                        "input": payload.get("input", ""),
-                        "output": payload.get("output", ""),
-                        "ok": payload.get("ok", True),
-                    })
-                elif typ == "skill_done" and payload.get("name"):
-                    acc_skill_events.append({"name": payload.get("name"), "steps": list(pending_skill_steps)})
-                    pending_skill_steps = []
-
-                if typ == "done":
-                    tokens_used = payload.get("tokens_used", 1)
-                    platform_tokens_used = token_service.llm_tokens_to_platform_tokens(tokens_used)
-                    if "follow_up_questions" not in payload:
-                        payload["follow_up_questions"] = []
-                    sid = _persist_turn_on_done(
-                        db,
-                        user_id,
-                        session_id_for_persist,
-                        existing_message_count,
-                        body.messages,
-                        acc_content,
-                        acc_tool_calls,
-                        acc_skill_events,
-                        acc_charts,
-                        tokens_used,
-                        model_metadata=_build_model_metadata(payload.get("llm_usage")),
-                        tools_called=payload.get("tools_called"),
-                        follow_up_questions=payload.get("follow_up_questions"),
-                    )
-                    new_balance = token_service.get_balance(user_id, db)
-                    payload["balance"] = new_balance
-                    payload["platform_tokens_used"] = platform_tokens_used
-                    if sid is not None:
-                        payload["session_id"] = sid
-                    tokens_used = 0  # so finally does not deduct again if yield fails
-                    try:
-                        yield f"data: {json.dumps(payload)}\n\n"
-                    except (asyncio.CancelledError, Exception):
-                        client_disconnected = True
-                        break
-                    continue
-
-                try:
-                    yield item
-                except (asyncio.CancelledError, Exception):
-                    client_disconnected = True
-                    break
-
-            # After client disconnect, drain queue and persist on "done" so user sees reply when they reload
-            if client_disconnected:
-                while True:
-                    item = await queue.get()
-                    if item is None:
-                        break
-                    try:
-                        raw = item.removeprefix("data: ").strip()
-                        payload = json.loads(raw)
-                    except Exception:
-                        continue
-                    typ = payload.get("type")
-                    if typ == "token" and payload.get("content"):
-                        acc_content.append(payload["content"])
-                    elif typ == "tool_call" and payload.get("name"):
-                        acc_tool_calls.append({
-                            "name": payload.get("name", ""),
-                            "input": payload.get("input", ""),
-                            "output": payload.get("output", ""),
-                        })
-                    elif typ == "chart" and payload.get("spec"):
-                        acc_charts.append(payload["spec"])
-                    elif typ == "skill_step":
-                        pending_skill_steps.append({
-                            "tool": payload.get("tool", ""),
-                            "input": payload.get("input", ""),
-                            "output": payload.get("output", ""),
-                            "ok": payload.get("ok", True),
-                        })
-                    elif typ == "skill_done" and payload.get("name"):
-                        acc_skill_events.append({"name": payload.get("name"), "steps": list(pending_skill_steps)})
-                        pending_skill_steps = []
-                    if typ == "done":
-                        tokens_used_val = payload.get("tokens_used", 1)
-                        db_bg = SessionLocal()
-                        try:
-                            _persist_turn_on_done(
-                                db_bg,
-                                user_id,
-                                session_id_for_persist,
-                                existing_message_count,
-                                body.messages,
-                                acc_content,
-                                acc_tool_calls,
-                                acc_skill_events,
-                                acc_charts,
-                                tokens_used_val,
-                                model_metadata=_build_model_metadata(payload.get("llm_usage")),
-                                tools_called=payload.get("tools_called"),
-                                follow_up_questions=payload.get("follow_up_questions"),
-                            )
-                            tokens_used = 0
-                        finally:
-                            db_bg.close()
-                        break
-
-            await thread_task
-
+                yield f"data: {json.dumps(payload)}\n\n"
         except Exception as e:
             logger.exception("Chat stream failed for user_id=%s: %s", user_id, e)
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
         finally:
-            if tokens_used > 0:
-                try:
-                    token_service.deduct_for_chat(user_id, tokens_used, db)
-                except Exception as e:
-                    logger.warning("Failed to deduct tokens for user_id=%s: %s", user_id, e)
+            turn_service.unsubscribe(turn_id, subscriber)
 
     return StreamingResponse(
         event_generator(),
@@ -622,5 +404,3 @@ async def chat_stream(
             "X-Accel-Buffering": "no",  # disable nginx buffering
         },
     )
-
-

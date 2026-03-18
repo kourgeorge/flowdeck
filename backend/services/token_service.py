@@ -242,7 +242,7 @@ def llm_tokens_to_platform_tokens(llm_tokens: int) -> int:
     return max(1, platform)
 
 
-def deduct_for_chat(user_id: int, llm_tokens: int, db: Session) -> bool:
+def deduct_for_chat(user_id: int, llm_tokens: int, db: Session, *, commit: bool = True) -> bool:
     """
     Deduct chat cost from user's token_balance. llm_tokens is the raw LLM token count
     for the exchange; it is converted to platform tokens using LLM_TOKENS_PER_PLATFORM_TOKEN
@@ -262,7 +262,10 @@ def deduct_for_chat(user_id: int, llm_tokens: int, db: Session) -> bool:
         return False
     try:
         user.token_balance = max(0, balance - platform_tokens)
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
         return True
     except Exception:
         db.rollback()
