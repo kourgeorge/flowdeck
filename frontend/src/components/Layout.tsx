@@ -102,9 +102,9 @@ function BriefIcon() {
 const navItems: { to: string; label: string; icon: () => JSX.Element; authOnly?: boolean }[] = [
   { to: '/', label: 'FlowDeck', icon: FlowDeckIcon },
   { to: '/market', label: 'Market View', icon: MarketIcon },
-  { to: '/dashboard', label: 'Dashboard', icon: DashboardIcon, authOnly: true },
-  { to: '/newsroom', label: 'Newsroom', icon: NewsroomIcon, authOnly: true },
   { to: '/portfolio-pulse', label: 'Portfolio Pulse', icon: PulseIcon },
+  { to: '/newsroom', label: 'Newsroom', icon: NewsroomIcon },
+  { to: '/dashboard', label: 'Dashboard', icon: DashboardIcon, authOnly: true },
   { to: '/brief', label: 'Briefing Desk', icon: BriefIcon, authOnly: true },
   { to: '/copilot', label: 'Trading Copilot', icon: CopilotIcon, authOnly: true },
   { to: '/chat', label: 'AI Analyst Agent', icon: ChatIcon, authOnly: true },

@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import DashboardNewsSection from '../components/DashboardNewsSection';
 import PageHeader from '../components/PageHeader';
 import TickerSearch from '../components/TickerSearch';
+import { SIGNIFICANT_SEVEN_RANK, SIGNIFICANT_SEVEN_TICKERS } from '../constants/majorTickers';
 import { useAuth } from '../contexts/AuthContext';
 import { useDashboardData } from '../hooks/useDashboardData';
+import { tickerApi } from '../services/api';
+import type { TickerWidget } from '../services/types';
 
 function NewsroomIcon() {
   return (
@@ -18,24 +21,58 @@ function NewsroomIcon() {
 export default function NewsroomPage() {
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
+  const [publicWidgets, setPublicWidgets] = useState<TickerWidget[]>([]);
+  const [publicError, setPublicError] = useState<string | null>(null);
+  const [isLoadingPublicWidgets, setIsLoadingPublicWidgets] = useState(false);
   const { widgets, isLoading } = useDashboardData({
     enableRecentAnalyzed: false,
   });
 
-  if (!user) {
-    return (
-      <div className="min-h-[60vh] px-4 py-6 sm:p-6 lg:p-8 flex items-center justify-center">
-        <div className="max-w-md text-center">
-          <p className="text-gray-400 mb-6">Sign in to open your Newsroom and view headlines for your subscribed stocks.</p>
-          <Link to="/" className="inline-block px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium">
-            Go to Home
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (user) {
+      setPublicWidgets([]);
+      setPublicError(null);
+      setIsLoadingPublicWidgets(false);
+      return;
+    }
 
-  const subscribedTickers = widgets.map((widget) => widget.ticker);
+    let cancelled = false;
+
+    const loadPublicWidgets = async () => {
+      setIsLoadingPublicWidgets(true);
+      setPublicError(null);
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        const response = await tickerApi.getWidgets([...SIGNIFICANT_SEVEN_TICKERS], today);
+        if (cancelled) return;
+        const sorted = [...response.widgets].sort((left, right) => {
+          const leftRank = SIGNIFICANT_SEVEN_RANK.get(left.ticker) ?? Number.MAX_SAFE_INTEGER;
+          const rightRank = SIGNIFICANT_SEVEN_RANK.get(right.ticker) ?? Number.MAX_SAFE_INTEGER;
+          if (leftRank !== rightRank) return leftRank - rightRank;
+          return left.ticker.localeCompare(right.ticker);
+        });
+        setPublicWidgets(sorted);
+      } catch {
+        if (!cancelled) {
+          setPublicWidgets([]);
+          setPublicError('Failed to load the Significant 7 newsroom preview.');
+        }
+      } finally {
+        if (!cancelled) setIsLoadingPublicWidgets(false);
+      }
+    };
+
+    loadPublicWidgets();
+    const intervalId = setInterval(loadPublicWidgets, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [user]);
+
+  const displayWidgets = user ? widgets : publicWidgets;
+  const displayTickers = displayWidgets.map((widget) => widget.ticker);
+  const pageIsLoading = user ? isLoading : isLoadingPublicWidgets;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -48,7 +85,23 @@ export default function NewsroomPage() {
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="px-4 py-6 sm:p-6 lg:p-8">
           <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
-            {isLoading && subscribedTickers.length === 0 ? (
+            {!user && (
+              <div className="mb-6 rounded-xl border border-blue-700/40 bg-blue-950/40 px-4 py-3 text-sm text-blue-100">
+                Viewing a public Newsroom preview powered by the Significant 7.{' '}
+                <Link to="/" className="font-medium text-white underline decoration-blue-400/60 underline-offset-2 hover:text-blue-100">
+                  Sign in
+                </Link>{' '}
+                to replace it with your own personal newsroom.
+              </div>
+            )}
+
+            {publicError && !user && (
+              <div className="mb-6 rounded-lg border border-amber-600/40 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
+                {publicError}
+              </div>
+            )}
+
+            {pageIsLoading && displayTickers.length === 0 ? (
               <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
                 <div className="flex items-center gap-2 text-gray-300 text-sm">
                   <svg className="w-4 h-4 text-blue-400 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -58,9 +111,9 @@ export default function NewsroomPage() {
                   <span>Loading newsroom...</span>
                 </div>
               </div>
-            ) : subscribedTickers.length > 0 ? (
+            ) : displayTickers.length > 0 ? (
               <DashboardNewsSection
-                tickers={subscribedTickers}
+                tickers={displayTickers}
                 refreshIntervalMs={120000}
                 searchQuery={searchQuery}
                 onSearchQueryChange={setSearchQuery}
@@ -68,13 +121,18 @@ export default function NewsroomPage() {
               />
             ) : (
               <div className="bg-gray-800 rounded-lg border border-gray-700 p-10 text-center">
-                <h2 className="text-xl font-semibold text-white">Your newsroom is empty</h2>
+                <h2 className="text-xl font-semibold text-white">{user ? 'Your newsroom is empty' : 'Newsroom preview unavailable'}</h2>
                 <p className="mt-2 text-sm text-gray-400">
-                  Subscribe to a few stocks from the dashboard or a ticker page to populate the newsroom.
+                  {user
+                    ? 'Subscribe to a few stocks from the dashboard or a ticker page to populate the newsroom.'
+                    : 'Try again shortly or sign in to open a personal newsroom curated from your subscribed stocks.'}
                 </p>
                 <div className="mt-6">
-                  <Link to="/dashboard" className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700">
-                    Go to Dashboard
+                  <Link
+                    to={user ? '/dashboard' : '/'}
+                    className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+                  >
+                    {user ? 'Go to Dashboard' : 'Go to Home'}
                   </Link>
                 </div>
               </div>
