@@ -15,6 +15,7 @@ from ai_engine.llm_provider import get_config_from_env, get_llm
 
 from .context_builder import build_digest_context
 from .agents import run_focus_selector, run_ticker_interpreter, run_market_interpreter, run_narrative_writer
+from . import prompts
 from .state import DigestWorkflowState, DigestResult, SpanType
 
 logger = logging.getLogger(__name__)
@@ -166,6 +167,10 @@ def run_digest(
         span_trading_days=span_trading_days,
     )
     state.digest_context = ctx
+    if not state.narrative_style:
+        state.narrative_style = prompts.extract_preferred_style_from_user_context(
+            ctx.user_context_snapshot
+        )
 
     llm = get_llm("quick", cfg)
 

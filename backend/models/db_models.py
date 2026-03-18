@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import (
     Boolean,
     Column,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -32,6 +33,29 @@ class User(Base):
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     subscriptions = relationship("Subscription", back_populates="user", cascade="all, delete-orphan")
+    profile = relationship("UserProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
+
+
+class UserProfile(Base):
+    __tablename__ = "user_profiles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    date_of_birth = Column(Date, nullable=True)
+    persona_type = Column(String(32), nullable=True)
+    experience_level = Column(String(32), nullable=True)
+    risk_tolerance = Column(String(32), nullable=True)
+    time_horizon = Column(String(32), nullable=True)
+    primary_goal = Column(String(64), nullable=True)
+    goals_json = Column(Text, nullable=True)
+    constraints_json = Column(Text, nullable=True)
+    preferred_style = Column(String(32), nullable=True)
+    ai_memory_text = Column(Text, nullable=True)
+    onboarding_completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="profile")
 
 
 class Execution(Base):
@@ -225,5 +249,3 @@ class UserSchedule(Base):
         UniqueConstraint("user_id", "schedule_type", name="uq_user_schedule_user_type"),
         Index("idx_user_schedules_type_enabled", "schedule_type", "enabled"),
     )
-
-

@@ -14,6 +14,7 @@ from config import MAJOR_TICKERS
 from models.db_models import User
 from services.email_service import send_welcome_email
 from services.subscription_service import subscribe_many
+from services.user_profile_service import ensure_profile_exists
 
 
 class AuthError(Exception):
@@ -53,6 +54,7 @@ def register(email: str, password: str, db: Session) -> Tuple[str, int, str]:
     )
     db.add(user)
     db.flush()
+    ensure_profile_exists(db, user.id)
     subscribe_many(
         db,
         user.id,
@@ -176,6 +178,7 @@ def google_callback(
         )
         db.add(user)
         db.flush()
+        ensure_profile_exists(db, user.id)
         subscribe_many(
             db,
             user.id,

@@ -1,0 +1,200 @@
+"""Structured investor profile + editable AI memory."""
+
+from __future__ import annotations
+
+import json
+from datetime import date, datetime
+from typing import Any, Optional
+
+from sqlalchemy.orm import Session
+
+from models.db_models import User, UserProfile
+from services import token_service
+
+
+PERSONA_TYPES = {"investor", "trader", "both"}
+EXPERIENCE_LEVELS = {"beginner", "intermediate", "advanced", "professional"}
+RISK_TOLERANCES = {"conservative", "moderate", "aggressive"}
+TIME_HORIZONS = {"intraday", "swing", "medium_term", "long_term"}
+PRIMARY_GOALS = {
+    "wealth_building",
+    "active_trading",
+    "retirement",
+    "income",
+    "capital_preservation",
+    "learning",
+}
+PREFERRED_STYLES = {"balanced", "concise", "professional", "technical"}
+
+
+def _clean_optional_str(value: Any, *, max_len: int) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return text[:max_len]
+
+
+def _clean_choice(value: Any, allowed: set[str], field_name: str) -> Optional[str]:
+    cleaned = _clean_optional_str(value, max_len=64)
+    if cleaned is None:
+        return None
+    if cleaned not in allowed:
+        raise ValueError(f"Invalid {field_name}")
+    return cleaned
+
+
+def _clean_string_list(value: Any, field_name: str, *, max_items: int = 12, max_len: int = 80) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError(f"{field_name} must be a list")
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in value:
+        cleaned = _clean_optional_str(raw, max_len=max_len)
+        if cleaned is None:
+            continue
+        lowered = cleaned.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        out.append(cleaned)
+        if len(out) >= max_items:
+            break
+    return out
+
+
+def _loads_list(raw: Optional[str]) -> list[str]:
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, list):
+            return [str(item) for item in parsed if item]
+    except Exception:
+        return []
+    return []
+
+
+def is_profile_complete(profile: Optional[UserProfile]) -> bool:
+    if profile is None:
+        return False
+    return bool(
+        profile.persona_type
+        and profile.risk_tolerance
+        and profile.time_horizon
+        and profile.primary_goal
+    )
+
+
+def get_or_create_profile(db: Session, user_id: int) -> UserProfile:
+    profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+    if profile is not None:
+        return profile
+    profile = UserProfile(user_id=user_id)
+    db.add(profile)
+    db.flush()
+    return profile
+
+
+def serialize_profile(profile: UserProfile) -> dict[str, Any]:
+    return {
+        "user_id": profile.user_id,
+        "date_of_birth": profile.date_of_birth,
+        "persona_type": profile.persona_type,
+        "experience_level": profile.experience_level,
+        "risk_tolerance": profile.risk_tolerance,
+        "time_horizon": profile.time_horizon,
+        "primary_goal": profile.primary_goal,
+        "goals": _loads_list(profile.goals_json),
+        "constraints": _loads_list(profile.constraints_json),
+        "preferred_style": profile.preferred_style,
+        "ai_memory_text": profile.ai_memory_text,
+        "has_completed_investor_profile": is_profile_complete(profile),
+        "onboarding_completed_at": profile.onboarding_completed_at,
+        "updated_at": profile.updated_at,
+    }
+
+
+def get_profile(db: Session, user_id: int) -> UserProfile:
+    return get_or_create_profile(db, user_id)
+
+
+def update_profile(db: Session, user_id: int, **fields: Any) -> UserProfile:
+    profile = get_or_create_profile(db, user_id)
+
+    if "date_of_birth" in fields:
+        dob = fields["date_of_birth"]
+        if dob is not None and not isinstance(dob, date):
+            raise ValueError("Invalid date_of_birth")
+        profile.date_of_birth = dob
+    if "persona_type" in fields:
+        profile.persona_type = _clean_choice(fields["persona_type"], PERSONA_TYPES, "persona_type")
+    if "experience_level" in fields:
+        profile.experience_level = _clean_choice(fields["experience_level"], EXPERIENCE_LEVELS, "experience_level")
+    if "risk_tolerance" in fields:
+        profile.risk_tolerance = _clean_choice(fields["risk_tolerance"], RISK_TOLERANCES, "risk_tolerance")
+    if "time_horizon" in fields:
+        profile.time_horizon = _clean_choice(fields["time_horizon"], TIME_HORIZONS, "time_horizon")
+    if "primary_goal" in fields:
+        profile.primary_goal = _clean_choice(fields["primary_goal"], PRIMARY_GOALS, "primary_goal")
+    if "goals" in fields:
+        profile.goals_json = json.dumps(_clean_string_list(fields["goals"], "goals"))
+    if "constraints" in fields:
+        profile.constraints_json = json.dumps(_clean_string_list(fields["constraints"], "constraints"))
+    if "preferred_style" in fields:
+        profile.preferred_style = _clean_choice(fields["preferred_style"], PREFERRED_STYLES, "preferred_style")
+    if "ai_memory_text" in fields:
+        profile.ai_memory_text = _clean_optional_str(fields["ai_memory_text"], max_len=4000)
+
+    profile.onboarding_completed_at = datetime.utcnow() if is_profile_complete(profile) else None
+    db.commit()
+    db.refresh(profile)
+    return profile
+
+
+def ensure_profile_exists(db: Session, user_id: int) -> UserProfile:
+    profile = get_or_create_profile(db, user_id)
+    db.flush()
+    return profile
+
+
+def build_user_context_snapshot(user_id: int, db: Session) -> str:
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return "User not found."
+
+    profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+    balance = token_service.get_balance(user_id, db)
+    member_since = user.created_at.strftime("%B %d, %Y") if user.created_at else "Unknown"
+    goals = _loads_list(profile.goals_json if profile else None)
+    constraints = _loads_list(profile.constraints_json if profile else None)
+
+    def _fmt(value: Optional[str], fallback: str = "Not set") -> str:
+        return value if value else fallback
+
+    lines = [
+        "# Your FlowDeck Profile",
+        f"Email: {user.email}",
+        f"Name: {_fmt(user.name)}",
+        f"Token Balance: {balance:,} tokens",
+        f"Member Since: {member_since}",
+        f"Account Type: {'Admin' if user.is_admin else 'Standard'}",
+        "",
+        "# Investor Preferences",
+        f"Persona Type: {_fmt(profile.persona_type if profile else None)}",
+        f"Experience Level: {_fmt(profile.experience_level if profile else None)}",
+        f"Risk Tolerance: {_fmt(profile.risk_tolerance if profile else None)}",
+        f"Time Horizon: {_fmt(profile.time_horizon if profile else None)}",
+        f"Primary Goal: {_fmt(profile.primary_goal if profile else None)}",
+        f"Preferred AI Style: {_fmt(profile.preferred_style if profile else None)}",
+        f"Date of Birth: {profile.date_of_birth.isoformat() if profile and profile.date_of_birth else 'Not set'}",
+        f"Goals: {', '.join(goals) if goals else 'None saved'}",
+        f"Constraints: {', '.join(constraints) if constraints else 'None saved'}",
+        "",
+        "# Saved AI Memory",
+        profile.ai_memory_text if profile and profile.ai_memory_text else "No saved memory.",
+    ]
+    return "\n".join(lines)

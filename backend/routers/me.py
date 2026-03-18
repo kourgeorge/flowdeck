@@ -1,5 +1,6 @@
 """Current user profile and stats (/api/me)."""
 
+from datetime import date, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +11,7 @@ from auth import get_current_user, get_current_admin_user
 from database import get_db
 from services import token_service
 from services import me_service
+from services import user_profile_service
 
 router = APIRouter(prefix="/api", tags=["me"])
 
@@ -31,12 +33,43 @@ class MeResponse(BaseModel):
     token_balance: int
     is_admin: bool = False
     has_password: bool = True
+    has_completed_investor_profile: bool = False
+
+
+class InvestorProfileResponse(BaseModel):
+    user_id: int
+    date_of_birth: Optional[date] = None
+    persona_type: Optional[str] = None
+    experience_level: Optional[str] = None
+    risk_tolerance: Optional[str] = None
+    time_horizon: Optional[str] = None
+    primary_goal: Optional[str] = None
+    goals: list[str] = []
+    constraints: list[str] = []
+    preferred_style: Optional[str] = None
+    ai_memory_text: Optional[str] = None
+    has_completed_investor_profile: bool = False
+    onboarding_completed_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 
 class UpdateProfileRequest(BaseModel):
     name: Optional[str] = None
     current_password: Optional[str] = None
     new_password: Optional[str] = None
+
+
+class UpdateInvestorProfileRequest(BaseModel):
+    date_of_birth: Optional[date] = None
+    persona_type: Optional[str] = None
+    experience_level: Optional[str] = None
+    risk_tolerance: Optional[str] = None
+    time_horizon: Optional[str] = None
+    primary_goal: Optional[str] = None
+    goals: Optional[list[str]] = None
+    constraints: Optional[list[str]] = None
+    preferred_style: Optional[str] = None
+    ai_memory_text: Optional[str] = None
 
 
 class TopUpRequest(BaseModel):
@@ -74,6 +107,35 @@ async def update_me(
     balance = token_service.get_balance(user.id, db)
     profile = me_service.get_profile(user, balance)
     return MeResponse(**profile)
+
+
+@router.get("/me/investor-profile", response_model=InvestorProfileResponse)
+async def get_investor_profile(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the current user's structured investor profile and editable AI memory."""
+    profile = user_profile_service.get_profile(db, current_user.id)
+    db.commit()
+    return InvestorProfileResponse(**user_profile_service.serialize_profile(profile))
+
+
+@router.patch("/me/investor-profile", response_model=InvestorProfileResponse)
+async def update_investor_profile(
+    body: UpdateInvestorProfileRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update the current user's structured investor profile and editable AI memory."""
+    try:
+        profile = user_profile_service.update_profile(
+            db,
+            current_user.id,
+            **body.model_dump(exclude_unset=True),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return InvestorProfileResponse(**user_profile_service.serialize_profile(profile))
 
 
 @router.get("/me/stats", response_model=UserStatsResponse)

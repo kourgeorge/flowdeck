@@ -184,6 +184,7 @@ def run_focus_selector(
         default_priority_tickers=default_priority,
         max_priority_tickers=state.max_priority_tickers,
         user_note=state.user_note,
+        user_context_snapshot=ctx.user_context_snapshot,
         period_label=state.period_label,
     )
     message = HumanMessage(content=prompts.FOCUS_SELECTOR_SYSTEM + "\n\n" + prompt_text)
@@ -234,6 +235,7 @@ def run_ticker_interpreter(
                 ticker=ticker,
                 context_text=context_text,
                 tool_names=["get_news", "get_platform_reports", "get_fundamentals", "get_analysts_recommendation", "get_insider_transactions", "get_insider_sentiment", "get_indicators", "web_search"],
+                user_context_snapshot=ctx.user_context_snapshot,
                 period_label=state.period_label,
             )
             message = HumanMessage(content=prompts.TICKER_INTERPRETER_SYSTEM + "\n\n" + prompt_text)
@@ -294,6 +296,7 @@ def run_market_interpreter(
         priority_tickers=ctx.priority_tickers or [],
         ticker_one_liners=one_liners,
         tool_names=["get_global_news", "get_daily_market_movers", "web_search"],
+        user_context_snapshot=ctx.user_context_snapshot,
         period_label=state.period_label,
     )
     message = HumanMessage(content=prompts.MARKET_INTERPRETER_SYSTEM + "\n\n" + prompt_text)
@@ -376,6 +379,7 @@ def run_narrative_writer(
         ticker_interpretations_text=ticker_interpretations_text,
         market_interpretation_text=market_interpretation_text,
         tool_names=["get_ticker_quote", "get_platform_reports"],
+        user_context_snapshot=ctx.user_context_snapshot if ctx else None,
         user_note=state.user_note,
         narrative_style=state.narrative_style,
         resources_text=resources_text or None,

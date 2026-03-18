@@ -4,10 +4,11 @@ Prompt templates for the User Daily Brief agents: Focus Selector, Ticker Interpr
 
 from __future__ import annotations
 
+import re
 from typing import Dict, Optional
 
 
-TICKER_INTERPRETER_SYSTEM = """You are a market analyst for the User Daily Brief. For the given ticker you receive prepared context: quote, returns, news, fundamentals, analyst recommendations, insider activity, technical indicators (if any), and the latest FlowDeck platform report (thesis and key takeaways). You may call the provided tools to fetch additional or fresher data if something is missing or you need to verify.
+TICKER_INTERPRETER_SYSTEM = """You are a market analyst for the User Daily Brief. For the given ticker you receive prepared context: quote, returns, news, fundamentals, analyst recommendations, insider activity, technical indicators (if any), and the latest FlowDeck platform report (thesis and key takeaways). You may also receive the user's saved investor profile and AI memory. Use that profile to choose the most relevant angle, risk framing, and decision-useful interpretation for this user. You may call the provided tools to fetch additional or fresher data if something is missing or you need to verify.
 
 Your tasks:
 1. Explain what happened for this ticker in the period (price move, key news, and why it matters).
@@ -21,22 +22,31 @@ def build_ticker_interpreter_prompt(
     ticker: str,
     context_text: str,
     tool_names: list[str],
+    user_context_snapshot: Optional[str] = None,
     period_label: str = "today",
 ) -> str:
+    user_profile_block = ""
+    if user_context_snapshot:
+        user_profile_block = (
+            "\n\n### User profile and saved memory\n"
+            "Personalize the interpretation to this profile when deciding what matters most.\n"
+            f"{user_context_snapshot[:2000]}"
+        )
+
     return f"""## Ticker: {ticker}
 
 ### Period
 This brief is for **{period_label}**.
 
 ### Prepared context
-{context_text}
+{context_text}{user_profile_block}
 
 You have access to these tools to fetch more data if needed: {', '.join(tool_names)}.
 
 Provide your interpretation: explanation, driver (company/sector/macro/unclear), and thesis_comparison."""
 
 
-MARKET_INTERPRETER_SYSTEM = """You are a market strategist for the User Daily Brief. You receive market movers (top gainers/losers), global/macro news, and an optional web snippet. You also know the user's portfolio tickers and which ones were prioritized for analysis (with optional one-line summaries per ticker).
+MARKET_INTERPRETER_SYSTEM = """You are a market strategist for the User Daily Brief. You receive market movers (top gainers/losers), global/macro news, and an optional web snippet. You also know the user's portfolio tickers and which ones were prioritized for analysis (with optional one-line summaries per ticker). You may receive the user's saved investor profile and AI memory; use that to decide which macro themes, risks, and opportunities are most relevant.
 
 Your tasks:
 1. Summarize the overall market backdrop in a few sentences (what drove the market in the period, key themes, risk-on/risk-off).
@@ -55,6 +65,7 @@ def build_market_interpreter_prompt(
     priority_tickers: list[str],
     ticker_one_liners: Optional[dict[str, str]],
     tool_names: list[str],
+    user_context_snapshot: Optional[str] = None,
     period_label: str = "today",
 ) -> str:
     lines = [
@@ -80,6 +91,15 @@ def build_market_interpreter_prompt(
         lines.append("One-line summary per priority ticker:")
         for t, s in ticker_one_liners.items():
             lines.append(f"- {t}: {s}")
+    if user_context_snapshot:
+        lines.extend(
+            [
+                "",
+                "## User profile and saved memory",
+                "Use this to judge which market developments matter most for this user.",
+                user_context_snapshot[:2000],
+            ]
+        )
     lines.extend([
         "",
         f"You have access to these tools if you need more context: {', '.join(tool_names)}.",
@@ -166,6 +186,7 @@ Write the brief in exactly four sections, each as a short block of text (a few s
 NARRATIVE_WRITER_SYSTEM = """You are the writer for a short User Daily Brief. You receive:
 - Per-ticker interpretations (explanation, driver, thesis comparison) for the user's priority holdings.
 - A market interpretation (overall backdrop and relevance to the portfolio).
+- The user's saved investor profile and AI memory, when available.
 - An optional user note with explicit preferences for this brief.
 
 A base narrative-writing prompt and a style overlay will be injected below: follow both exactly for tone, structure, and output fields.
@@ -173,6 +194,7 @@ A base narrative-writing prompt and a style overlay will be injected below: foll
 Hard requirements:
 - Return valid Markdown only.
 - Treat the user note as a high-priority instruction for this specific brief.
+- Treat the saved investor profile and AI memory as durable preferences unless the user note overrides them for this run.
 - If the user note requests a language, write the entire brief in that language.
 - If the user note requests emphasis, focus, or constraints, reflect that clearly in the brief unless it conflicts with the required format or the available evidence.
 - Always anchor the brief in the market interpretation first. The reader should immediately understand what is happening in the market overall.
@@ -211,11 +233,20 @@ def build_narrative_writer_prompt(
     ticker_interpretations_text: str,
     market_interpretation_text: str,
     tool_names: list[str],
+    user_context_snapshot: Optional[str] = None,
     user_note: Optional[str] = None,
     narrative_style: Optional[str] = None,
     resources_text: Optional[str] = None,
     period_label: str = "today",
 ) -> str:
+    user_profile_block = ""
+    if user_context_snapshot:
+        user_profile_block = (
+            "\n\n## Saved investor profile and AI memory\n"
+            "Treat this as durable personalization context for tone, emphasis, risk framing, and relevance.\n"
+            f"{user_context_snapshot[:2200]}"
+        )
+
     user_note_block = ""
     if user_note:
         user_note_block = (
@@ -236,7 +267,7 @@ def build_narrative_writer_prompt(
 {ticker_interpretations_text}
 
 ## Market interpretation
-{market_interpretation_text}{period_block}{user_note_block}{resources_block}
+{market_interpretation_text}{period_block}{user_profile_block}{user_note_block}{resources_block}
 
 ## Narrative prompt composition
 {narrative_prompt_instructions}
@@ -250,6 +281,7 @@ You receive:
 - The user's full portfolio tickers.
 - A deterministic attention score per ticker (based on moves and news in the period).
 - The current default top-N tickers ranked by this attention score.
+- The user's saved investor profile and AI memory, when available.
 - An optional free-form note from the user describing what they care about for this brief.
 
 Your job:
@@ -267,6 +299,7 @@ def build_focus_selector_prompt(
     default_priority_tickers: list[str],
     max_priority_tickers: int,
     user_note: Optional[str],
+    user_context_snapshot: Optional[str] = None,
     period_label: str = "today",
 ) -> str:
     sorted_by_score = sorted(
@@ -296,6 +329,15 @@ def build_focus_selector_prompt(
                 user_note[:1500],
             ]
         )
+    if user_context_snapshot:
+        lines.extend(
+            [
+                "",
+                "## Saved investor profile and AI memory",
+                "Use this to decide which positions deserve attention for this specific user.",
+                user_context_snapshot[:1800],
+            ]
+        )
     lines.extend(
         [
             "",
@@ -306,3 +348,21 @@ def build_focus_selector_prompt(
         ]
     )
     return "\n".join(lines)
+
+
+def extract_preferred_style_from_user_context(user_context_snapshot: Optional[str]) -> Optional[str]:
+    """Best-effort parse of preferred brief style from the saved user context snapshot."""
+    if not user_context_snapshot:
+        return None
+    match = re.search(r"^Preferred AI Style:\s*(.+?)\s*$", user_context_snapshot, flags=re.MULTILINE)
+    if not match:
+        return None
+    value = match.group(1).strip().lower()
+    if not value or value == "not set":
+        return None
+    normalized = get_normalized_narrative_style(value)
+    if normalized is None:
+        return None
+    if normalized == "balanced" or normalized in NARRATIVE_STYLE_PROMPTS or normalized in STRUCTURED_OUTPUT_STYLES:
+        return normalized
+    return None

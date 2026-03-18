@@ -37,6 +37,7 @@ def init_db() -> None:
         ReportView,
         Subscription,
         User,
+        UserProfile,
         UserSchedule,
     )
     Base.metadata.create_all(bind=engine)

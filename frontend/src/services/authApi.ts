@@ -101,6 +101,37 @@ export interface MeProfile {
   token_balance: number;
   is_admin?: boolean;
   has_password?: boolean;  // True if user has email/password, false if Google-only
+  has_completed_investor_profile?: boolean;
+}
+
+export interface InvestorProfile {
+  user_id: number;
+  date_of_birth: string | null;
+  persona_type: string | null;
+  experience_level: string | null;
+  risk_tolerance: string | null;
+  time_horizon: string | null;
+  primary_goal: string | null;
+  goals: string[];
+  constraints: string[];
+  preferred_style: string | null;
+  ai_memory_text: string | null;
+  has_completed_investor_profile: boolean;
+  onboarding_completed_at: string | null;
+  updated_at: string | null;
+}
+
+export interface UpdateInvestorProfileBody {
+  date_of_birth?: string | null;
+  persona_type?: string | null;
+  experience_level?: string | null;
+  risk_tolerance?: string | null;
+  time_horizon?: string | null;
+  primary_goal?: string | null;
+  goals?: string[];
+  constraints?: string[];
+  preferred_style?: string | null;
+  ai_memory_text?: string | null;
 }
 
 export interface UserStats {
@@ -140,6 +171,22 @@ export const profileApi = {
     const token = getStoredToken();
     if (!token) throw new Error('Not authenticated');
     const res = await api.get<UserStats>('/api/me/stats', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.data;
+  },
+  getInvestorProfile: async (): Promise<InvestorProfile> => {
+    const token = getStoredToken();
+    if (!token) throw new Error('Not authenticated');
+    const res = await api.get<InvestorProfile>('/api/me/investor-profile', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.data;
+  },
+  updateInvestorProfile: async (body: UpdateInvestorProfileBody): Promise<InvestorProfile> => {
+    const token = getStoredToken();
+    if (!token) throw new Error('Not authenticated');
+    const res = await api.patch<InvestorProfile>('/api/me/investor-profile', body, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return res.data;

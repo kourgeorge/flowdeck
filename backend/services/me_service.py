@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from auth import hash_password, verify_password
 from models.db_models import User, Execution, ReportView, Subscription
+from services import user_profile_service
 
 
 def get_profile(user: User, token_balance: int) -> dict:
@@ -18,6 +19,9 @@ def get_profile(user: User, token_balance: int) -> dict:
         "token_balance": token_balance,
         "is_admin": getattr(user, "is_admin", False),
         "has_password": user.hashed_password is not None,
+        "has_completed_investor_profile": user_profile_service.is_profile_complete(
+            getattr(user, "profile", None)
+        ),
     }
 
 

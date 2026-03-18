@@ -115,9 +115,24 @@ def _build_system_prompt(
     """Build the FlowDeck system prompt for a given request."""
     today = datetime.date.today().isoformat()
     has_user_ctx = user_id is not None and db is not None
+    user_profile_snapshot = ""
+    if has_user_ctx:
+        try:
+            from services.user_profile_service import build_user_context_snapshot
+
+            snapshot = build_user_context_snapshot(user_id, db)
+            if snapshot and snapshot != "User not found.":
+                user_profile_snapshot = f"""
+
+## Saved User Profile
+Use this profile to personalize your recommendations, explanations, and tradeoffs. Treat it as durable user preference context unless the user overrides it in the conversation.
+
+{snapshot[:2500]}"""
+        except Exception:
+            user_profile_snapshot = ""
 
     user_ctx_section = """
-15. Call `get_user_context` to retrieve the current user's profile (email, name, token balance, member since).
+15. Call `get_user_context` to retrieve the current user's account profile, investor preferences, and saved AI memory.
 16. Call `get_user_subscriptions` to see which stocks the user is subscribed/watching on FlowDeck.
 17. Call `get_portfolio_overview` to get live quotes AND AI recommendations for ALL of the user's subscribed stocks at once — use this when the user asks about their portfolio or how their stocks are doing.""" if has_user_ctx else ""
 
@@ -137,6 +152,7 @@ The user is currently viewing the Vibe Trading page with the following tickers i
 
 ## Your Role
 You are a **researcher** as well as an analyst. You help users understand stocks, markets, and investment opportunities by **gathering real-time data and news from tools**, then synthesizing the best answer. You do not rely on memory for current events or market conditions — you use tools to look things up, often with multiple searches and tool calls, then compile what you find into a clear, accurate reply.
+{user_profile_snapshot}
 
 ## ⚠️ CRITICAL: NEVER Simulate or Estimate Data
 **You MUST NEVER fabricate, simulate, estimate, or hallucinate financial data.**
@@ -480,5 +496,4 @@ def get_chat_service() -> ChatService:
     if _chat_service is None:
         _chat_service = ChatService()
     return _chat_service
-
 

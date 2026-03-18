@@ -28,9 +28,10 @@ _USER_CONTEXT_SPEC = ToolSpec(
     name="get_user_context",
     version="1.0",
     description=(
-        "Get the current user's profile information: their email, display name, "
-        "token balance, account type, and member-since date. "
-        "Use when the user asks about their account, profile, token balance, or who they are."
+        "Get the current user's account profile, structured investor preferences, "
+        "and saved AI memory. Includes email, display name, token balance, "
+        "member-since date, investor/trader profile fields, and editable memory notes. "
+        "Use when the user asks about their account, profile, preferences, token balance, or who they are."
     ),
     input_schema={
         "type": "object",
@@ -70,25 +71,9 @@ def _get_user_context(user_id: int, db: Any) -> str:
         from data_layer import get_data_gateway
         return get_data_gateway().get_user_context(user_id, db)
     except (ImportError, RuntimeError):
-        # Fallback when gateway not initialized (e.g. standalone agent)
-        from models.db_models import User  # type: ignore[import]
-        from services import token_service  # type: ignore[import]
+        from services.user_profile_service import build_user_context_snapshot  # type: ignore[import]
 
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            return "User not found."
-        balance = token_service.get_balance(user_id, db)
-        member_since = user.created_at.strftime("%B %d, %Y") if user.created_at else "Unknown"
-        name_str = f"Name: {user.name}" if user.name else "Name: (not set)"
-        lines = [
-            "# Your FlowDeck Profile",
-            f"Email: {user.email}",
-            name_str,
-            f"Token Balance: {balance:,} tokens",
-            f"Member Since: {member_since}",
-            f"Account Type: {'Admin' if user.is_admin else 'Standard'}",
-        ]
-        return "\n".join(lines)
+        return build_user_context_snapshot(user_id, db)
 
 
 # ---------------------------------------------------------------------------
@@ -287,5 +272,4 @@ def make_user_context_tools(user_id: int, db: Any) -> list[BaseTool]:
         UserSubscriptionsTool(user_id=user_id, db=db),
         PortfolioOverviewTool(user_id=user_id, db=db),
     ]
-
 

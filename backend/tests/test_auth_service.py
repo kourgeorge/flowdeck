@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from database import Base
-from models.db_models import Subscription, User
+from models.db_models import Subscription, User, UserProfile
 from services.auth_service import DEFAULT_SIGNUP_TICKERS, google_callback, register
 
 
@@ -46,6 +46,8 @@ class TestAuthService(unittest.TestCase):
         self.assertEqual(email, "newuser@example.com")
         user = self.db.query(User).filter(User.id == user_id).first()
         self.assertIsNotNone(user)
+        profile = self.db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+        self.assertIsNotNone(profile)
 
         subscriptions = (
             self.db.query(Subscription)
@@ -107,6 +109,9 @@ class TestAuthService(unittest.TestCase):
             .order_by(Subscription.ticker.asc())
             .all()
         )
+        profile = self.db.query(UserProfile).filter(UserProfile.user_id == user.id).first()
+
+        self.assertIsNotNone(profile)
         self.assertEqual([sub.ticker for sub in subscriptions], sorted(DEFAULT_SIGNUP_TICKERS))
         self.assertTrue(all(sub.email_updates is False for sub in subscriptions))
         mock_welcome.assert_called_once_with("googleuser@example.com")

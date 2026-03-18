@@ -215,6 +215,88 @@ class TestNarrativePromptComposition(unittest.TestCase):
         self.assertIn("This note is a high-priority instruction for this run.", prompt)
         self.assertIn("in spanish", prompt)
 
+    def test_prompts_include_saved_user_profile_context(self) -> None:
+        snapshot = "Persona Type: investor\nPreferred AI Style: technical\nSaved AI Memory: Avoid leverage."
+
+        focus_prompt = prompts.build_focus_selector_prompt(
+            portfolio_tickers=["AAPL", "MSFT"],
+            attention_scores={"AAPL": 1.0, "MSFT": 0.5},
+            default_priority_tickers=["AAPL"],
+            max_priority_tickers=2,
+            user_note=None,
+            user_context_snapshot=snapshot,
+        )
+        ticker_prompt = prompts.build_ticker_interpreter_prompt(
+            ticker="AAPL",
+            context_text="Quote: {}",
+            tool_names=["get_news"],
+            user_context_snapshot=snapshot,
+        )
+        market_prompt = prompts.build_market_interpreter_prompt(
+            market_movers_text="(none)",
+            global_news_text="(none)",
+            web_snippet=None,
+            portfolio_tickers=["AAPL"],
+            priority_tickers=["AAPL"],
+            ticker_one_liners=None,
+            tool_names=["web_search"],
+            user_context_snapshot=snapshot,
+        )
+        narrative_prompt = prompts.build_narrative_writer_prompt(
+            ticker_interpretations_text="(none)",
+            market_interpretation_text="Summary: Mixed\nRelevance to portfolio: Relevant.",
+            tool_names=["get_ticker_quote"],
+            user_context_snapshot=snapshot,
+        )
+
+        self.assertIn("Saved investor profile and AI memory", focus_prompt)
+        self.assertIn("User profile and saved memory", ticker_prompt)
+        self.assertIn("User profile and saved memory", market_prompt)
+        self.assertIn("Saved investor profile and AI memory", narrative_prompt)
+
+    def test_extract_preferred_style_from_user_context(self) -> None:
+        snapshot = "Persona Type: trader\nPreferred AI Style: technical\nDate of Birth: Not set"
+
+        self.assertEqual(
+            prompts.extract_preferred_style_from_user_context(snapshot),
+            "technical",
+        )
+
+    @patch("ai_engine.briefing_agent.runner.run_narrative_writer", return_value=("Brief", "Watch list"))
+    @patch(
+        "ai_engine.briefing_agent.runner.run_market_interpreter",
+        return_value=MarketInterpretation(
+            summary="Summary",
+            relevance_to_portfolio="Relevant",
+        ),
+    )
+    @patch("ai_engine.briefing_agent.runner.run_ticker_interpreter", return_value={})
+    @patch("ai_engine.briefing_agent.runner.run_focus_selector", return_value=None)
+    @patch("ai_engine.briefing_agent.runner.get_llm", return_value=object())
+    @patch("ai_engine.briefing_agent.runner.get_config_from_env", return_value={})
+    @patch(
+        "ai_engine.briefing_agent.runner.build_digest_context",
+        return_value=DigestContext(
+            tickers=["AAPL"],
+            priority_tickers=["AAPL"],
+            user_context_snapshot="# Investor Preferences\nPreferred AI Style: technical",
+        ),
+    )
+    def test_run_digest_uses_saved_preferred_style_when_no_runtime_style(
+        self,
+        _mock_context,
+        _mock_config,
+        _mock_llm,
+        _mock_focus,
+        _mock_ticker,
+        _mock_market,
+        mock_narrative,
+    ) -> None:
+        run_digest(user_id=7, digest_date="2026-03-16", db=object())
+
+        called_state = mock_narrative.call_args[0][0]
+        self.assertEqual(called_state.narrative_style, "technical")
+
 
 if __name__ == "__main__":
     unittest.main()
