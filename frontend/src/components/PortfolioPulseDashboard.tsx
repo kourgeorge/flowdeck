@@ -555,7 +555,9 @@ export default function PortfolioPulseDashboard({
   });
   const [marketTapeCharts, setMarketTapeCharts] = useState<Record<string, SparklineData>>({});
   const [isLoadingCompanyInfo, setIsLoadingCompanyInfo] = useState(false);
-  const [isLoadingMarket, setIsLoadingMarket] = useState(true);
+  const [isLoadingOverview, setIsLoadingOverview] = useState(true);
+  const [isLoadingMovers, setIsLoadingMovers] = useState(true);
+  const [isLoadingPortfolioNews, setIsLoadingPortfolioNews] = useState(true);
   const [isLoadingBrief, setIsLoadingBrief] = useState(false);
   const [isCreatingBrief, setIsCreatingBrief] = useState(false);
   const [briefActionError, setBriefActionError] = useState<string | null>(null);
@@ -654,41 +656,68 @@ export default function PortfolioPulseDashboard({
   useEffect(() => {
     let cancelled = false;
 
-    const fetchMarketData = async () => {
-      setIsLoadingMarket(true);
+    const fetchOverview = async () => {
+      setIsLoadingOverview(true);
       try {
-        const [overviewResult, moversResult, newsResult] = await Promise.allSettled([
-          tickerApi.getMarketOverview({
-            limit_indices: 6,
-            limit_sectors: 8,
-            limit_regions: 20,
-            limit_commodities: 4,
-            range: '1d',
-          }),
-          tickerApi.getMarketMovers(6),
-          tickers.length > 0 ? tickerApi.getNewsBatch(tickers) : Promise.resolve({ articles: [], count: 0 }),
-        ]);
-
-        if (cancelled) return;
-
-        setOverview(overviewResult.status === 'fulfilled' ? overviewResult.value : null);
-        setMarketMovers(moversResult.status === 'fulfilled'
-          ? moversResult.value
-          : { gainers: [], losers: [], most_active: [] });
-        setPortfolioNews(newsResult.status === 'fulfilled' ? newsResult.value.articles.slice(0, 20) : []);
+        const nextOverview = await tickerApi.getMarketOverview({
+          limit_indices: 6,
+          limit_sectors: 8,
+          limit_regions: 20,
+          limit_commodities: 4,
+          range: '1d',
+        });
+        if (!cancelled) setOverview(nextOverview);
+      } catch {
+        if (!cancelled) setOverview(null);
       } finally {
-        if (!cancelled) setIsLoadingMarket(false);
+        if (!cancelled) setIsLoadingOverview(false);
       }
     };
 
-    fetchMarketData().catch(() => {
-      if (!cancelled) {
-        setOverview(null);
-        setMarketMovers({ gainers: [], losers: [], most_active: [] });
-        setPortfolioNews([]);
-        setIsLoadingMarket(false);
+    const fetchMovers = async () => {
+      setIsLoadingMovers(true);
+      try {
+        const nextMovers = await tickerApi.getMarketMovers(6);
+        if (!cancelled) setMarketMovers(nextMovers);
+      } catch {
+        if (!cancelled) {
+          setMarketMovers({ gainers: [], losers: [], most_active: [] });
+        }
+      } finally {
+        if (!cancelled) setIsLoadingMovers(false);
       }
-    });
+    };
+
+    void fetchOverview();
+    void fetchMovers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchPortfolioNews = async () => {
+      if (tickers.length === 0) {
+        setPortfolioNews([]);
+        setIsLoadingPortfolioNews(false);
+        return;
+      }
+
+      setIsLoadingPortfolioNews(true);
+      try {
+        const newsResponse = await tickerApi.getNewsBatch(tickers);
+        if (!cancelled) setPortfolioNews(newsResponse.articles.slice(0, 20));
+      } catch {
+        if (!cancelled) setPortfolioNews([]);
+      } finally {
+        if (!cancelled) setIsLoadingPortfolioNews(false);
+      }
+    };
+
+    void fetchPortfolioNews();
 
     return () => {
       cancelled = true;
@@ -1329,7 +1358,7 @@ export default function PortfolioPulseDashboard({
       </div>
       <MoversList
         rows={marketMoverRows.slice(0, 6)}
-        isLoading={isLoadingMarket}
+        isLoading={isLoadingMovers}
         onSelectTicker={(ticker) => navigate(`/tickers/${ticker}`)}
       />
     </div>
@@ -1398,7 +1427,7 @@ export default function PortfolioPulseDashboard({
                   </ResponsiveContainer>
                 </div>
               </div>
-            ) : isLoadingMarket ? (
+            ) : isLoadingOverview ? (
               <LoadingStateCard label="Loading market pulse..." />
             ) : (
               <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5 text-sm text-slate-500">
@@ -1459,7 +1488,7 @@ export default function PortfolioPulseDashboard({
               </button>
             ))}
             {(!overview || overview.indices.length === 0) && (
-              isLoadingMarket ? (
+              isLoadingOverview ? (
                 <LoadingStateCard label="Loading market overview..." />
               ) : (
                 <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5 text-sm text-slate-500">
@@ -1740,7 +1769,7 @@ export default function PortfolioPulseDashboard({
                     ))}
                   </div>
                 </div>
-              ) : isLoadingMarket ? (
+              ) : isLoadingPortfolioNews ? (
                 <LoadingStateCard label="Loading portfolio news..." className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-8" />
               ) : (
                 <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-8 text-sm text-slate-500">
