@@ -454,7 +454,7 @@ export default function BriefPage() {
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="px-4 py-6 sm:p-6 lg:p-8">
           <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
-            <div className="mb-6 overflow-hidden rounded-2xl border border-emerald-500/20 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.17),_transparent_34%),linear-gradient(135deg,_rgba(2,6,23,0.98),_rgba(15,23,42,0.96))] shadow-lg">
+            <div className="mb-6 overflow-hidden rounded-2xl border border-emerald-500/20 bg-slate-950 shadow-lg">
               <div className="grid gap-4 px-5 py-5 sm:px-6 lg:grid-cols-[minmax(0,1.35fr)_280px] lg:items-start lg:px-7">
                 <div className="min-w-0">
                   <p className="text-[11px] font-mono uppercase tracking-[0.24em] text-emerald-300/80">
