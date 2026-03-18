@@ -232,6 +232,32 @@ function MiniSparkline({
   );
 }
 
+function SpinnerIcon({ className = 'h-4 w-4 text-sky-400' }: { className?: string }) {
+  return (
+    <svg className={`${className} animate-spin shrink-0`} fill="none" viewBox="0 0 24 24" aria-hidden>
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+    </svg>
+  );
+}
+
+function LoadingStateCard({
+  label,
+  className = 'rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5',
+}: {
+  label: string;
+  className?: string;
+}) {
+  return (
+    <div className={`${className} flex items-center justify-center`}>
+      <div className="flex items-center gap-2 text-sm text-slate-400">
+        <SpinnerIcon />
+        <span>{label}</span>
+      </div>
+    </div>
+  );
+}
+
 function normalizeRecommendation(value: string | null | undefined): 'BUY' | 'HOLD' | 'SELL' | 'NO AI' {
   if (!value) return 'NO AI';
   const upper = value.toUpperCase();
@@ -461,11 +487,17 @@ function RecommendationDonut({
 
 function MoversList({
   rows,
+  isLoading,
   onSelectTicker,
 }: {
   rows: MarketMoverRow[];
+  isLoading: boolean;
   onSelectTicker: (ticker: string) => void;
 }) {
+  if (isLoading) {
+    return <LoadingStateCard label="Loading market movers..." className="rounded-2xl border border-dashed border-slate-700 px-4 py-6" />;
+  }
+
   if (rows.length === 0) {
     return <div className="rounded-2xl border border-dashed border-slate-700 px-4 py-6 text-sm text-slate-500">No mover data available.</div>;
   }
@@ -1155,7 +1187,12 @@ export default function PortfolioPulseDashboard({
     <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
       <div className="mb-3 flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Portfolio Sector Exposure</p>
-        {isLoadingCompanyInfo && <span className="text-[11px] text-slate-500">Refreshing...</span>}
+        {isLoadingCompanyInfo && (
+          <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
+            <SpinnerIcon className="h-3.5 w-3.5 text-slate-500" />
+            <span>Refreshing...</span>
+          </span>
+        )}
       </div>
       {portfolioSummary.sectorExposure.length > 0 ? (
         <div className="space-y-2">
@@ -1233,7 +1270,11 @@ export default function PortfolioPulseDashboard({
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Broader Market Movers</p>
         {moversControls}
       </div>
-      <MoversList rows={marketMoverRows.slice(0, 6)} onSelectTicker={(ticker) => navigate(`/tickers/${ticker}`)} />
+      <MoversList
+        rows={marketMoverRows.slice(0, 6)}
+        isLoading={isLoadingMarket}
+        onSelectTicker={(ticker) => navigate(`/tickers/${ticker}`)}
+      />
     </div>
   );
   const signalsPanel = (
@@ -1300,9 +1341,11 @@ export default function PortfolioPulseDashboard({
                   </ResponsiveContainer>
                 </div>
               </div>
+            ) : isLoadingMarket ? (
+              <LoadingStateCard label="Loading market pulse..." />
             ) : (
               <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5 text-sm text-slate-500">
-                {isLoadingMarket ? 'Loading market pulse...' : 'Market pulse unavailable.'}
+                Market pulse unavailable.
               </div>
             )}
           </div>
@@ -1359,9 +1402,13 @@ export default function PortfolioPulseDashboard({
               </button>
             ))}
             {(!overview || overview.indices.length === 0) && (
-              <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5 text-sm text-slate-500">
-                {isLoadingMarket ? 'Loading market overview...' : 'Market overview unavailable.'}
-              </div>
+              isLoadingMarket ? (
+                <LoadingStateCard label="Loading market overview..." />
+              ) : (
+                <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-5 text-sm text-slate-500">
+                  Market overview unavailable.
+                </div>
+              )
             )}
           </div>
         </div>
@@ -1638,13 +1685,13 @@ export default function PortfolioPulseDashboard({
                     ))}
                   </div>
                 </div>
+              ) : isLoadingMarket ? (
+                <LoadingStateCard label="Loading portfolio news..." className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-8" />
               ) : (
                 <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-3 py-8 text-sm text-slate-500">
-                  {isLoadingMarket
-                    ? 'Loading portfolio news...'
-                    : selectedNewsTickers.length > 0
-                      ? `No portfolio headlines match ${selectedNewsTickers.join(', ')}.`
-                      : 'No portfolio headlines right now.'}
+                  {selectedNewsTickers.length > 0
+                    ? `No portfolio headlines match ${selectedNewsTickers.join(', ')}.`
+                    : 'No portfolio headlines right now.'}
                 </div>
               )}
             </div>
