@@ -527,10 +527,11 @@ export default function WorldMapRegionalStocks({
 
               {countryTooltip ? (
                 <div
-                  className="pointer-events-none absolute z-10 rounded-full border border-white/10 bg-slate-950/92 px-2.5 py-1 text-[11px] font-medium text-slate-200 shadow-lg backdrop-blur-sm"
+                  className="pointer-events-none absolute z-10 whitespace-nowrap rounded-full border border-white/10 bg-slate-950/92 px-2.5 py-1 text-[11px] font-medium text-slate-200 shadow-lg backdrop-blur-sm"
                   style={{
-                    left: countryTooltip.x + 12,
-                    top: countryTooltip.y + 10,
+                    left: countryTooltip.x,
+                    top: countryTooltip.y,
+                    transform: 'translate(12px, -75%)',
                   }}
                 >
                   {countryTooltip.name}
