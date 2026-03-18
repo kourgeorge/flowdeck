@@ -982,6 +982,17 @@ export interface ToolCallEvent {
   output: string;
 }
 
+export const SKILL_DISPLAY_NAMES: Record<string, string> = {
+  compare_stocks: 'Compare Markets',
+  stock_deep_dive: 'Stock Deep Dive',
+  portfolio_health: 'Portfolio Health',
+  portfolio_performance: 'Portfolio Performance',
+};
+
+export function formatSkillDisplayName(name: string): string {
+  return SKILL_DISPLAY_NAMES[name] ?? name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 /** A skill activation event — emitted when a skill workflow starts */
 export interface SkillActivationEvent {
   /** Skill name, e.g. "compare_stocks" */
@@ -1240,7 +1251,7 @@ export const chatApi = {
               } else if (event.type === 'skill_start' && event.name) {
                 // Skill workflow started — accumulate steps until skill_done
                 pendingSkill = { name: event.name, steps: [] };
-                onThinking?.(`Running ${event.name.replace(/_/g, ' ')} workflow…`);
+                onThinking?.(`Running ${formatSkillDisplayName(event.name)} workflow`);
               } else if (event.type === 'skill_step' && pendingSkill) {
                 pendingSkill.steps.push({
                   tool: event.tool ?? '',
