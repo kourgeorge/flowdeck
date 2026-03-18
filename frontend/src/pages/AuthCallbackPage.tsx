@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { consumePostAuthRedirect, setStoredAuth } from '../services/authApi';
+import { consumePostAuthRedirect, profileApi, setStoredAuth } from '../services/authApi';
 
 export default function AuthCallbackPage() {
   const [searchParams] = useSearchParams();
@@ -8,33 +8,61 @@ export default function AuthCallbackPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = searchParams.get('token');
-    const email = searchParams.get('email');
-    const userId = searchParams.get('user_id');
-    const errorParam = searchParams.get('error');
+    let cancelled = false;
 
-    if (errorParam) {
-      setError(errorParam);
-      // Redirect to home after showing error
-      setTimeout(() => {
-        navigate('/');
-      }, 3000);
-      return;
-    }
+    const completeAuth = async () => {
+      const token = searchParams.get('token');
+      const email = searchParams.get('email');
+      const userId = searchParams.get('user_id');
+      const isNew = searchParams.get('is_new') === '1';
+      const errorParam = searchParams.get('error');
 
-    if (token && email && userId) {
-      // Store authentication
-      setStoredAuth(token, email, parseInt(userId, 10));
+      if (errorParam) {
+        setError(errorParam);
+        setTimeout(() => {
+          navigate('/');
+        }, 3000);
+        return;
+      }
 
-      const target = consumePostAuthRedirect() ?? '/dashboard';
-      // Force full reload so auth context initializes from stored credentials.
-      window.location.replace(target);
-    } else {
-      setError('Invalid authentication response');
-      setTimeout(() => {
-        navigate('/');
-      }, 3000);
-    }
+      if (!(token && email && userId)) {
+        setError('Invalid authentication response');
+        setTimeout(() => {
+          navigate('/');
+        }, 3000);
+        return;
+      }
+
+      try {
+        setStoredAuth(token, email, parseInt(userId, 10));
+        const profile = await profileApi.getMe();
+        if (cancelled) return;
+
+        setStoredAuth(
+          token,
+          profile.email,
+          profile.user_id,
+          profile.is_admin,
+          profile.has_completed_investor_profile,
+        );
+
+        const fallbackTarget = consumePostAuthRedirect() ?? '/dashboard';
+        const target = isNew && profile.has_completed_investor_profile === false
+          ? '/profile#investor-profile'
+          : fallbackTarget;
+        window.location.replace(target);
+      } catch {
+        if (cancelled) return;
+        const fallbackTarget = consumePostAuthRedirect() ?? '/dashboard';
+        window.location.replace(fallbackTarget);
+      }
+    };
+
+    completeAuth();
+
+    return () => {
+      cancelled = true;
+    };
   }, [searchParams, navigate]);
 
   if (error) {

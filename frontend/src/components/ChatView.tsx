@@ -623,10 +623,12 @@ export function MessageBubble({
   message,
   isStreaming = false,
   onFollowUpClick,
+  showAdminUsageDetails = false,
 }: {
   message: ChatMessageWithMeta;
   isStreaming?: boolean;
   onFollowUpClick?: (text: string) => void;
+  showAdminUsageDetails?: boolean;
 }) {
   const isUser = message.role === 'user';
   const [copied, triggerCopy] = useCopyText(stripChartJsonFromContent(stripFollowUpJsonLine(message.content ?? '')));
@@ -737,7 +739,7 @@ export function MessageBubble({
               {(message.platform_tokens_used != null || message.tokens_used != null) && (
                 <span>
                   {(message.platform_tokens_used ?? message.tokens_used)!} {(message.platform_tokens_used ?? message.tokens_used) !== 1 ? 'DECKS' : 'DECK'} used
-                  {(message.tokens_used != null || message.cost_usd != null) && (
+                  {showAdminUsageDetails && (message.tokens_used != null || message.cost_usd != null) && (
                     <span>
                       {' ('}
                       {message.tokens_used != null && message.tokens_used.toLocaleString()}
@@ -1080,6 +1082,8 @@ export interface ChatViewProps {
   chat: UseChatStateReturn;
   /** Whether the user is authenticated */
   isAuthenticated: boolean;
+  /** Whether raw token and cost internals should be visible */
+  showAdminUsageDetails?: boolean;
   /** Suggested questions shown on the empty state */
   suggestedQuestions: string[];
   /** Optional welcome heading */
@@ -1095,6 +1099,7 @@ export interface ChatViewProps {
 export default function ChatView({
   chat,
   isAuthenticated,
+  showAdminUsageDetails = false,
   suggestedQuestions,
   welcomeHeading,
   welcomeSubtext,
@@ -1181,6 +1186,7 @@ export default function ChatView({
             key={i}
             message={msg}
             isStreaming={isStreaming && i === messages.length - 1 && msg.role === 'assistant'}
+            showAdminUsageDetails={showAdminUsageDetails}
             onFollowUpClick={sendMessage}
           />
         ))}

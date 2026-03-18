@@ -229,7 +229,7 @@ function InvestorProfileSelect({
 }
 
 export default function ProfilePage() {
-  const { user, deleteAccount } = useAuth();
+  const { user, deleteAccount, setProfileCompletion } = useAuth();
   const navigate = useNavigate();
   const { hash } = useLocation();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -628,6 +628,7 @@ export default function ProfilePage() {
       setInvestorProfile(data);
       setInvestorProfileForm(buildInvestorProfileForm(data));
       setProfile((prev) => (prev ? { ...prev, has_completed_investor_profile: data.has_completed_investor_profile } : prev));
+      setProfileCompletion(data.has_completed_investor_profile);
       setInvestorProfileMessage('Investor profile saved.');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
@@ -868,6 +869,11 @@ export default function ProfilePage() {
                 {investorProfile?.has_completed_investor_profile ? 'Profile complete' : 'Profile incomplete'}
               </div>
             </div>
+            {investorProfile?.has_completed_investor_profile === false && (
+              <div className="mt-5 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                Fill this out to get a more tailored experience in chat and automated briefs. You can skip it for now, but personalization will be weaker until it is saved.
+              </div>
+            )}
             <div className="mt-5 grid gap-3 md:grid-cols-4">
               {summaryItems.map((item, idx) => (
                 <div key={`${item}-${idx}`} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">

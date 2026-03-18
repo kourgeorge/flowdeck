@@ -62,11 +62,17 @@ export function setStoredAuth(
   email: string,
   userId: number,
   isAdmin?: boolean,
+  hasCompletedInvestorProfile?: boolean,
 ): void {
   localStorage.setItem(AUTH_KEY, token);
   localStorage.setItem(
     USER_KEY,
-    JSON.stringify({ email, userId, is_admin: isAdmin ?? false }),
+    JSON.stringify({
+      email,
+      userId,
+      is_admin: isAdmin ?? false,
+      has_completed_investor_profile: hasCompletedInvestorProfile ?? false,
+    }),
   );
 }
 
@@ -80,6 +86,7 @@ export function getStoredUser(): {
   userId: number;
   name?: string | null;
   is_admin?: boolean;
+  has_completed_investor_profile?: boolean;
 } | null {
   const raw = localStorage.getItem(USER_KEY);
   if (!raw) return null;
@@ -88,6 +95,7 @@ export function getStoredUser(): {
     return {
       ...parsed,
       is_admin: parsed.is_admin === true,
+      has_completed_investor_profile: parsed.has_completed_investor_profile === true,
     };
   } catch {
     return null;

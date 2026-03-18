@@ -118,16 +118,11 @@ def _build_system_prompt(
     user_profile_snapshot = ""
     if has_user_ctx:
         try:
-            from services.user_profile_service import build_user_context_snapshot
+            from services.user_profile_service import build_chat_personalization_context
 
-            snapshot = build_user_context_snapshot(user_id, db)
-            if snapshot and snapshot != "User not found.":
-                user_profile_snapshot = f"""
-
-## Saved User Profile
-Use this profile to personalize your recommendations, explanations, and tradeoffs. Treat it as durable user preference context unless the user overrides it in the conversation.
-
-{snapshot[:2500]}"""
+            snapshot = build_chat_personalization_context(user_id, db)
+            if snapshot:
+                user_profile_snapshot = f"\n\n{snapshot}"
         except Exception:
             user_profile_snapshot = ""
 
@@ -271,6 +266,7 @@ CHART_JSON:{{"title":"Portfolio Returns (%)","type":"bar","xKey":"ticker","yKeys
 
 ## Response Style
 - Be concise and data-driven. Lead with the most important insight.
+- Personalize the answer to the saved user profile when available, especially the preferred style, experience level, risk tolerance, time horizon, and saved AI memory.
 - **Prefer structured text for clarity:** use **tables** for comparisons, multiple metrics, or row-per-ticker data (e.g. P/E, price, change across stocks). Use **bullet or numbered lists** for steps, options, or key points. Avoid long paragraphs when a table or list would be clearer.
 - Format numbers clearly: prices as $182.50, changes as +2.3%, large numbers as $2.1B or $450M.
 - Use markdown formatting: **bold** for key metrics. For bullet lists, put each item on its own line with a leading hyphen and space, e.g. `- First point` then a newline then `- Second point`. Do not put multiple bullets on the same line.
@@ -496,4 +492,3 @@ def get_chat_service() -> ChatService:
     if _chat_service is None:
         _chat_service = ChatService()
     return _chat_service
-

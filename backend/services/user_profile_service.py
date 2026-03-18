@@ -26,6 +26,25 @@ PRIMARY_GOALS = {
 }
 PREFERRED_STYLES = {"balanced", "concise", "professional", "technical"}
 
+CHAT_STYLE_GUIDANCE = {
+    "balanced": (
+        "Use a balanced tone: clear plain-English explanations, moderate detail, "
+        "and a mix of summary plus supporting evidence."
+    ),
+    "concise": (
+        "Keep replies compact and high-signal. Lead with the bottom line, avoid "
+        "unnecessary background, and prefer short bullets or tight structure."
+    ),
+    "professional": (
+        "Use a professional, polished tone. Organize the answer clearly and focus "
+        "on decision-useful takeaways and tradeoffs."
+    ),
+    "technical": (
+        "Use a more technical analytical style. Assume the user is comfortable with "
+        "financial terminology, denser reasoning, and quantified detail when tools support it."
+    ),
+}
+
 
 def _clean_optional_str(value: Any, *, max_len: int) -> Optional[str]:
     if value is None:
@@ -198,3 +217,90 @@ def build_user_context_snapshot(user_id: int, db: Session) -> str:
         profile.ai_memory_text if profile and profile.ai_memory_text else "No saved memory.",
     ]
     return "\n".join(lines)
+
+
+def build_chat_personalization_context(user_id: int, db: Session) -> str:
+    """Build explicit prompt instructions so chat responses follow saved profile style and memory."""
+    profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+    if profile is None:
+        return ""
+
+    goals = _loads_list(profile.goals_json)
+    constraints = _loads_list(profile.constraints_json)
+    snapshot = build_user_context_snapshot(user_id, db)
+
+    instructions = [
+        "## Personalization Instructions",
+        "Use the saved profile below to tailor the response unless the user overrides it in this conversation.",
+        "- Follow the saved preferred style when writing the answer.",
+        "- Use saved AI memory as durable context for how to frame explanations, risk tradeoffs, examples, and follow-through.",
+        "- Treat investor preferences as default decision criteria when the user asks for guidance, comparisons, or recommendations.",
+        "- If the live request conflicts with saved preferences or memory, follow the live request and treat it as an override.",
+        "- Do not mention the saved profile or memory unless it materially helps the answer.",
+    ]
+
+    if profile.preferred_style:
+        style_guidance = CHAT_STYLE_GUIDANCE.get(profile.preferred_style)
+        instructions.append(f"- Preferred AI Style: {profile.preferred_style}")
+        if style_guidance:
+            instructions.append(f"- Style behavior: {style_guidance}")
+
+    if profile.ai_memory_text:
+        instructions.append(f"- Saved AI Memory: {profile.ai_memory_text[:600]}")
+        instructions.append(
+            "- Memory behavior: incorporate these notes when prioritizing risks, "
+            "positioning ideas, and the level of explanation."
+        )
+
+    if profile.persona_type:
+        if profile.persona_type == "investor":
+            instructions.append(
+                "- Persona behavior: default toward investment thesis, fundamentals, "
+                "valuation, and longer-term compounding implications."
+            )
+        elif profile.persona_type == "trader":
+            instructions.append(
+                "- Persona behavior: default toward setups, catalysts, timing, "
+                "risk management, and shorter-term decision framing."
+            )
+        else:
+            instructions.append(
+                "- Persona behavior: balance investor-style thesis work with "
+                "trader-style timing and risk management."
+            )
+
+    if profile.experience_level:
+        if profile.experience_level == "beginner":
+            instructions.append(
+                "- Experience behavior: explain jargon briefly, surface the key assumptions, "
+                "and keep the answer educational."
+            )
+        elif profile.experience_level in {"advanced", "professional"}:
+            instructions.append(
+                "- Experience behavior: skip basic education, use domain terms directly, "
+                "and keep the analysis dense."
+            )
+        else:
+            instructions.append(
+                "- Experience behavior: use moderate technical depth and explain only the less-obvious points."
+            )
+
+    if profile.risk_tolerance:
+        instructions.append(f"- Default risk tolerance: {profile.risk_tolerance}")
+    if profile.time_horizon:
+        instructions.append(f"- Default time horizon: {profile.time_horizon}")
+    if profile.primary_goal:
+        instructions.append(f"- Primary goal: {profile.primary_goal}")
+    if goals:
+        instructions.append(f"- Additional goals: {', '.join(goals)}")
+    if constraints:
+        instructions.append(f"- Constraints: {', '.join(constraints)}")
+
+    instructions.extend(
+        [
+            "",
+            "## Saved User Profile",
+            snapshot[:2500],
+        ]
+    )
+    return "\n".join(instructions)

@@ -95,7 +95,7 @@ class TestAuthService(unittest.TestCase):
         with patch.dict(sys.modules, patched_modules), patch(
             "services.auth_service.send_welcome_email"
         ) as mock_welcome:
-            user, _ = google_callback(
+            user, _, is_new_user = google_callback(
                 "oauth-code",
                 self.db,
                 client_id="client-id",
@@ -112,6 +112,7 @@ class TestAuthService(unittest.TestCase):
         profile = self.db.query(UserProfile).filter(UserProfile.user_id == user.id).first()
 
         self.assertIsNotNone(profile)
+        self.assertTrue(is_new_user)
         self.assertEqual([sub.ticker for sub in subscriptions], sorted(DEFAULT_SIGNUP_TICKERS))
         self.assertTrue(all(sub.email_updates is False for sub in subscriptions))
         mock_welcome.assert_called_once_with("googleuser@example.com")

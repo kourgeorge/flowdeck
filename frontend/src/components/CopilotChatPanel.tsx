@@ -365,6 +365,7 @@ export default function CopilotChatPanel({
       <ChatView
         chat={chat}
         isAuthenticated={!!user}
+        showAdminUsageDetails={!!user?.is_admin}
         suggestedQuestions={getSuggestedQuestions(selectedTicker, tickers)}
         welcomeHeading="Ask me anything about the market"
         welcomeSubtext="I have access to live prices, AI reports, fundamentals, news, technicals, insider activity & your watchlist."

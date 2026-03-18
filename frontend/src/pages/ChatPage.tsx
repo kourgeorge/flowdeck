@@ -245,6 +245,7 @@ export default function ChatPage() {
             <ChatView
               chat={chat}
               isAuthenticated={!!user}
+              showAdminUsageDetails={!!user?.is_admin}
               suggestedQuestions={SUGGESTED_QUESTIONS}
               welcomeHeading={
                 greeting

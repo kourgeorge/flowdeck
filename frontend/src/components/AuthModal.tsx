@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authApi } from '../services/authApi';
 
@@ -10,6 +11,7 @@ interface AuthModalProps {
 
 export default function AuthModal({ onClose, message }: AuthModalProps) {
   const { login, register } = useAuth();
+  const navigate = useNavigate();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [authMethod, setAuthMethod] = useState<'choice' | 'email' | 'google'>('choice');
   const [email, setEmail] = useState('');
@@ -22,12 +24,13 @@ export default function AuthModal({ onClose, message }: AuthModalProps) {
     setError(null);
     setLoading(true);
     try {
-      if (mode === 'login') {
-        await login(email, password);
-      } else {
-        await register(email, password);
-      }
+      const profile = mode === 'login'
+        ? await login(email, password)
+        : await register(email, password);
       onClose();
+      if (mode === 'register' && profile.has_completed_investor_profile === false) {
+        navigate('/profile#investor-profile');
+      }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setError(typeof msg === 'string' ? msg : 'Something went wrong');

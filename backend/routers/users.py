@@ -103,14 +103,15 @@ def google_login():
 def google_callback_route(code: str, state: str, db: Session = Depends(get_db)):
     """Handle Google OAuth callback."""
     try:
-        user, jwt_token = auth_google_callback(
+        user, jwt_token, is_new_user = auth_google_callback(
             code,
             db,
             client_id=GOOGLE_CLIENT_ID,
             client_secret=GOOGLE_CLIENT_SECRET,
             redirect_uri=GOOGLE_REDIRECT_URI,
         )
-        redirect_url = f"{FRONTEND_URL}/auth/callback?token={jwt_token}&email={user.email}&user_id={user.id}"
+        is_new_flag = "1" if is_new_user else "0"
+        redirect_url = f"{FRONTEND_URL}/auth/callback?token={jwt_token}&email={user.email}&user_id={user.id}&is_new={is_new_flag}"
         return RedirectResponse(url=redirect_url)
     except AuthError as e:
         redirect_url = f"{FRONTEND_URL}/auth/callback?error={e.detail}"

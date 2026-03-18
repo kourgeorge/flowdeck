@@ -122,9 +122,9 @@ def google_callback(
     client_id: str,
     client_secret: str,
     redirect_uri: str,
-) -> Tuple[User, str]:
+ ) -> Tuple[User, str, bool]:
     """
-    Exchange Google OAuth code for user and JWT. Returns (user, access_token).
+    Exchange Google OAuth code for user and JWT. Returns (user, access_token, is_new_user).
     Creates user if first Google login. Sends welcome email for new users (best effort).
     Raises AuthError on configuration or token/email failure.
     """
@@ -163,12 +163,14 @@ def google_callback(
         raise AuthError(400, "Email not provided by Google")
 
     user = db.query(User).filter(User.email == email).first()
+    is_new_user = False
     if user:
         if not user.google_id:
             user.google_id = google_user_id
             db.commit()
             db.refresh(user)
     else:
+        is_new_user = True
         user = User(
             email=email,
             name=name,
@@ -193,4 +195,4 @@ def google_callback(
             pass
 
     token = create_access_token(str(user.id))
-    return user, token
+    return user, token, is_new_user
