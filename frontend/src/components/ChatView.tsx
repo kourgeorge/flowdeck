@@ -157,25 +157,21 @@ export function StreamingCursor() {
 
 export function TypingIndicator({ status }: { status?: string | null }) {
   return (
-    <div className="flex items-end gap-2 mb-4">
-      <div className="bg-slate-700 rounded-2xl rounded-bl-sm px-4 py-3">
-        {status ? (
-          <div className="flex items-center gap-2">
-            <svg className="w-3.5 h-3.5 text-blue-400 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-            </svg>
-            <span className="text-xs text-slate-300">{status}…</span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <svg className="w-3.5 h-3.5 text-blue-400 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-            </svg>
-            <span className="text-xs text-slate-300">Thinking…</span>
-          </div>
-        )}
+    <div className="mb-6 flex items-start gap-3">
+      <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-blue-500/20 bg-blue-500/10 text-blue-300 shadow-[0_10px_24px_rgba(37,99,235,0.12)]">
+        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+        </svg>
+      </div>
+      <div className="rounded-lg border border-slate-800/80 bg-slate-900/90 px-4 py-3 shadow-[0_16px_40px_rgba(15,23,42,0.3)]">
+        <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">AI Analyst</div>
+        <div className="flex items-center gap-2 text-sm text-slate-300">
+          <svg className="h-3.5 w-3.5 shrink-0 animate-spin text-blue-400" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+          </svg>
+          <span>{status ? `${status}…` : 'Thinking…'}</span>
+        </div>
       </div>
     </div>
   );
@@ -199,7 +195,7 @@ export function ToolCallBlock({ toolCall }: { toolCall: ToolCallEvent }) {
   } catch { /* use raw */ }
 
   return (
-    <div className="mb-1.5 rounded-lg border border-slate-600/60 bg-slate-800/60 overflow-hidden text-xs">
+    <div className="mb-1.5 rounded-md border border-slate-600/60 bg-slate-800/60 overflow-hidden text-xs">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
@@ -264,7 +260,7 @@ export function SkillActivationBlock({ event }: { event: SkillActivationEvent })
   const failedCount = event.steps.filter((s) => !s.ok).length;
 
   return (
-    <div className="mb-1.5 rounded-lg border border-blue-500/40 bg-blue-950/30 overflow-hidden text-xs">
+    <div className="mb-1.5 rounded-md border border-blue-500/40 bg-blue-950/30 overflow-hidden text-xs">
       {/* Header row */}
       <button
         type="button"
@@ -355,7 +351,7 @@ function CopyButton({ onClick, copied, title = 'Copy' }: { onClick: () => void; 
       type="button"
       onClick={onClick}
       title={title}
-      className="flex items-center justify-center w-6 h-6 rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-600/60 transition-colors"
+      className="flex h-6 w-6 items-center justify-center rounded-sm text-slate-400 transition-colors hover:bg-slate-600/60 hover:text-slate-200"
       aria-label={title}
     >
       {copied ? (
@@ -552,7 +548,7 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
   };
 
   return (
-    <div className="mt-3 rounded-xl border border-slate-600/60 bg-slate-800/60 overflow-hidden">
+    <div className="mt-3 rounded-md border border-slate-600/60 bg-slate-800/60 overflow-hidden">
       <div className="flex items-center justify-between px-4 py-2 border-b border-slate-700/60">
         <span className="text-xs font-semibold text-slate-300">{spec.title ?? ''}</span>
         <button
@@ -609,7 +605,7 @@ function renderUserMessage(content: string) {
       return (
         <span
           key={i}
-          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-blue-400/25 border border-blue-300/40 text-blue-100 font-mono font-semibold text-xs mx-0.5"
+          className="mx-0.5 inline-flex items-center gap-0.5 rounded-sm border border-blue-300/40 bg-blue-400/25 px-1.5 py-0.5 font-mono text-xs font-semibold text-blue-100"
         >
           {part}
         </span>
@@ -632,27 +628,40 @@ export function MessageBubble({
 }) {
   const isUser = message.role === 'user';
   const [copied, triggerCopy] = useCopyText(stripChartJsonFromContent(stripFollowUpJsonLine(message.content ?? '')));
-  
+
   // Detect if message contains RTL text
   const isRTL = detectRTL(message.content);
   const direction = isRTL ? 'rtl' : 'ltr';
 
   if (isUser) {
     return (
-      <div className="flex justify-end mb-4">
-        <div
-          className="max-w-[85%] bg-blue-600 text-white rounded-2xl rounded-br-sm px-4 py-2.5 text-sm leading-relaxed chat-message-content"
-          dir={direction}
-        >
-          {renderUserMessage(message.content)}
+      <div className="mb-6 flex justify-end">
+        <div className="max-w-[88%] md:max-w-[78%]">
+          <div className="mb-1.5 text-right text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500">You</div>
+          <div
+            className="rounded-lg border border-blue-400/20 bg-blue-600/92 px-4 py-3 text-sm leading-relaxed text-white shadow-[0_18px_40px_rgba(37,99,235,0.18)] chat-message-content"
+            dir={direction}
+          >
+            {renderUserMessage(message.content)}
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex items-start gap-2.5 mb-4">
+    <div className="mb-6 flex items-start gap-3">
+      <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-900/90 text-slate-300 shadow-[0_12px_28px_rgba(15,23,42,0.28)]">
+        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+        </svg>
+      </div>
       <div className="flex-1 min-w-0">
+        <div className="mb-1.5 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500">
+          <span>AI Analyst</span>
+          <span className="h-1 w-1 rounded-full bg-slate-600" />
+          <span>Research Response</span>
+        </div>
         {/* Skill activation blocks — shown above tool calls, with ⚡ icon */}
         {message.skill_activation_events && message.skill_activation_events.length > 0 && (
           <div className="mb-2 space-y-1">
@@ -671,7 +680,7 @@ export function MessageBubble({
         {/* Only render message bubble if there's content, streaming, or charts */}
         {(message.content || isStreaming || (message.charts && message.charts.length > 0) || extractChartSpecsFromContent(message.content ?? '').length > 0) && (
           <div
-            className="bg-slate-700/80 text-slate-100 rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed"
+            className="rounded-lg border border-slate-800/80 bg-slate-900/92 px-4 py-3 text-sm leading-relaxed text-slate-100 shadow-[0_18px_40px_rgba(15,23,42,0.28)]"
             dir={direction}
           >
             <div className="prose prose-invert prose-sm max-w-none chat-message-content">
@@ -720,15 +729,15 @@ export function MessageBubble({
           </div>
         )}
         {/* Copy button + token/tool metadata row */}
-        <div className="flex items-center gap-2.5 mt-1 ml-1">
+        <div className="mt-2 ml-1 flex flex-wrap items-center gap-2.5">
           {/* Copy text button — always visible once message is complete */}
           {!isStreaming && stripChartJsonFromContent(stripFollowUpJsonLine(message.content ?? '')) && (
             <CopyButton onClick={triggerCopy} copied={copied} title="Copy message" />
           )}
           {((message.platform_tokens_used != null || message.tokens_used != null) || (message.tools_called != null && message.tools_called > 0)) && (
-            <div className="flex items-center gap-2.5 text-xs text-slate-500">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
               {message.tools_called != null && message.tools_called > 0 && (
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1 rounded-sm border border-slate-700/80 bg-slate-900/70 px-2.5 py-1">
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -737,7 +746,7 @@ export function MessageBubble({
                 </span>
               )}
               {(message.platform_tokens_used != null || message.tokens_used != null) && (
-                <span>
+                <span className="rounded-sm border border-slate-700/80 bg-slate-900/70 px-2.5 py-1">
                   {(message.platform_tokens_used ?? message.tokens_used)!} {(message.platform_tokens_used ?? message.tokens_used) !== 1 ? 'DECKS' : 'DECK'} used
                   {showAdminUsageDetails && (message.tokens_used != null || message.cost_usd != null) && (
                     <span>
@@ -755,15 +764,15 @@ export function MessageBubble({
         </div>
         {/* Follow-up suggestions — clickable chips */}
         {!isStreaming && message.follow_up_questions && message.follow_up_questions.length > 0 && (
-          <div className="mt-2 space-y-1.5">
-            <p className="text-xs text-slate-500 mb-1">Suggestions</p>
-            <div className="flex flex-wrap gap-1.5">
+          <div className="mt-3 space-y-2">
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Suggestions</p>
+            <div className="flex flex-wrap gap-2">
               {message.follow_up_questions.map((q) => (
                 <button
                   key={q}
                   type="button"
                   onClick={() => onFollowUpClick?.(q)}
-                  className="text-left text-[13px] text-slate-300 bg-slate-700/50 hover:bg-slate-700 border border-slate-600/60 hover:border-slate-500 rounded-xl px-3 py-2 transition-all"
+                  className="rounded-md border border-slate-700/80 bg-slate-900/70 px-3.5 py-2.5 text-left text-[13px] text-slate-300 transition-all hover:border-slate-600 hover:bg-slate-800/80"
                 >
                   <span className="text-blue-400 mr-1.5">→</span>
                   {q}
@@ -1132,58 +1141,82 @@ export default function ChatView({
   return (
     <>
       {/* Messages area */}
-      <div className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden px-3 py-4">
+      <div className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden px-3 py-4 md:px-4 md:py-5">
         {isEmpty && (
-          <div className="flex flex-col items-center justify-center min-h-[60%] gap-4 pb-4">
+          <div className="flex min-h-full items-center justify-center py-4">
             {!isAuthenticated ? (
-              <div className="text-center max-w-xs px-2">
-                <div className="w-12 h-12 rounded-full bg-blue-600/20 border border-blue-500/30 flex items-center justify-center mx-auto mb-3">
-                  <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="mx-auto max-w-md rounded-xl border border-slate-800/80 bg-slate-900/85 p-8 text-center shadow-[0_24px_60px_rgba(15,23,42,0.28)]">
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg border border-blue-500/20 bg-blue-500/10">
+                  <svg className="h-6 w-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
                 </div>
-                <p className="text-sm font-semibold text-white mb-1">Sign in to use AI Analyst</p>
-                <p className="text-xs text-slate-400 leading-relaxed">
+                <p className="mb-2 text-lg font-semibold text-white">Sign in to use AI Analyst</p>
+                <p className="text-sm leading-6 text-slate-400">
                   Create a free account to chat with the AI Analyst and get live market insights.
                 </p>
               </div>
             ) : (
-              <>
-                <div className="text-center max-w-xs px-2">
-                  <div className="w-12 h-12 rounded-full bg-blue-600/20 border border-blue-500/30 flex items-center justify-center mx-auto mb-3">
-                    <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="mx-auto w-full max-w-5xl rounded-xl border border-slate-800/80 bg-slate-950/55 p-5 shadow-[0_26px_70px_rgba(15,23,42,0.32)] md:p-6">
+                <div className="mb-4 flex items-start gap-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-blue-500/20 bg-blue-500/10">
+                    <svg className="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
                     </svg>
                   </div>
-                  {welcomeHeading && (
-                    <p className="text-sm font-semibold text-white mb-1">{welcomeHeading}</p>
-                  )}
-                  {welcomeSubtext && (
-                    <p className="text-sm text-slate-400 leading-relaxed">{welcomeSubtext}</p>
-                  )}
+                  <div className="min-w-0 flex-1">
+                    {welcomeHeading && (
+                      <p className="text-lg font-semibold tracking-tight text-white">{welcomeHeading}</p>
+                    )}
+                    {welcomeSubtext && (
+                      <p className="mt-1.5 text-[13px] leading-5 text-slate-400">{welcomeSubtext}</p>
+                    )}
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      <span className="rounded-sm border border-slate-800 bg-slate-900/80 px-2.5 py-0.5 text-[11px] text-slate-300">
+                        Thesis
+                      </span>
+                      <span className="rounded-sm border border-slate-800 bg-slate-900/80 px-2.5 py-0.5 text-[11px] text-slate-300">
+                        @Ticker
+                      </span>
+                      <span className="rounded-sm border border-slate-800 bg-slate-900/80 px-2.5 py-0.5 text-[11px] text-slate-300">
+                        Charts
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="w-full space-y-1.5">
-                  <p className="text-xs text-slate-500 text-center mb-1">Suggested questions</p>
-                  {suggestedQuestions.map((q) => (
-                    <button
-                      key={q}
-                      type="button"
-                      onClick={() => sendMessage(q)}
-                      className="w-full text-left text-[13px] text-slate-300 bg-slate-700/50 hover:bg-slate-700 border border-slate-600/60 hover:border-slate-500 rounded-xl px-3 py-2 transition-all"
-                    >
-                      <span className="text-blue-400 mr-1.5">→</span>
-                      {q}
-                    </button>
-                  ))}
+
+                <div className="border-t border-slate-800/80 pt-4">
+                  <div className="mb-3">
+                    <p className="text-sm font-semibold text-white">Suggested starting points</p>
+                  </div>
+                  <div className="grid gap-2">
+                    {suggestedQuestions.map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        onClick={() => sendMessage(q)}
+                        className="group rounded-md border border-slate-800/80 bg-slate-950/75 px-3 py-2 text-left transition-all hover:border-slate-700 hover:bg-slate-900"
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-sm bg-blue-500/10 text-blue-300 transition-colors group-hover:bg-blue-500/15 group-hover:text-blue-200">
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </span>
+                          <span className="text-[13px] leading-5 text-slate-300">{q}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </>
+              </div>
             )}
           </div>
         )}
 
         {messages.map((msg, i) => (
           <MessageBubble
-            key={i}
+            key={`${msg.role}-${i}-${msg.content.slice(0, 24)}`}
             message={msg}
             isStreaming={isStreaming && i === messages.length - 1 && msg.role === 'assistant'}
             showAdminUsageDetails={showAdminUsageDetails}
@@ -1194,15 +1227,15 @@ export default function ChatView({
         {isLoading && <TypingIndicator status={thinkingStatus} />}
 
         {error && (
-          <div className="flex items-start gap-2 rounded-xl border border-red-800 bg-red-950/50 px-3 py-2.5 text-xs text-red-200 mb-4">
-            <svg className="h-4 w-4 shrink-0 text-red-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="mb-4 flex items-start gap-2 rounded-md border border-red-800/80 bg-red-950/40 px-4 py-3 text-sm text-red-100">
+            <svg className="mt-0.5 h-4 w-4 shrink-0 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <span>{error}</span>
             <button
               type="button"
               onClick={() => setError(null)}
-              className="ml-auto text-red-400 hover:text-red-200"
+              className="ml-auto text-red-400 transition-colors hover:text-red-200"
               aria-label="Dismiss error"
             >
               ×
@@ -1214,10 +1247,9 @@ export default function ChatView({
       </div>
 
       {/* Input area */}
-      <div className="shrink-0 px-3 pt-2">
-        <div className="flex flex-col bg-slate-700/80 rounded-lg border border-slate-600 focus-within:border-blue-500 transition-colors">
-          {/* Textarea row */}
-          <div className="px-3 pt-2">
+      <div className="shrink-0 px-3 pb-1 pt-2 md:px-4">
+        <div className="overflow-hidden rounded-lg border border-slate-800/80 bg-slate-900/92 shadow-[0_18px_44px_rgba(15,23,42,0.24)] transition-colors focus-within:border-blue-500/60">
+          <div className="px-4 pt-3">
             <TickerMentionInput
               inputRef={inputRef}
               value={input}
@@ -1225,27 +1257,29 @@ export default function ChatView({
               onKeyDown={handleKeyDown}
               placeholder={inputPlaceholder ?? (isAuthenticated ? 'Ask about any stock…' : 'Sign in to start chatting…')}
               disabled={isLoading || isStreaming || !isAuthenticated}
-              className="bg-transparent text-sm text-white placeholder-slate-400 resize-none outline-none min-h-[60px] max-h-[200px] leading-6 disabled:opacity-50"
+              className="min-h-[56px] max-h-[160px] resize-none bg-transparent text-[14px] leading-6 text-white outline-none placeholder:text-slate-500 disabled:opacity-50"
             />
           </div>
-          {/* Bottom bar: hint + send button */}
-          <div className="flex items-center justify-between px-3 py-1.5 border-t border-slate-600/50">
+
+          <div className="flex flex-col gap-2 border-t border-slate-800/80 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
             {isAuthenticated ? (
-              <span className="text-[11px] text-slate-500 select-none">
-                Type <kbd className="px-1 py-0.5 rounded bg-slate-600/60 text-slate-400 font-mono text-[10px]">@</kbd> to mention a ticker
-              </span>
+              <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
+                <span className="rounded-sm border border-slate-800 bg-slate-950/70 px-2 py-0.5 leading-4">
+                  Use <kbd className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">@</kbd> to mention a ticker
+                </span>
+              </div>
             ) : (
-              <span />
+              <span className="text-[10px] text-slate-500">Authentication required to send messages.</span>
             )}
             <button
               type="button"
               onClick={() => sendMessage(input)}
               disabled={!input.trim() || isLoading || isStreaming || !isAuthenticated}
-              className="shrink-0 w-8 h-8 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-default flex items-center justify-center transition-colors"
+              className="inline-flex h-8 w-8 items-center justify-center self-end rounded-md bg-blue-600 text-white transition-colors hover:bg-blue-500 disabled:cursor-default disabled:bg-slate-700 disabled:text-slate-400 sm:self-auto"
               aria-label="Send message"
             >
-              <svg className="w-4 h-4 text-white rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.25} d="M9 5l7 7-7 7" />
               </svg>
             </button>
           </div>

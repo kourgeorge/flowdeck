@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ChatView, { useChatState, type ChatMessageWithMeta } from '../components/ChatView';
 import PageHeader from '../components/PageHeader';
 import { useAuth } from '../contexts/AuthContext';
 import { profileApi } from '../services/authApi';
-import { chatApi, type ChatSessionListItem, type ChatMessageWithMetaApi } from '../services/api';
+import { chatApi, type ChatMessageWithMetaApi, type ChatSessionListItem } from '../services/api';
 
 const SUGGESTED_QUESTIONS = [
   "What's the current price and today's performance for AAPL?",
@@ -14,6 +14,8 @@ const SUGGESTED_QUESTIONS = [
   'Summarize the latest news for AMZN',
   'Calculate the Pearson correlation between META and IBM daily returns over the past year',
 ];
+
+const ACTIVE_CHAT_SESSION_STORAGE_KEY = 'flowdeck.chat.activeSessionId';
 
 function apiMessageToChatMessageWithMeta(m: ChatMessageWithMetaApi): ChatMessageWithMeta {
   return {
@@ -31,15 +33,120 @@ function apiMessageToChatMessageWithMeta(m: ChatMessageWithMetaApi): ChatMessage
   };
 }
 
+function formatSessionTimestamp(updatedAt?: string | null) {
+  if (!updatedAt) return 'No activity yet';
+
+  const date = new Date(updatedAt);
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+
+  if (date.toDateString() === yesterday.toDateString()) {
+    return `Yesterday · ${date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+  }
+
+  if (sameDay) {
+    return `Today · ${date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+  }
+
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+function getInitialHistoryCollapsed() {
+  if (typeof window === 'undefined') return false;
+  return window.innerWidth < 1024;
+}
+
+function getStoredActiveSessionId(): number | null {
+  if (typeof window === 'undefined') return null;
+  const raw = window.localStorage.getItem(ACTIVE_CHAT_SESSION_STORAGE_KEY);
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function HistoryList({
+  sessions,
+  activeSessionId,
+  onOpenSession,
+  onDeleteSession,
+}: {
+  sessions: ChatSessionListItem[];
+  activeSessionId: number | null;
+  onOpenSession: (id: number) => void;
+  onDeleteSession: (id: number, e: React.MouseEvent<HTMLButtonElement>) => void;
+}) {
+  if (sessions.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-slate-700/80 bg-slate-900/40 px-4 py-5 text-sm text-slate-400">
+        Your saved conversations will appear here once you start chatting.
+      </div>
+    );
+  }
+
+  return (
+    <ul className="space-y-2">
+      {sessions.map((session) => {
+        const isActive = activeSessionId === session.id;
+
+        return (
+          <li
+            key={session.id}
+            className={`group rounded-lg border transition-all ${
+              isActive
+                ? 'border-blue-500/60 bg-blue-500/12 shadow-[0_12px_30px_rgba(37,99,235,0.16)]'
+                : 'border-slate-800/80 bg-slate-900/60 hover:border-slate-700 hover:bg-slate-800/70'
+            }`}
+          >
+            <div className="flex items-start gap-2 px-3 py-3">
+              <button
+                type="button"
+                onClick={() => onOpenSession(session.id)}
+                className="flex min-w-0 flex-1 items-start gap-3 text-left"
+              >
+                <div className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${isActive ? 'bg-blue-400' : 'bg-slate-600 group-hover:bg-slate-400'}`} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium text-slate-100" title={session.title ?? undefined}>
+                    {session.title || 'New chat'}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">{formatSessionTimestamp(session.updated_at)}</div>
+                </div>
+              </button>
+              <div>
+                <button
+                  type="button"
+                  onClick={(e) => onDeleteSession(session.id, e)}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-700/80 hover:text-rose-300"
+                  title="Delete chat"
+                  aria-label="Delete chat"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export default function ChatPage() {
   const { user } = useAuth();
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [sessions, setSessions] = useState<ChatSessionListItem[]>([]);
-  const [historyCollapsed, setHistoryCollapsed] = useState(() => {
-    if (typeof window !== 'undefined' && window.innerWidth < 768) return true;
-    return false;
+  const [historyCollapsed, setHistoryCollapsed] = useState(getInitialHistoryCollapsed);
+  const [isMobileHistory, setIsMobileHistory] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 1024;
   });
+  const [pendingRestoredSessionId, setPendingRestoredSessionId] = useState<number | null>(null);
+  const restoreAttemptedRef = useRef(false);
+  const restorePollTimeoutRef = useRef<number | null>(null);
 
   const refreshSessions = useCallback(() => {
     if (!user) return;
@@ -62,48 +169,165 @@ export default function ChatPage() {
   }, [refreshSessions]);
 
   const chat = useChatState(undefined, undefined, sessionId, onStreamDone, createSessionIfNeeded);
+  const { inputRef, setTokenBalance, clearLoadingState, setMessages, clearChat, messages } = chat;
 
-  // Fetch initial token balance and display name when user is logged in
+  const clearRestorePoll = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (restorePollTimeoutRef.current != null) {
+      window.clearTimeout(restorePollTimeoutRef.current);
+      restorePollTimeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const syncViewport = () => {
+      const mobile = window.innerWidth < 1024;
+      setIsMobileHistory(mobile);
+      if (!mobile) return;
+      setHistoryCollapsed(true);
+    };
+
+    syncViewport();
+    window.addEventListener('resize', syncViewport);
+    return () => window.removeEventListener('resize', syncViewport);
+  }, []);
+
   useEffect(() => {
     if (!user) {
-      chat.setTokenBalance(null);
+      setTokenBalance(null);
       setDisplayName(null);
       setSessions([]);
       setSessionId(null);
+      setPendingRestoredSessionId(null);
+      setHistoryCollapsed(true);
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(ACTIVE_CHAT_SESSION_STORAGE_KEY);
+      }
       return;
     }
+
     profileApi.getMe().then((me) => {
-      chat.setTokenBalance(me.token_balance);
+      setTokenBalance(me.token_balance);
       setDisplayName(me.name && me.name.trim() ? me.name.trim() : null);
     }).catch(() => {});
-  }, [user]);
+  }, [setTokenBalance, user]);
 
   useEffect(() => {
     refreshSessions();
   }, [refreshSessions]);
 
-  // Focus input on mount
   useEffect(() => {
-    chat.inputRef.current?.focus();
-  }, []);
+    restoreAttemptedRef.current = false;
+    clearRestorePoll();
+  }, [clearRestorePoll, user]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!user) {
+      window.localStorage.removeItem(ACTIVE_CHAT_SESSION_STORAGE_KEY);
+      return;
+    }
+    if (sessionId == null) return;
+    window.localStorage.setItem(ACTIVE_CHAT_SESSION_STORAGE_KEY, String(sessionId));
+  }, [sessionId, user]);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, [inputRef]);
+
+  const openSessionById = useCallback(
+    async (
+      id: number,
+      options?: { collapseHistory?: boolean; pollIfEmpty?: boolean },
+    ) => {
+      clearRestorePoll();
+      clearLoadingState();
+      const detail = await chatApi.getChatSession(id);
+      setSessionId(detail.id);
+      setMessages(detail.messages.map(apiMessageToChatMessageWithMeta));
+      if ((options?.collapseHistory ?? true) && isMobileHistory) setHistoryCollapsed(true);
+      setPendingRestoredSessionId(options?.pollIfEmpty && detail.messages.length === 0 ? detail.id : null);
+      return detail;
+    },
+    [clearLoadingState, clearRestorePoll, isMobileHistory, setMessages],
+  );
+
+  useEffect(() => {
+    if (!user || restoreAttemptedRef.current) return;
+    if (sessionId != null || messages.length > 0) {
+      restoreAttemptedRef.current = true;
+      return;
+    }
+
+    const storedSessionId = getStoredActiveSessionId();
+    restoreAttemptedRef.current = true;
+    if (storedSessionId == null) return;
+
+    openSessionById(storedSessionId, { collapseHistory: false, pollIfEmpty: true }).catch(() => {
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(ACTIVE_CHAT_SESSION_STORAGE_KEY);
+      }
+      setPendingRestoredSessionId(null);
+    });
+  }, [messages.length, openSessionById, sessionId, user]);
+
+  useEffect(() => {
+    if (!user || pendingRestoredSessionId == null || typeof window === 'undefined') return undefined;
+
+    let cancelled = false;
+    let attempts = 0;
+
+    const poll = async () => {
+      attempts += 1;
+      try {
+        const detail = await chatApi.getChatSession(pendingRestoredSessionId);
+        if (cancelled) return;
+        if (detail.messages.length > 0) {
+          setSessionId(detail.id);
+          setMessages(detail.messages.map(apiMessageToChatMessageWithMeta));
+          setPendingRestoredSessionId(null);
+          refreshSessions();
+          return;
+        }
+        if (attempts >= 10) {
+          setPendingRestoredSessionId(null);
+          return;
+        }
+        restorePollTimeoutRef.current = window.setTimeout(poll, 2000);
+      } catch {
+        if (!cancelled) setPendingRestoredSessionId(null);
+      }
+    };
+
+    restorePollTimeoutRef.current = window.setTimeout(poll, 2000);
+
+    return () => {
+      cancelled = true;
+      clearRestorePoll();
+    };
+  }, [clearRestorePoll, pendingRestoredSessionId, refreshSessions, setMessages, user]);
+
+  useEffect(() => () => clearRestorePoll(), [clearRestorePoll]);
 
   const handleOpenSession = (id: number) => {
-    chat.clearLoadingState();
-    chatApi.getChatSession(id).then((detail) => {
-      setSessionId(detail.id);
-      chat.setMessages(detail.messages.map(apiMessageToChatMessageWithMeta));
-      setHistoryCollapsed(true);
-    }).catch(() => {});
+    openSessionById(id).catch(() => {});
   };
 
-  const handleDeleteSession = (id: number, e: React.MouseEvent) => {
+  const handleDeleteSession = (id: number, e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     if (!user) return;
+
     chatApi.deleteChatSession(id).then(() => {
-      setSessions((prev) => prev.filter((s) => s.id !== id));
+      setSessions((prev) => prev.filter((session) => session.id !== id));
       if (sessionId === id) {
         setSessionId(null);
-        chat.clearChat();
+        setPendingRestoredSessionId(null);
+        clearChat();
+        if (typeof window !== 'undefined') {
+          window.localStorage.removeItem(ACTIVE_CHAT_SESSION_STORAGE_KEY);
+        }
       }
     }).catch(() => {});
   };
@@ -112,7 +336,6 @@ export default function ChatPage() {
     ? displayName ?? (user.email.split('@')[0].charAt(0).toUpperCase() + user.email.split('@')[0].slice(1))
     : null;
 
-  // Most recent first (recent at top)
   const sessionsByRecency = useMemo(
     () =>
       [...sessions].sort((a, b) => {
@@ -123,8 +346,27 @@ export default function ChatPage() {
     [sessions],
   );
 
+  const currentSession = sessions.find((session) => session.id === sessionId) ?? null;
+  const startNewChat = () => {
+    setSessionId(null);
+    setPendingRestoredSessionId(null);
+    clearChat();
+    clearRestorePoll();
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(ACTIVE_CHAT_SESSION_STORAGE_KEY);
+    }
+    inputRef.current?.focus();
+    if (isMobileHistory) setHistoryCollapsed(true);
+  };
+
   return (
-    <div className="flex flex-col h-full bg-gray-900">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-slate-950 text-white">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.18),transparent_58%)]" />
+        <div className="absolute left-[-12%] top-24 h-64 w-64 rounded-full bg-sky-400/6 blur-3xl" />
+        <div className="absolute right-[-8%] top-16 h-72 w-72 rounded-full bg-blue-500/8 blur-3xl" />
+      </div>
+
       <PageHeader
         title="AI Analyst Agent"
         icon={
@@ -135,26 +377,38 @@ export default function ChatPage() {
       >
         {user && (
           <>
+            <button
+              type="button"
+              onClick={() => setHistoryCollapsed((prev) => !prev)}
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-700/80 bg-slate-800/70 text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-700/80 hover:text-white"
+              title={historyCollapsed ? 'Show conversation history' : 'Hide conversation history'}
+              aria-label={historyCollapsed ? 'Show conversation history' : 'Hide conversation history'}
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <rect x="3" y="4" width="18" height="16" rx="2" strokeWidth="2" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 4v16M13 8h4M13 12h4M13 16h3" />
+              </svg>
+            </button>
             {chat.tokenBalance !== null && (
               <div
                 key={chat.tokenBalance}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-700/60 border border-slate-600/60 transition-all duration-300"
+                className="flex items-center gap-2 rounded-md border border-amber-400/20 bg-amber-500/8 px-3 py-1.5 transition-all duration-300"
                 title="Remaining token balance"
               >
-                <svg className="w-3.5 h-3.5 text-yellow-400 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                <svg className="h-3.5 w-3.5 shrink-0 text-amber-300" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2.67v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05.82 1.87 2.65 1.87 1.96 0 2.4-.98 2.4-1.59 0-.83-.44-1.61-2.67-2.14-2.48-.6-4.18-1.62-4.18-3.67 0-1.72 1.39-2.84 3.11-3.21V4h2.67v1.95c1.86.45 2.79 1.86 2.85 3.39H14.3c-.05-1.11-.64-1.87-2.22-1.87-1.5 0-2.4.68-2.4 1.64 0 .84.65 1.39 2.67 1.91s4.18 1.39 4.18 3.91c-.01 1.83-1.38 2.83-3.12 3.16z" />
                 </svg>
-                <span className="text-xs font-medium text-yellow-300 tabular-nums">{chat.tokenBalance.toLocaleString()}</span>
-                <span className="text-xs text-slate-400">tokens</span>
+                <span className="text-xs font-semibold text-amber-100 tabular-nums">{chat.tokenBalance.toLocaleString()}</span>
+                <span className="text-xs text-amber-200/70">tokens</span>
               </div>
             )}
             <button
               type="button"
-              onClick={() => { setSessionId(null); chat.clearChat(); }}
-              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors px-2.5 py-1 rounded-lg hover:bg-gray-700 border border-gray-600 hover:border-gray-500"
+              onClick={startNewChat}
+              className="flex items-center gap-1.5 rounded-md border border-slate-700/80 bg-slate-800/70 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-slate-600 hover:bg-slate-700/80 hover:text-white"
               title="Start a new chat"
             >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
               New chat
@@ -163,108 +417,174 @@ export default function ChatPage() {
         )}
       </PageHeader>
 
-      <div className="flex flex-1 min-h-0 min-w-0">
-        {/* Session list sidebar (authenticated only), collapsible */}
-        {user && (
-          <aside
-            className={`shrink-0 border-r border-gray-700 bg-gray-800/50 flex flex-col overflow-hidden transition-[width] duration-200 ${
-              historyCollapsed ? 'w-12' : 'w-56'
-            }`}
-          >
-            <div className="flex items-center border-b border-gray-700 min-h-[40px]">
-              {historyCollapsed ? (
-                <button
-                  type="button"
-                  onClick={() => setHistoryCollapsed(false)}
-                  title="Expand chat history"
-                  className="w-full flex items-center justify-center py-2 text-slate-400 hover:text-white hover:bg-gray-700/50 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
-                </button>
-              ) : (
-                <>
-                  <div className="flex-1 px-3 py-2 min-w-0">
-                    <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide truncate">Chat history</h2>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setHistoryCollapsed(true)}
-                    title="Collapse chat history"
-                    className="shrink-0 w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white hover:bg-gray-700/50 transition-colors"
-                    aria-label="Collapse chat history"
-                  >
-                    <svg className="w-4 h-4 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                </>
-              )}
+      {user && isMobileHistory && !historyCollapsed && (
+        <>
+          <button
+            type="button"
+            onClick={() => setHistoryCollapsed(true)}
+            aria-label="Close conversation history"
+            className="absolute inset-0 z-20 bg-slate-950/60 backdrop-blur-sm lg:hidden"
+          />
+          <aside className="absolute inset-y-0 left-0 z-30 flex w-[23rem] max-w-[calc(100%-1rem)] flex-col border-r border-slate-800 bg-slate-950/96 px-3 pb-4 pt-3 shadow-2xl shadow-black/40 lg:hidden">
+            <div className="mb-4 flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/80 px-4 py-3">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">History</div>
+                <div className="mt-1 text-sm text-slate-200">Saved conversations</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoryCollapsed(true)}
+                className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-slate-300 transition-colors hover:border-slate-600 hover:text-white"
+                aria-label="Close conversation history"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
-            {!historyCollapsed && (
-              <ul className="flex-1 overflow-y-auto py-1">
-                {sessionsByRecency.map((s) => (
-                  <li key={s.id}>
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => handleOpenSession(s.id)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleOpenSession(s.id)}
-                      className={`group flex items-center gap-2 px-3 py-2 text-left cursor-pointer border-l-2 transition-colors ${
-                        sessionId === s.id
-                          ? 'border-blue-500 bg-gray-700/60 text-white'
-                          : 'border-transparent hover:bg-gray-700/40 text-slate-300'
-                      }`}
+
+            <div className="mb-4 rounded-lg border border-slate-800 bg-slate-900/70 p-4">
+              <p className="text-sm font-medium text-white">Open a saved thread or start a new one.</p>
+              <button
+                type="button"
+                onClick={startNewChat}
+                className="mt-4 inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Start new chat
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+              <HistoryList
+                sessions={sessionsByRecency}
+                activeSessionId={sessionId}
+                onOpenSession={handleOpenSession}
+                onDeleteSession={handleDeleteSession}
+              />
+            </div>
+          </aside>
+        </>
+      )}
+
+      <div className="relative z-10 flex-1 min-h-0 px-3 pb-3 pt-3 md:px-4 md:pb-4">
+        <div className="mx-auto flex h-full min-h-0 w-full max-w-[1280px] gap-3 lg:gap-4">
+          {user && !isMobileHistory && (
+            <aside
+              className={`hidden min-h-0 shrink-0 flex-col overflow-hidden rounded-xl border border-slate-800/80 bg-slate-900/75 shadow-[0_20px_80px_rgba(2,6,23,0.45)] backdrop-blur lg:flex ${
+                historyCollapsed ? 'w-[88px]' : 'w-[320px]'
+              }`}
+            >
+              <div className="border-b border-slate-800/80 p-3">
+                {historyCollapsed ? (
+                  <div className="flex flex-col items-center gap-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => setHistoryCollapsed(false)}
+                      className="flex h-11 w-11 items-center justify-center rounded-md border border-slate-700/80 bg-slate-800/80 text-slate-300 transition-colors hover:border-slate-600 hover:text-white"
+                      title="Expand conversation history"
                     >
-                      <span className="flex-1 min-w-0 truncate text-sm" title={s.title ?? undefined}>
-                        {s.title || 'New chat'}
-                      </span>
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={startNewChat}
+                      className="flex h-11 w-11 items-center justify-center rounded-md bg-blue-600 text-white transition-colors hover:bg-blue-500"
+                      title="Start a new chat"
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">History</h2>
+                      </div>
                       <button
                         type="button"
-                        onClick={(e) => handleDeleteSession(s.id, e)}
-                        className="shrink-0 w-6 h-6 flex items-center justify-center rounded text-slate-500 hover:text-red-400 hover:bg-gray-600/60 opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Delete chat"
-                        aria-label="Delete chat"
+                        onClick={() => setHistoryCollapsed(true)}
+                        className="flex h-10 w-10 items-center justify-center rounded-md border border-slate-700/80 bg-slate-800/80 text-slate-300 transition-colors hover:border-slate-600 hover:text-white"
+                        aria-label="Collapse conversation history"
                       >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                         </svg>
                       </button>
                     </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </aside>
-        )}
+                    <button
+                      type="button"
+                      onClick={startNewChat}
+                      className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-500"
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Start new chat
+                    </button>
+                  </div>
+                )}
+              </div>
 
-        {/* Centered content wrapper for the messages + input */}
-        <div className="flex flex-col flex-1 min-h-0 min-w-0">
-          <div className="flex flex-col flex-1 min-h-0 min-w-0 max-w-3xl w-full mx-auto px-4">
-            <ChatView
-              chat={chat}
-              isAuthenticated={!!user}
-              showAdminUsageDetails={!!user?.is_admin}
-              suggestedQuestions={SUGGESTED_QUESTIONS}
-              welcomeHeading={
-                greeting
-                  ? `Hi ${greeting}!\nAsk me anything about the market`
-                  : undefined
-              }
-              welcomeSubtext="I have access to live prices, AI reports, fundamentals, news, technicals, insider activity & your watchlist."
-              inputPlaceholder={user ? 'Ask about any stock…' : 'Sign in to start chatting…'}
-              inputFooter={
-                <p className="text-xs text-slate-500 text-center py-1.5">
-                  AI can make mistakes — always verify · Not financial advice
-                </p>
-              }
-            />
-          </div>
+              {!historyCollapsed && (
+                <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-1">
+                  <HistoryList
+                    sessions={sessionsByRecency}
+                    activeSessionId={sessionId}
+                    onOpenSession={handleOpenSession}
+                    onDeleteSession={handleDeleteSession}
+                  />
+                </div>
+              )}
+            </aside>
+          )}
+
+          <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-800/80 bg-slate-900/75 shadow-[0_20px_80px_rgba(2,6,23,0.5)] backdrop-blur">
+            <div className="border-b border-slate-800/80 bg-slate-950/55 px-4 py-2.5 md:px-5">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0 text-sm font-medium text-slate-100">
+                  <span className="mr-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Thread</span>
+                  <span className="truncate align-middle">
+                    {currentSession?.title || (greeting ? `${greeting}'s new market thread` : 'New market thread')}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded-md border border-slate-800 bg-slate-900/80 px-2.5 py-1 text-[11px] text-slate-400">
+                    {sessions.length} chats
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col px-2 pb-2 pt-2 md:px-3 md:pb-3">
+              <ChatView
+                chat={chat}
+                isAuthenticated={!!user}
+                showAdminUsageDetails={!!user?.is_admin}
+                suggestedQuestions={SUGGESTED_QUESTIONS}
+                welcomeHeading={
+                  greeting
+                    ? `Hi ${greeting}. What are you researching?`
+                    : undefined
+                }
+                welcomeSubtext="Build a thesis, stress-test an idea, or pull together price action, fundamentals, and news in one thread."
+                inputPlaceholder={user ? 'Ask about any stock, theme, or portfolio question…' : 'Sign in to start chatting…'}
+                inputFooter={
+                  <p className="px-2 pb-1 pt-1 text-center text-[11px] leading-4 text-slate-500">
+                    AI can make mistakes. Verify important details before acting. Not financial advice.
+                  </p>
+                }
+              />
+            </div>
+          </section>
         </div>
       </div>
     </div>
   );
 }
-
-// Made with Bob

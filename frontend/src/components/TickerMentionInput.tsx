@@ -204,10 +204,10 @@ export default function TickerMentionInput({
       {showDropdown && suggestions.length > 0 && (
         <div
           ref={dropdownRef}
-          className="absolute bottom-full mb-1 left-0 w-64 bg-gray-800 border border-gray-600 rounded-xl shadow-2xl z-50 overflow-hidden"
+          className="absolute bottom-full left-0 z-50 mb-2 w-72 overflow-hidden rounded-lg border border-slate-700/80 bg-slate-950/96 shadow-[0_24px_70px_rgba(15,23,42,0.42)] backdrop-blur"
         >
-          <div className="px-3 py-1.5 border-b border-gray-700 flex items-center gap-1.5">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Mention a ticker</span>
+          <div className="flex items-center gap-1.5 border-b border-slate-800/80 px-3 py-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Mention a ticker</span>
           </div>
           <ul className="max-h-52 overflow-y-auto">
             {suggestions.map((ticker, i) => (
@@ -221,14 +221,14 @@ export default function TickerMentionInput({
                   }}
                   className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${
                     i === selectedIndex
-                      ? 'bg-blue-600/40 text-white'
-                      : 'hover:bg-gray-700 text-slate-200'
+                      ? 'bg-blue-500/12 text-white'
+                      : 'text-slate-200 hover:bg-slate-900'
                   }`}
                 >
-                  <span className="shrink-0 w-10 text-xs font-bold text-blue-300 font-mono">
+                  <span className="shrink-0 rounded-sm border border-blue-500/15 bg-blue-500/10 px-2 py-1 text-xs font-bold font-mono text-blue-300">
                     {ticker.ticker}
                   </span>
-                  <span className="text-xs text-slate-400 truncate">{ticker.name}</span>
+                  <span className="truncate text-xs text-slate-400">{ticker.name}</span>
                 </button>
               </li>
             ))}
