@@ -5,7 +5,7 @@ import {
   AreaChart, Area, BarChart, Bar, LineChart, Line, ScatterChart, Scatter,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { chatApi, type ChatMessage, type ModelMetadataApi, type ToolCallEvent, type ChartSpec, type SkillActivationEvent, type ChatTurnStatus } from '../services/api';
+import { chatApi, formatSkillDisplayName, type ChatMessage, type ModelMetadataApi, type ToolCallEvent, type ChartSpec, type SkillActivationEvent, type ChatTurnStatus } from '../services/api';
 import { convertAsciiTableToMarkdown } from '../utils/chatMarkdown';
 import TickerMentionInput from './TickerMentionInput';
 import { getErrorMessage, isInsufficientTokensError, isAuthenticationError } from '../utils/errorHandling';
@@ -149,6 +149,10 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   get_portfolio_overview: 'Portfolio Overview',
 };
 
+function formatToolDisplayName(name: string): string {
+  return TOOL_DISPLAY_NAMES[name] ?? name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 // ── Sub-components ─────────────────────────────────────────────────────────
 
 export function StreamingCursor() {
@@ -156,6 +160,8 @@ export function StreamingCursor() {
 }
 
 export function TypingIndicator({ status }: { status?: string | null }) {
+  const displayStatus = status ? (/[.…]$/.test(status) ? status : `${status}…`) : 'Thinking…';
+
   return (
     <div className="mb-6 flex items-start gap-3">
       <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-blue-500/20 bg-blue-500/10 text-blue-300 shadow-[0_10px_24px_rgba(37,99,235,0.12)]">
@@ -170,18 +176,40 @@ export function TypingIndicator({ status }: { status?: string | null }) {
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
           </svg>
-          <span>{status ? `${status}…` : 'Thinking…'}</span>
+          <span>{displayStatus}</span>
         </div>
       </div>
     </div>
   );
 }
 
+function formatThinkingStatus(status?: string | null): string | null {
+  if (status == null) return null;
+
+  const trimmed = status.trim();
+  if (!trimmed) return null;
+
+  const runningWorkflowMatch = trimmed.match(/^Running\s+([a-z0-9_]+)\s+workflow(?:\.{3}|…)?$/i);
+  if (runningWorkflowMatch) {
+    return `Running ${formatSkillDisplayName(runningWorkflowMatch[1])} workflow`;
+  }
+
+  const callingToolsMatch = trimmed.match(/^Calling\s+(.+?)(?:\.{3}|…)?$/i);
+  if (callingToolsMatch) {
+    const formattedNames = callingToolsMatch[1]
+      .split(/\s*,\s*/)
+      .filter(Boolean)
+      .map((name) => formatToolDisplayName(name))
+      .join(', ');
+    return `Calling ${formattedNames}`;
+  }
+
+  return trimmed;
+}
+
 export function ToolCallBlock({ toolCall }: { toolCall: ToolCallEvent }) {
   const [expanded, setExpanded] = useState(false);
-  const displayName =
-    TOOL_DISPLAY_NAMES[toolCall.name] ??
-    toolCall.name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const displayName = formatToolDisplayName(toolCall.name);
 
   let inputDisplay = toolCall.input;
   try {
@@ -241,20 +269,9 @@ export function ToolCallBlock({ toolCall }: { toolCall: ToolCallEvent }) {
 }
 
 // ── Skill display names ────────────────────────────────────────────────────
-const SKILL_DISPLAY_NAMES: Record<string, string> = {
-  compare_stocks: 'Compare Markets',
-  stock_deep_dive: 'Stock Deep Dive',
-  portfolio_health: 'Portfolio Health',
-  portfolio_performance: 'Portfolio Performance',
-};
-
-// ── Tool display names for skill steps (reuse TOOL_DISPLAY_NAMES) ──────────
-
 export function SkillActivationBlock({ event }: { event: SkillActivationEvent }) {
   const [expanded, setExpanded] = useState(false);
-  const displayName =
-    SKILL_DISPLAY_NAMES[event.name] ??
-    event.name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const displayName = formatSkillDisplayName(event.name);
 
   const stepCount = event.steps.length;
   const failedCount = event.steps.filter((s) => !s.ok).length;
@@ -288,9 +305,7 @@ export function SkillActivationBlock({ event }: { event: SkillActivationEvent })
       {expanded && stepCount > 0 && (
         <div className="border-t border-blue-500/30 divide-y divide-blue-900/40">
           {event.steps.map((step, i) => {
-            const toolDisplay =
-              TOOL_DISPLAY_NAMES[step.tool] ??
-              step.tool.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+            const toolDisplay = formatToolDisplayName(step.tool);
             return (
               <div key={i} className="px-3 py-2">
                 <div className="flex items-center gap-1.5 mb-1">
@@ -974,7 +989,7 @@ export function useChatState(
       onTurnStarted,
       (status) => {
         if (!isVisibleStream()) return;
-        setThinkingStatus(status);
+        setThinkingStatus(formatThinkingStatus(status));
       },
       (toolCall) => {
         if (!isVisibleStream()) return;
@@ -1075,7 +1090,7 @@ export function useChatState(
     visibleStreamIdRef.current = null;
     setIsLoading(true);
     setIsStreaming(false);
-    setThinkingStatus(status ?? 'Working…');
+    setThinkingStatus(formatThinkingStatus(status) ?? 'Working…');
     setError(null);
   };
 
@@ -1263,9 +1278,9 @@ export default function ChatView({
       </div>
 
       {/* Input area */}
-      <div className="shrink-0 px-3 pb-1 pt-2 md:px-4">
-        <div className="overflow-hidden rounded-lg border border-slate-800/80 bg-slate-900/92 shadow-[0_18px_44px_rgba(15,23,42,0.24)] transition-colors focus-within:border-blue-500/60">
-          <div className="px-4 pt-3">
+      <div className="shrink-0 px-3 pb-0 pt-1.5 md:px-4">
+        <div className="overflow-hidden rounded-lg border border-slate-800/80 bg-slate-800/90 shadow-[0_18px_44px_rgba(15,23,42,0.24)] transition-colors focus-within:border-blue-500/60">
+          <div className="px-4 pt-2.5">
             <TickerMentionInput
               inputRef={inputRef}
               value={input}
@@ -1277,21 +1292,21 @@ export default function ChatView({
             />
           </div>
 
-          <div className="flex flex-col gap-2 border-t border-slate-800/80 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center justify-between gap-2 border-t border-slate-800/80 px-3 py-1.5">
             {isAuthenticated ? (
-              <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
-                <span className="rounded-sm border border-slate-800 bg-slate-950/70 px-2 py-0.5 leading-4">
+              <div className="min-w-0 flex items-center gap-1.5 text-[10px] text-slate-500">
+                <span className="truncate rounded-sm border border-slate-800 bg-slate-950/70 px-2 py-0.5 leading-4">
                   Use <kbd className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">@</kbd> to mention a ticker
                 </span>
               </div>
             ) : (
-              <span className="text-[10px] text-slate-500">Authentication required to send messages.</span>
+              <span className="min-w-0 truncate text-[10px] text-slate-500">Authentication required to send messages.</span>
             )}
             <button
               type="button"
               onClick={() => sendMessage(input)}
               disabled={!input.trim() || isLoading || isStreaming || !isAuthenticated}
-              className="inline-flex h-8 w-8 items-center justify-center self-end rounded-md bg-blue-600 text-white transition-colors hover:bg-blue-500 disabled:cursor-default disabled:bg-slate-700 disabled:text-slate-400 sm:self-auto"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white transition-colors hover:bg-blue-500 disabled:cursor-default disabled:bg-slate-700 disabled:text-slate-400"
               aria-label="Send message"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -548,13 +548,14 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={startNewChat}
-              className="flex items-center gap-1.5 rounded-md border border-slate-700/80 bg-slate-800/70 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-slate-600 hover:bg-slate-700/80 hover:text-white"
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-700/80 bg-slate-800/70 text-xs font-medium text-slate-200 transition-colors hover:border-slate-600 hover:bg-slate-700/80 hover:text-white sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-1.5"
               title="Start a new chat"
+              aria-label="Start a new chat"
             >
               <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              New chat
+              <span className="hidden sm:inline">New chat</span>
             </button>
           </>
         )}
@@ -691,16 +692,16 @@ export default function ChatPage() {
           )}
 
           <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-800/80 bg-slate-900/75 shadow-[0_20px_80px_rgba(2,6,23,0.5)] backdrop-blur">
-            <div className="border-b border-slate-800/80 bg-slate-950/55 px-4 py-2.5 md:px-5">
-              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <div className="min-w-0 text-sm font-medium text-slate-100">
-                  <span className="mr-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Thread</span>
+            <div className="border-b border-slate-800/80 bg-slate-950/55 px-3 py-2 md:px-5 md:py-2.5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex items-center gap-2 text-sm font-medium text-slate-100">
+                  <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Thread</span>
                   <span className="truncate align-middle">
                     {currentSession?.title || (greeting ? `${greeting}'s new market thread` : 'New market thread')}
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <span className="rounded-md border border-slate-800 bg-slate-900/80 px-2.5 py-1 text-[11px] text-slate-400">
+                <div className="shrink-0">
+                  <span className="rounded-md border border-slate-800 bg-slate-900/80 px-2.5 py-1 text-[11px] leading-none text-slate-400">
                     {sessions.length} chats
                   </span>
                 </div>
@@ -721,7 +722,7 @@ export default function ChatPage() {
                 welcomeSubtext="Build a thesis, stress-test an idea, or pull together price action, fundamentals, and news in one thread."
                 inputPlaceholder={user ? 'Ask about any stock, theme, or portfolio question…' : 'Sign in to start chatting…'}
                 inputFooter={
-                  <p className="px-2 pb-1 pt-1 text-center text-[11px] leading-4 text-slate-500">
+                  <p className="px-2 pb-0 pt-0.5 text-center text-[11px] leading-4 text-slate-500">
                     AI can make mistakes. Verify important details before acting. Not financial advice.
                   </p>
                 }
