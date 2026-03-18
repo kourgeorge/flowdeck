@@ -106,6 +106,23 @@ MARKET_OVERVIEW_TICKERS = [
     ("commodities", "DBC", "Broad Commodities"),
 ]
 
-OVERVIEW_INTERNATIONAL_TICKERS = [
+_REQUIRED_OVERVIEW_INTERNATIONAL = {
+    "^GDAXI",  # Germany DAX 30
+    "^FTSE",   # UK FTSE 100
+    "^FCHI",   # France CAC 40
+    "^NSEI",   # India Nifty 50
+    "^N225",   # Japan Nikkei 225
+    "^HSI",    # Hong Kong Hang Seng
+}
+
+_all_international = [
     (g, t, n) for g, t, n in MARKET_OVERVIEW_TICKERS if g == "international"
-][:18]
+]
+_required_international = [
+    entry for entry in _all_international if entry[1].upper() in _REQUIRED_OVERVIEW_INTERNATIONAL
+]
+_remaining_international = [
+    entry for entry in _all_international if entry[1].upper() not in _REQUIRED_OVERVIEW_INTERNATIONAL
+]
+
+OVERVIEW_INTERNATIONAL_TICKERS = (_required_international + _remaining_international)[:18]

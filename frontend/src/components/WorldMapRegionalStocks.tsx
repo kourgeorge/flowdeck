@@ -137,6 +137,9 @@ function dedupeByLocation(items: MappedItem[]): MappedItem[] {
     const primaryA = PRIMARY_TICKERS.has(a.ticker) ? 0 : 1;
     const primaryB = PRIMARY_TICKERS.has(b.ticker) ? 0 : 1;
     if (primaryA !== primaryB) return primaryA - primaryB;
+    const benchmarkA = a.ticker.startsWith('^') ? 0 : 1;
+    const benchmarkB = b.ticker.startsWith('^') ? 0 : 1;
+    if (benchmarkA !== benchmarkB) return benchmarkA - benchmarkB;
     return Math.abs(b.changePercent ?? 0) - Math.abs(a.changePercent ?? 0);
   });
 
