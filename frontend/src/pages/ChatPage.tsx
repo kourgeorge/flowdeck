@@ -354,6 +354,7 @@ export default function ChatPage() {
       id: number,
       options?: { collapseHistory?: boolean },
     ) => {
+      setSessionId(id);
       clearLoadingState();
       const detail = await chatApi.getChatSession(id);
       setSessionId(detail.id);
@@ -363,6 +364,7 @@ export default function ChatPage() {
         restorePendingTurn(detail.active_turn.last_thinking_status ?? 'Working…');
       } else {
         removeRunningTurn(detail.id);
+        clearLoadingState();
       }
       if ((options?.collapseHistory ?? true) && isMobileHistory) setHistoryCollapsed(true);
       return detail;

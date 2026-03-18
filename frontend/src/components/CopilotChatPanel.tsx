@@ -221,6 +221,7 @@ export default function CopilotChatPanel({
 
   const handleLoadSession = useCallback((id: number) => {
     clearTurnPoll();
+    setSessionId(id);
     chat.clearLoadingState();
     chatApi.getChatSession(id).then((detail) => {
       setSessionId(detail.id);
@@ -230,6 +231,7 @@ export default function CopilotChatPanel({
         chat.restorePendingTurn(detail.active_turn.last_thinking_status ?? 'Working…');
       } else {
         setActiveTurnId(null);
+        chat.clearLoadingState();
       }
       setHistoryOpen(false);
     }).catch(() => {});
