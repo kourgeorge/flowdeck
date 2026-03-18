@@ -732,7 +732,7 @@ export default function HomePage() {
             </div>
             <div className="bg-cyan-900/20 border border-cyan-700/50 rounded-xl p-6">
               <h4 className="text-lg font-semibold text-white mb-2">
-                <Link to={user ? '/newsroom' : '#'} onClick={!user ? () => setShowAuthModal(true) : undefined} className="hover:text-cyan-300 transition-colors">
+                <Link to="/newsroom" className="hover:text-cyan-300 transition-colors">
                   Personal Newsroom
                 </Link>
               </h4>
