@@ -18,6 +18,7 @@ import AspectSpiderChart, { formatReportKey, getAnalysisScoreEntries, getScoreCo
 import DashboardPriceTrendsChart from './DashboardPriceTrendsChart';
 import { SubscribedChangeColumnsChart } from './OverviewStatsPanel';
 import { formatPrice } from '../utils/currency';
+import { getErrorMessage } from '../utils/errorHandling';
 
 type CompanyInfo = {
   name: string;
@@ -556,11 +557,54 @@ export default function PortfolioPulseDashboard({
   const [isLoadingCompanyInfo, setIsLoadingCompanyInfo] = useState(false);
   const [isLoadingMarket, setIsLoadingMarket] = useState(true);
   const [isLoadingBrief, setIsLoadingBrief] = useState(false);
+  const [isCreatingBrief, setIsCreatingBrief] = useState(false);
+  const [briefActionError, setBriefActionError] = useState<string | null>(null);
   const [hasBriefForToday, setHasBriefForToday] = useState<boolean | null>(null);
   const [selectedNewsTickers, setSelectedNewsTickers] = useState<string[]>([]);
   const [latestBriefMode, setLatestBriefMode] = useState<'daily' | 'weekly'>('daily');
   const [moversTab, setMoversTab] = useState<'gainers' | 'losers' | 'most_active'>('gainers');
   const [marketTapePeriod, setMarketTapePeriod] = useState<(typeof MARKET_TAPE_PERIODS)[number]['period']>('1mo');
+
+  const applyLatestBriefState = ({
+    dailyBrief,
+    weeklyBrief,
+    hasTodayBrief,
+    preferDaily = false,
+  }: {
+    dailyBrief: DigestBriefItem | null;
+    weeklyBrief: DigestBriefItem | null;
+    hasTodayBrief: boolean;
+    preferDaily?: boolean;
+  }) => {
+    setLatestBriefs({ daily: dailyBrief, weekly: weeklyBrief });
+    setHasBriefForToday(hasTodayBrief);
+    setLatestBriefMode((prev) => {
+      if (preferDaily && dailyBrief) return 'daily';
+      if (prev === 'weekly' && !weeklyBrief && dailyBrief) return 'daily';
+      if (prev === 'daily' && !dailyBrief && weeklyBrief) return 'weekly';
+      return prev;
+    });
+  };
+
+  const loadLatestBriefState = async () => {
+    const datesResponse = await digestApi.getDigestDates(21, browserTimezone);
+    const dailySlots = datesResponse.dates.filter((slot) => !slot.startsWith('w:'));
+    const weeklySlots = datesResponse.dates.filter((slot) => slot.startsWith('w:'));
+    const hasTodayBrief = dailySlots.includes(todayDateStr());
+    const latestDailySlot = dailySlots[dailySlots.length - 1] ?? null;
+    const latestWeeklySlot = weeklySlots[weeklySlots.length - 1] ?? null;
+
+    const [dailyResponse, weeklyResponse] = await Promise.allSettled([
+      latestDailySlot ? digestApi.getDigestsForDate(latestDailySlot, browserTimezone) : Promise.resolve({ date: '', briefs: [] }),
+      latestWeeklySlot ? digestApi.getDigestsForDate(latestWeeklySlot, browserTimezone) : Promise.resolve({ date: '', briefs: [] }),
+    ]);
+
+    return {
+      dailyBrief: dailyResponse.status === 'fulfilled' ? dailyResponse.value.briefs[0] ?? null : null,
+      weeklyBrief: weeklyResponse.status === 'fulfilled' ? weeklyResponse.value.briefs[0] ?? null : null,
+      hasTodayBrief,
+    };
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -710,6 +754,8 @@ export default function PortfolioPulseDashboard({
       setLatestBriefs({ daily: null, weekly: null });
       setLatestBriefMode('daily');
       setIsLoadingBrief(false);
+      setIsCreatingBrief(false);
+      setBriefActionError(null);
       setHasBriefForToday(null);
       return () => {
         cancelled = true;
@@ -719,29 +765,8 @@ export default function PortfolioPulseDashboard({
     const fetchLatestBrief = async () => {
       setIsLoadingBrief(true);
       try {
-        const datesResponse = await digestApi.getDigestDates(21, browserTimezone);
-        const dailySlots = datesResponse.dates.filter((slot) => !slot.startsWith('w:'));
-        const weeklySlots = datesResponse.dates.filter((slot) => slot.startsWith('w:'));
-        const hasTodayBrief = dailySlots.includes(todayDateStr());
-        const latestDailySlot = dailySlots[dailySlots.length - 1] ?? null;
-        const latestWeeklySlot = weeklySlots[weeklySlots.length - 1] ?? null;
-
-        const [dailyResponse, weeklyResponse] = await Promise.allSettled([
-          latestDailySlot ? digestApi.getDigestsForDate(latestDailySlot, browserTimezone) : Promise.resolve({ date: '', briefs: [] }),
-          latestWeeklySlot ? digestApi.getDigestsForDate(latestWeeklySlot, browserTimezone) : Promise.resolve({ date: '', briefs: [] }),
-        ]);
-
-        if (!cancelled) {
-          const dailyBrief = dailyResponse.status === 'fulfilled' ? dailyResponse.value.briefs[0] ?? null : null;
-          const weeklyBrief = weeklyResponse.status === 'fulfilled' ? weeklyResponse.value.briefs[0] ?? null : null;
-          setLatestBriefs({ daily: dailyBrief, weekly: weeklyBrief });
-          setHasBriefForToday(hasTodayBrief);
-          setLatestBriefMode((prev) => {
-            if (prev === 'weekly' && !weeklyBrief && dailyBrief) return 'daily';
-            if (prev === 'daily' && !dailyBrief && weeklyBrief) return 'weekly';
-            return prev;
-          });
-        }
+        const latestState = await loadLatestBriefState();
+        if (!cancelled) applyLatestBriefState(latestState);
       } catch {
         if (!cancelled) {
           setLatestBriefs({ daily: null, weekly: null });
@@ -764,6 +789,22 @@ export default function PortfolioPulseDashboard({
       cancelled = true;
     };
   }, [browserTimezone, publicPreview, tickersKey]);
+
+  const handleCreateBrief = async () => {
+    if (isCreatingBrief) return;
+
+    setBriefActionError(null);
+    setIsCreatingBrief(true);
+    try {
+      await digestApi.getDigest({ timezone: browserTimezone });
+      const latestState = await loadLatestBriefState();
+      applyLatestBriefState({ ...latestState, preferDaily: true });
+    } catch (error: unknown) {
+      setBriefActionError(getErrorMessage(error, 'Failed to generate brief. Please try again.'));
+    } finally {
+      setIsCreatingBrief(false);
+    }
+  };
 
   useEffect(() => {
     const portfolioTickers = new Set(tickers);
@@ -1063,15 +1104,27 @@ export default function PortfolioPulseDashboard({
       ) : activeBrief ? (
         <div className="space-y-3">
           {shouldShowNoBriefTodayNotice && (
-            <div className="rounded-[0.95rem] border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-amber-100">
-              <p className="text-sm font-medium">No brief for today yet.</p>
-              {latestBriefMode === 'daily' && latestDailyBriefDate && (
-                <p className="mt-1 text-xs text-amber-100/80">
-                  Showing the latest saved daily brief from {latestDailyBriefDate}.
-                </p>
-              )}
+            <div className="flex flex-wrap items-start justify-between gap-3 rounded-[0.95rem] border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-amber-100">
+              <div>
+                <p className="text-sm font-medium">No brief for today yet.</p>
+                {latestBriefMode === 'daily' && latestDailyBriefDate && (
+                  <p className="mt-1 text-xs text-amber-100/80">
+                    Showing the latest saved daily brief from {latestDailyBriefDate}.
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={handleCreateBrief}
+                disabled={isCreatingBrief}
+                className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-300/40 bg-amber-400/15 px-3 py-1.5 text-xs font-medium text-amber-50 transition-colors hover:bg-amber-400/25 disabled:cursor-wait disabled:opacity-80"
+              >
+                {isCreatingBrief && <SpinnerIcon className="h-3.5 w-3.5 text-amber-50" />}
+                <span>{isCreatingBrief ? 'Creating...' : 'Create Brief'}</span>
+              </button>
             </div>
           )}
+          {briefActionError && <p className="text-xs text-rose-300">{briefActionError}</p>}
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
             <span className="rounded-full border border-slate-600/80 bg-slate-900/70 px-2.5 py-1">{activeBrief.span_label || activeBrief.span_type || (latestBriefMode === 'weekly' ? 'Weekly' : 'Daily')}</span>
             <span>{activeBrief.digest_date}</span>
@@ -1122,12 +1175,16 @@ export default function PortfolioPulseDashboard({
             <p className="mb-2 text-sm font-medium text-amber-100">No brief for today yet.</p>
           )}
           <p className="text-sm text-slate-300">No saved {latestBriefMode} brief yet.</p>
-          <Link
-            to="/brief"
-            className="mt-3 inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/15 px-4 py-2 text-sm font-medium text-emerald-100 transition-colors hover:bg-emerald-500/20"
+          {briefActionError && <p className="mt-2 text-xs text-rose-300">{briefActionError}</p>}
+          <button
+            type="button"
+            onClick={handleCreateBrief}
+            disabled={isCreatingBrief}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/15 px-4 py-2 text-sm font-medium text-emerald-100 transition-colors hover:bg-emerald-500/20 disabled:cursor-wait disabled:opacity-80"
           >
-            Generate brief
-          </Link>
+            {isCreatingBrief && <SpinnerIcon className="h-4 w-4 text-emerald-100" />}
+            <span>{isCreatingBrief ? 'Creating brief...' : 'Generate brief'}</span>
+          </button>
         </div>
       )}
     </section>
@@ -1424,18 +1481,16 @@ export default function PortfolioPulseDashboard({
           <div className="pointer-events-none absolute bottom-0 left-1/3 h-32 w-32 rounded-full bg-emerald-400/10 blur-3xl" />
           <div className="relative space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="max-w-2xl">
+              <div className="max-w-4xl flex-1 min-w-[min(100%,28rem)]">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-200/80">Portfolio x Market Pulse</p>
-                <div className="mt-1.5 flex items-start justify-between gap-4">
-                  <p className="text-sm leading-6 text-slate-300">{heroSummary}</p>
-                  <Link
-                    to="/market"
-                    className="inline-flex shrink-0 items-center rounded-full border border-slate-500/60 bg-slate-900/60 px-3.5 py-2 text-sm font-medium text-slate-100 transition-colors hover:border-slate-400 hover:bg-slate-800"
-                  >
-                    Market View
-                  </Link>
-                </div>
+                <p className="mt-1.5 text-sm leading-6 text-slate-300">{heroSummary}</p>
               </div>
+              <Link
+                to="/market"
+                className="inline-flex shrink-0 items-center self-start rounded-full border border-slate-500/60 bg-slate-900/60 px-3.5 py-2 text-sm font-medium text-slate-100 transition-colors hover:border-slate-400 hover:bg-slate-800"
+              >
+                Market View
+              </Link>
             </div>
 
             <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
