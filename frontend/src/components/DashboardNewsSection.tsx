@@ -21,6 +21,12 @@ interface DashboardNewsSectionProps {
   refreshIntervalMs?: number;
   /** When true, grow to fill container height (e.g. to span alongside left column) */
   fillHeight?: boolean;
+  /** Free-text filter for headlines, summaries, publishers, and ticker tags. */
+  searchQuery?: string;
+  /** Optional change handler for the external search UI. */
+  onSearchQueryChange?: (value: string) => void;
+  /** Optional clear handler for the external search UI. */
+  onClearSearch?: () => void;
 }
 
 const PAGE_SIZE = 20;
@@ -194,11 +200,17 @@ function NewsroomSkeleton() {
 function EmptyState({
   selectedTickers,
   onClearFilters,
+  searchQuery,
+  onClearSearch,
 }: {
   selectedTickers: string[];
   onClearFilters: () => void;
+  searchQuery: string;
+  onClearSearch?: () => void;
 }) {
   const hasFilters = selectedTickers.length > 0;
+  const hasSearch = searchQuery.trim().length > 0;
+  const hasAnyRefinement = hasFilters || hasSearch;
 
   return (
     <div className="rounded-[1.8rem] border border-slate-700/75 bg-slate-900/60 px-6 py-12 text-center">
@@ -208,21 +220,38 @@ function EmptyState({
         </svg>
       </div>
       <h3 className="mt-4 text-xl font-semibold text-white">
-        {hasFilters ? `No stories match ${selectedTickers.join(', ')}` : 'No newsroom stories yet'}
+        {hasSearch
+          ? `No stories match "${searchQuery.trim()}"`
+          : hasFilters
+            ? `No stories match ${selectedTickers.join(', ')}`
+            : 'No newsroom stories yet'}
       </h3>
       <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-        {hasFilters
-          ? 'Try widening the filter set to bring more of your watchlist back into the feed.'
+        {hasAnyRefinement
+          ? 'Try broadening your search or clearing some filters to bring more of your newsroom back into view.'
           : 'Subscribe to more active names or check back shortly while the newsroom refreshes.'}
       </p>
-      {hasFilters && (
-        <button
-          type="button"
-          onClick={onClearFilters}
-          className="mt-5 rounded-full border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:border-slate-500 hover:bg-slate-700"
-        >
-          Clear filters
-        </button>
+      {hasAnyRefinement && (
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+          {hasSearch && onClearSearch && (
+            <button
+              type="button"
+              onClick={onClearSearch}
+              className="rounded-full border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:border-slate-500 hover:bg-slate-700"
+            >
+              Clear search
+            </button>
+          )}
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={onClearFilters}
+              className="rounded-full border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:border-slate-500 hover:bg-slate-700"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -350,6 +379,9 @@ export default function DashboardNewsSection({
   tickers,
   refreshIntervalMs = 120000,
   fillHeight = false,
+  searchQuery = '',
+  onSearchQueryChange,
+  onClearSearch,
 }: DashboardNewsSectionProps) {
   const [articles, setArticles] = useState<NewsArticleWithTicker[]>([]);
   const [selectedTickers, setSelectedTickers] = useState<string[]>([]);
@@ -360,6 +392,7 @@ export default function DashboardNewsSection({
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const tickersKey = tickers.join(',');
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
 
   const fetchNews = useCallback(async () => {
     const portfolioTickers = tickersKey ? tickersKey.split(',') : [];
@@ -430,7 +463,7 @@ export default function DashboardNewsSection({
 
   useEffect(() => {
     setDisplayCount(PAGE_SIZE);
-  }, [selectedTickers]);
+  }, [selectedTickers, normalizedSearchQuery]);
 
   const toggleTickerTag = useCallback((ticker: string) => {
     setSelectedTickers((current) => (
@@ -444,9 +477,23 @@ export default function DashboardNewsSection({
     setSelectedTickers([]);
   }, []);
 
-  const filteredArticles = selectedTickers.length > 0
-    ? articles.filter((article) => article.tickers.some((ticker) => selectedTickers.includes(ticker)))
-    : articles;
+  const filteredArticles = articles.filter((article) => {
+    const matchesTickers = selectedTickers.length === 0
+      || article.tickers.some((ticker) => selectedTickers.includes(ticker));
+
+    if (!matchesTickers) return false;
+    if (!normalizedSearchQuery) return true;
+
+    const searchableText = [
+      article.title,
+      article.summary ?? '',
+      article.publisher,
+      article.type,
+      article.tickers.join(' '),
+    ].join(' ').toLowerCase();
+
+    return searchableText.includes(normalizedSearchQuery);
+  });
   const displayList = filteredArticles.slice(0, displayCount);
   const hasMore = displayList.length < filteredArticles.length;
   const tickerCounts = tickers.reduce<Record<string, number>>((accumulator, ticker) => {
@@ -500,12 +547,50 @@ export default function DashboardNewsSection({
             <p className="mt-3 text-sm leading-7 text-slate-300 sm:text-[15px]">
               Lead coverage, watchlist pulse, and a browsable wire of headlines across your subscribed names.
             </p>
+            <div className="mt-5 max-w-xl">
+              <label className="relative block">
+                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-500">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" />
+                  </svg>
+                </span>
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(event) => {
+                    if (onSearchQueryChange) {
+                      onSearchQueryChange(event.target.value);
+                    }
+                  }}
+                  placeholder="Search headlines, summaries, publishers, tickers..."
+                  className="w-full rounded-full border border-slate-600 bg-slate-900/85 py-3 pl-10 pr-11 text-sm text-white placeholder:text-slate-500 transition-colors focus:border-cyan-400/60 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+                  aria-label="Search newsroom content"
+                />
+                {searchQuery.trim() && onClearSearch && (
+                  <button
+                    type="button"
+                    onClick={onClearSearch}
+                    className="absolute inset-y-0 right-2 flex items-center rounded-full px-2 text-slate-400 transition-colors hover:text-white"
+                    aria-label="Clear newsroom search"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12M18 6 6 18" />
+                    </svg>
+                  </button>
+                )}
+              </label>
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
             <div className="rounded-full border border-slate-700 bg-slate-900/65 px-3 py-2 text-sm text-slate-300">
               <span className="font-semibold text-white">{filteredArticles.length}</span> live stories
             </div>
+            {normalizedSearchQuery && (
+              <div className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-100">
+                Searching "{searchQuery.trim()}"
+              </div>
+            )}
             <div className="rounded-full border border-slate-700 bg-slate-900/65 px-3 py-2 text-sm text-slate-300">
               <span className="font-semibold text-white">{visiblePublisherCount}</span> sources
             </div>
@@ -589,7 +674,12 @@ export default function DashboardNewsSection({
           {isLoading && articles.length === 0 ? (
             <NewsroomSkeleton />
           ) : !leadArticle ? (
-            <EmptyState selectedTickers={selectedTickers} onClearFilters={clearTickerFilters} />
+            <EmptyState
+              selectedTickers={selectedTickers}
+              onClearFilters={clearTickerFilters}
+              searchQuery={searchQuery}
+              onClearSearch={onClearSearch}
+            />
           ) : (
             <div className="space-y-6">
               <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_22rem]">

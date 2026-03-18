@@ -82,6 +82,15 @@ function PulseIcon() {
   );
 }
 
+function NewsroomIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 5H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2V7a2 2 0 00-2-2z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 9h10M7 13h6M7 17h10" />
+    </svg>
+  );
+}
+
 function BriefIcon() {
   return (
     <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -94,6 +103,7 @@ const navItems: { to: string; label: string; icon: () => JSX.Element; authOnly?:
   { to: '/', label: 'FlowDeck', icon: FlowDeckIcon },
   { to: '/market', label: 'Market View', icon: MarketIcon },
   { to: '/dashboard', label: 'Dashboard', icon: DashboardIcon, authOnly: true },
+  { to: '/newsroom', label: 'Newsroom', icon: NewsroomIcon, authOnly: true },
   { to: '/portfolio-pulse', label: 'Portfolio Pulse', icon: PulseIcon },
   { to: '/brief', label: 'Briefing Desk', icon: BriefIcon, authOnly: true },
   { to: '/copilot', label: 'Trading Copilot', icon: CopilotIcon, authOnly: true },

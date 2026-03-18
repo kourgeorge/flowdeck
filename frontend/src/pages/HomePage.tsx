@@ -238,12 +238,12 @@ export default function HomePage() {
                 <span className="text-blue-400">Side by Side</span>
               </h2>
               <p className="text-gray-400 text-base leading-relaxed mb-6">
-                {COPILOT_NAME} is your Trading Copilot — a three-panel workspace: your watchlist on the left, full stock detail in the middle, and an AI chat on the right. Ask follow-up questions while you read the report — no switching tabs, no copy-pasting tickers.
+                {COPILOT_NAME} is your Trading Copilot — a three-panel workspace: your watchlist on the left, full stock detail in the middle, and an AI chat on the right. The agent knows your watchlist, your context, and your preferences, so follow-up questions stay personal and on track while you read the report.
               </p>
               <ul className="space-y-3 mb-8">
                 {[
                   { icon: '📊', text: 'Live quote, AI recommendation, and all report tabs in one view' },
-                  { icon: '🤖', text: 'AI chat with full context — selected ticker, watchlist, live data, and reports' },
+                  { icon: '🤖', text: 'AI chat with full context — selected ticker, watchlist, live data, reports, and your preferences' },
                   { icon: '🌐', text: 'Searches the live web for breaking news, earnings, analyst upgrades, and macro events' },
                   { icon: '🐍', text: 'Writes and executes Python analysis code — correlations, return scenarios, statistical models' },
                   { icon: '📈', text: 'Generates interactive charts — line, bar, area, and scatter — rendered inline in the chat' },
@@ -730,6 +730,16 @@ export default function HomePage() {
                 Subscribe to stocks and get email updates when new analysis reports are available. Track your watchlist and portfolio performance from a personalized dashboard.
               </p>
             </div>
+            <div className="bg-cyan-900/20 border border-cyan-700/50 rounded-xl p-6">
+              <h4 className="text-lg font-semibold text-white mb-2">
+                <Link to={user ? '/newsroom' : '#'} onClick={!user ? () => setShowAuthModal(true) : undefined} className="hover:text-cyan-300 transition-colors">
+                  Personal Newsroom
+                </Link>
+              </h4>
+              <p className="text-gray-400 text-sm">
+                Open a <strong className="text-white">personal newsroom curated specifically for you</strong> from your subscribed stocks. FlowDeck turns your watchlist into a clean, browsable stream with a lead story, fast-scan headlines, and a tailored news wire for your names.
+              </p>
+            </div>
             <div className="bg-indigo-900/20 border border-indigo-700/50 rounded-xl p-6">
               <h4 className="text-lg font-semibold text-white mb-2">
                 <Link to="/tps" className="hover:text-indigo-300 transition-colors">TPS — Structured Trade Plans</Link>
@@ -741,7 +751,7 @@ export default function HomePage() {
             <div className="bg-blue-900/20 border border-blue-700/50 rounded-xl p-6">
               <h4 className="text-lg font-semibold text-white mb-2">{COPILOT_NAME} — A Powerful Trading Assistant</h4>
               <p className="text-gray-400 text-sm">
-                {COPILOT_NAME} can <strong className="text-white">search the live web</strong> for breaking news and analyst updates, <strong className="text-white">write and execute Python code</strong> for financial modelling and statistical analysis, and <strong className="text-white">generate interactive charts</strong> — line, bar, area, and scatter — rendered directly in the chat. All of FlowDeck's proprietary reports are accessible in the same conversation.
+                {COPILOT_NAME} can <strong className="text-white">search the live web</strong> for breaking news and analyst updates, <strong className="text-white">write and execute Python code</strong> for financial modelling and statistical analysis, and <strong className="text-white">generate interactive charts</strong> — line, bar, area, and scatter — rendered directly in the chat. It also knows your watchlist and preferences, so all of FlowDeck's proprietary reports are accessible in the same conversation with personalized context.
               </p>
             </div>
             <div className="bg-emerald-900/20 border border-emerald-700/50 rounded-xl p-6">
@@ -843,15 +853,19 @@ export default function HomePage() {
                 </li>
                 <li className="flex items-start">
                   <span className="text-blue-400 mr-2">✓</span>
+                  <span><strong className="text-white">Personal Newsroom</strong> curated specifically for your subscribed stocks</span>
+                </li>
+                <li className="flex items-start">
+                  <span className="text-blue-400 mr-2">✓</span>
                   <span><strong className="text-white">Stock subscriptions</strong> with email updates</span>
                 </li>
                 <li className="flex items-start">
                   <span className="text-blue-400 mr-2">✓</span>
-                  <span><strong className="text-white">{COPILOT_NAME}</strong> — your Trading Copilot, research and chat side by side</span>
+                  <span><strong className="text-white">{COPILOT_NAME}</strong> — your Trading Copilot that knows you, your watchlist, and your preferences</span>
                 </li>
                 <li className="flex items-start">
                   <span className="text-blue-400 mr-2">✓</span>
-                  <span><strong className="text-white">AI Analyst Agent</strong> — chat with live market data and analysis</span>
+                  <span><strong className="text-white">AI Analyst Agent</strong> — chat with live market data, analysis, and your personal context</span>
                 </li>
               </ul>
             </div>
