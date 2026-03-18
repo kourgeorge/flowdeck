@@ -1758,15 +1758,8 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
 
           {/* News Tab */}
           {activeTab === 'news' && (
-            <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 flex flex-col" style={{ minHeight: '400px' }}>
-              <h3 className="text-lg font-semibold text-white mb-4 shrink-0">Latest News</h3>
-              <div className="flex-1 min-h-0 overflow-y-auto">
-                {isLoadingNews ? (
-                  <div className="animate-pulse space-y-3">{[1,2,3].map((i) => <div key={i} className="h-20 bg-gray-700 rounded" />)}</div>
-                ) : (
-                  <NewsWidget articles={newsData} ticker={stockData.ticker} onRetry={fetchNews} isLoading={isLoadingNews} errorMessage={newsError} />
-                )}
-              </div>
+            <div className="min-h-[400px]">
+              <NewsWidget articles={newsData} ticker={stockData.ticker} onRetry={fetchNews} isLoading={isLoadingNews} errorMessage={newsError} />
             </div>
           )}
 
