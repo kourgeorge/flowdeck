@@ -6,6 +6,7 @@ import AuthModal from '../components/AuthModal';
 import { tickerApi, API_BASE_URL } from '../services/api';
 import type { TickerWidget as StockWidgetType } from '../services/types';
 import { LOGO_PATH, COPILOT_NAME } from '../config';
+import { SIGNIFICANT_SEVEN_RANK } from '../constants/majorTickers';
 import { useAuth } from '../contexts/AuthContext';
 
 interface PublicStats {
@@ -13,9 +14,6 @@ interface PublicStats {
   total_reports: number;
   unique_tickers_analyzed: number;
 }
-
-const HOME_MAJOR_TICKER_ORDER = ['NVDA', 'AAPL', 'GOOGL', 'MSFT', 'AMZN', 'META', 'TSLA'];
-const HOME_MAJOR_TICKER_RANK = new Map<string, number>(HOME_MAJOR_TICKER_ORDER.map((ticker, index) => [ticker, index]));
 
 export default function HomePage() {
   const { user } = useAuth();
@@ -80,9 +78,9 @@ export default function HomePage() {
     ? widgets.filter((w) => w.is_major === true)
     : widgets;
   const majorWidgets = [...majorFiltered]
-    .sort((a, b) => {
-      const aRank = HOME_MAJOR_TICKER_RANK.get(a.ticker) ?? Number.MAX_SAFE_INTEGER;
-      const bRank = HOME_MAJOR_TICKER_RANK.get(b.ticker) ?? Number.MAX_SAFE_INTEGER;
+      .sort((a, b) => {
+      const aRank = SIGNIFICANT_SEVEN_RANK.get(a.ticker) ?? Number.MAX_SAFE_INTEGER;
+      const bRank = SIGNIFICANT_SEVEN_RANK.get(b.ticker) ?? Number.MAX_SAFE_INTEGER;
       if (aRank !== bRank) return aRank - bRank;
       return a.ticker.localeCompare(b.ticker);
     })

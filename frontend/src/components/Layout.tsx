@@ -74,6 +74,14 @@ function MarketIcon() {
   );
 }
 
+function PulseIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12h4l2.5-6 5 12 2.5-6H21" />
+    </svg>
+  );
+}
+
 function BriefIcon() {
   return (
     <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -86,6 +94,7 @@ const navItems: { to: string; label: string; icon: () => JSX.Element; authOnly?:
   { to: '/', label: 'FlowDeck', icon: FlowDeckIcon },
   { to: '/market', label: 'Market View', icon: MarketIcon },
   { to: '/dashboard', label: 'Dashboard', icon: DashboardIcon, authOnly: true },
+  { to: '/portfolio-pulse', label: 'Portfolio Pulse', icon: PulseIcon },
   { to: '/brief', label: 'Briefing Desk', icon: BriefIcon, authOnly: true },
   { to: '/copilot', label: 'Trading Copilot', icon: CopilotIcon, authOnly: true },
   { to: '/chat', label: 'AI Analyst Agent', icon: ChatIcon, authOnly: true },

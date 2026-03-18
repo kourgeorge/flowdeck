@@ -81,6 +81,7 @@ type SparklineData = {
 interface PortfolioPulseDashboardProps {
   widgets: TickerWidget[];
   tickerToName: Record<string, string>;
+  publicPreview?: boolean;
 }
 
 const RECOMMENDATION_COLORS: Record<string, string> = {
@@ -180,6 +181,14 @@ function formatSectorAbbreviation(value: string | null | undefined): string {
 function formatMaybePrice(value: number | null | undefined, currency?: string | null): string {
   if (value == null || Number.isNaN(value)) return '—';
   return formatPrice(value, currency);
+}
+
+function todayDateStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function MiniSparkline({
@@ -493,6 +502,7 @@ function MoversList({
 export default function PortfolioPulseDashboard({
   widgets,
   tickerToName,
+  publicPreview = false,
 }: PortfolioPulseDashboardProps) {
   const navigate = useNavigate();
   const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
@@ -514,6 +524,7 @@ export default function PortfolioPulseDashboard({
   const [isLoadingCompanyInfo, setIsLoadingCompanyInfo] = useState(false);
   const [isLoadingMarket, setIsLoadingMarket] = useState(true);
   const [isLoadingBrief, setIsLoadingBrief] = useState(false);
+  const [hasBriefForToday, setHasBriefForToday] = useState<boolean | null>(null);
   const [selectedNewsTickers, setSelectedNewsTickers] = useState<string[]>([]);
   const [latestBriefMode, setLatestBriefMode] = useState<'daily' | 'weekly'>('daily');
   const [moversTab, setMoversTab] = useState<'gainers' | 'losers' | 'most_active'>('gainers');
@@ -663,12 +674,23 @@ export default function PortfolioPulseDashboard({
   useEffect(() => {
     let cancelled = false;
 
+    if (publicPreview) {
+      setLatestBriefs({ daily: null, weekly: null });
+      setLatestBriefMode('daily');
+      setIsLoadingBrief(false);
+      setHasBriefForToday(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const fetchLatestBrief = async () => {
       setIsLoadingBrief(true);
       try {
         const datesResponse = await digestApi.getDigestDates(21, browserTimezone);
         const dailySlots = datesResponse.dates.filter((slot) => !slot.startsWith('w:'));
         const weeklySlots = datesResponse.dates.filter((slot) => slot.startsWith('w:'));
+        const hasTodayBrief = dailySlots.includes(todayDateStr());
         const latestDailySlot = dailySlots[dailySlots.length - 1] ?? null;
         const latestWeeklySlot = weeklySlots[weeklySlots.length - 1] ?? null;
 
@@ -681,6 +703,7 @@ export default function PortfolioPulseDashboard({
           const dailyBrief = dailyResponse.status === 'fulfilled' ? dailyResponse.value.briefs[0] ?? null : null;
           const weeklyBrief = weeklyResponse.status === 'fulfilled' ? weeklyResponse.value.briefs[0] ?? null : null;
           setLatestBriefs({ daily: dailyBrief, weekly: weeklyBrief });
+          setHasBriefForToday(hasTodayBrief);
           setLatestBriefMode((prev) => {
             if (prev === 'weekly' && !weeklyBrief && dailyBrief) return 'daily';
             if (prev === 'daily' && !dailyBrief && weeklyBrief) return 'weekly';
@@ -688,7 +711,10 @@ export default function PortfolioPulseDashboard({
           });
         }
       } catch {
-        if (!cancelled) setLatestBriefs({ daily: null, weekly: null });
+        if (!cancelled) {
+          setLatestBriefs({ daily: null, weekly: null });
+          setHasBriefForToday(null);
+        }
       } finally {
         if (!cancelled) setIsLoadingBrief(false);
       }
@@ -697,6 +723,7 @@ export default function PortfolioPulseDashboard({
     fetchLatestBrief().catch(() => {
       if (!cancelled) {
         setLatestBriefs({ daily: null, weekly: null });
+        setHasBriefForToday(null);
         setIsLoadingBrief(false);
       }
     });
@@ -704,7 +731,7 @@ export default function PortfolioPulseDashboard({
     return () => {
       cancelled = true;
     };
-  }, [browserTimezone, tickersKey]);
+  }, [browserTimezone, publicPreview, tickersKey]);
 
   useEffect(() => {
     const portfolioTickers = new Set(tickers);
@@ -887,6 +914,9 @@ export default function PortfolioPulseDashboard({
     if (!activeBrief?.focus_snapshot) return [];
     return Object.entries(activeBrief.focus_snapshot).slice(0, 5);
   }, [activeBrief]);
+  const showPublicPreviewBrief = publicPreview;
+  const shouldShowNoBriefTodayNotice = !publicPreview && hasBriefForToday === false;
+  const latestDailyBriefDate = latestBriefs.daily?.digest_date ?? null;
 
   const heroSummary = useMemo(() => {
     if (widgets.length === 0) {
@@ -931,7 +961,7 @@ export default function PortfolioPulseDashboard({
               ['daily', 'Daily'],
               ['weekly', 'Weekly'],
             ] as const).map(([mode, label]) => {
-              const hasBrief = latestBriefs[mode] != null;
+              const hasBrief = latestBriefs[mode] != null || (showPublicPreviewBrief && mode === 'daily');
               return (
                 <button
                   key={mode}
@@ -965,8 +995,51 @@ export default function PortfolioPulseDashboard({
           <div className="h-16 animate-pulse rounded-[1rem] bg-slate-800" />
           <div className="h-14 animate-pulse rounded-[1rem] bg-slate-800" />
         </div>
+      ) : showPublicPreviewBrief ? (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+            <span className="rounded-full border border-sky-500/40 bg-sky-500/10 px-2.5 py-1 text-sky-100">Preview</span>
+            <span>Covered brief snapshot</span>
+          </div>
+          <div className="relative min-h-[240px] overflow-hidden rounded-[1rem] border border-slate-700/70 bg-slate-950/50 p-4">
+            <div className="space-y-4 select-none opacity-70 blur-[2.5px]" aria-hidden>
+              {[
+                ['w-32', ['w-full', 'w-11/12', 'w-4/5', 'w-10/12']],
+                ['w-28', ['w-full', 'w-5/6', 'w-11/12', 'w-3/4']],
+                ['w-36', ['w-10/12', 'w-full', 'w-4/5']],
+              ].map(([headingWidth, lines], sectionIndex) => (
+                <div key={sectionIndex} className="space-y-2.5">
+                  <div className={`h-3 rounded-full bg-emerald-300/35 ${headingWidth}`} />
+                  {(lines as string[]).map((lineWidth, lineIndex) => (
+                    <div key={lineIndex} className={`h-2.5 rounded-full bg-slate-500/60 ${lineWidth}`} />
+                  ))}
+                </div>
+              ))}
+            </div>
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.12),transparent_42%),linear-gradient(180deg,rgba(2,6,23,0.12),rgba(2,6,23,0.72))]" />
+            <div className="absolute inset-x-4 bottom-4 rounded-[0.95rem] border border-sky-400/20 bg-slate-950/80 px-3 py-3 backdrop-blur-sm">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-sky-100/80">Covered Preview</p>
+              <p className="mt-1.5 text-sm leading-6 text-slate-200" style={{ fontFamily: BRIEF_FONT_FAMILY }}>
+                A live daily or weekly market-plus-portfolio brief appears here for signed-in portfolios.
+              </p>
+            </div>
+          </div>
+          <p className="text-xs text-slate-500">
+            Sign in to unlock the readable daily and weekly brief for your own portfolio.
+          </p>
+        </div>
       ) : activeBrief ? (
         <div className="space-y-3">
+          {shouldShowNoBriefTodayNotice && (
+            <div className="rounded-[0.95rem] border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-amber-100">
+              <p className="text-sm font-medium">No brief for today yet.</p>
+              {latestBriefMode === 'daily' && latestDailyBriefDate && (
+                <p className="mt-1 text-xs text-amber-100/80">
+                  Showing the latest saved daily brief from {latestDailyBriefDate}.
+                </p>
+              )}
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
             <span className="rounded-full border border-slate-600/80 bg-slate-900/70 px-2.5 py-1">{activeBrief.span_label || activeBrief.span_type || (latestBriefMode === 'weekly' ? 'Weekly' : 'Daily')}</span>
             <span>{activeBrief.digest_date}</span>
@@ -1013,6 +1086,9 @@ export default function PortfolioPulseDashboard({
         </div>
       ) : (
         <div className="rounded-[1rem] border border-dashed border-slate-700 px-4 py-7 text-center">
+          {shouldShowNoBriefTodayNotice && (
+            <p className="mb-2 text-sm font-medium text-amber-100">No brief for today yet.</p>
+          )}
           <p className="text-sm text-slate-300">No saved {latestBriefMode} brief yet.</p>
           <Link
             to="/brief"

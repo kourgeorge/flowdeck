@@ -5,15 +5,14 @@ import DashboardTopTiles from '../components/DashboardTopTiles';
 import PageHeader from '../components/PageHeader';
 import TickerListView from '../components/StockListView';
 import DashboardNewsSection from '../components/DashboardNewsSection';
-import PortfolioPulseDashboard from '../components/PortfolioPulseDashboard';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useAuth } from '../contexts/AuthContext';
 import { digestApi } from '../services/api';
 
-type DashboardTab = 'overview' | 'pulse' | 'news';
+type DashboardTab = 'overview' | 'news';
 type StockListTab = 'subscribed' | 'recent';
 
-const DASHBOARD_TAB_IDS: DashboardTab[] = ['overview', 'pulse', 'news'];
+const DASHBOARD_TAB_IDS: DashboardTab[] = ['overview', 'news'];
 const STOCK_LIST_TAB_IDS: StockListTab[] = ['subscribed', 'recent'];
 
 export default function DashboardPage() {
@@ -100,6 +99,10 @@ export default function DashboardPage() {
     return <Navigate to="/brief" replace />;
   }
 
+  if (searchParams.get('tab') === 'pulse') {
+    return <Navigate to="/portfolio-pulse" replace />;
+  }
+
   if (!user) {
     return (
       <div className="min-h-[60vh] px-4 py-6 sm:p-6 lg:p-8 flex items-center justify-center">
@@ -143,7 +146,6 @@ export default function DashboardPage() {
           <nav className="flex gap-0.5" aria-label="Dashboard views">
             {([
               { id: 'overview', label: 'Overview' },
-              { id: 'pulse', label: 'Portfolio Pulse' },
               { id: 'news', label: 'News' },
             ] as { id: DashboardTab; label: string }[]).map((tab) => (
               <button
@@ -301,16 +303,6 @@ export default function DashboardPage() {
                   )}
                 </div>
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {dashboardTab === 'pulse' && (
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          <div className="px-4 py-6 sm:p-6 lg:p-8">
-            <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
-              <PortfolioPulseDashboard widgets={widgets} tickerToName={tickerToName} />
             </div>
           </div>
         </div>
