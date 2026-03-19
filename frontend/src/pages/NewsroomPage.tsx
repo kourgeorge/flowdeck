@@ -76,7 +76,7 @@ export default function NewsroomPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <PageHeader title="Personal Newsroom" icon={<NewsroomIcon />} compact />
+      <PageHeader title="Personal Newsroom" icon={<NewsroomIcon />} />
 
       <div className="px-4 py-1 border-b border-gray-700 bg-gray-900 shrink-0">
         <TickerSearch compact />

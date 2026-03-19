@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { APP_NAME, LOGO_PATH, COPILOT_NAME } from '../config';
 import { useAuth } from '../contexts/AuthContext';
 import { digestApi } from '../services/api';
 import AuthModal from './AuthModal';
 import Footer from './Footer';
+import { LayoutHeaderContext } from './LayoutHeaderContext';
 
 // Menu Icons
 function FlowDeckIcon() {
@@ -159,10 +160,23 @@ export default function Layout() {
   });
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [hasBriefForToday, setHasBriefForToday] = useState<boolean | null>(null);
+  const [pageHeaderCount, setPageHeaderCount] = useState(0);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+
+  const openMobileMenu = useCallback(() => {
+    setSidebarExpanded(true);
+  }, []);
+
+  const registerPageHeader = useCallback(() => {
+    setPageHeaderCount((count) => count + 1);
+  }, []);
+
+  const unregisterPageHeader = useCallback(() => {
+    setPageHeaderCount((count) => Math.max(0, count - 1));
+  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -417,27 +431,36 @@ export default function Layout() {
         <AuthModal onClose={() => setAuthModalOpen(false)} />
       )}
 
-      {/* Main content area */}
-      <div className="flex flex-col flex-1 min-w-0 min-h-0 h-screen overflow-hidden">
-        {/* Hamburger: visible on mobile when sidebar is collapsed */}
-        {!sidebarExpanded && (
-          <div className="md:hidden sticky top-0 z-20 flex items-center border-b border-gray-700 bg-gray-900/95 px-3 py-1.5 shrink-0">
-            <button
-              type="button"
-              aria-expanded={sidebarExpanded}
-              aria-label="Open menu"
-              onClick={() => setSidebarExpanded(true)}
-              className="p-1 -ml-1 text-gray-300 hover:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <HamburgerIcon open={false} />
-            </button>
-          </div>
-        )}
-        <main className="flex-1 min-w-0 min-h-0 overflow-auto">
-          <Outlet />
-        </main>
-        <Footer />
-      </div>
+      <LayoutHeaderContext.Provider
+        value={{
+          openMobileMenu,
+          registerPageHeader,
+          unregisterPageHeader,
+          showMobileMenuButton: !sidebarExpanded,
+        }}
+      >
+        {/* Main content area */}
+        <div className="flex flex-col flex-1 min-w-0 min-h-0 h-screen overflow-hidden">
+          {/* Hamburger: visible on mobile when sidebar is collapsed and the page does not render its own header */}
+          {!sidebarExpanded && pageHeaderCount === 0 && (
+            <div className="md:hidden sticky top-0 z-20 flex items-center border-b border-gray-700 bg-gray-900/95 px-3 py-1.5 shrink-0">
+              <button
+                type="button"
+                aria-expanded={sidebarExpanded}
+                aria-label="Open menu"
+                onClick={openMobileMenu}
+                className="p-1 -ml-1 text-gray-300 hover:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <HamburgerIcon open={false} />
+              </button>
+            </div>
+          )}
+          <main className="flex-1 min-w-0 min-h-0 overflow-auto">
+            <Outlet />
+          </main>
+          <Footer />
+        </div>
+      </LayoutHeaderContext.Provider>
     </div>
   );
 }
