@@ -504,12 +504,6 @@ export default function ChatPage() {
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-slate-950 text-white">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.18),transparent_58%)]" />
-        <div className="absolute left-[-12%] top-24 h-64 w-64 rounded-full bg-sky-400/6 blur-3xl" />
-        <div className="absolute right-[-8%] top-16 h-72 w-72 rounded-full bg-blue-500/8 blur-3xl" />
-      </div>
-
       <PageHeader
         title="AI Analyst Agent"
         icon={

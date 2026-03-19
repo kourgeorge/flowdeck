@@ -654,7 +654,7 @@ export function MessageBubble({
         <div className="max-w-[88%] md:max-w-[78%]">
           <div className="mb-1.5 text-right text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500">You</div>
           <div
-            className="rounded-lg border border-blue-400/20 bg-blue-600/92 px-4 py-3 text-sm leading-relaxed text-white shadow-[0_18px_40px_rgba(37,99,235,0.18)] chat-message-content"
+            className="rounded-lg border border-slate-700/80 bg-transparent px-4 py-3 text-sm leading-relaxed text-white chat-message-content"
             dir={direction}
           >
             {renderUserMessage(message.content)}
