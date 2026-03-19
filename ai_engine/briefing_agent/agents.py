@@ -338,6 +338,57 @@ def run_market_interpreter(
         )
 
 
+def run_recent_briefs_summarizer(
+    state: DigestWorkflowState,
+    llm: Any,
+) -> Optional[str]:
+    """Summarize already-covered points from the last few stored briefs."""
+    recent_briefs = state.recent_digest_briefs or []
+    if not recent_briefs:
+        return None
+
+    briefs_lines: List[str] = []
+    for idx, brief in enumerate(recent_briefs[:5], start=1):
+        briefs_lines.append(f"### Brief {idx}")
+        if brief.digest_date:
+            briefs_lines.append(f"- Digest date: {brief.digest_date}")
+        if brief.created_at:
+            briefs_lines.append(f"- Created at (UTC): {brief.created_at}")
+        if brief.span_label or brief.span_type:
+            briefs_lines.append(f"- Span: {brief.span_label or brief.span_type}")
+        if brief.priority_tickers:
+            briefs_lines.append(f"- Priority tickers: {', '.join(brief.priority_tickers)}")
+        if brief.narrative:
+            briefs_lines.append("- Narrative:")
+            briefs_lines.append(brief.narrative[:1800])
+        if brief.what_to_watch:
+            briefs_lines.append("- What to watch:")
+            briefs_lines.append(brief.what_to_watch[:800])
+        briefs_lines.append("")
+
+    prompt_text = prompts.build_recent_briefs_summary_prompt("\n".join(briefs_lines).strip())
+    message = HumanMessage(content=prompts.RECENT_BRIEFS_SUMMARIZER_SYSTEM + "\n\n" + prompt_text)
+
+    try:
+        from pydantic import BaseModel, Field
+
+        class _RecentBriefsSummaryOut(BaseModel):
+            summary: str = Field(
+                description=(
+                    "Concise summary of the main points already covered across the recent briefs, "
+                    "for use as anti-repetition context."
+                )
+            )
+
+        chain = llm.with_structured_output(_RecentBriefsSummaryOut)
+        result = chain.invoke([message])
+        summary = getattr(result, "summary", "") or ""
+        return summary.strip() or None
+    except Exception as e:
+        logger.warning("Digest: recent_briefs_summarizer failed: %s", e)
+        return None
+
+
 def run_narrative_writer(
     state: DigestWorkflowState,
     llm: Any,
@@ -395,7 +446,6 @@ def run_narrative_writer(
             resources_lines.append(str(ctx.web_search_snippet)[:400])
 
     resources_text = "\n".join(resources_lines) if resources_lines else ""
-
     prompt_text = prompts.build_narrative_writer_prompt(
         ticker_interpretations_text=ticker_interpretations_text,
         market_interpretation_text=market_interpretation_text,
@@ -403,6 +453,7 @@ def run_narrative_writer(
         user_context_snapshot=ctx.user_context_snapshot if ctx else None,
         user_note=state.user_note,
         narrative_style=state.narrative_style,
+        recent_briefs_summary=state.recent_briefs_summary,
         resources_text=resources_text or None,
         period_label=state.period_label,
     )

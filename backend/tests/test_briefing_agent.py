@@ -7,7 +7,7 @@ from backend.processing import DetectedEvent, TickerEventSummary
 from ai_engine.briefing_agent import prompts
 from ai_engine.briefing_agent.context_builder import build_digest_context
 from ai_engine.briefing_agent.runner import run_digest
-from ai_engine.briefing_agent.state import DigestContext, MarketInterpretation
+from ai_engine.briefing_agent.state import DigestContext, HistoricalDigestBrief, MarketInterpretation
 
 
 class _MarketOnlyFetcher:
@@ -288,6 +288,19 @@ class TestNarrativePromptComposition(unittest.TestCase):
         self.assertIn("This note is a high-priority instruction for this run.", prompt)
         self.assertIn("in spanish", prompt)
 
+    def test_narrative_writer_prompt_includes_recent_briefs_summary(self) -> None:
+        prompt = prompts.build_narrative_writer_prompt(
+            ticker_interpretations_text="(none)",
+            market_interpretation_text="Summary: Mixed session\nRelevance to portfolio: Relevant.",
+            tool_names=["get_ticker_quote"],
+            recent_briefs_summary="Recent briefs already emphasized rates pressure and defensive positioning.",
+            period_label="today",
+        )
+
+        self.assertIn("## Summary of recent briefs", prompt)
+        self.assertIn("Avoid repeating them unless today's evidence materially changes them", prompt)
+        self.assertIn("Recent briefs already emphasized rates pressure", prompt)
+
     def test_prompts_include_saved_user_profile_context(self) -> None:
         snapshot = "Persona Type: investor\nPreferred AI Style: technical\nSaved AI Memory: Avoid leverage."
 
@@ -345,6 +358,24 @@ class TestNarrativePromptComposition(unittest.TestCase):
     )
     @patch("ai_engine.briefing_agent.runner.run_ticker_interpreter", return_value={})
     @patch("ai_engine.briefing_agent.runner.run_focus_selector", return_value=None)
+    @patch(
+        "ai_engine.briefing_agent.runner.run_recent_briefs_summarizer",
+        return_value="Recent briefs already emphasized rates pressure and Treasury-yield risk.",
+    )
+    @patch(
+        "ai_engine.briefing_agent.runner._load_recent_digest_briefs",
+        return_value=[
+            HistoricalDigestBrief(
+                narrative="Yesterday focused on rates.",
+                what_to_watch="Watch Treasury yields.",
+                digest_date="2026-03-15",
+                created_at="2026-03-15T14:00:00+00:00",
+                span_type="daily",
+                span_label="Daily",
+                priority_tickers=["AAPL"],
+            )
+        ],
+    )
     @patch("ai_engine.briefing_agent.runner.get_llm", return_value=object())
     @patch("ai_engine.briefing_agent.runner.get_config_from_env", return_value={})
     @patch(
@@ -360,6 +391,8 @@ class TestNarrativePromptComposition(unittest.TestCase):
         _mock_context,
         _mock_config,
         _mock_llm,
+        _mock_recent_briefs,
+        _mock_recent_summary,
         _mock_focus,
         _mock_ticker,
         _mock_market,
@@ -369,6 +402,12 @@ class TestNarrativePromptComposition(unittest.TestCase):
 
         called_state = mock_narrative.call_args[0][0]
         self.assertEqual(called_state.narrative_style, "technical")
+        self.assertEqual(len(called_state.recent_digest_briefs), 1)
+        self.assertEqual(called_state.recent_digest_briefs[0].narrative, "Yesterday focused on rates.")
+        self.assertEqual(
+            called_state.recent_briefs_summary,
+            "Recent briefs already emphasized rates pressure and Treasury-yield risk.",
+        )
 
 
 if __name__ == "__main__":

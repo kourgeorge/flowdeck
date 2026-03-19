@@ -67,6 +67,21 @@ class ReferenceItem(BaseModel):
     )
 
 
+class HistoricalDigestBrief(BaseModel):
+    """Stored brief used as continuity context across runs."""
+
+    narrative: str = Field(default="", description="Narrative body from the previous stored brief.")
+    what_to_watch: str = Field(default="", description="What-to-watch section from the previous stored brief.")
+    digest_date: Optional[str] = Field(default=None, description="Digest date for the previous brief.")
+    created_at: Optional[str] = Field(default=None, description="Creation timestamp for the previous brief.")
+    span_type: Optional[str] = Field(default=None, description="Span type for the previous brief.")
+    span_label: Optional[str] = Field(default=None, description="Human-readable span label for the previous brief.")
+    priority_tickers: List[str] = Field(
+        default_factory=list,
+        description="Priority tickers covered by the previous brief.",
+    )
+
+
 # ---------------------------------------------------------------------------
 # DigestContext (output of build_digest_context)
 # ---------------------------------------------------------------------------
@@ -191,6 +206,14 @@ class DigestWorkflowState(BaseModel):
     references: List[ReferenceItem] = Field(
         default_factory=list,
         description="Structured list of sources used for this brief (news articles, feeds, web snippets, etc.).",
+    )
+    recent_digest_briefs: List[HistoricalDigestBrief] = Field(
+        default_factory=list,
+        description="Most recent stored briefs for this user, newest first.",
+    )
+    recent_briefs_summary: Optional[str] = Field(
+        default=None,
+        description="LLM summary of recurring or already-covered points from recent stored briefs.",
     )
 
     model_config = {"arbitrary_types_allowed": True}

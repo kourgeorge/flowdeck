@@ -188,6 +188,7 @@ NARRATIVE_WRITER_SYSTEM = """You are the writer for a short User Daily Brief. Yo
 - A market interpretation (overall backdrop and relevance to the portfolio).
 - The user's saved investor profile and AI memory, when available.
 - An optional user note with explicit preferences for this brief.
+- A summary of the main points already covered in the user's last few briefs, when available.
 
 A base narrative-writing prompt and a style overlay will be injected below: follow both exactly for tone, structure, and output fields.
 
@@ -201,7 +202,20 @@ Hard requirements:
 - Include notable movers and important recent news when they are available.
 - When the brief references specific movers, include the company name and ticker if available.
 - If ticker interpretations exist, use them to personalize the brief after the market-level summary.
-- If ticker interpretations do not exist, still produce a complete market briefing rather than a placeholder."""
+- If ticker interpretations do not exist, still produce a complete market briefing rather than a placeholder.
+- If a recent-briefs summary is provided, use it for continuity and avoid repeating those already-covered points unless today's evidence materially changes them or they remain central with a genuinely new angle."""
+
+
+RECENT_BRIEFS_SUMMARIZER_SYSTEM = """You summarize recent User Daily Briefs so the next brief avoids repetition.
+
+You receive the user's last few stored briefs, newest first. Extract the main points that have already been covered across those briefs.
+
+Requirements:
+- Focus on the recurring market regime, repeated portfolio implications, and already-covered watch items.
+- Compress overlapping ideas into a short summary.
+- Do not invent new facts.
+- Do not recommend trades.
+- Keep the summary concise and concrete so another writer can avoid repeating it."""
 
 
 def get_style_prompt_for_narrative(narrative_style: Optional[str]) -> str:
@@ -236,6 +250,7 @@ def build_narrative_writer_prompt(
     user_context_snapshot: Optional[str] = None,
     user_note: Optional[str] = None,
     narrative_style: Optional[str] = None,
+    recent_briefs_summary: Optional[str] = None,
     resources_text: Optional[str] = None,
     period_label: str = "today",
 ) -> str:
@@ -255,6 +270,14 @@ def build_narrative_writer_prompt(
             f"{user_note[:1500]}"
         )
 
+    recent_briefs_block = ""
+    if recent_briefs_summary:
+        recent_briefs_block = (
+            "\n\n## Summary of recent briefs\n"
+            "These are the main points that were already covered recently. Avoid repeating them unless today's evidence materially changes them or you have a genuinely new angle.\n"
+            f"{recent_briefs_summary[:2500]}"
+        )
+
     narrative_prompt_instructions = build_narrative_prompt_instructions(narrative_style)
 
     period_block = f"\n\n## Period\nThis brief covers **{period_label}**."
@@ -267,12 +290,19 @@ def build_narrative_writer_prompt(
 {ticker_interpretations_text}
 
 ## Market interpretation
-{market_interpretation_text}{period_block}{user_profile_block}{user_note_block}{resources_block}
+{market_interpretation_text}{period_block}{user_profile_block}{user_note_block}{recent_briefs_block}{resources_block}
 
 ## Narrative prompt composition
 {narrative_prompt_instructions}
 
 You may use these tools to insert exact prices or report dates if needed: {', '.join(tool_names)}."""
+
+
+def build_recent_briefs_summary_prompt(briefs_text: str) -> str:
+    return f"""## Recent stored briefs
+{briefs_text}
+
+Summarize the main points that were already covered across these briefs so the next brief can avoid repetition."""
 
 
 FOCUS_SELECTOR_SYSTEM = """You are a portfolio assistant helping choose which tickers to focus on in a User Daily Brief.

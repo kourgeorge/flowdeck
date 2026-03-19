@@ -27,13 +27,15 @@ flowchart LR
     G[Focus Selector]
     H[Ticker Interpreter]
     I[Market Interpreter]
+    P[Load Previous Brief]
     J[Narrative Writer]
   end
 
-  A --> B --> C --> D --> E --> F --> G --> H --> I --> J
+  A --> B --> C --> D --> E --> F --> G --> H --> I --> P --> J
 ```
 
 The event layer is deterministic and explainable. Agents consume it as prepared evidence; they do not decide whether the event happened.
+The narrative stage can also consume the user's most recently stored brief so the generated report emphasizes what is new or materially changed instead of repeating unchanged observations.
 
 ---
 
@@ -431,11 +433,18 @@ The writer should consume:
 - market interpretation
 - ticker interpretations
 - dominant events per ticker
+- the most recently stored prior brief for the user, when one exists
 
 This should improve output quality because the writer can ground the brief in explicit event language:
 
 - "AAPL triggered a resistance break on elevated volume"
 - "MSFT showed volatility compression ahead of earnings"
+
+The previous brief should be treated as continuity context, not as a template to paraphrase. The writer should:
+
+- avoid repeating unchanged observations from the prior brief
+- focus on newly emerged events, changed implications, or materially updated risks
+- only restate an older point when it is still the most important thing for the user to monitor, and then do so with fresh context
 
 The writer should still decide presentation, not detection.
 
@@ -451,10 +460,12 @@ Recommended structure:
   - deterministic event definitions and extraction logic
 - `ai_engine/briefing_agent/context_builder.py`
   - fetch OHLCV, call extractor, score events, rank tickers, assemble context
+- `ai_engine/briefing_agent/runner.py`
+  - load the most recently stored previous brief and attach it to workflow state for continuity
 - `ai_engine/briefing_agent/agents.py`
-  - format event summaries into prompts for Focus Selector / Ticker Interpreter / Market Interpreter / Writer
+  - format event summaries and previous-brief context into prompts for Focus Selector / Ticker Interpreter / Market Interpreter / Writer
 - `ai_engine/briefing_agent/prompts.py`
-  - update prompts to treat deterministic events as canonical evidence
+  - update prompts to treat deterministic events as canonical evidence and instruct the writer not to repeat stale points from the last brief
 
 ---
 
@@ -490,6 +501,7 @@ Verify the prompts include:
 - dominant events
 - event score or event summary
 - separation between deterministic events and interpretive reasoning
+- previous-brief continuity instructions and anti-repetition guidance
 
 ---
 

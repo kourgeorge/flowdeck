@@ -7,23 +7,123 @@ Uses ai_engine.llm_provider for LLM access (same as chat and analysis services).
 
 from __future__ import annotations
 
+import json
 import logging
-from datetime import datetime, timedelta
-from typing import Any, Dict, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional
 
 from ai_engine.llm_provider import get_config_from_env, get_llm
 from backend.processing import build_important_events
 
 from .context_builder import build_digest_context
-from .agents import run_focus_selector, run_ticker_interpreter, run_market_interpreter, run_narrative_writer
+from .agents import (
+    run_focus_selector,
+    run_ticker_interpreter,
+    run_market_interpreter,
+    run_recent_briefs_summarizer,
+    run_narrative_writer,
+)
 from . import prompts
-from .state import DigestWorkflowState, DigestResult, SpanType
+from .state import DigestWorkflowState, DigestResult, HistoricalDigestBrief, SpanType
 
 logger = logging.getLogger(__name__)
+_RECENT_BRIEFS_LIMIT = 5
 
 
 def _parse_date(s: str) -> datetime:
     return datetime.strptime(s, "%Y-%m-%d")
+
+
+def _ensure_backend_import_path() -> None:
+    try:
+        import backend  # noqa: F401
+        return
+    except Exception:
+        pass
+
+    import os
+    import sys
+
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    backend_dir = os.path.join(repo_root, "backend")
+    for path in (repo_root, backend_dir):
+        if os.path.isdir(path) and path not in sys.path:
+            sys.path.insert(0, path)
+
+
+def _to_utc_iso(value: Optional[datetime]) -> Optional[str]:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+    return value.isoformat()
+
+
+def _load_recent_digest_briefs(
+    user_id: int,
+    db: Any,
+    *,
+    limit: int = _RECENT_BRIEFS_LIMIT,
+) -> List[HistoricalDigestBrief]:
+    """Load the user's most recent stored digests, newest first."""
+    if db is None:
+        return []
+
+    try:
+        _ensure_backend_import_path()
+        try:
+            from backend.models.db_models import Execution, Report
+        except Exception:
+            from models.db_models import Execution, Report  # type: ignore[import-not-found]
+
+        rows = (
+            db.query(Execution, Report)
+            .join(Report, Report.execution_id == Execution.id)
+            .filter(
+                Execution.execution_type == "daily_digest",
+                Execution.subject_type == "user_date",
+                Execution.creator_id == user_id,
+                Report.report_type == "daily_digest",
+            )
+            .order_by(Execution.created_at.desc(), Report.created_at.desc(), Execution.id.desc())
+            .limit(max(1, int(limit)))
+            .all()
+        )
+        briefs: List[HistoricalDigestBrief] = []
+        for execution, report in rows:
+            metadata: Dict[str, Any] = {}
+            if getattr(report, "metadata_json", None):
+                try:
+                    metadata = json.loads(report.metadata_json) or {}
+                except Exception:
+                    metadata = {}
+
+            priority_tickers = metadata.get("priority_tickers") or []
+            if not isinstance(priority_tickers, list):
+                priority_tickers = []
+
+            narrative = str(getattr(report, "content", "") or "").strip()
+            what_to_watch = str(metadata.get("what_to_watch") or "").strip()
+            if not narrative and not what_to_watch:
+                continue
+
+            briefs.append(
+                HistoricalDigestBrief(
+                    narrative=narrative,
+                    what_to_watch=what_to_watch,
+                    digest_date=str(metadata.get("digest_date") or "") or None,
+                    created_at=_to_utc_iso(getattr(execution, "created_at", None)),
+                    span_type=str(metadata.get("span_type") or "daily"),
+                    span_label=str(metadata.get("span_label") or "Daily"),
+                    priority_tickers=[str(t) for t in priority_tickers if t],
+                )
+            )
+        return briefs
+    except Exception as exc:
+        logger.warning("Digest: failed to load recent briefs for user_id=%s: %s", user_id, exc)
+        return []
 
 
 def _format_period_label(span_type: SpanType, start_date: Optional[str], end_date: str) -> str:
@@ -139,6 +239,7 @@ def run_digest(
         db=db,
         config=cfg,
     )
+    state.recent_digest_briefs = _load_recent_digest_briefs(user_id, db)
     if user_note:
         state.user_note = user_note
     if narrative_style:
@@ -199,6 +300,9 @@ def run_digest(
             logger.info("Digest: running market interpreter")
             state.market_interpretation = run_market_interpreter(state, llm)
 
+            logger.info("Digest: summarizing recent briefs")
+            state.recent_briefs_summary = run_recent_briefs_summarizer(state, llm)
+
             logger.info("Digest: running narrative writer")
             narrative, what_to_watch = run_narrative_writer(state, llm)
 
@@ -217,6 +321,9 @@ def run_digest(
 
         logger.info("Digest: running market interpreter")
         state.market_interpretation = run_market_interpreter(state, llm)
+
+        logger.info("Digest: summarizing recent briefs")
+        state.recent_briefs_summary = run_recent_briefs_summarizer(state, llm)
 
         logger.info("Digest: running narrative writer")
         narrative, what_to_watch = run_narrative_writer(state, llm)
