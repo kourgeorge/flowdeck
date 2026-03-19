@@ -4,16 +4,18 @@ import type { TickerWidget as TickerWidgetType } from '../services/types';
 import { parseReportDate } from '../utils/date';
 import { formatPrice } from '../utils/currency';
 import AspectSpiderChart, { getScoreColor, formatReportKey, getAnalysisScoreEntries } from './AspectSpiderChart';
+import { EventIcon, formatDominantEventLabel } from './EventsPanel';
 
 /** Min and max number of visible stock rows; table height is dynamic within these limits. */
 const MIN_VISIBLE_ROWS = 3;
 const MAX_VISIBLE_ROWS = 12;
-const ROW_HEIGHT_PX = 72;
+const ROW_HEIGHT_PX = 84;
 const TABLE_HEADER_HEIGHT_PX = 52;
+const TABLE_FOOTER_HEIGHT_PX = 40;
 
-function getTableHeightPx(rowCount: number): number {
+function getTableHeightPx(rowCount: number, hasFooter: boolean): number {
   const visibleRows = Math.min(MAX_VISIBLE_ROWS, Math.max(MIN_VISIBLE_ROWS, rowCount));
-  return TABLE_HEADER_HEIGHT_PX + visibleRows * ROW_HEIGHT_PX;
+  return TABLE_HEADER_HEIGHT_PX + visibleRows * ROW_HEIGHT_PX + (hasFooter ? TABLE_FOOTER_HEIGHT_PX : 0);
 }
 
 interface TickerListViewProps {
@@ -62,12 +64,42 @@ function getConfidenceValue(widget: TickerWidgetType): number {
   return getWidgetConfidence(widget) ?? -1;
 }
 
+function renderEventChips(widget: TickerWidgetType) {
+  const dominantEvents = widget.dominant_events ?? [];
+  if (dominantEvents.length === 0) {
+    return <span className="text-xs text-gray-500">No signals</span>;
+  }
+
+  const visibleEvents = dominantEvents.slice(0, 2);
+  const hiddenCount = Math.max(0, dominantEvents.length - visibleEvents.length);
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {visibleEvents.map((eventType) => (
+        <span
+          key={eventType}
+          className="inline-flex items-center gap-1.5 rounded border border-gray-700 bg-gray-900 px-2 py-1 text-xs font-medium text-gray-200"
+          title={formatDominantEventLabel(eventType)}
+        >
+          <EventIcon eventType={eventType} className="h-3.5 w-3.5 shrink-0 text-sky-300" />
+          <span className="truncate">{formatDominantEventLabel(eventType)}</span>
+        </span>
+      ))}
+      {hiddenCount > 0 ? (
+        <span className="inline-flex items-center rounded border border-gray-700 bg-gray-900 px-2 py-1 text-xs font-medium text-gray-400">
+          +{hiddenCount}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export default function TickerListView({ widgets, tickerToName, scrollRef, onScroll, footer, preserveOrder = false }: TickerListViewProps) {
   const navigate = useNavigate();
   const sortedWidgets = preserveOrder
     ? widgets
     : [...widgets].sort((a, b) => getConfidenceValue(b) - getConfidenceValue(a));
-  const tableHeightPx = getTableHeightPx(sortedWidgets.length);
+  const tableHeightPx = getTableHeightPx(sortedWidgets.length, Boolean(footer));
 
   return (
     <div className="w-full min-w-0 max-w-full rounded-lg border border-gray-700 bg-gray-800/80" role="region" aria-label="Stock list table">
@@ -77,26 +109,22 @@ export default function TickerListView({ widgets, tickerToName, scrollRef, onScr
         className="overflow-auto min-h-0 w-full scrollbar-hide-x"
         style={{ height: `${tableHeightPx}px` }}
       >
-        <table className="table-fixed text-left w-full min-w-[960px]" style={{ tableLayout: 'fixed' }}>
+        <table className="table-fixed text-left w-full min-w-[980px]" style={{ tableLayout: 'fixed' }}>
         <colgroup>
-          <col className="w-[8%]" />
-          <col className="w-[7%]" />
           <col className="w-[12%]" />
-          <col className="w-[8%]" />
-          <col className="w-[8%]" />
+          <col className="w-[9%]" />
+          <col className="w-[14%]" />
+          <col className="w-[45%]" />
+          <col className="w-[13%]" />
           <col className="w-[7%]" />
-          <col className="w-[42%]" />
-          <col className="w-[8%]" />
         </colgroup>
         <thead className="sticky top-0 z-10 bg-gray-800 shadow-[0_1px_0_0_rgba(55,65,81,1)]">
           <tr className="border-b border-gray-700 text-gray-400 text-sm">
             <th className="py-3 px-2 font-semibold"></th>
             <th className="py-3 px-2 font-semibold whitespace-nowrap">Ticker</th>
-            <th className="py-3 px-2 font-semibold truncate" title="Name">Name</th>
-            <th className="py-3 px-2 font-semibold text-right whitespace-nowrap">Price</th>
-            <th className="py-3 px-2 font-semibold text-right whitespace-nowrap">Change</th>
-            <th className="py-3 px-2 font-semibold whitespace-nowrap text-center">Call</th>
+            <th className="py-3 px-2 font-semibold text-right whitespace-nowrap">Price / Change</th>
             <th className="py-3 px-2 font-semibold min-w-0">AI analysis scores</th>
+            <th className="py-3 px-2 font-semibold min-w-0">Events</th>
             <th className="py-3 px-2 font-semibold whitespace-nowrap">Report date</th>
           </tr>
         </thead>
@@ -119,22 +147,33 @@ export default function TickerListView({ widgets, tickerToName, scrollRef, onScr
                     </div>
                   ) : null}
                 </td>
-                <td className="py-3 px-2 font-bold text-white whitespace-nowrap truncate" title={widget.ticker}>{widget.ticker}</td>
-                <td className="py-3 px-2 text-gray-300 min-w-0 truncate" title={name}>
-                  {name}
+                <td className="py-3 px-2 min-w-0" title={`${widget.ticker} ${name}`}>
+                  <div className="min-w-0">
+                    <div className="font-bold text-white whitespace-nowrap truncate">{widget.ticker}</div>
+                    <div className="text-xs leading-tight text-gray-400 truncate">{name}</div>
+                  </div>
                 </td>
-                <td className="py-3 px-2 text-right text-white font-mono whitespace-nowrap">
-                  {widget.current_price > 0 ? formatPrice(widget.current_price, widget.currency) : '—'}
+                <td className="py-3 px-2 text-right min-w-0">
+                  <div className="min-w-0">
+                    <div className="text-white font-mono whitespace-nowrap truncate">
+                      {widget.current_price > 0 ? formatPrice(widget.current_price, widget.currency) : '—'}
+                    </div>
+                    <div className={`text-xs font-mono font-medium whitespace-nowrap truncate ${changeColor}`}>
+                      {widget.current_price > 0
+                        ? `${formatPrice(widget.daily_change, widget.currency)} (${widget.daily_change_percent >= 0 ? '+' : ''}${widget.daily_change_percent.toFixed(2)}%)`
+                        : '—'}
+                    </div>
+                  </div>
                 </td>
-                <td className={`py-3 px-2 text-right font-mono font-medium whitespace-nowrap ${changeColor}`}>
-                  {widget.current_price > 0
-                    ? `${widget.daily_change_percent >= 0 ? '+' : ''}${widget.daily_change_percent.toFixed(2)}%`
-                    : '—'}
-                </td>
-                <td className="py-3 px-2 min-w-0 truncate text-center">{getRecommendationBadge(widget.recommendation)}</td>
                 <td className="py-3 px-2 min-w-0">
-                  {scoreEntries.length > 0 ? (
+                  {scoreEntries.length > 0 || widget.recommendation ? (
                     <div className="flex flex-wrap gap-2 min-w-0">
+                      {widget.recommendation ? (
+                        <div className="flex items-center gap-1 bg-gray-700/60 rounded px-2 py-1 text-sm">
+                          <span className="text-gray-400">Call:</span>
+                          {getRecommendationBadge(widget.recommendation)}
+                        </div>
+                      ) : null}
                       {scoreEntries.map(([reportType, data]) => {
                         const label = formatReportKey(reportType);
                         const value = data.score != null ? `${data.score}/10` : '—';
@@ -154,6 +193,9 @@ export default function TickerListView({ widgets, tickerToName, scrollRef, onScr
                   ) : (
                     <span className="text-gray-500 text-sm">No scores</span>
                   )}
+                </td>
+                <td className="py-3 px-2 min-w-0">
+                  {renderEventChips(widget)}
                 </td>
                 <td className="py-3 px-2 text-gray-400 text-sm whitespace-nowrap truncate" title={formatDate(widget.report_date)}>{formatDate(widget.report_date)}</td>
               </tr>

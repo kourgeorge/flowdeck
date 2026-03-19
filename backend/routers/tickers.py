@@ -24,6 +24,7 @@ from models.schemas import (
 from data_layer import get_data_gateway
 from services import token_service
 from services.share_service import get_share_url
+from processing import get_ticker_event_summary
 
 router = APIRouter(prefix="/api/tickers", tags=["tickers"])
 
@@ -120,6 +121,21 @@ def _get_ticker_widgets_sync(
     except Exception:
         company_names = {t: None for t in ticker_list}
 
+    today = datetime.now().strftime("%Y-%m-%d")
+    event_summaries: dict[str, dict[str, object]] = {}
+    for ticker in ticker_list:
+        try:
+            summary = get_ticker_event_summary(gw, ticker, as_of_date=today)
+            event_summaries[ticker] = {
+                "dominant_events": summary.dominant_events[:3],
+                "event_count": summary.event_count,
+            }
+        except Exception:
+            event_summaries[ticker] = {
+                "dominant_events": [],
+                "event_count": 0,
+            }
+
     for ticker in ticker_list:
         quote_data = quotes_dict.get(ticker) if quotes_dict else None
         quote = None
@@ -166,6 +182,7 @@ def _get_ticker_widgets_sync(
 
         is_major = (ticker.upper() in major_set) if use_major_split else None
         company_name = company_names.get(ticker)
+        event_summary = event_summaries.get(ticker, {"dominant_events": [], "event_count": 0})
         if quote:
             widget = TickerWidget(
                 ticker=ticker,
@@ -181,6 +198,8 @@ def _get_ticker_widgets_sync(
                 report_scores=report_scores,
                 is_major=is_major,
                 currency=getattr(quote, "currency", None),
+                dominant_events=event_summary["dominant_events"],
+                event_count=event_summary["event_count"],
             )
         else:
             widget = TickerWidget(
@@ -196,6 +215,8 @@ def _get_ticker_widgets_sync(
                 market_status="UNKNOWN",
                 report_scores=report_scores,
                 is_major=is_major,
+                dominant_events=event_summary["dominant_events"],
+                event_count=event_summary["event_count"],
             )
         widgets.append(widget)
 

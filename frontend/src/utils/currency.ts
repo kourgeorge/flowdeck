@@ -28,12 +28,14 @@ export function formatPrice(
 ): string {
   const code = currency?.trim().toUpperCase() || 'USD';
   const symbol = CURRENCY_SYMBOLS[code];
-  const formatted = amount.toLocaleString(undefined, {
+  const absoluteAmount = Math.abs(amount);
+  const formatted = absoluteAmount.toLocaleString(undefined, {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   });
+  const prefix = amount < 0 ? '-' : '';
   if (symbol) {
-    return `${symbol}${formatted}`;
+    return `${prefix}${symbol}${formatted}`;
   }
-  return `${formatted} ${code}`;
+  return `${prefix}${formatted} ${code}`;
 }

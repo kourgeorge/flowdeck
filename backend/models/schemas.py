@@ -109,6 +109,8 @@ class TickerWidget(BaseModel):
     # True when ticker is in MAJOR_STOCKS (only set when widgets requested without explicit tickers)
     is_major: Optional[bool] = None
     currency: Optional[str] = None  # e.g. "USD", "ILS" for price display
+    dominant_events: Optional[List[str]] = None
+    event_count: Optional[int] = None
 
     @field_validator('confidence', mode='before')
     @classmethod
@@ -200,4 +202,3 @@ class TickerPageData(BaseModel):
     @classmethod
     def sanitize_return_pcts(cls, v):
         return _sanitize_float(v)
-

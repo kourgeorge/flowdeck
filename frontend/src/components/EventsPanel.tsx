@@ -22,7 +22,7 @@ interface EventsPanelProps {
   error?: string;
 }
 
-const EVENT_LABELS: Record<string, string> = {
+export const EVENT_LABELS: Record<string, string> = {
   price_spike_up: 'Price Spike Up',
   price_spike_down: 'Price Spike Down',
   price_gap_up: 'Gap Up',
@@ -88,7 +88,11 @@ const EVENTS_PANEL_METADATA = {
     'FlowDeck detects these signals automatically using deterministic rules over cached normalized market data. Each event type uses explicit trigger thresholds and severity bands to classify low, medium, or high strength. No LLM is used in the extraction layer.',
 };
 
-function EventIcon({ eventType, className = 'h-4 w-4' }: { eventType: string; className?: string }) {
+export function formatDominantEventLabel(eventType: string): string {
+  return EVENT_LABELS[eventType] ?? eventType.replace(/_/g, ' ');
+}
+
+export function EventIcon({ eventType, className = 'h-4 w-4' }: { eventType: string; className?: string }) {
   const shared = {
     className,
     fill: 'none',
@@ -357,7 +361,7 @@ export default function EventsPanel({
               {dominantEvents.slice(0, 3).map((eventType) => (
                 <span key={eventType} className="inline-flex items-center gap-2 rounded border border-gray-700 bg-gray-900 px-2.5 py-1.5 text-sm font-medium text-gray-200">
                   <EventIcon eventType={eventType} className="h-4 w-4 shrink-0 text-sky-300" />
-                  <span>{eventType.split('_').slice(0, 2).join(' ')}</span>
+                  <span>{formatDominantEventLabel(eventType)}</span>
                 </span>
               ))}
             </div>

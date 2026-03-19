@@ -21,6 +21,8 @@ export interface TickerWidget {
   is_major?: boolean | null;
   /** e.g. "USD", "ILS" for price display */
   currency?: string | null;
+  dominant_events?: string[] | null;
+  event_count?: number | null;
 }
 
 export interface WidgetsResponse {
