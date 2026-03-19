@@ -546,7 +546,7 @@ export default function BriefPage() {
         <div className="px-4 py-6 sm:p-6 lg:p-8">
           <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
             <div className="mb-6 overflow-hidden rounded-2xl border border-emerald-500/20 bg-slate-950 shadow-lg">
-              <div className="grid gap-4 px-5 py-5 sm:px-6 lg:grid-cols-[minmax(0,1.35fr)_320px] lg:items-start lg:px-7">
+              <div className="grid gap-4 px-5 py-5 sm:px-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(360px,420px)] lg:items-start lg:px-7">
                 <div className="min-w-0">
                   <p className="text-[11px] font-mono uppercase tracking-[0.24em] text-emerald-300/80">
                     FlowDeck AI Briefing
@@ -559,7 +559,7 @@ export default function BriefPage() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3 lg:min-w-[360px]">
                   <div className="rounded-xl border border-slate-700/80 bg-slate-950/70 p-3.5">
                     <p className="text-xs font-mono uppercase tracking-[0.2em] text-emerald-300">Daily</p>
                     <p className="mt-1.5 text-sm leading-6 text-slate-300">
