@@ -207,6 +207,21 @@ def get_financial_charts(
         return None
 
 
+def get_events(
+    ticker: str,
+    base_url: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Fetch deterministic ticker events from /api/data/events/{ticker}."""
+    base_url = base_url or _get_info_service_base_url()
+    if not base_url:
+        return None
+    try:
+        data = _get(None, base_url, f"/api/data/events/{ticker.upper()}")
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
 def get_edgar_filing_content(
     ticker: str,
     form: Optional[str] = None,

@@ -15,7 +15,7 @@ from backend.processing import (
     extract_price_technical_events,
     get_ticker_event_summary,
 )
-from services.data_cache import clear_cache
+from services.data_cache import clear_cache, init_cache
 
 
 def _bars_from_closes(
@@ -183,6 +183,7 @@ class TestDeterministicPriceEvents(unittest.TestCase):
 
 class TestTickerEventProcessingService(unittest.TestCase):
     def setUp(self) -> None:
+        init_cache(maxsize=1024)
         clear_cache()
 
     def test_get_ticker_event_summary_uses_processing_cache(self) -> None:

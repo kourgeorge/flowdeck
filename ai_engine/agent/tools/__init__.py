@@ -7,6 +7,7 @@ Import ALL_TOOLS to get the full list ready for ToolRegistry.register_many().
 
 from ai_engine.agent.tools.stock_quote import StockQuoteTool
 from ai_engine.agent.tools.platform_reports import PlatformReportsTool, HistoricalReportDatesTool
+from ai_engine.agent.tools.events import EventsTool
 from ai_engine.agent.tools.market_data import StockDataTool, HistoricalPricesTool, IndicatorsTool
 from ai_engine.agent.tools.multi_market_data import MultiHistoricalPricesTool
 from ai_engine.agent.tools.analyst_recommendations import AnalystRecommendationsTool
@@ -27,6 +28,7 @@ ALL_TOOLS = [
     StockQuoteTool(),
     PlatformReportsTool(),
     HistoricalReportDatesTool(),
+    EventsTool(),
     StockDataTool(),
     HistoricalPricesTool(),
     MultiHistoricalPricesTool(),
@@ -49,6 +51,7 @@ __all__ = [
     "StockQuoteTool",
     "PlatformReportsTool",
     "HistoricalReportDatesTool",
+    "EventsTool",
     "StockDataTool",
     "HistoricalPricesTool",
     "MultiHistoricalPricesTool",
@@ -67,5 +70,3 @@ __all__ = [
     "ExecutePythonTool",
     "ALL_TOOLS",
 ]
-
-

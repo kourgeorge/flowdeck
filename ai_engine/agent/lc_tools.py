@@ -207,6 +207,16 @@ def get_historical_report_dates(ticker: str, config: _InjectedConfig = None) -> 
     return HistoricalReportDatesTool().execute(ctx, ticker=ticker).to_str()
 
 
+@tool
+def get_events(ticker: str, config: _InjectedConfig = None) -> str:
+    """Get FlowDeck's event summary for a stock: unusual price moves, gaps,
+    52-week highs/lows, volume spikes, RSI divergences, upcoming earnings, and insider activity.
+    Use when the user asks what stands out, what recent events matter, or which catalysts/signals are active."""
+    from ai_engine.agent.tools.events import EventsTool
+    ctx = _ctx_from_config(config)
+    return EventsTool().execute(ctx, ticker=ticker).to_str()
+
+
 # ---------------------------------------------------------------------------
 # News tools
 # ---------------------------------------------------------------------------
@@ -371,6 +381,7 @@ ALL_LC_TOOLS = [
     get_cashflow,
     get_platform_reports,
     get_historical_report_dates,
+    get_events,
     get_news,
     get_global_news,
     get_reddit_company_social,
@@ -391,5 +402,3 @@ def get_all_lc_tools(user_id: Optional[int] = None, db: Any = None) -> list:
     if user_id is not None and db is not None:
         tools.extend(make_user_lc_tools(user_id, db))
     return tools
-
-
