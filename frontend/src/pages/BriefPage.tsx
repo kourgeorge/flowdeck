@@ -546,36 +546,30 @@ export default function BriefPage() {
         <div className="px-4 py-6 sm:p-6 lg:p-8">
           <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
             <div className="mb-6 overflow-hidden rounded-2xl border border-emerald-500/20 bg-slate-950 shadow-lg">
-              <div className="grid gap-4 px-5 py-5 sm:px-6 lg:grid-cols-[minmax(0,1.35fr)_280px] lg:items-start lg:px-7">
+              <div className="grid gap-4 px-5 py-5 sm:px-6 lg:grid-cols-[minmax(0,1.35fr)_320px] lg:items-start lg:px-7">
                 <div className="min-w-0">
                   <p className="text-[11px] font-mono uppercase tracking-[0.24em] text-emerald-300/80">
                     FlowDeck AI Briefing
                   </p>
                   <h2 className="mt-2 max-w-4xl text-2xl font-semibold tracking-tight text-white sm:text-[1.9rem]">
-                    A fast, personalized digest of your portfolio and the market.
+                    Personalized market and portfolio briefs.
                   </h2>
                   <p className="mt-3 max-w-4xl text-sm leading-6 text-slate-300">
-                    Harness AI to get a clear, tailored daily or weekly briefing, so you do not need to piece together
-                    charts, headlines, and separate reports yourself.
-                  </p>
-                  <p className="mt-2 max-w-5xl text-sm leading-6 text-slate-300">
-                    It turns the market noise into a clear, personalized brief by surfacing the stories, signals, and
-                    portfolio names that matter most to you, then packaging them into an easy read with key takeaways
-                    and what to watch next.
+                    Get a concise daily or weekly read on the stories, signals, and holdings that matter most.
                   </p>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-xl border border-slate-700/80 bg-slate-950/70 p-3.5">
                     <p className="text-xs font-mono uppercase tracking-[0.2em] text-emerald-300">Daily</p>
                     <p className="mt-1.5 text-sm leading-6 text-slate-300">
-                      Quick market context and immediate portfolio impact.
+                      Market context and portfolio moves.
                     </p>
                   </div>
                   <div className="rounded-xl border border-slate-700/80 bg-slate-950/70 p-3.5">
                     <p className="text-xs font-mono uppercase tracking-[0.2em] text-emerald-300">Weekly</p>
                     <p className="mt-1.5 text-sm leading-6 text-slate-300">
-                      A broader read on themes, follow-through, and next signals.
+                      Themes, follow-through, and next signals.
                     </p>
                   </div>
                 </div>
