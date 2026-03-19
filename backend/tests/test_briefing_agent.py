@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
+from backend.processing import DetectedEvent, TickerEventSummary
 from ai_engine.briefing_agent import prompts
 from ai_engine.briefing_agent.context_builder import build_digest_context
 from ai_engine.briefing_agent.runner import run_digest
@@ -121,6 +122,7 @@ class TestRunDigest(unittest.TestCase):
         self.assertEqual(result.narrative, "Market-only brief")
         self.assertEqual(result.what_to_watch, "Watch rates and breadth.")
         self.assertEqual(result.priority_tickers, [])
+        self.assertEqual(result.important_events, [])
         mock_market.assert_called_once()
         mock_narrative.assert_called_once()
 
@@ -161,8 +163,79 @@ class TestRunDigest(unittest.TestCase):
         self.assertEqual(result.narrative, "Market plus portfolio context")
         self.assertEqual(result.what_to_watch, "Watch earnings and macro.")
         self.assertEqual(result.priority_tickers, [])
+        self.assertEqual(result.important_events, [])
         mock_market.assert_called_once()
         mock_narrative.assert_called_once()
+
+    @patch("ai_engine.briefing_agent.runner.run_narrative_writer", return_value=("Focused brief", "Watch confirmation."))
+    @patch(
+        "ai_engine.briefing_agent.runner.run_market_interpreter",
+        return_value=MarketInterpretation(
+            summary="Mixed market",
+            relevance_to_portfolio="Relevant backdrop.",
+        ),
+    )
+    @patch("ai_engine.briefing_agent.runner.run_ticker_interpreter", return_value={})
+    @patch("ai_engine.briefing_agent.runner.run_focus_selector", return_value=["AAPL"])
+    @patch("ai_engine.briefing_agent.runner.get_llm", return_value=object())
+    @patch("ai_engine.briefing_agent.runner.get_config_from_env", return_value={})
+    @patch(
+        "ai_engine.briefing_agent.runner.build_digest_context",
+        return_value=DigestContext(
+            tickers=["AAPL", "MSFT"],
+            priority_tickers=["AAPL", "MSFT"],
+            quotes={"AAPL": {"current_price": 210.0, "name": "Apple Inc."}},
+            returns_1d={"AAPL": 5.2},
+            event_summaries={
+                "AAPL": TickerEventSummary(
+                    ticker="AAPL",
+                    event_score=3.5,
+                    dominant_events=["price_spike_up", "earnings_upcoming"],
+                    event_count=2,
+                    events=[
+                        DetectedEvent(
+                            event_type="price_spike_up",
+                            domain="price_technical",
+                            detected_on="2026-03-16",
+                            window_start="2026-03-01",
+                            window_end="2026-03-16",
+                            strength="high",
+                            metric_value=5.2,
+                            threshold_value=4.0,
+                            metadata={"return_1d_pct": 5.2},
+                        ),
+                        DetectedEvent(
+                            event_type="earnings_upcoming",
+                            domain="fundamental",
+                            detected_on="2026-03-20",
+                            window_start="2026-03-16",
+                            window_end="2026-04-15",
+                            strength="medium",
+                            metric_value=4.0,
+                            threshold_value=30.0,
+                            metadata={"days_until": 4},
+                        ),
+                    ],
+                ),
+            },
+        ),
+    )
+    def test_run_digest_returns_important_events_for_selected_focus_tickers(
+        self,
+        _mock_context,
+        _mock_config,
+        _mock_llm,
+        _mock_focus,
+        _mock_ticker,
+        _mock_market,
+        _mock_narrative,
+    ) -> None:
+        result = run_digest(user_id=7, digest_date="2026-03-16", db=object())
+
+        self.assertEqual(result.priority_tickers, ["AAPL"])
+        self.assertEqual([item.event.event_type for item in result.important_events], ["price_spike_up", "earnings_upcoming"])
+        self.assertEqual(result.important_events[0].ticker, "AAPL")
+        self.assertGreater(result.important_events[0].importance_score, result.important_events[1].importance_score)
 
 
 class TestNarrativePromptComposition(unittest.TestCase):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 import sys
 import unittest
@@ -99,6 +100,39 @@ class TestDigestService(unittest.TestCase):
         brief = _report_to_brief_item(execution, report, "2026-03-17")
 
         self.assertEqual(brief.created_at, "2026-03-17T15:45:30+00:00")
+
+    def test_report_to_brief_item_preserves_important_events(self) -> None:
+        execution = _ExecutionStub(
+            execution_id=44,
+            created_at=datetime(2026, 3, 17, 15, 45, 30, tzinfo=timezone.utc),
+        )
+        report = _ReportStub(
+            content="Brief body",
+            metadata_json=json.dumps(
+                {
+                    "digest_date": "2026-03-17",
+                    "priority_tickers": ["AAPL"],
+                    "important_events": [
+                        {
+                            "ticker": "AAPL",
+                            "importance_score": 4.0,
+                            "event": {
+                                "event_type": "price_spike_up",
+                                "domain": "price_technical",
+                                "detected_on": "2026-03-17",
+                                "strength": "high",
+                                "metadata": {"return_1d_pct": 5.2},
+                            },
+                        }
+                    ],
+                }
+            ),
+        )
+
+        brief = _report_to_brief_item(execution, report, "2026-03-17")
+
+        self.assertEqual(len(brief.important_events), 1)
+        self.assertEqual(brief.important_events[0]["event"]["event_type"], "price_spike_up")
 
     def test_get_digest_dates_groups_daily_briefs_by_user_local_day(self) -> None:
         self._add_digest(
