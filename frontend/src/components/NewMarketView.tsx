@@ -1265,9 +1265,14 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
           <div className="space-y-3">
             <div className="space-y-4 xl:grid xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.95fr)] xl:items-start xl:gap-4 xl:space-y-0">
               <div className="space-y-3">
-              <div className="inline-flex items-center gap-2 rounded-full border border-gray-700 bg-gray-700/50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300">
-                <span className="h-2 w-2 rounded-full bg-sky-400" />
-                Market view
+              <div className="flex flex-wrap gap-2">
+                <div className="inline-flex items-center gap-2 rounded-full border border-gray-700 bg-gray-700/50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300">
+                  <span className="h-2 w-2 rounded-full bg-sky-400" />
+                  Market view
+                </div>
+                <span className="rounded-full border border-gray-700 bg-gray-700/50 px-3 py-1 text-[11px] font-medium text-slate-300">
+                  Range: {getRangeLabel(range)}
+                </span>
               </div>
               <div className="space-y-2">
                 <h1 className="max-w-3xl text-xl font-semibold tracking-tight text-white sm:text-2xl">
@@ -1276,14 +1281,6 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
                 <p className="max-w-2xl text-xs leading-relaxed text-gray-400 sm:text-sm">
                   {heroDescription} Scan the market quickly, then drill into the names or regions that matter.
                 </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <span className="rounded-full border border-gray-700 bg-gray-700/50 px-3 py-1 text-[11px] font-medium text-slate-300">
-                  {activeTab === 'overview' ? 'Cross-asset overview' : 'Regional heat map'}
-                </span>
-                <span className="rounded-full border border-gray-700 bg-gray-700/50 px-3 py-1 text-[11px] font-medium text-slate-300">
-                  Range: {getRangeLabel(range)}
-                </span>
               </div>
               <div className="max-w-2xl">
                 <TickerSearch compact />
