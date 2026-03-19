@@ -713,6 +713,12 @@ export default function HomePage() {
               </p>
             </div>
             <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+              <h4 className="text-lg font-semibold text-white mb-2">Analytic Signals</h4>
+              <p className="text-gray-400 text-sm">
+                FlowDeck automatically extracts important anomalies and market events for each ticker, including price spikes, volatility shifts, insider activity, earnings timing, and other deterministic signals surfaced directly in the platform.
+              </p>
+            </div>
+            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
               <h4 className="text-lg font-semibold text-white mb-2">Deep AI Analysis, On Demand</h4>
               <p className="text-gray-400 text-sm">
                 Trigger a full multi-agent analysis for any stock, any time. A committee of specialized AI analysts — covering market data, news, fundamentals, technicals, and risk — each produce their own report before a final recommendation is synthesized. Every angle covered, every time.
