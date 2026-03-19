@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+</head>
+<body style="margin:0;padding:0;background:#dbe4ee;font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;color:#0f172a;">
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
+    {% block preheader %}{% endblock %}
+  </div>
+
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;background:#dbe4ee;">
+    <tr>
+      <td align="center" style="padding:28px 16px;">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;margin:0 auto;background:#f4f7fa;border:1px solid #bfccda;border-collapse:separate;border-spacing:0;border-radius:20px;overflow:hidden;">
+          <tr>
+            <td style="padding:26px 40px 22px;background:#1b2638;border-bottom:1px solid #314154;">
+              <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 18px;">
+                <tr>
+                  <td style="vertical-align:middle;">
+                    {% if email_logo_src %}
+                    <img src="{{ email_logo_src }}" alt="Flowdeck" width="34" height="34" style="display:block;width:34px;height:34px;border:0;outline:none;text-decoration:none;">
+                    {% else %}
+                    <div style="width:34px;height:34px;border-radius:10px;background:#dbeafe;text-align:center;line-height:34px;font-size:13px;font-weight:700;color:#1d4ed8;">FD</div>
+                    {% endif %}
+                  </td>
+                  <td style="padding-left:12px;vertical-align:middle;">
+                    <p style="margin:0;font-size:13px;line-height:1.4;color:#bfdbfe;text-transform:uppercase;letter-spacing:0.18em;font-weight:700;">Flowdeck</p>
+                  </td>
+                </tr>
+              </table>
+              {% block eyebrow %}{% endblock %}
+              <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;font-weight:700;">{% block title %}{% endblock %}</h1>
+              <div style="font-size:15px;line-height:1.7;color:#d7e0ea;">
+                {% block intro %}{% endblock %}
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 40px 12px;background:#f4f7fa;">
+              {% block content %}{% endblock %}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 40px 32px;background:#f4f7fa;">
+              {% block actions %}{% endblock %}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:18px 40px 24px;background:#eef3f7;border-top:1px solid #d5dee8;">
+              <p style="margin:0;font-size:12px;line-height:1.6;color:#64748b;">{% block footer_message %}You received this email because you use <strong style="color:#0f172a;">Flowdeck</strong>.{% endblock %}</p>
+              {% block footer_extra %}{% endblock %}
+              <p style="margin:12px 0 0;font-size:11px;line-height:1.5;color:#94a3b8;">&copy; Flowdeck. All rights reserved.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

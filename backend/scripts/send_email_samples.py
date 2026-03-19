@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 backend_root = Path(__file__).resolve().parent.parent
@@ -48,6 +48,56 @@ def _send_admin_sample(to_email: str, ticker: str) -> bool:
         html_body = es._html_email_wrapper(
             title="New subscription",
             inner_body=f"<p>New subscription: {user_email} → {ticker_upper}</p>",
+        )
+
+    to_emails = [to_email]
+    if es._get_smtp_password() and es._send_via_smtp(to_emails, subject, text_body, html_body):
+        return True
+    if es._get_api_key() and es._send_via_api(to_emails, subject, text_body, html_body):
+        return True
+    return False
+
+
+def _send_daily_digest_sample(to_email: str, ticker: str) -> bool:
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    brief_url = f"{es._get_frontend_url()}/dashboard?tab=digest"
+    subject = f"Your User Daily Brief (Daily) – {today}"
+    narrative = """## Market Highlights
+The market opened with a constructive tone as large-cap technology continued to lead.
+
+## Key Signals
+Momentum remains favorable, but leadership is still narrow and worth monitoring.
+
+## Risks & Opportunities
+Near-term upside depends on earnings resilience and rate expectations staying stable."""
+    what_to_watch = (
+        f"Watch {ticker} price action around the latest support zone, along with any "
+        "macro headlines that could shift sentiment."
+    )
+    text_body = (
+        f"Your User Daily Brief for {today} is ready.\n\n"
+        f"Focus: {ticker}, SPY, QQQ\n\n"
+        f"{narrative}\n\n"
+        f"What to watch\n{what_to_watch}\n\n"
+        f"View this brief in Flowdeck: {brief_url}"
+    )
+
+    try:
+        template = es._jinja_env.get_template("daily_digest_email.html")
+        html_body = template.render(
+            digest_date=today,
+            span_label="Daily",
+            priority_tickers=[ticker, "SPY", "QQQ"],
+            narrative_html=es._format_brief_narrative_for_email(narrative),
+            what_to_watch=what_to_watch,
+            brief_url=brief_url,
+            preheader=f"Your User Daily Brief for {today} is ready.",
+        )
+    except Exception:
+        html_body = es._html_email_wrapper(
+            title="User Daily Brief",
+            inner_body=f"<p>Your User Daily Brief is ready. <a href='{brief_url}'>Open brief</a></p>",
+            preheader=f"Your User Daily Brief for {today} is ready.",
         )
 
     to_emails = [to_email]
@@ -141,6 +191,8 @@ def main() -> None:
         )
     finally:
         es.CONTACT_FORM_RECIPIENT = prev_contact_recipient
+
+    results["daily_digest_email"] = _send_daily_digest_sample(to_email, ticker)
 
     print("\nSend results:")
     all_ok = True

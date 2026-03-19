@@ -3,9 +3,11 @@
 import os
 import json
 import html
+import base64
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
 from pathlib import Path
 from typing import List, Optional
 
@@ -30,11 +32,59 @@ _jinja_env = Environment(
 
 # Brand colors and layout (email-safe inline styles)
 _BRAND_PRIMARY = "#2563eb"   # blue-600
-_BRAND_PRIMARY_LIGHT = "#3b82f6"  # blue-500
-_BRAND_BG = "#eff6ff"        # blue-50
-_TEXT_DARK = "#1e40af"       # website dark-blue
-_TEXT_MUTED = "#64748b"      # slate-500, readable on white
 _FONT_FAMILY = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
+_EMAIL_LOGO_CID = "flowdeck-logo"
+
+
+def _get_email_logo_data_uri() -> str:
+    """Return the self-contained Flowdeck logo as a data URI for email templates."""
+    cached_path = Path(__file__).resolve().parent / "email_logo_data_uri.txt"
+    if cached_path.is_file():
+        try:
+            cached_value = cached_path.read_text().strip()
+        except OSError:
+            cached_value = ""
+        if cached_value.startswith("data:image/"):
+            return cached_value
+
+    logo_path = Path(__file__).resolve().parent.parent.parent / "logo.svg"
+    if not logo_path.is_file():
+        return ""
+    try:
+        svg_b64 = base64.b64encode(logo_path.read_bytes()).decode("ascii")
+    except OSError:
+        return ""
+    return f"data:image/svg+xml;base64,{svg_b64}"
+
+
+def _get_email_logo_png_bytes() -> bytes:
+    """Extract the embedded PNG bytes from the repo logo.svg for email CID embedding."""
+    logo_path = Path(__file__).resolve().parent.parent.parent / "logo.svg"
+    if not logo_path.is_file():
+        return b""
+    try:
+        svg_text = logo_path.read_text(encoding="utf-8")
+    except OSError:
+        return b""
+
+    marker = "data:image/png;base64,"
+    start = svg_text.find(marker)
+    if start == -1:
+        return b""
+    start += len(marker)
+    end = svg_text.find('"', start)
+    if end == -1:
+        return b""
+    try:
+        return base64.b64decode(svg_text[start:end])
+    except Exception:
+        return b""
+
+
+_EMAIL_LOGO_DATA_URI = _get_email_logo_data_uri()
+_EMAIL_LOGO_PNG_BYTES = _get_email_logo_png_bytes()
+
+_jinja_env.globals["email_logo_src"] = _EMAIL_LOGO_DATA_URI
 
 def _html_email_wrapper(
     title: str,
@@ -44,32 +94,53 @@ def _html_email_wrapper(
     """Wrap email content in a consistent Flowdeck layout; content centered, with Flowdeck title."""
     preheader_html = ""
     if preheader:
-        preheader_html = f'<div style="display:none;max-height:0;overflow:hidden;">{preheader}</div>'
-    brand_title = f'<p style="margin:0 0 12px;font-size:26px;font-weight:700;color:{_TEXT_DARK};letter-spacing:0.05em;">Flowdeck</p>'
+        preheader_html = f'<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">{preheader}</div>'
+    logo_html = ""
+    if _EMAIL_LOGO_DATA_URI:
+        logo_html = (
+            f'<img src="{_EMAIL_LOGO_DATA_URI}" alt="Flowdeck" width="34" height="34" '
+            'style="display:block;width:34px;height:34px;border:0;outline:none;text-decoration:none;">'
+        )
+    else:
+        logo_html = (
+            '<div style="width:34px;height:34px;border-radius:10px;background:#dbeafe;'
+            'text-align:center;line-height:34px;font-size:13px;font-weight:700;color:#1d4ed8;">FD</div>'
+        )
     return f"""
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
 </head>
-<body style="margin:0;padding:0;background:#f1f5f9;font-family:{_FONT_FAMILY};">
+<body style="margin:0;padding:0;background:#dbe4ee;font-family:{_FONT_FAMILY};color:#0f172a;">
   {preheader_html}
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f1f5f9;">
-    <tr><td align="center" style="padding:12px 20px;">
-      <table role="presentation" width="560" align="center" cellspacing="0" cellpadding="0" style="width:100%;max-width:560px;margin:0 auto;background:#ffffff;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#dbe4ee;">
+    <tr><td align="center" style="padding:28px 16px;">
+      <table role="presentation" width="600" align="center" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;margin:0 auto;background:#f4f7fa;border:1px solid #bfccda;border-collapse:separate;border-spacing:0;border-radius:20px;">
         <tr>
-          <td style="padding:16px 40px 20px;text-align:center;">
-            {brand_title}
-            {inner_body}
+          <td style="padding:26px 40px 22px;background:#1b2638;border-bottom:1px solid #314154;">
+            <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 18px;">
+              <tr>
+                <td style="vertical-align:middle;">{logo_html}</td>
+                <td style="padding-left:12px;vertical-align:middle;">
+                  <p style="margin:0;font-size:13px;line-height:1.4;color:#bfdbfe;text-transform:uppercase;letter-spacing:0.18em;font-weight:700;">Flowdeck</p>
+                </td>
+              </tr>
+            </table>
+            <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;font-weight:700;">{title}</h1>
+            <div style="font-size:15px;line-height:1.7;color:#d7e0ea;">
+              {inner_body}
+            </div>
           </td>
         </tr>
         <tr>
-          <td style="padding:14px 40px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;">
+          <td style="padding:18px 40px 24px;background:#eef3f7;border-top:1px solid #d5dee8;">
             <p style="margin:0;font-size:12px;color:#64748b;">
               You received this email because you use <strong>Flowdeck</strong>.
             </p>
-            <p style="margin:6px 0 0;font-size:11px;color:#94a3b8;">
+            <p style="margin:12px 0 0;font-size:11px;color:#94a3b8;">
               &copy; Flowdeck. All rights reserved.
             </p>
           </td>
@@ -201,9 +272,6 @@ def _build_report_email_bodies(
     if not summary_lines or summary_lines == [""]:
         text_body = f"Your analysis report for {ticker_upper} is ready.\n\nView your report: {report_url}"
 
-    def safe(s: str) -> str:
-        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
     # These variables are kept for backwards compatibility with older templates,
     # but the current template reads data directly from the context.
     
@@ -275,6 +343,7 @@ def _build_report_email_bodies(
             bull_view=bull_view,
             bear_view=bear_view,
             report_url=report_url,
+            profile_url=f"{_get_frontend_url()}/profile",
             preheader=f"New analysis for {ticker_upper}. " + (f"Recommendation: {recommendation}." if recommendation else "View your report.")
         )
     except Exception:
@@ -306,12 +375,25 @@ def _send_via_smtp(
         if not email or "@" not in email:
             continue
         try:
-            msg = MIMEMultipart("alternative")
+            msg = MIMEMultipart("related")
             msg["Subject"] = subject
             msg["From"] = user
             msg["To"] = email
-            msg.attach(MIMEText(text_body, "plain"))
-            msg.attach(MIMEText(html_body, "html"))
+            alt = MIMEMultipart("alternative")
+            alt.attach(MIMEText(text_body, "plain"))
+
+            html_part = html_body
+            if _EMAIL_LOGO_DATA_URI and _EMAIL_LOGO_PNG_BYTES:
+                html_part = html_part.replace(_EMAIL_LOGO_DATA_URI, f"cid:{_EMAIL_LOGO_CID}")
+            alt.attach(MIMEText(html_part, "html"))
+            msg.attach(alt)
+
+            if _EMAIL_LOGO_PNG_BYTES and f"cid:{_EMAIL_LOGO_CID}" in html_part:
+                logo_part = MIMEImage(_EMAIL_LOGO_PNG_BYTES, _subtype="png")
+                logo_part.add_header("Content-ID", f"<{_EMAIL_LOGO_CID}>")
+                logo_part.add_header("Content-Disposition", "inline", filename="flowdeck-logo.png")
+                msg.attach(logo_part)
+
             with smtplib.SMTP_SSL(host, port) as server:
                 server.login(user, password)
                 server.sendmail(user, [email], msg.as_string())
@@ -438,17 +520,27 @@ def send_contact_form_email(name: str, email: str, message: str) -> bool:
     def safe(s: str) -> str:
         return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("@", "&#64;")
 
-    inner = f"""
-    <p style="margin:0 0 16px;font-size:18px;color:{_TEXT_DARK};font-weight:600;">Contact form submission</p>
-    <p style="margin:0 0 12px;font-size:15px;color:#475569;line-height:1.6;"><strong>Name:</strong> {safe(name) or '(not provided)'}</p>
-    <p style="margin:0 0 12px;font-size:15px;color:#475569;line-height:1.6;"><strong>Email:</strong> {safe(email) or '(not provided)'}</p>
-    <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.6;white-space:pre-wrap;">{safe(message) or '(empty)'}</p>
-    <p style="margin:0;"><a href="{_get_frontend_url()}" style="display:inline-block;padding:12px 24px;background:{_BRAND_PRIMARY};color:#ffffff !important;text-decoration:none;font-weight:600;font-size:14px;border-radius:8px;">Open Flowdeck</a></p>
-    """
-    html_body = _html_email_wrapper(
-        title="Contact form",
-        inner_body=inner,
-    )
+    dashboard_url = _get_frontend_url()
+    try:
+        template = _jinja_env.get_template("contact_form_email.html")
+        html_body = template.render(
+            name=name or "(not provided)",
+            email=email or "",
+            message=message or "(empty)",
+            dashboard_url=dashboard_url,
+        )
+    except Exception:
+        inner = f"""
+        <p style="margin:0 0 16px;font-size:15px;color:#475569;line-height:1.7;">A new message was sent from the Flowdeck contact form.</p>
+        <p style="margin:0 0 12px;font-size:15px;color:#475569;line-height:1.6;"><strong>Name:</strong> {safe(name) or '(not provided)'}</p>
+        <p style="margin:0 0 12px;font-size:15px;color:#475569;line-height:1.6;"><strong>Email:</strong> {safe(email) or '(not provided)'}</p>
+        <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.6;white-space:pre-wrap;"><strong>Message:</strong><br>{safe(message) or '(empty)'}</p>
+        <p style="margin:0;"><a href="{dashboard_url}" style="display:inline-block;padding:13px 24px;background:{_BRAND_PRIMARY};color:#ffffff !important;text-decoration:none;font-weight:700;font-size:14px;border-radius:10px;">Open Flowdeck</a></p>
+        """
+        html_body = _html_email_wrapper(
+            title="Contact form submission",
+            inner_body=inner,
+        )
     to_emails = [CONTACT_FORM_RECIPIENT]
     if _get_smtp_password() and _send_via_smtp(to_emails, subject, text_body, html_body):
         return True
@@ -627,36 +719,36 @@ def _format_brief_narrative_for_email(narrative: str) -> str:
         key = title.lower()
         if "market highlight" in key:
             return {
-                "bg": "#fef3c7",
-                "border": "#fbbf24",
-                "title": "#92400e",
-                "text": "#451a03",
+                "bg": "#eff6ff",
+                "border": "#bfdbfe",
+                "title": "#2563eb",
+                "text": "#0f172a",
             }
         if "key signal" in key:
             return {
-                "bg": "#f3e8ff",
-                "border": "#a855f7",
-                "title": "#6b21a8",
-                "text": "#4c1d95",
+                "bg": "#f8fafc",
+                "border": "#cbd5e1",
+                "title": "#334155",
+                "text": "#0f172a",
             }
         if "what to watch" in key:
             return {
-                "bg": "#fed7aa",
-                "border": "#f59e0b",
-                "title": "#92400e",
-                "text": "#78350f",
+                "bg": "#eff6ff",
+                "border": "#bfdbfe",
+                "title": "#475569",
+                "text": "#334155",
             }
         if "risk" in key:
             return {
-                "bg": "#fee2e2",
-                "border": "#f87171",
-                "title": "#991b1b",
-                "text": "#7f1d1d",
+                "bg": "#fbfcfd",
+                "border": "#cbd5e1",
+                "title": "#64748b",
+                "text": "#334155",
             }
         # Default neutral section with light background.
         return {
-            "bg": "#f1f5f9",
-            "border": "#94a3b8",
+            "bg": "#f8fafc",
+            "border": "#dbe2ea",
             "title": "#334155",
             "text": "#0f172a",
         }

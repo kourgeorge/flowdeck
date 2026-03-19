@@ -1,47 +1,18 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-  
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f1f5f9;">
-    <tr><td align="center" style="padding:12px 20px;">
-      <table role="presentation" width="560" align="center" cellspacing="0" cellpadding="0" style="width:100%;max-width:560px;margin:0 auto;background:#ffffff;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-        
-        <tr>
-          <td style="padding:16px 40px 20px;text-align:center;">
-            <p style="margin:0 0 12px;font-size:26px;font-weight:700;color:#1e40af;letter-spacing:0.05em;">Flowdeck</p>
-            
-            <p style="margin:0 0 16px;font-size:18px;color:#1e40af;font-weight:600;">New subscription</p>
-            
-            <p style="margin:0 0 12px;font-size:15px;color:#475569;line-height:1.6;">
-              <strong>User:</strong> {{ user_email }}
-            </p>
-            <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.6;">
-              <strong>Ticker:</strong> {{ ticker }}
-            </p>
-            
-            <p style="margin:0;">
-              <a href="{{ dashboard_url }}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#ffffff !important;text-decoration:none;font-weight:600;font-size:14px;border-radius:8px;">Open Flowdeck</a>
-            </p>
-          </td>
-        </tr>
-        
-        <tr>
-          <td style="padding:14px 40px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;">
-            <p style="margin:0;font-size:12px;color:#64748b;">
-              Admin notification from <strong>Flowdeck</strong>
-            </p>
-            <p style="margin:6px 0 0;font-size:11px;color:#94a3b8;">
-              &copy; Flowdeck. All rights reserved.
-            </p>
-          </td>
-        </tr>
-        
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>
+{% extends "email_base.html" %}
+{% import "email_macros.html" as ui %}
+
+{% block title %}New subscription{% endblock %}
+{% block intro %}
+<p style="margin:0;">A user created a new stock subscription on Flowdeck.</p>
+{% endblock %}
+{% block content %}
+{% call ui.panel(title='Subscription details') %}
+  {{ ui.key_value('User', user_email, 'mailto:' ~ user_email) }}
+  {{ ui.key_value('Ticker', ticker) }}
+{% endcall %}
+{% endblock %}
+{% block actions %}
+{{ ui.button(dashboard_url, 'Open Flowdeck') }}
+{{ ui.link_block(dashboard_url, 'Open in browser', 'If the button above does not work, open the dashboard with', 'this browser link') }}
+{% endblock %}
+{% block footer_message %}Admin notification from <strong style="color:#334155;">Flowdeck</strong>.{% endblock %}
