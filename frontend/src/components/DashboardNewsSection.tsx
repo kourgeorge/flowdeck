@@ -539,15 +539,9 @@ export default function DashboardNewsSection({
     >
       <div className="border-b border-slate-700/70 px-5 py-6 sm:px-7">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-3xl">
+          <div className="max-w-4xl flex-1">
             <div className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-300/80">Watchlist Newsroom</div>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-              A cleaner news room for the stocks you track
-            </h2>
-            <p className="mt-3 text-sm leading-7 text-slate-300 sm:text-[15px]">
-              Lead coverage, watchlist pulse, and a browsable wire of headlines across your subscribed names.
-            </p>
-            <div className="mt-5 max-w-xl">
+            <div className="mt-5 max-w-3xl">
               <label className="relative block">
                 <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-500">
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -582,46 +576,48 @@ export default function DashboardNewsSection({
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <div className="rounded-full border border-slate-700 bg-slate-900/65 px-3 py-2 text-sm text-slate-300">
-              <span className="font-semibold text-white">{filteredArticles.length}</span> live stories
-            </div>
-            {normalizedSearchQuery && (
-              <div className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-100">
-                Searching "{searchQuery.trim()}"
-              </div>
-            )}
-            <div className="rounded-full border border-slate-700 bg-slate-900/65 px-3 py-2 text-sm text-slate-300">
-              <span className="font-semibold text-white">{visiblePublisherCount}</span> sources
-            </div>
-            {lastUpdated && (
+          <div className="flex flex-col gap-3 xl:items-end">
+            <div className="flex flex-wrap gap-2 xl:justify-end">
               <div className="rounded-full border border-slate-700 bg-slate-900/65 px-3 py-2 text-sm text-slate-300">
-                Updated {lastUpdated.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                <span className="font-semibold text-white">{filteredArticles.length}</span> live stories
+              </div>
+              {normalizedSearchQuery && (
+                <div className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-100">
+                  Searching "{searchQuery.trim()}"
+                </div>
+              )}
+              <div className="rounded-full border border-slate-700 bg-slate-900/65 px-3 py-2 text-sm text-slate-300">
+                <span className="font-semibold text-white">{visiblePublisherCount}</span> sources
+              </div>
+              {lastUpdated && (
+                <div className="rounded-full border border-slate-700 bg-slate-900/65 px-3 py-2 text-sm text-slate-300">
+                  Updated {lastUpdated.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={fetchNews}
+                disabled={isLoading}
+                className="rounded-full border border-slate-600 bg-slate-900/70 px-4 py-2 text-sm font-medium text-white transition-colors hover:border-slate-500 hover:bg-slate-800 disabled:cursor-default disabled:opacity-60"
+              >
+                {isLoading ? 'Refreshing...' : 'Refresh newsroom'}
+              </button>
+            </div>
+
+            {visibleTopPublishers.length > 0 && (
+              <div className="flex flex-wrap gap-2 xl:justify-end">
+                {visibleTopPublishers.map((publisher) => (
+                  <span
+                    key={publisher}
+                    className="rounded-full border border-slate-700/90 bg-slate-800/80 px-3 py-1.5 text-xs font-medium text-slate-300"
+                  >
+                    {publisher}
+                  </span>
+                ))}
               </div>
             )}
-            <button
-              type="button"
-              onClick={fetchNews}
-              disabled={isLoading}
-              className="rounded-full border border-slate-600 bg-slate-900/70 px-4 py-2 text-sm font-medium text-white transition-colors hover:border-slate-500 hover:bg-slate-800 disabled:cursor-default disabled:opacity-60"
-            >
-              {isLoading ? 'Refreshing...' : 'Refresh newsroom'}
-            </button>
           </div>
         </div>
-
-        {visibleTopPublishers.length > 0 && (
-          <div className="mt-5 flex flex-wrap gap-2">
-            {visibleTopPublishers.map((publisher) => (
-              <span
-                key={publisher}
-                className="rounded-full border border-slate-700/90 bg-slate-800/80 px-3 py-1.5 text-xs font-medium text-slate-300"
-              >
-                {publisher}
-              </span>
-            ))}
-          </div>
-        )}
 
         <div className="mt-5 flex flex-wrap items-center gap-2">
           <button

@@ -311,7 +311,7 @@ export default function Layout() {
                         <Icon />
                         {showNoBrief && (
                           <span
-                            className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-gray-800"
+                            className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-gray-800"
                             aria-hidden
                           />
                         )}
@@ -320,7 +320,7 @@ export default function Layout() {
                         <span className="flex flex-col items-start gap-0 min-w-0">
                           <span>{label}</span>
                           {showNoBrief && (
-                            <span className="text-[10px] font-normal text-amber-400">No brief today</span>
+                            <span className="text-[10px] font-normal text-emerald-300/80">No brief today</span>
                           )}
                         </span>
                       )}

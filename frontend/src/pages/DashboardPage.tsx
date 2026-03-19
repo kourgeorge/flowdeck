@@ -2,15 +2,16 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import TickerSearch from '../components/TickerSearch';
 import DashboardTopTiles from '../components/DashboardTopTiles';
+import DashboardEventsView from '../components/DashboardEventsView';
 import PageHeader from '../components/PageHeader';
 import TickerListView from '../components/StockListView';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useAuth } from '../contexts/AuthContext';
 import { digestApi } from '../services/api';
 
-type StockListTab = 'subscribed' | 'recent';
+type StockListTab = 'subscribed' | 'recent' | 'events';
 
-const STOCK_LIST_TAB_IDS: StockListTab[] = ['subscribed', 'recent'];
+const STOCK_LIST_TAB_IDS: StockListTab[] = ['subscribed', 'recent', 'events'];
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -220,6 +221,20 @@ export default function DashboardPage() {
                       <span className="ml-1.5 text-xs text-gray-500">({recentAnalyzedNonSubscribed.length})</span>
                     )}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => handleStockListTabChange('events')}
+                    className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors -mb-px ${
+                      stockListTab === 'events'
+                        ? 'text-white border-blue-500 bg-gray-800'
+                        : 'text-gray-400 border-transparent hover:text-white hover:bg-gray-800/60'
+                    }`}
+                  >
+                    Events
+                    {widgets.length > 0 && (
+                      <span className="ml-1.5 text-xs text-gray-500">({widgets.length})</span>
+                    )}
+                  </button>
                 </div>
 
                 {stockListTab === 'subscribed' && (
@@ -262,6 +277,12 @@ export default function DashboardPage() {
                       }
                     />
                   )
+                )}
+
+                {stockListTab === 'events' && (
+                  <div className="rounded-b-2xl border border-gray-700 border-t-0 bg-gray-900/45 p-4 sm:p-5">
+                    <DashboardEventsView widgets={widgets} tickerToName={tickerToName} />
+                  </div>
                 )}
               </div>
             )}
