@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ReportData } from '../services/types';
 import { getScoreColor } from './AspectSpiderChart';
+import TpsPlanCard from './TpsPlanCard';
 
 const REPORT_LABELS: Record<string, string> = {
   market_report: 'Market',
@@ -241,25 +242,7 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
               {selectedReportKey === 'trader_investment_plan' && selectedData.tps_plan && selectedData.tps_plan.trim().length > 0 && (
                 <div className="space-y-3 pt-2 border-t border-gray-700">
                   <h4 className="text-[0.72rem] font-bold uppercase tracking-wide text-slate-500">TPS</h4>
-                  <div className="rounded-lg border border-indigo-700/60 bg-indigo-950/30 overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-indigo-700/40 bg-indigo-900/30">
-                      <span className="text-xs font-semibold uppercase tracking-widest text-indigo-300">TPS v0.1</span>
-                      <span className="text-xs text-indigo-500 font-mono">JSON</span>
-                    </div>
-                    <div className="p-4">
-                      <pre className="bg-slate-900 rounded-lg p-4 overflow-x-auto text-sm font-mono leading-relaxed whitespace-pre text-slate-300">
-                        {(() => {
-                          let parsed: unknown = null;
-                          try {
-                            parsed = JSON.parse(selectedData.tps_plan!);
-                          } catch {
-                            /* not JSON */
-                          }
-                          return parsed !== null ? JSON.stringify(parsed, null, 2) : selectedData.tps_plan;
-                        })()}
-                      </pre>
-                    </div>
-                  </div>
+                  <TpsPlanCard tpsPlan={selectedData.tps_plan!} />
                 </div>
               )}
 
