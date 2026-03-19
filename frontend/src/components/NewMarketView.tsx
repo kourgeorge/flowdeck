@@ -62,11 +62,16 @@ function formatVolume(n: number | null): string {
   return String(n);
 }
 
-function formatPublishedLabel(article: HeadlineArticle): string {
+function getPublishedDate(article: HeadlineArticle): Date | null {
   const rawTimestamp = article.published_timestamp;
   const timestampMs = rawTimestamp > 1e12 ? rawTimestamp : rawTimestamp > 0 ? rawTimestamp * 1000 : NaN;
   const date = Number.isFinite(timestampMs) ? new Date(timestampMs) : article.published_time ? new Date(article.published_time) : null;
-  if (!date || Number.isNaN(date.getTime())) return article.publisher || 'Latest';
+  return date && !Number.isNaN(date.getTime()) ? date : null;
+}
+
+function formatPublishedLabel(article: HeadlineArticle): string {
+  const date = getPublishedDate(article);
+  if (!date) return 'Latest';
 
   const diffMinutes = Math.round((date.getTime() - Date.now()) / 60000);
   const absoluteMinutes = Math.abs(diffMinutes);
@@ -75,6 +80,17 @@ function formatPublishedLabel(article: HeadlineArticle): string {
   if (absoluteMinutes < 1440) return `${Math.round(absoluteMinutes / 60)}h ago`;
   if (absoluteMinutes < 10080) return `${Math.round(absoluteMinutes / 1440)}d ago`;
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatPublishedDateTime(article: HeadlineArticle): string {
+  const date = getPublishedDate(article);
+  if (!date) return 'Latest';
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 function getRangeLabel(range: '1d' | '1w' | '1mo' | '6mo' | 'ytd'): string {
@@ -216,8 +232,24 @@ function NewsBriefingPanel({
   tickerChangeMap: Record<string, number | null>;
   compact?: boolean;
 }) {
+  const initialVisibleCount = compact ? 12 : 20;
+  const loadStep = compact ? 8 : 12;
+  const [visibleCount, setVisibleCount] = useState(initialVisibleCount);
+
+  useEffect(() => {
+    setVisibleCount((current) => {
+      if (articles.length === 0) return initialVisibleCount;
+      if (current < initialVisibleCount) return Math.min(initialVisibleCount, articles.length);
+      return Math.min(current, articles.length);
+    });
+  }, [articles.length, initialVisibleCount]);
+
+  const handleLoadMore = useCallback(() => {
+    setVisibleCount((current) => Math.min(current + loadStep, articles.length));
+  }, [articles.length, loadStep]);
+
   return (
-    <div className={`rounded-xl border border-gray-700 bg-gray-800/80 shadow-[0_14px_28px_-24px_rgba(15,23,42,0.85)] ${compact ? 'p-3' : 'p-3.5'}`}>
+    <div className={`rounded-xl border border-gray-700 bg-gray-800/80 shadow-[0_14px_28px_-24px_rgba(15,23,42,0.85)] ${compact ? 'p-3' : 'p-3.5 xl:flex xl:h-[44rem] xl:min-h-0 xl:flex-col'}`}>
       <div className="mb-3 flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-500">News briefing</div>
@@ -226,7 +258,15 @@ function NewsBriefingPanel({
           {isLoading ? 'Refreshing headlines' : `${articles.length} headlines`}
         </div>
       </div>
-      <RunningHeadlinesStrip articles={articles} isLoading={isLoading} tickerChangeMap={tickerChangeMap} />
+      <RunningHeadlinesStrip
+        articles={articles}
+        isLoading={isLoading}
+        compact={compact}
+        tickerChangeMap={tickerChangeMap}
+        visibleCount={visibleCount}
+        hasMore={visibleCount < articles.length}
+        onLoadMore={handleLoadMore}
+      />
     </div>
   );
 }
@@ -498,69 +538,90 @@ function MoversTable({
 
 const HEADLINES_REFRESH_MS = 300000; // 5 minutes (was 2 min)
 
-function HeadlineTickerPill({
-  ticker,
-  changePercent,
-}: {
+type HeadlineTone = {
+  line: string;
+  dot: string;
+  dotCore: string;
   ticker: string;
-  changePercent: number | null;
-}) {
-  const toneClass =
-    changePercent != null && changePercent > 0
-      ? 'border-emerald-900/40 bg-emerald-950/40 text-emerald-300'
-      : changePercent != null && changePercent < 0
-        ? 'border-red-900/40 bg-red-950/40 text-red-300'
-        : 'border-gray-700 bg-gray-700/50 text-slate-300';
+};
 
-  return (
-    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium tracking-[0.12em] ${toneClass}`}>
-      {ticker}
-    </span>
-  );
-}
+function getHeadlineTone(article: HeadlineArticle, tickerChangeMap: Record<string, number | null>): HeadlineTone {
+  const linkedChange = article.tickers.reduce<number | null>((found, ticker) => {
+    if (found != null) return found;
+    return tickerChangeMap[ticker] ?? tickerChangeMap[ticker.toUpperCase()] ?? null;
+  }, null);
 
-function HeadlineMeta({
-  article,
-  compact = false,
-}: {
-  article: HeadlineArticle;
-  compact?: boolean;
-}) {
-  return (
-    <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-slate-500 ${compact ? 'text-[11px]' : 'text-xs'}`}>
-      {article.publisher && <span className="font-medium text-slate-400">{article.publisher}</span>}
-      <span>{formatPublishedLabel(article)}</span>
-      {article.type && <span className="uppercase tracking-[0.14em]">{article.type}</span>}
-    </div>
-  );
+  if (linkedChange != null && linkedChange > 0) {
+    return {
+      line: 'bg-emerald-400/55',
+      dot: 'border-emerald-400/70 bg-emerald-400/10',
+      dotCore: 'bg-emerald-300',
+      ticker: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200',
+    };
+  }
+
+  if (linkedChange != null && linkedChange < 0) {
+    return {
+      line: 'bg-rose-400/55',
+      dot: 'border-rose-400/70 bg-rose-400/10',
+      dotCore: 'bg-rose-300',
+      ticker: 'border-rose-500/25 bg-rose-500/10 text-rose-200',
+    };
+  }
+
+  return {
+    line: 'bg-sky-400/55',
+    dot: 'border-sky-400/70 bg-sky-400/10',
+    dotCore: 'bg-sky-300',
+    ticker: 'border-sky-500/25 bg-sky-500/10 text-sky-200',
+  };
 }
 
 function RunningHeadlinesStrip({
   articles,
   isLoading,
+  compact = false,
   tickerChangeMap = {},
+  visibleCount,
+  hasMore = false,
+  onLoadMore,
 }: {
   articles: HeadlineArticle[];
   isLoading: boolean;
+  compact?: boolean;
   tickerChangeMap?: Record<string, number | null>;
+  visibleCount: number;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
 }) {
+  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    if (!hasMore || !onLoadMore) return;
+    const target = event.currentTarget;
+    if (target.scrollHeight - target.scrollTop - target.clientHeight <= 120) {
+      onLoadMore();
+    }
+  }, [hasMore, onLoadMore]);
+
   if (isLoading) {
     return (
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]" aria-live="polite" aria-busy="true">
-        <div className="animate-pulse rounded-xl border border-gray-700 bg-gray-800/70 p-4">
-          <div className="h-28 rounded-lg bg-gray-700/70" />
-          <div className="mt-3 h-3 w-32 rounded bg-gray-700/70" />
-          <div className="mt-2 h-5 w-4/5 rounded bg-gray-700/80" />
-          <div className="mt-2 h-5 w-3/5 rounded bg-gray-700/80" />
-          <div className="mt-3 h-3 w-full rounded bg-gray-700/70" />
-          <div className="mt-2 h-3 w-5/6 rounded bg-gray-700/70" />
-        </div>
-        <div className="space-y-2">
+      <div
+        className="overflow-hidden rounded-lg border border-gray-700 bg-[linear-gradient(180deg,rgba(31,41,55,0.92),rgba(17,24,39,0.96))]"
+        aria-live="polite"
+        aria-busy="true"
+      >
+        <div className={`${compact ? 'max-h-[420px]' : 'max-h-[760px] xl:max-h-none xl:h-full'} overflow-y-auto ${compact ? 'px-3 py-2.5' : 'px-4 py-3'}`}>
           {[1, 2, 3, 4].map((item) => (
-            <div key={item} className="animate-pulse rounded-lg border border-gray-700 bg-gray-800/70 p-3">
-              <div className="h-3 w-24 rounded bg-gray-700/70" />
-              <div className="mt-2 h-4 w-full rounded bg-gray-700/80" />
-              <div className="mt-2 h-4 w-4/5 rounded bg-gray-700/80" />
+            <div key={item} className={`grid grid-cols-[1rem_minmax(0,1fr)] gap-2.5 ${item < 4 ? 'pb-3' : ''}`}>
+              <div className="relative flex justify-center">
+                {item < 4 ? <div className="absolute top-3.5 bottom-[-0.8rem] w-px bg-gray-700/80" /> : null}
+                <div className="relative mt-1 h-2.5 w-2.5 rounded-full border border-sky-400/60 bg-sky-400/10">
+                  <div className="absolute inset-[3px] rounded-full bg-sky-300/90" />
+                </div>
+              </div>
+              <div className="animate-pulse rounded-md border border-gray-700 bg-gray-800/55 px-3 py-2.5">
+                <div className="h-4 w-5/6 rounded bg-gray-700/80" />
+                <div className="mt-2 h-4 w-3/4 rounded bg-gray-700/75" />
+              </div>
             </div>
           ))}
         </div>
@@ -576,133 +637,74 @@ function RunningHeadlinesStrip({
     );
   }
 
-  const featured = articles[0];
-  const briefing = articles.slice(1, 6);
-  const moreStories = articles.slice(6, 12);
-  const featuredTickers = featured.tickers.slice(0, 4);
-  const featuredSummary = featured.summary?.trim();
+  const timelineArticles = articles.slice(0, visibleCount);
 
   return (
-    <div className="space-y-3" aria-live="polite">
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
-        <a
-          href={featured.link}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="group overflow-hidden rounded-xl border border-gray-700 bg-gray-800/70 transition hover:bg-gray-800/90 focus:outline-none focus:ring-2 focus:ring-sky-500"
-        >
-          <div className="grid min-h-full gap-0 md:grid-cols-[minmax(0,1fr)_220px]">
-            <div className="p-4">
-              <div className="flex items-center justify-between gap-3">
-                <HeadlineMeta article={featured} />
-                <span className="rounded-full border border-gray-700 bg-gray-700/50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-300">
-                  Lead story
-                </span>
-              </div>
-              <h3 className="mt-3 text-base font-semibold leading-snug text-white sm:text-lg">
-                {featured.title}
-              </h3>
-              {featuredSummary && (
-                <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-slate-400">
-                  {featuredSummary}
-                </p>
-              )}
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {featuredTickers.length > 0 ? featuredTickers.map((ticker) => (
-                  <HeadlineTickerPill
-                    key={ticker}
-                    ticker={ticker}
-                    changePercent={tickerChangeMap[ticker] ?? tickerChangeMap[ticker.toUpperCase()] ?? null}
-                  />
-                )) : (
-                  <span className="text-[11px] text-slate-500">Broad market coverage</span>
-                )}
-              </div>
-            </div>
-            <div className="relative hidden bg-gray-800/70 md:block">
-              {featured.thumbnail ? (
-                <>
-                  <img
-                    src={featured.thumbnail}
-                    alt=""
-                    className="h-full w-full object-cover opacity-75 transition duration-300 group-hover:scale-[1.02]"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/35 to-transparent" />
-                </>
-              ) : (
-                <div className="flex h-full items-end bg-gray-800 p-4">
-                  <div className="space-y-2">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-gray-500">Market pulse</div>
-                    <div className="text-sm font-medium text-slate-200">
-                      Curated lead coverage with context, source, and linked tickers.
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </a>
+    <div
+      className="overflow-hidden rounded-lg border border-gray-700 bg-[linear-gradient(180deg,rgba(31,41,55,0.88),rgba(17,24,39,0.96))] xl:flex-1 xl:min-h-0"
+      aria-live="polite"
+    >
+      <div
+        className={`${compact ? 'max-h-[420px]' : 'max-h-[760px] xl:max-h-none xl:h-full'} overflow-y-auto ${compact ? 'px-3 py-2.5' : 'px-4 py-3'}`}
+        onScroll={handleScroll}
+      >
+        {timelineArticles.map((article, index) => {
+          const tone = getHeadlineTone(article, tickerChangeMap);
+          const isLast = index === timelineArticles.length - 1;
 
-        <div className="overflow-hidden rounded-xl border border-gray-700 bg-gray-800/60">
-          {briefing.map((article, index) => (
+          return (
             <a
               key={article.uuid}
               href={article.link}
               target="_blank"
               rel="noopener noreferrer"
-              className={`block px-3.5 py-3 transition hover:bg-gray-700/30 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-sky-500 ${
-                index < briefing.length - 1 ? 'border-b border-gray-700' : ''
+              className={`group grid grid-cols-[1rem_minmax(0,1fr)] gap-2.5 transition focus:outline-none focus:ring-2 focus:ring-inset focus:ring-sky-500 ${
+                index < timelineArticles.length - 1 ? 'pb-3' : ''
               }`}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <HeadlineMeta article={article} compact />
-                  <div className="mt-1.5 line-clamp-2 text-sm font-medium leading-snug text-slate-100">
-                    {article.title}
-                  </div>
-                  {article.summary && (
-                    <div className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-slate-500">
-                      {article.summary}
-                    </div>
-                  )}
+              <div className="relative flex justify-center">
+                {index < timelineArticles.length - 1 ? (
+                  <div className={`absolute top-3.5 bottom-[-0.8rem] w-px ${tone.line}`} />
+                ) : null}
+                <div className={`relative mt-1 h-2.5 w-2.5 rounded-full border ${tone.dot}`}>
+                  <div className={`absolute inset-[3px] rounded-full ${tone.dotCore}`} />
                 </div>
               </div>
-              {article.tickers.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {article.tickers.slice(0, 3).map((ticker) => (
-                    <HeadlineTickerPill
-                      key={ticker}
-                      ticker={ticker}
-                      changePercent={tickerChangeMap[ticker] ?? tickerChangeMap[ticker.toUpperCase()] ?? null}
-                    />
-                  ))}
-                </div>
-              )}
-            </a>
-          ))}
-        </div>
-      </div>
 
-      {moreStories.length > 0 && (
-        <div className="overflow-x-auto">
-          <div className="flex gap-2.5 pb-1">
-            {moreStories.map((article) => (
-              <a
-                key={article.uuid}
-                href={article.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block min-w-[220px] max-w-[240px] shrink-0 rounded-lg border border-gray-700 bg-gray-800/70 px-3 py-3 transition hover:bg-gray-800/90 focus:outline-none focus:ring-2 focus:ring-sky-500"
-              >
-                <HeadlineMeta article={article} compact />
-                <div className="mt-1.5 line-clamp-3 text-xs font-medium leading-relaxed text-slate-200">
+              <div className={`min-w-0 pb-2.5 ${isLast ? '' : 'border-b border-gray-800/80 group-hover:border-gray-700/90'}`}>
+                <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0 text-[11px] text-slate-400">
+                    {formatPublishedDateTime(article)}
+                  </div>
+                  <div className="shrink-0 text-[11px] text-slate-500">
+                    {formatPublishedLabel(article)}
+                  </div>
+                </div>
+                <div className="text-sm font-medium leading-snug text-slate-100">
                   {article.title}
                 </div>
-              </a>
-            ))}
+                {article.tickers.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {article.tickers.slice(0, compact ? 2 : 3).map((ticker) => (
+                      <span
+                        key={ticker}
+                        className={`rounded-sm border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${tone.ticker}`}
+                      >
+                        {ticker}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </a>
+          );
+        })}
+        {hasMore ? (
+          <div className="pt-2 text-center text-[11px] text-slate-500">
+            Scroll for more
           </div>
-        </div>
-      )}
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -733,7 +735,6 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<'overview' | 'regional'>('overview');
   const [range, setRange] = useState<'1d' | '1w' | '1mo' | '6mo' | 'ytd'>('1d');
-  const [mobileNewsExpanded, setMobileNewsExpanded] = useState(false);
 
   // Sync URL -> tab state (reload / back restores tab)
   useEffect(() => {
@@ -1397,7 +1398,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
       </section>
 
       {activeTab === 'overview' && (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-stretch">
           <div className="space-y-6">
             <section className="space-y-4">
               <SectionHeading
@@ -1523,52 +1524,21 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
               )}
             </section>
 
-            <section className="space-y-3 xl:hidden">
-              <button
-                type="button"
-                onClick={() => setMobileNewsExpanded((prev) => !prev)}
-                className="flex w-full items-center justify-between rounded-xl border border-gray-700 bg-gray-800/80 px-4 py-3 text-left shadow-[0_12px_26px_-22px_rgba(15,23,42,0.8)] transition hover:border-gray-600 hover:bg-gray-800"
-                aria-expanded={mobileNewsExpanded}
-              >
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Briefing</div>
-                  <div className="mt-1 text-sm font-medium text-white">Market news</div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-slate-500">
-                    {headlinesLoading ? 'Refreshing' : `${headlines.length} headlines`}
-                  </span>
-                  <svg
-                    className={`h-4 w-4 text-slate-400 transition-transform ${mobileNewsExpanded ? 'rotate-180' : ''}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    aria-hidden
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </button>
-
-              {mobileNewsExpanded && (
-                <NewsBriefingPanel
-                  articles={headlines}
-                  isLoading={headlinesLoading}
-                  tickerChangeMap={tickerChangeMap}
-                />
-              )}
-            </section>
-          </div>
-
-          <aside className="hidden xl:block">
-            <div className="sticky top-4 space-y-4">
+            <section className="space-y-4 xl:hidden">
               <NewsBriefingPanel
                 articles={headlines}
                 isLoading={headlinesLoading}
                 tickerChangeMap={tickerChangeMap}
-                compact
               />
-            </div>
+            </section>
+          </div>
+
+          <aside className="hidden xl:block xl:min-h-0">
+            <NewsBriefingPanel
+              articles={headlines}
+              isLoading={headlinesLoading}
+              tickerChangeMap={tickerChangeMap}
+            />
           </aside>
         </div>
       )}
