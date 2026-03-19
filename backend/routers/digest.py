@@ -131,6 +131,14 @@ async def get_digest(
     """
     digest_date = date or _today_for_timezone(timezone_name)
     span_type = span or "daily"
+    logger.info(
+        "Digest request user_id=%s date=%s span=%s timezone=%s max_priority_tickers=%s",
+        current_user.id,
+        digest_date,
+        span_type,
+        timezone_name,
+        max_priority_tickers,
+    )
 
     try:
         result, metadata, execution_id, _slot = await run_and_store_digest(
@@ -150,7 +158,14 @@ async def get_digest(
             detail=str(e),
         )
     except ImportError as e:
-        logger.exception("Digest module not available: %s", e)
+        logger.exception(
+            "Digest module not available for user_id=%s date=%s span=%s timezone=%s: %s",
+            current_user.id,
+            digest_date,
+            span_type,
+            timezone_name,
+            e,
+        )
         raise HTTPException(status_code=503, detail="Digest service unavailable")
     except Exception as e:  # pragma: no cover - bubble to client
         logger.exception("Digest generation failed for user_id=%s: %s", current_user.id, e)

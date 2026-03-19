@@ -1,6 +1,7 @@
 """Digest service: generation helpers and history for user briefs."""
 
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 from zoneinfo import ZoneInfo
@@ -9,6 +10,9 @@ from sqlalchemy.orm import Session
 
 from models.db_models import Execution, Report
 from services import token_service
+
+
+logger = logging.getLogger(__name__)
 
 
 class DigestBriefItem:
@@ -141,7 +145,11 @@ async def run_and_store_digest(
     - Sends email notification to user if user_email is provided.
     - Returns (result, metadata, execution_id, slot).
     """
-    from ai_engine.briefing_agent import run_digest  # imported lazily
+    try:
+        from ai_engine.briefing_agent import run_digest  # imported lazily
+    except ImportError:
+        logger.exception("Digest import failed while loading ai_engine.briefing_agent")
+        raise
 
     slot = _build_slot(span_type, digest_date)
     subject_id = f"{user_id}:{slot}"
@@ -154,10 +162,6 @@ async def run_and_store_digest(
 
     # Run the heavy work in a background thread.
     import asyncio
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     try:
         result = await asyncio.to_thread(
             run_digest,
@@ -174,7 +178,6 @@ async def run_and_store_digest(
             end_date=end_date,
         )
     except Exception as e:  # pragma: no cover - surface to caller
-        logger = logging.getLogger(__name__)
         logger.exception("Digest generation failed for user_id=%s: %s", user_id, e)
         raise
 
