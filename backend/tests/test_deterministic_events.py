@@ -9,7 +9,13 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from ai_engine.briefing_agent.context_builder import build_digest_context
-from backend.processing import extract_fundamental_events, extract_insider_events, extract_price_technical_events
+from backend.processing import (
+    extract_fundamental_events,
+    extract_insider_events,
+    extract_price_technical_events,
+    get_ticker_event_summary,
+)
+from services.data_cache import clear_cache
 
 
 def _bars_from_closes(
@@ -106,6 +112,33 @@ class _ContextFetcher:
         return {ticker: {"sector": "Technology", "industry": "Software"} for ticker in tickers}
 
 
+class _CountingEventFetcher:
+    def __init__(self, bars: list[dict]):
+        self._bars = bars
+        self.calls = {
+            "historical": 0,
+            "future_events": 0,
+            "insider_transactions": 0,
+            "indicators": 0,
+        }
+
+    def get_historical(self, ticker: str, period: str = "1y", interval: str = "1d") -> dict:
+        self.calls["historical"] += 1
+        return {"ticker": ticker, "period": period, "interval": interval, "data": self._bars}
+
+    def get_future_events(self, ticker: str) -> dict:
+        self.calls["future_events"] += 1
+        return {"ticker": ticker, "events": [], "count": 0}
+
+    def get_insider_transactions(self, ticker: str, limit: int = 50) -> dict:
+        self.calls["insider_transactions"] += 1
+        return {"ticker": ticker, "transactions": [], "count": 0}
+
+    def get_indicators(self, ticker: str, indicator: str, curr_date: str, look_back_days: int = 30) -> str:
+        self.calls["indicators"] += 1
+        return ""
+
+
 class TestDeterministicPriceEvents(unittest.TestCase):
     def test_extract_price_events_detects_high_confidence_signals(self) -> None:
         closes = [100.0 + 0.05 * i for i in range(259)] + [125.0]
@@ -146,6 +179,33 @@ class TestDeterministicPriceEvents(unittest.TestCase):
 
         self.assertEqual(len(cross_events), 1)
         self.assertEqual(cross_events[0].metadata.get("cross"), "bullish")
+
+
+class TestTickerEventProcessingService(unittest.TestCase):
+    def setUp(self) -> None:
+        clear_cache()
+
+    def test_get_ticker_event_summary_uses_processing_cache(self) -> None:
+        closes = [100.0 + 0.05 * i for i in range(259)] + [125.0]
+        bars = _bars_from_closes(
+            closes,
+            start=date(2025, 1, 1),
+            latest_open=120.0,
+            latest_high=126.0,
+            latest_low=119.5,
+            latest_volume=350_000,
+        )
+        fetcher = _CountingEventFetcher(bars)
+
+        first = get_ticker_event_summary(fetcher, "AAPL", as_of_date="2026-03-19")
+        second = get_ticker_event_summary(fetcher, "AAPL", as_of_date="2026-03-19")
+
+        self.assertEqual(fetcher.calls["historical"], 1)
+        self.assertEqual(fetcher.calls["future_events"], 1)
+        self.assertEqual(fetcher.calls["insider_transactions"], 1)
+        self.assertEqual(fetcher.calls["indicators"], 1)
+        self.assertEqual(first.model_dump(), second.model_dump())
+        self.assertGreater(first.event_score, 0.0)
 
 
 class TestDeterministicFundamentalEvents(unittest.TestCase):

@@ -4,7 +4,7 @@ Manually inspect the deterministic event layer for a ticker.
 """
 
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -18,7 +18,7 @@ env_path = Path(__file__).resolve().parents[2] / "backend" / ".env"
 load_dotenv(dotenv_path=env_path)
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
 
-from backend.processing import extract_ticker_events, parse_rsi_indicator_data
+from backend.processing import get_ticker_event_summary
 from data_layer import get_data_gateway, init_data_gateway
 from data_layer.market import MarketDataLayer
 from data_layer.sources.edgar import EdgarDataSource
@@ -32,7 +32,7 @@ from services.report_service import ReportService
 
 def calculate_ticker_events(ticker):
     """Calculate event layer for a given ticker."""
-    as_of_date = datetime.utcnow().strftime("%Y-%m-%d")
+    as_of_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     print(f"Calculating event layer for {ticker} as of {as_of_date}\n")
 
@@ -70,68 +70,12 @@ def calculate_ticker_events(ticker):
             traceback.print_exc()
             return None
 
-    # Fetch historical data (1 year)
-    print("Fetching historical price data...")
+    print("Fetching cached ticker event snapshot...")
     try:
-        hist_data = gateway.get_historical(ticker, period="1y", interval="1d")
-        if hist_data.get("error"):
-            print(f"Error fetching historical data: {hist_data.get('error')}")
-            return None
-        bars = hist_data.get("data", [])
-        if not bars:
-            print("No historical data available")
-            return None
-        print(f"  ✓ Fetched {len(bars)} daily bars")
-    except Exception as e:
-        print(f"Error fetching historical data: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return None
-
-    # Fetch future events (earnings, etc.)
-    print("Fetching future events...")
-    try:
-        events_data = gateway.get_future_events(ticker)
-        if events_data.get("error"):
-            print(f"Warning: Could not fetch future events: {events_data.get('error')}")
-            future_events = None
-        else:
-            future_events = events_data
-            events_list = future_events.get("events", []) if isinstance(future_events, dict) else []
-            print(f"  ✓ Fetched {len(events_list)} future events")
-    except Exception as e:
-        print(f"Warning: Could not fetch future events: {e}")
-        future_events = None
-
-    print("Fetching insider transactions...")
-    try:
-        insider_transactions = gateway.get_insider_transactions(ticker, limit=50)
-        txs = insider_transactions.get("transactions", []) if isinstance(insider_transactions, dict) else []
-        print(f"  ✓ Fetched {len(txs)} insider transactions")
-    except Exception as e:
-        print(f"Warning: Could not fetch insider transactions: {e}")
-        insider_transactions = None
-
-    print("Fetching RSI data...")
-    try:
-        raw_rsi = gateway.get_indicators(ticker, "rsi", as_of_date, 60)
-        rsi_data = parse_rsi_indicator_data(raw_rsi)
-        print(f"  ✓ Parsed {len(rsi_data)} RSI points")
-    except Exception as e:
-        print(f"Warning: Could not fetch RSI data: {e}")
-        rsi_data = None
-
-    # Calculate event layer
-    print("\nCalculating events...")
-    try:
-        event_summary = extract_ticker_events(
+        event_summary = get_ticker_event_summary(
+            gateway,
             ticker,
-            bars=bars,
             as_of_date=as_of_date,
-            future_events=future_events,
-            insider_transactions=insider_transactions,
-            rsi_data=rsi_data,
         )
         print("  ✓ Event calculation complete\n")
 

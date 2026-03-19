@@ -15,7 +15,7 @@ import sys
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from backend.processing import extract_ticker_events, parse_rsi_indicator_data
+from backend.processing import get_ticker_event_summary, parse_rsi_indicator_data
 
 from .state import DigestContext
 
@@ -380,13 +380,17 @@ def build_digest_context(
                 analyst_rec[t] = fetcher.get_analyst_recommendations(t)
             except Exception:
                 analyst_rec[t] = {}
-            event_summary = extract_ticker_events(
+            event_summary = get_ticker_event_summary(
+                fetcher,
                 t,
-                bars=ohlcv_history.get(t) or [],
                 as_of_date=digest_date,
+                bars=ohlcv_history.get(t) or [],
                 future_events=future_events.get(t),
                 insider_transactions=insider.get(t),
                 rsi_data=rsi_maps.get(t),
+                history_period="1y",
+                history_interval="1d",
+                insider_limit=20,
                 start_date=start_date,
                 end_date=end_date,
             )
@@ -472,13 +476,17 @@ def build_digest_context(
     insider = _load_insider_transactions(fetcher, tickers, limit=20)
     rsi_maps = _load_rsi_maps(fetcher, tickers, as_of_date=digest_date)
     event_summaries = {
-        ticker: extract_ticker_events(
+        ticker: get_ticker_event_summary(
+            fetcher,
             ticker,
-            bars=ohlcv_history.get(ticker) or [],
             as_of_date=digest_date,
+            bars=ohlcv_history.get(ticker) or [],
             future_events=future_events.get(ticker),
             insider_transactions=insider.get(ticker),
             rsi_data=rsi_maps.get(ticker),
+            history_period="1y",
+            history_interval="1d",
+            insider_limit=20,
             start_date=start_date,
             end_date=end_date,
         )

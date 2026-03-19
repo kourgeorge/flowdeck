@@ -1,6 +1,8 @@
 # Stock Dashboard & Trading Agents — System Architecture
 
-High-level architecture: UI, Backend, Agents, and persistence (filesystem). No database; all persistence is file-based.
+High-level architecture: UI, Backend, Agents, cache infrastructure, and persisted report storage.
+
+For the shared cache design, see [CACHE_LAYER.md](CACHE_LAYER.md).
 
 ---
 
@@ -32,6 +34,7 @@ flowchart TB
             NewsSvc["NewsService"]
             ReportSvc["ReportService"]
             AnalysisSvc["AnalysisService"]
+            CacheSvc["Shared SQLite Cache\n(raw data, derived outputs, runtime state)"]
         end
 
         API_Data --> InfoFetcher
@@ -40,6 +43,9 @@ flowchart TB
         InfoFetcher --> MarketData
         InfoFetcher --> NewsSvc
         API_Analyses --> AnalysisSvc
+        InfoFetcher --> CacheSvc
+        MarketData --> CacheSvc
+        AnalysisSvc --> CacheSvc
     end
 
     subgraph Agents["Trading Agents (LangGraph)"]
@@ -54,7 +60,7 @@ flowchart TB
         Yahoo["Yahoo Finance\n(yfinance)"]
     end
 
-    subgraph FS["Filesystem (no DB)"]
+    subgraph FS["Filesystem / DB-backed persistence"]
         Results["results/\n<TICKER>/<DATE>/reports/*.json"]
         StocksJson["frontend/public/stocks.json"]
     end

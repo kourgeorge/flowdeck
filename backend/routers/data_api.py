@@ -365,54 +365,17 @@ async def data_deterministic_events(ticker: str):
     """Get deterministic technical and fundamental events for a ticker."""
     await _ensure_ticker_exists(ticker)
     try:
-        from backend.processing import extract_ticker_events, parse_rsi_indicator_data
-        from datetime import datetime
-        
-        # Fetch OHLCV data
-        hist_data = await asyncio.to_thread(_gateway().get_historical, ticker, "1y", "1d")
-        bars = (hist_data or {}).get("data") or []
-        
-        if not bars:
-            return {
-                "ticker": ticker.upper(),
-                "event_score": 0.0,
-                "events": [],
-                "dominant_events": [],
-                "event_count": 0,
-            }
-        
-        # Get future events for fundamental event detection
-        future_events = {}
-        try:
-            future_events = await asyncio.to_thread(_gateway().get_future_events, ticker) or {}
-        except Exception:
-            pass
+        from datetime import datetime, timezone
 
-        insider_transactions = {}
-        try:
-            insider_transactions = await asyncio.to_thread(_gateway().get_insider_transactions, ticker, 50) or {}
-        except Exception:
-            pass
+        from backend.processing import get_ticker_event_summary
 
-        today = datetime.utcnow().strftime("%Y-%m-%d")
-        rsi_data = {}
-        try:
-            raw_rsi = await asyncio.to_thread(_gateway().get_indicators, ticker, "rsi", today, 60)
-            rsi_data = parse_rsi_indicator_data(raw_rsi)
-        except Exception:
-            pass
-        
-        # Extract events
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         result = await asyncio.to_thread(
-            extract_ticker_events,
+            get_ticker_event_summary,
+            _gateway(),
             ticker,
-            bars=bars,
             as_of_date=today,
-            future_events=future_events,
-            insider_transactions=insider_transactions,
-            rsi_data=rsi_data,
         )
-        
         return result.model_dump()
     except Exception as e:
         return {

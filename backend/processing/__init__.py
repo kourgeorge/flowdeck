@@ -12,6 +12,7 @@ from .event import (
     extract_ticker_events,
 )
 from .digest_projection import ImportantEvent, build_important_events
+from .service import get_ticker_event_summary
 
 __all__ = [
     "DetectedEvent",
@@ -25,4 +26,5 @@ __all__ = [
     "parse_rsi_indicator_data",
     "extract_price_technical_events",
     "extract_ticker_events",
+    "get_ticker_event_summary",
 ]

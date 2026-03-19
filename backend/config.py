@@ -46,6 +46,7 @@ DATA_CACHE_TTL_INDICATORS = 900        # 15min (technical indicators)
 DATA_CACHE_TTL_VENDOR_OHLCV = 86400    # 24h (raw Yahoo OHLCV for indicators)
 DATA_CACHE_TTL_GLOBAL_NEWS = 900       # 15min (global/macro news)
 DATA_CACHE_TTL_INSIDER_SENTIMENT = 900  # 15min (insider sentiment)
+PROCESSING_CACHE_TTL_TICKER_EVENTS = 900  # 15min (derived ticker event snapshots)
 
 # CORS: comma-separated origins (e.g. "https://app.example.com,https://example.com")
 # If empty, defaults to common local dev origins for backwards compatibility
