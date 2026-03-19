@@ -221,7 +221,147 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* SECTION 3: TRADER COPILOT SPOTLIGHT */}
+      {/* SECTION 3: PLATFORM OVERVIEW (How It Works + Features) */}
+      <section className="px-4 py-12 sm:py-16 bg-gray-900 border-t border-gray-700">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl font-bold text-white mb-3">
+              Everything You Need to Know
+            </h2>
+            <p className="text-gray-400 text-base sm:text-lg">
+              A transparent, multi-step AI process — and all the tools to act on it
+            </p>
+          </div>
+
+          {/* Feature Highlights */}
+          <h3 className="text-lg font-semibold text-gray-300 uppercase tracking-wider mb-6">
+            Platform Features
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+              <h4 className="text-lg font-semibold text-white mb-2">Live Market Data</h4>
+              <p className="text-gray-400 text-sm">
+                Real-time prices, volume, and ranges — plus AI-driven recommendations synthesized from news, SEC filings, fundamentals, technicals, and sentiment.
+              </p>
+            </div>
+            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+              <h4 className="text-lg font-semibold text-white mb-2">Analytic Signals</h4>
+              <p className="text-gray-400 text-sm">
+                FlowDeck automatically extracts important anomalies and market events for each ticker, including price spikes, volatility shifts, insider activity, earnings timing, and other deterministic signals surfaced directly in the platform.
+              </p>
+            </div>
+            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+              <h4 className="text-lg font-semibold text-white mb-2">Deep AI Analysis, On Demand</h4>
+              <p className="text-gray-400 text-sm">
+                Trigger a full multi-agent analysis for any stock, any time. A committee of specialized AI analysts — covering market data, news, fundamentals, technicals, and risk — each produce their own report before a final recommendation is synthesized. Every angle covered, every time.
+              </p>
+            </div>
+            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+              <h4 className="text-lg font-semibold text-white mb-2">Transparent Reports & Recommendations</h4>
+              <p className="text-gray-400 text-sm">
+                Get clear <strong className="text-white">BUY / SELL / HOLD</strong> recommendations backed by comprehensive AI analysis — and read the full reasoning across multiple report tabs.
+              </p>
+            </div>
+            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+              <h4 className="text-lg font-semibold text-white mb-2">Stock Subscriptions & Dashboard</h4>
+              <p className="text-gray-400 text-sm">
+                Subscribe to stocks and get email updates when new analysis reports are available. Track your watchlist and portfolio performance from a personalized dashboard.
+              </p>
+            </div>
+            <div className="bg-blue-900/20 border border-blue-700/50 rounded-xl p-6">
+              <h4 className="text-lg font-semibold text-white mb-2">{COPILOT_NAME} — A Powerful Trading Assistant</h4>
+              <p className="text-gray-400 text-sm">
+                {COPILOT_NAME} can <strong className="text-white">search the live web</strong> for breaking news and analyst updates, <strong className="text-white">write and execute Python code</strong> for financial modelling and statistical analysis, and <strong className="text-white">generate interactive charts</strong> — line, bar, area, and scatter — rendered directly in the chat. It also knows your watchlist and preferences, so all of FlowDeck's proprietary reports are accessible in the same conversation with personalized context.
+              </p>
+            </div>
+            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+              <h4 className="text-lg font-semibold text-white mb-2">
+                <Link to="/api-docs" className="hover:text-gray-200 transition-colors">REST API — Programmatic Access</Link>
+              </h4>
+              <p className="text-gray-400 text-sm">
+                Integrate FlowDeck into your trading systems with our <strong className="text-white">REST API</strong>. The system is <strong className="text-white">autonomous-agent ready</strong>: agents can register, fetch market data, chat with the AI analyst, and start analyses without human intervention. Create secure API keys, access all AI reports and recommendations programmatically, and fetch real-time market data. Perfect for algorithmic trading, portfolio tools, and custom integrations. <a href="https://flowdeck.biz/api/SKILL.md" target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-white underline">View SKILL.md →</a>
+              </p>
+            </div>
+            <div className="bg-cyan-900/20 border border-cyan-700/50 rounded-xl p-6">
+              <h4 className="text-lg font-semibold text-white mb-2">
+                <Link to="/newsroom" className="hover:text-cyan-300 transition-colors">
+                  Personal Newsroom
+                </Link>
+              </h4>
+              <p className="text-gray-400 text-sm">
+                Open a <strong className="text-white">personal newsroom curated specifically for you</strong> from your subscribed stocks. FlowDeck turns your watchlist into a clean, browsable stream with a lead story, fast-scan headlines, and a tailored news wire for your names.
+              </p>
+            </div>
+            <div className="bg-indigo-900/20 border border-indigo-700/50 rounded-xl p-6">
+              <h4 className="text-lg font-semibold text-white mb-2">
+                <Link to="/tps" className="hover:text-indigo-300 transition-colors">TPS — Structured Trade Plans</Link>
+              </h4>
+              <p className="text-gray-400 text-sm">
+                Every AI analysis automatically produces a <strong className="text-white">Trading Plan Specification (TPS)</strong> — a schema-validated JSON object with entry zone, stop-loss, take-profit targets, position sizing, and invalidation rules. No ambiguity, no prose to interpret.
+              </p>
+            </div>
+            <div className="bg-purple-900/20 border border-purple-700/50 rounded-xl p-6">
+              <h4 className="text-lg font-semibold text-white mb-2">
+                <a href="https://flowdeck.biz/api/SKILL.md" target="_blank" rel="noopener noreferrer" className="hover:text-purple-300 transition-colors inline-flex items-center gap-1">
+                  SKILL.md — Autonomous Agent Integration
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              </h4>
+              <p className="text-gray-400 text-sm">
+                A comprehensive API guide for AI agents to autonomously interact with FlowDeck. Agents can register, fetch market data, chat with the AI analyst, and start analyses — all without human intervention. <a href="https://flowdeck.biz/api/SKILL.md" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 underline">View SKILL.md →</a>
+              </p>
+            </div>
+            <div className="bg-amber-900/20 border border-amber-700/60 rounded-xl p-6">
+              <h4 className="text-lg font-semibold text-white mb-2">
+                <Link to={user ? '/brief' : '#'} onClick={!user ? () => setShowAuthModal(true) : undefined} className="hover:text-amber-300 transition-colors">Briefing</Link>
+              </h4>
+              <p className="text-gray-400 text-sm">
+                Get a personalized <strong className="text-white">daily or weekly brief</strong> that turns your watchlist into a concise, readable narrative. Control the tone (Balanced, Concise, Professional, Technical), add your own note, and let FlowDeck highlight what changed and what to watch next across your subscribed tickers. Runs directly from your dashboard using the same AI analysis stack that powers full reports.
+              </p>
+            </div>
+          </div>
+
+          {/* How It Works — 3 steps */}
+          <div className="border border-gray-700 rounded-2xl p-8 bg-gray-800/30">
+            <h3 className="text-lg font-semibold text-gray-300 uppercase tracking-wider mb-6">
+              How the AI Analysis Team Works
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+                <h4 className="text-lg font-semibold text-white mb-2">1. Analyst Team</h4>
+                <p className="text-gray-400 text-sm leading-relaxed">
+                  Six specialized AI analysts — covering market trends, news, fundamentals, SEC filings, technicals, and social sentiment — each independently research the stock and produce a scored report. Every angle is covered before any debate begins.
+                </p>
+              </div>
+              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+                <h4 className="text-lg font-semibold text-white mb-2">2. Investment Debate → Trade Plan</h4>
+                <p className="text-gray-400 text-sm leading-relaxed">
+                  Bull and Bear researchers argue the investment case across multiple rounds using all analyst reports. A Research Manager then adjudicates, producing a conviction score, return scenarios, and a structured investment plan — which a Trader agent refines into an actionable trade strategy.
+                </p>
+              </div>
+              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+                <h4 className="text-lg font-semibold text-white mb-2">3. Risk Debate → Final Decision</h4>
+                <p className="text-gray-400 text-sm leading-relaxed">
+                  Three risk agents — Aggressive, Cautious, and Neutral — debate the trade plan in round-robin. A Risk Judge weighs all upstream scores and risk arguments to produce the final verdict: <strong className="text-green-400">BUY</strong>, <strong className="text-red-400">SELL</strong>, or <strong className="text-yellow-400">HOLD</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="text-center">
+              <Link
+                to="/how-it-works"
+                className="inline-flex items-center px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+              >
+                Read full explanation →
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 4: TRADER COPILOT SPOTLIGHT */}
       <section className="px-4 py-12 sm:py-16 bg-gray-900 border-t border-gray-700">
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
@@ -371,7 +511,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* SECTION 3b: TPS — TRADING PLAN SPECIFICATION */}
+      {/* SECTION 4b: TPS — TRADING PLAN SPECIFICATION */}
       <section className="px-4 py-12 sm:py-16 bg-gray-900 border-t border-gray-700">
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
@@ -684,146 +824,6 @@ export default function HomePage() {
                   <span className="text-[11px] text-amber-300">Built with your note</span>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* SECTION 4: PLATFORM OVERVIEW (How It Works + Features) */}
-      <section className="px-4 py-12 sm:py-16 bg-gray-900 border-t border-gray-700">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl sm:text-4xl font-bold text-white mb-3">
-              Everything You Need to Know
-            </h2>
-            <p className="text-gray-400 text-base sm:text-lg">
-              A transparent, multi-step AI process — and all the tools to act on it
-            </p>
-          </div>
-
-          {/* Feature Highlights */}
-          <h3 className="text-lg font-semibold text-gray-300 uppercase tracking-wider mb-6">
-            Platform Features
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">Live Market Data</h4>
-              <p className="text-gray-400 text-sm">
-                Real-time prices, volume, and ranges — plus AI-driven recommendations synthesized from news, SEC filings, fundamentals, technicals, and sentiment.
-              </p>
-            </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">Analytic Signals</h4>
-              <p className="text-gray-400 text-sm">
-                FlowDeck automatically extracts important anomalies and market events for each ticker, including price spikes, volatility shifts, insider activity, earnings timing, and other deterministic signals surfaced directly in the platform.
-              </p>
-            </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">Deep AI Analysis, On Demand</h4>
-              <p className="text-gray-400 text-sm">
-                Trigger a full multi-agent analysis for any stock, any time. A committee of specialized AI analysts — covering market data, news, fundamentals, technicals, and risk — each produce their own report before a final recommendation is synthesized. Every angle covered, every time.
-              </p>
-            </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">Transparent Reports & Recommendations</h4>
-              <p className="text-gray-400 text-sm">
-                Get clear <strong className="text-white">BUY / SELL / HOLD</strong> recommendations backed by comprehensive AI analysis — and read the full reasoning across multiple report tabs.
-              </p>
-            </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">Stock Subscriptions & Dashboard</h4>
-              <p className="text-gray-400 text-sm">
-                Subscribe to stocks and get email updates when new analysis reports are available. Track your watchlist and portfolio performance from a personalized dashboard.
-              </p>
-            </div>
-            <div className="bg-cyan-900/20 border border-cyan-700/50 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">
-                <Link to="/newsroom" className="hover:text-cyan-300 transition-colors">
-                  Personal Newsroom
-                </Link>
-              </h4>
-              <p className="text-gray-400 text-sm">
-                Open a <strong className="text-white">personal newsroom curated specifically for you</strong> from your subscribed stocks. FlowDeck turns your watchlist into a clean, browsable stream with a lead story, fast-scan headlines, and a tailored news wire for your names.
-              </p>
-            </div>
-            <div className="bg-indigo-900/20 border border-indigo-700/50 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">
-                <Link to="/tps" className="hover:text-indigo-300 transition-colors">TPS — Structured Trade Plans</Link>
-              </h4>
-              <p className="text-gray-400 text-sm">
-                Every AI analysis automatically produces a <strong className="text-white">Trading Plan Specification (TPS)</strong> — a schema-validated JSON object with entry zone, stop-loss, take-profit targets, position sizing, and invalidation rules. No ambiguity, no prose to interpret.
-              </p>
-            </div>
-            <div className="bg-blue-900/20 border border-blue-700/50 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">{COPILOT_NAME} — A Powerful Trading Assistant</h4>
-              <p className="text-gray-400 text-sm">
-                {COPILOT_NAME} can <strong className="text-white">search the live web</strong> for breaking news and analyst updates, <strong className="text-white">write and execute Python code</strong> for financial modelling and statistical analysis, and <strong className="text-white">generate interactive charts</strong> — line, bar, area, and scatter — rendered directly in the chat. It also knows your watchlist and preferences, so all of FlowDeck's proprietary reports are accessible in the same conversation with personalized context.
-              </p>
-            </div>
-            <div className="bg-emerald-900/20 border border-emerald-700/50 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">
-                <Link to="/api-docs" className="hover:text-emerald-300 transition-colors">REST API — Programmatic Access</Link>
-              </h4>
-              <p className="text-gray-400 text-sm">
-                Integrate FlowDeck into your trading systems with our <strong className="text-white">REST API</strong>. The system is <strong className="text-white">autonomous-agent ready</strong>: agents can register, fetch market data, chat with the AI analyst, and start analyses without human intervention. Create secure API keys, access all AI reports and recommendations programmatically, and fetch real-time market data. Perfect for algorithmic trading, portfolio tools, and custom integrations. <a href="https://flowdeck.biz/api/SKILL.md" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:text-emerald-300 underline">View SKILL.md →</a>
-              </p>
-            </div>
-            <div className="bg-purple-900/20 border border-purple-700/50 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">
-                <a href="https://flowdeck.biz/api/SKILL.md" target="_blank" rel="noopener noreferrer" className="hover:text-purple-300 transition-colors inline-flex items-center gap-1">
-                  SKILL.md — Autonomous Agent Integration
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                  </svg>
-                </a>
-              </h4>
-              <p className="text-gray-400 text-sm">
-                A comprehensive API guide for AI agents to autonomously interact with FlowDeck. Agents can register, fetch market data, chat with the AI analyst, and start analyses — all without human intervention. <a href="https://flowdeck.biz/api/SKILL.md" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 underline">View SKILL.md →</a>
-              </p>
-            </div>
-            <div className="bg-amber-900/20 border border-amber-700/60 rounded-xl p-6">
-              <h4 className="text-lg font-semibold text-white mb-2">
-                <Link to={user ? '/brief' : '#'} onClick={!user ? () => setShowAuthModal(true) : undefined} className="hover:text-amber-300 transition-colors">Briefing</Link>
-              </h4>
-              <p className="text-gray-400 text-sm">
-                Get a personalized <strong className="text-white">daily or weekly brief</strong> that turns your watchlist into a concise, readable narrative. Control the tone (Balanced, Concise, Professional, Technical), add your own note, and let FlowDeck highlight what changed and what to watch next across your subscribed tickers. Runs directly from your dashboard using the same AI analysis stack that powers full reports.
-              </p>
-            </div>
-          </div>
-
-          {/* How It Works — 3 steps */}
-          <div className="border border-gray-700 rounded-2xl p-8 bg-gray-800/30">
-            <h3 className="text-lg font-semibold text-gray-300 uppercase tracking-wider mb-6">
-              How the AI Analysis Team Works
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-                <h4 className="text-lg font-semibold text-white mb-2">1. Analyst Team</h4>
-                <p className="text-gray-400 text-sm leading-relaxed">
-                  Six specialized AI analysts — covering market trends, news, fundamentals, SEC filings, technicals, and social sentiment — each independently research the stock and produce a scored report. Every angle is covered before any debate begins.
-                </p>
-              </div>
-              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-                <h4 className="text-lg font-semibold text-white mb-2">2. Investment Debate → Trade Plan</h4>
-                <p className="text-gray-400 text-sm leading-relaxed">
-                  Bull and Bear researchers argue the investment case across multiple rounds using all analyst reports. A Research Manager then adjudicates, producing a conviction score, return scenarios, and a structured investment plan — which a Trader agent refines into an actionable trade strategy.
-                </p>
-              </div>
-              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-                <h4 className="text-lg font-semibold text-white mb-2">3. Risk Debate → Final Decision</h4>
-                <p className="text-gray-400 text-sm leading-relaxed">
-                  Three risk agents — Aggressive, Cautious, and Neutral — debate the trade plan in round-robin. A Risk Judge weighs all upstream scores and risk arguments to produce the final verdict: <strong className="text-green-400">BUY</strong>, <strong className="text-red-400">SELL</strong>, or <strong className="text-yellow-400">HOLD</strong>.
-                </p>
-              </div>
-            </div>
-
-            <div className="text-center">
-              <Link
-                to="/how-it-works"
-                className="inline-flex items-center px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors"
-              >
-                Read full explanation →
-              </Link>
             </div>
           </div>
         </div>
