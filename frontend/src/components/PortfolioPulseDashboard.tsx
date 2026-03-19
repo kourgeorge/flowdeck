@@ -118,12 +118,12 @@ const latestBriefMarkdownComponents = {
     </h2>
   ),
   p: ({ children, ...props }: ComponentProps<'p'>) => (
-    <p className="my-0 whitespace-pre-wrap text-xs leading-5 text-slate-200" style={{ fontFamily: BRIEF_FONT_FAMILY }} {...props}>
+    <p className="my-0 whitespace-pre-wrap text-xs leading-5 text-slate-300" style={{ fontFamily: BRIEF_FONT_FAMILY }} {...props}>
       {children}
     </p>
   ),
   ul: ({ children, ...props }: ComponentProps<'ul'>) => (
-    <ul className="my-0 list-disc space-y-1 pl-5 text-xs text-slate-200" style={{ fontFamily: BRIEF_FONT_FAMILY }} {...props}>
+    <ul className="my-0 list-disc space-y-1 pl-5 text-xs text-slate-300" style={{ fontFamily: BRIEF_FONT_FAMILY }} {...props}>
       {children}
     </ul>
   ),

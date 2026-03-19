@@ -197,20 +197,20 @@ export default function SharedReportPage() {
                 Focus: {data.priority_tickers.join(', ')}
               </p>
             )}
-            <div className="prose prose-invert prose-sm max-w-none text-gray-200">
+            <div className="prose prose-invert prose-sm max-w-none text-slate-300">
               <ReactMarkdown
                 components={{
                   h2: ({ children, ...props }: ComponentProps<'h2'>) => (
                     <h2 className="text-sm font-semibold text-emerald-300 mb-1 mt-4 first:mt-0" {...props}>{children}</h2>
                   ),
                   p: ({ children, ...props }: ComponentProps<'p'>) => (
-                    <p className="whitespace-pre-wrap leading-relaxed my-0" {...props}>{children}</p>
+                    <p className="whitespace-pre-wrap leading-relaxed my-0 text-slate-300" {...props}>{children}</p>
                   ),
                   ul: ({ children, ...props }: ComponentProps<'ul'>) => (
-                    <ul className="list-disc pl-5 my-0 space-y-1" {...props}>{children}</ul>
+                    <ul className="list-disc pl-5 my-0 space-y-1 text-slate-300" {...props}>{children}</ul>
                   ),
                   li: ({ children, ...props }: ComponentProps<'li'>) => (
-                    <li className="leading-relaxed" {...props}>{children}</li>
+                    <li className="leading-relaxed text-slate-300" {...props}>{children}</li>
                   ),
                 }}
               >
@@ -228,17 +228,17 @@ export default function SharedReportPage() {
             {data.what_to_watch && !/##\s*(Market Highlights|What to Watch|Risks\s*&\s*Opportunities)/i.test(data.narrative) && (
               <div className="mt-6 pt-4 border-t border-gray-700">
                 <h2 className="text-sm font-semibold text-white mb-2">What to watch</h2>
-                <div className="prose prose-invert prose-sm max-w-none text-gray-300">
+                <div className="prose prose-invert prose-sm max-w-none text-slate-300">
                   <ReactMarkdown
                     components={{
                       p: ({ children, ...props }: ComponentProps<'p'>) => (
-                        <p className="text-sm whitespace-pre-wrap leading-relaxed my-0" {...props}>{children}</p>
+                        <p className="text-sm whitespace-pre-wrap leading-relaxed my-0 text-slate-300" {...props}>{children}</p>
                       ),
                       ul: ({ children, ...props }: ComponentProps<'ul'>) => (
-                        <ul className="list-disc pl-5 my-0 space-y-1 text-sm" {...props}>{children}</ul>
+                        <ul className="list-disc pl-5 my-0 space-y-1 text-sm text-slate-300" {...props}>{children}</ul>
                       ),
                       li: ({ children, ...props }: ComponentProps<'li'>) => (
-                        <li className="leading-relaxed" {...props}>{children}</li>
+                        <li className="leading-relaxed text-slate-300" {...props}>{children}</li>
                       ),
                     }}
                   >

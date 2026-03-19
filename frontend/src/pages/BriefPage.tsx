@@ -75,7 +75,7 @@ const briefMarkdownComponents = {
   ),
   p: ({ children, ...props }: ComponentProps<'p'>) => (
     <p
-      className="whitespace-pre-wrap leading-relaxed text-sm my-0"
+      className="whitespace-pre-wrap leading-relaxed text-sm my-0 text-slate-300"
       style={{ fontFamily: 'Menlo, Monaco, "Courier New", monospace' }}
       {...props}
     >
@@ -84,7 +84,7 @@ const briefMarkdownComponents = {
   ),
   ul: ({ children, ...props }: ComponentProps<'ul'>) => (
     <ul
-      className="list-disc pl-5 my-0 space-y-1 text-sm"
+      className="list-disc pl-5 my-0 space-y-1 text-sm text-slate-300"
       style={{ fontFamily: 'Menlo, Monaco, "Courier New", monospace' }}
       {...props}
     >
@@ -92,7 +92,7 @@ const briefMarkdownComponents = {
     </ul>
   ),
   li: ({ children, ...props }: ComponentProps<'li'>) => (
-    <li className="leading-relaxed" {...props}>{children}</li>
+    <li className="leading-relaxed text-slate-300" {...props}>{children}</li>
   ),
 };
 
@@ -354,7 +354,7 @@ export default function BriefPage() {
             {overviewLabel}
           </div>
           <div
-            className="prose prose-invert prose-sm max-w-none text-gray-100 text-sm"
+            className="prose prose-invert prose-sm max-w-none text-slate-300 text-sm"
             style={{ fontFamily: 'Menlo, Monaco, "Courier New", monospace' }}
           >
             <ReactMarkdown components={briefMarkdownComponents}>
@@ -403,7 +403,7 @@ export default function BriefPage() {
                       : 'text-red-300'
                     : 'text-slate-400';
                 return (
-                  <div key={t} className="flex items-center justify-between text-sm text-slate-100">
+                  <div key={t} className="flex items-center justify-between text-sm text-slate-300">
                     <span className="mr-3">
                       {displayName ? `${displayName} (${t})` : t}
                     </span>
