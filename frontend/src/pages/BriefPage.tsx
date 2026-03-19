@@ -537,6 +537,11 @@ export default function BriefPage() {
   }
 
   const subscribedTickers = widgets.map((w) => w.ticker);
+  const showEmptyDigestState =
+    !digestLoading &&
+    !digestError &&
+    !digest &&
+    (!selectedDigestDate || digestBriefsForDay.length === 0);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -783,8 +788,8 @@ export default function BriefPage() {
                 </div>
               )}
 
-              <div className="flex-1 min-w-0 bg-black rounded-xl border border-slate-800 overflow-hidden shadow-lg">
-                <div className={`${digestLoading ? 'bg-transparent' : 'bg-slate-950'} min-h-[200px] px-4 sm:px-6 pt-3 sm:pt-4 pb-4 sm:pb-6 space-y-3`}>
+              <div className={`flex-1 min-w-0 rounded-xl border border-slate-800 overflow-hidden shadow-lg ${showEmptyDigestState ? 'bg-transparent' : 'bg-black'}`}>
+                <div className={`${digestLoading || showEmptyDigestState ? 'bg-transparent' : 'bg-slate-950'} min-h-[200px] px-4 sm:px-6 pt-3 sm:pt-4 pb-4 sm:pb-6 space-y-3`}>
                   {digestLoading && (
                     <div className="flex flex-col items-center justify-center min-h-[280px] py-12 px-4">
                       <div className="relative">
@@ -1188,10 +1193,7 @@ export default function BriefPage() {
                     </div>
                   )}
 
-                  {!digestLoading &&
-                    !digestError &&
-                    !digest &&
-                    (!selectedDigestDate || digestBriefsForDay.length === 0) && (
+                  {showEmptyDigestState && (
                       <p className="text-sm text-gray-400">
                         Click &ldquo;Create brief&rdquo; to generate today&apos;s summary, or select a highlighted day in
                         the calendar to view that day&apos;s briefs.
