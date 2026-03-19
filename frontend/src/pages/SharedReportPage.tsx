@@ -13,6 +13,23 @@ const REPORT_ORDER = [
   'market_report', 'sentiment_report', 'news_report', 'technical_report',
   'fundamentals_report', 'sec_report', 'investment_plan', 'trader_investment_plan', 'final_trade_decision',
 ];
+const IMPORTANT_EVENT_LABELS: Record<string, string> = {
+  price_spike_up: 'Price spike up',
+  price_spike_down: 'Price spike down',
+  price_gap_up: 'Gap up',
+  price_gap_down: 'Gap down',
+  volatility_expansion: 'Volatility expansion',
+  volatility_compression: 'Volatility compression',
+  moving_average_cross: 'Moving average cross',
+  new_52w_high: 'New 52-week high',
+  new_52w_low: 'New 52-week low',
+  volume_spike: 'Volume spike',
+  earnings_upcoming: 'Upcoming earnings',
+  insider_buying: 'Insider buying',
+  insider_selling: 'Insider selling',
+  rsi_bullish_divergence: 'RSI bullish divergence',
+  rsi_bearish_divergence: 'RSI bearish divergence',
+};
 
 interface SharedTickerReport {
   type: 'ticker';
@@ -50,7 +67,43 @@ interface SharedDigestReport {
   span_type: string;
   span_label: string;
   priority_tickers: string[];
+  important_events?: {
+    ticker: string;
+    importance_score: number;
+    event: {
+      event_type: string;
+      domain: string;
+      detected_on?: string | null;
+      strength: string;
+      metric_value?: number | null;
+      description?: string;
+    };
+  }[];
   references?: unknown[] | null;
+}
+
+function formatImportantEventLabel(eventType: string): string {
+  return IMPORTANT_EVENT_LABELS[eventType] ?? eventType.replace(/_/g, ' ');
+}
+
+function formatImportantEventMetric(
+  importantEvent: NonNullable<SharedDigestReport['important_events']>[number],
+): string | null {
+  const metricValue = importantEvent.event.metric_value;
+  if (typeof metricValue !== 'number') return null;
+  if (['price_spike_up', 'price_spike_down', 'price_gap_up', 'price_gap_down'].includes(importantEvent.event.event_type)) {
+    return `${metricValue >= 0 ? '+' : ''}${metricValue.toFixed(1)}%`;
+  }
+  if (importantEvent.event.event_type === 'earnings_upcoming') {
+    return `${metricValue.toFixed(0)}d`;
+  }
+  if (['volatility_expansion', 'volatility_compression', 'volume_spike'].includes(importantEvent.event.event_type)) {
+    return `${metricValue.toFixed(2)}x`;
+  }
+  if (['insider_buying', 'insider_selling'].includes(importantEvent.event.event_type)) {
+    return `$${metricValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  }
+  return `${metricValue.toFixed(2)}`;
 }
 
 type SharedReportData = SharedTickerReport | SharedDigestReport;
@@ -191,6 +244,40 @@ export default function SharedReportPage() {
                   >
                     {data.what_to_watch}
                   </ReactMarkdown>
+                </div>
+              </div>
+            )}
+            {data.important_events && data.important_events.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-700">
+                <h2 className="text-sm font-semibold text-white mb-2">Important events</h2>
+                <div className="space-y-2">
+                  {data.important_events.map((item, idx) => {
+                    const metric = formatImportantEventMetric(item);
+                    return (
+                      <div
+                        key={`${item.ticker}-${item.event.event_type}-${idx}`}
+                        className="flex items-start justify-between gap-3 rounded-lg border border-gray-700 bg-gray-900/50 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-sm text-gray-100">
+                            <span className="font-semibold text-emerald-300">{item.ticker}</span>
+                            <span className="mx-2 text-gray-600">·</span>
+                            <span>{formatImportantEventLabel(item.event.event_type)}</span>
+                          </div>
+                          <div className="mt-0.5 text-xs text-gray-400">
+                            {item.event.strength}
+                            {item.event.detected_on ? ` · ${item.event.detected_on}` : ''}
+                          </div>
+                          {item.event.description && (
+                            <div className="mt-1 text-xs leading-5 text-gray-400 max-w-2xl">
+                              {item.event.description}
+                            </div>
+                          )}
+                        </div>
+                        {metric && <span className="shrink-0 font-mono text-sm text-gray-300">{metric}</span>}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

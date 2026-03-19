@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 from ai_engine.llm_provider import get_config_from_env, get_llm
+from backend.processing import build_important_events
 
 from .context_builder import build_digest_context
 from .agents import run_focus_selector, run_ticker_interpreter, run_market_interpreter, run_narrative_writer
@@ -256,6 +257,10 @@ def run_digest(
         "provider": cfg.get("llm_provider"),
         "quick_think": cfg.get("quick_think_llm"),
     }
+    important_events = build_important_events(
+        getattr(ctx, "event_summaries", {}) or {},
+        ticker_order=ctx.priority_tickers,
+    )
 
     return DigestResult(
         narrative=state.digest_narrative,
@@ -264,6 +269,7 @@ def run_digest(
         span_type=span_type,
         span_label=span_label,
         priority_tickers=ctx.priority_tickers,
+        important_events=important_events,
         focus_snapshot=focus_snapshot,
         references=state.references,
         input_tokens=input_tokens,

@@ -9,6 +9,23 @@ import { digestApi, type DigestBriefItem, type DigestResponse } from '../service
 import { getErrorMessage } from '../utils/errorHandling';
 
 const BRIEF_SECTION_TOKENS = ['market_highlights', 'key_signals', 'what_to_watch', 'risks_opportunities'];
+const IMPORTANT_EVENT_LABELS: Record<string, string> = {
+  price_spike_up: 'Price spike up',
+  price_spike_down: 'Price spike down',
+  price_gap_up: 'Gap up',
+  price_gap_down: 'Gap down',
+  volatility_expansion: 'Volatility expansion',
+  volatility_compression: 'Volatility compression',
+  moving_average_cross: 'Moving average cross',
+  new_52w_high: 'New 52-week high',
+  new_52w_low: 'New 52-week low',
+  volume_spike: 'Volume spike',
+  earnings_upcoming: 'Upcoming earnings',
+  insider_buying: 'Insider buying',
+  insider_selling: 'Insider selling',
+  rsi_bullish_divergence: 'RSI bullish divergence',
+  rsi_bearish_divergence: 'RSI bearish divergence',
+};
 
 function briefHasStructuredSections(narrative: string): boolean {
   return /##\s*(Market Highlights|What to Watch|Risks\s*&\s*Opportunities)/i.test(narrative);
@@ -21,6 +38,30 @@ function narrativeForDisplay(narrative: string): string {
     .split('\n')
     .filter((line) => !tokenSet.has(line.trim()))
     .join('\n');
+}
+
+function formatImportantEventLabel(eventType: string): string {
+  return IMPORTANT_EVENT_LABELS[eventType] ?? eventType.replace(/_/g, ' ');
+}
+
+function formatImportantEventMetric(
+  importantEvent: NonNullable<DigestResponse['important_events']>[number],
+): string | null {
+  const { event } = importantEvent;
+  if (typeof event.metric_value !== 'number') return null;
+  if (['price_spike_up', 'price_spike_down', 'price_gap_up', 'price_gap_down'].includes(event.event_type)) {
+    return `${event.metric_value >= 0 ? '+' : ''}${event.metric_value.toFixed(1)}%`;
+  }
+  if (event.event_type === 'earnings_upcoming') {
+    return `${event.metric_value.toFixed(0)}d`;
+  }
+  if (['volatility_expansion', 'volatility_compression', 'volume_spike'].includes(event.event_type)) {
+    return `${event.metric_value.toFixed(2)}x`;
+  }
+  if (['insider_buying', 'insider_selling'].includes(event.event_type)) {
+    return `$${event.metric_value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  }
+  return `${event.metric_value.toFixed(2)}`;
 }
 
 const briefMarkdownComponents = {
@@ -233,6 +274,10 @@ export default function BriefPage() {
     if (brief.priority_tickers && brief.priority_tickers.length > 0) {
       lines.push(`Focus: ${brief.priority_tickers.join(', ')}`);
     }
+    const importantEvents = brief.important_events ?? [];
+    if (importantEvents.length > 0) {
+      lines.push(`Important events: ${importantEvents.map((item) => `${item.ticker} ${formatImportantEventLabel(item.event.event_type)}`).join(', ')}`);
+    }
     lines.push('');
     lines.push(brief.narrative.trim());
     if (brief.what_to_watch && !briefHasStructuredSections(brief.narrative)) {
@@ -273,6 +318,7 @@ export default function BriefPage() {
       what_to_watch: brief.what_to_watch,
       digest_date: brief.digest_date,
       priority_tickers: brief.priority_tickers,
+      important_events: anyBrief?.important_events ?? null,
       user_note: anyBrief?.user_note ?? null,
       narrative_style: anyBrief?.narrative_style ?? null,
       user_focus_tickers: anyBrief?.user_focus_tickers ?? null,
@@ -290,6 +336,7 @@ export default function BriefPage() {
 
   const renderBriefContentCard = (brief: DigestResponse | DigestBriefItem) => {
     const focusTickers = brief.priority_tickers ?? [];
+    const importantEvents = brief.important_events ?? [];
     const spanLabel = brief.span_label && brief.span_label !== 'Daily' ? brief.span_label : 'Daily';
     const overviewLabel =
       spanLabel.toLowerCase().startsWith('week') || brief.span_type === 'weekly'
@@ -366,6 +413,50 @@ export default function BriefPage() {
                       )}
                       {changeStr && <span className={changeClass}>{changeStr}</span>}
                     </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {importantEvents.length > 0 && (
+          <div className="pt-3 border-t border-slate-700/80 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-mono font-semibold text-emerald-300 uppercase tracking-[0.18em]">
+                Important events
+              </span>
+            </div>
+            <div className="space-y-2">
+              {importantEvents.map((item, idx) => {
+                const metric = formatImportantEventMetric(item);
+                const detectedOn = item.event.detected_on;
+                return (
+                  <div
+                    key={`${item.ticker}-${item.event.event_type}-${idx}`}
+                    className="flex items-start justify-between gap-3 rounded-lg border border-slate-700/80 bg-slate-950/50 px-3 py-2 text-sm"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-slate-100">
+                        <span className="font-semibold text-emerald-200">{item.ticker}</span>
+                        <span className="mx-2 text-slate-500">·</span>
+                        <span>{formatImportantEventLabel(item.event.event_type)}</span>
+                      </div>
+                      <div className="mt-0.5 text-xs text-slate-400">
+                        {item.event.strength}
+                        {detectedOn ? ` · ${detectedOn}` : ''}
+                      </div>
+                      {item.event.description && (
+                        <div className="mt-1 text-xs leading-5 text-slate-400 max-w-2xl">
+                          {item.event.description}
+                        </div>
+                      )}
+                    </div>
+                    {metric && (
+                      <span className="shrink-0 font-mono text-slate-300">
+                        {metric}
+                      </span>
+                    )}
                   </div>
                 );
               })}

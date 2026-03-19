@@ -1,129 +1,518 @@
-# User Daily Brief Workflow for FlowDeck (Agentic-Oriented)
+# User Daily Brief Workflow for FlowDeck (Event-Layer Redesign)
 
 ## 1. Architecture
 
-- **Design principle:** All consecutive deterministic work is **squashed into one algorithmic step**. The workflow is **agent-centric**: each agent receives prepared data, has a clear task, and has **tools** to pull more information when the prepared context is insufficient.
-- **New module:** `ai_engine/daily_digest/` containing:
-  - **State models:** Workflow state + **DigestContext** (output of the single algorithmic step; the primary input to agents).
-- **One algorithmic step:** A single function that loads portfolio, fetches base market data, ranks tickers, fetches detailed evidence, platform reports, market context, and sector/peer context. Output = **DigestContext**.
-- **Three AI agents:** Each gets the relevant slice of state (DigestContext + prior agents' outputs), has a **bounded tool set**, and can call tools to get information **beyond** what was passed in.
-- **Orchestration:** Linear pipeline: `build_digest_context(...)` → Ticker Interpreter(s) → Market Interpreter → Narrative Writer. Runner can be wrapped in LangGraph or a cron job later.
+- **Design principle:** keep all deterministic data preparation outside the LLM pipeline, and make the "what happened" layer explicit rather than implicit.
+- **Core change:** split the current single algorithmic preparation stage into:
+  1. **Base Data Collection**
+  2. **Deterministic Event Extraction**
+  3. **Priority Scoring / Context Assembly**
+- **Why:** today the brief mostly infers importance from returns, news presence, and LLM summarization. The redesigned flow introduces a first-class event layer so the pipeline can say, deterministically, which meaningful price/volume/technical events occurred for each ticker.
+- **Long-term direction:** the event layer becomes a common interface across domains:
+  - price/technical events
+  - news/information events
+  - fundamental events
 
 ```mermaid
 flowchart LR
-  subgraph algo [Algorithmic]
-    Build[Build DigestContext]
+  subgraph deterministic [Deterministic]
+    A[Load Portfolio + User Context]
+    B[Fetch Base Market Data]
+    C[Extract Price Events]
+    D[Score Importance + Select Priority Tickers]
+    E[Fetch Detailed Evidence for Priority Tickers]
+    F[Assemble DigestContext]
   end
-  subgraph agents [Agents with tools]
-    TickerInt[Ticker Interpreter]
-    MarketInt[Market Interpreter]
-    Writer[Narrative Writer]
+  subgraph agents [LLM Steps]
+    G[Focus Selector]
+    H[Ticker Interpreter]
+    I[Market Interpreter]
+    J[Narrative Writer]
   end
-  Build --> TickerInt --> MarketInt --> Writer
+
+  A --> B --> C --> D --> E --> F --> G --> H --> I --> J
 ```
 
-**Data sources:** Used inside the algorithmic step and exposed to agents via their tools: portfolio from `ai_engine/agent/tools/user_context.py` (Subscription); quotes, history, news, fundamentals, analyst/insider, market movers from `backend/data_layer` (via `get_info_fetcher()`); platform reports from `backend/services/report_service.py`; web search from `ai_engine/agent/tools/web_search.py`.
+The event layer is deterministic and explainable. Agents consume it as prepared evidence; they do not decide whether the event happened.
 
 ---
 
-## 2. State Models
+## 2. New Concept: Event Extraction Layer
 
-**DigestContext (output of the single algorithmic step)**  
-This is the main data structure that agents receive. Define it as a Pydantic model with:
+### 2.1 Goals
 
-- **Portfolio:** `tickers: list[str]`, optional `user_context_snapshot: str | None`.
-- **Priority:** `priority_tickers: list[str]`, `attention_scores: dict[str, float]`.
-- **Per-ticker (for priority_tickers only):** `quotes`, `returns_1d`, `returns_5d`, `abnormal_signal`; `news`, `fundamentals`, `analyst_rec`, `insider`, `indicators`; `platform_reports`; `sector_industry`, `peer_tickers`, `peer_quotes`. Missing ticker/key → empty or None; agents use **tools** to fill gaps when needed.
-- **Market:** `market_movers`, `global_news`, optional `web_search_snippet`.
+- Convert raw time series into explicit event objects.
+- Make event detection reproducible and testable.
+- Give downstream steps a stronger notion of "importance" than plain return magnitude.
+- Create a schema that can later support news and fundamentals without redesigning the pipeline again.
 
-**Workflow state (passed along the pipeline):** Input (`user_id`, `digest_date`, `max_priority_tickers`, `db`, `config`); after algorithmic step: `digest_context: DigestContext`; after agents: `ticker_interpretations`, `market_interpretation`, `digest_narrative`, `what_to_watch`.
+### 2.2 Event domains
 
-**Typed interpretations (agent outputs):**
+The system should treat all events through one shared abstraction:
 
-- `TickerInterpretation`: `explanation: str`, `driver: Literal["company", "sector", "macro", "unclear"]`, `thesis_comparison: str`.
-- `MarketInterpretation`: `summary: str`, `relevance_to_portfolio: str`.
+- `price_technical`
+- `news_information`
+- `fundamental`
 
-Define all in `ai_engine/daily_digest/state.py`.
+The first implementation only populates `price_technical`. The others are reserved for future expansion.
 
----
+### 2.3 Event taxonomy for phase 1
 
-## 3. Workflow Design: One Algorithmic Step + Three Agents
+Initial deterministic price/technical events per ticker:
 
-### 3.1 Algorithmic step (single function)
+- `price_spike_up`
+- `price_spike_down`
+- `price_gap_up`
+- `price_gap_down`
+- `volatility_expansion`
+- `volatility_compression`
+- `trend_acceleration`
+- `trend_reversal`
+- `support_break`
+- `resistance_break`
+- `moving_average_cross`
+- `new_52w_high`
+- `new_52w_low`
+- `volume_spike`
+- `unusual_volume_pattern`
 
-**Function:** `build_digest_context(user_id, digest_date, max_priority_tickers, db, fetchers)` → `DigestContext`.
+Future domains can add:
 
-**Internal sequence (all deterministic, no LLM):**
-
-1. Load portfolio tickers from `Subscription` by `user_id`; optionally `get_user_context`. If no tickers, return a minimal context or short-circuit the workflow with a "no portfolio" brief.
-2. Fetch base market data for all portfolio tickers: `get_quotes_batch`, `get_historical` per ticker; compute 1d/5d returns and a simple abnormal-move signal (e.g. |1d return| > 2× recent vol or ±3%).
-3. Rank tickers: lightweight `get_news_batch(tickers, lookback_days=2)` for has_recent_news; score = f(|returns_1d|, |returns_5d|, abnormal_flag, has_recent_news); sort and take top `max_priority_tickers`.
-4. For priority tickers only: fetch news (e.g. 5–7 days), fundamentals/company info (sector/industry), analyst recommendations, insider transactions/sentiment, technical indicators; fetch platform reports via `ReportService.get_latest_execution_for_ticker` + `get_reports_with_scores` (or batch API).
-5. Fetch market context: `get_daily_market_movers`, `get_global_news`; optionally one `web_search` for macro/sector and store a short snippet.
-6. Build sector/peer context: from company info get sector/industry per priority ticker; deterministic peer set (e.g. same sector from portfolio + market movers); `get_quotes_batch(peer_tickers)` for peer moves.
-
-On partial failure (e.g. missing data for one ticker), set that key to empty/None and continue. Output is one **DigestContext** instance.
-
-### 3.2 Agent 1 – Ticker Interpreter
-
-- **Data it gets:** For each priority ticker, the slice of `DigestContext` for that ticker: quote, returns, abnormal flag, news, fundamentals, analyst rec, insider, indicators, platform reports (thesis/key takeaways), sector/industry, peer tickers and their moves. Passed in the agent prompt.
-- **Task:** Explain what happened for this ticker; classify driver (company-specific / sector-wide / macro-driven / unclear); compare today's developments to the latest FlowDeck thesis from platform reports.
-- **Output:** `TickerInterpretation` (explanation, driver, thesis_comparison) per ticker. Use structured output (Pydantic/JSON).
-- **Tools (to get information beyond the provided input):** `get_news(ticker)`, `get_platform_reports(ticker)`, `get_fundamentals(ticker)`, `get_analysts_recommendation(ticker)`, `get_insider_transactions(ticker)`, `get_insider_sentiment(ticker)`, `get_indicators(ticker)`, `web_search(query)`. The agent can call these when the prepared context is missing a piece or when it wants to verify or deepen (e.g. latest headline, full report text, or a macro query).
-
-### 3.3 Agent 2 – Market Interpreter
-
-- **Data it gets:** `DigestContext.market_movers`, `global_news`, `web_search_snippet`; list of portfolio tickers and priority tickers; optionally a one-line summary per priority ticker from the Ticker Interpreter.
-- **Task:** Summarize the overall market backdrop; explain why it matters for this portfolio.
-- **Output:** `MarketInterpretation` (summary, relevance_to_portfolio). Structured output.
-- **Tools:** `get_global_news(query)`, `get_daily_market_movers(count)`, `web_search(query)`. Use when it needs fresher or more targeted macro/sector/breaking context than what was pre-fetched.
-
-### 3.4 Agent 3 – Narrative Writer
-
-- **Data it gets:** All `ticker_interpretations` and `market_interpretation` (and optionally the raw DigestContext for reference).
-- **Task:** Write a short, narrative, portfolio-centered digest; avoid long bullet lists. End with a short "what to watch" section.
-- **Output:** `digest_narrative: str`, `what_to_watch: str` (or a single combined string).
-- **Tools:** `get_ticker_quote(ticker)`, `get_platform_reports(ticker)`. Use when it needs an exact price or report date to cite in the narrative.
-
-**Failure handling:** If the algorithmic step fails for a subset of tickers, leave those keys empty and continue. If an agent fails, let the exception propagate (per workspace rules). Optional: at API/job level, one try/except to return "brief unavailable" and log.
+- `news_published`
+- `breaking_news`
+- `major_headline`
+- `earnings_announced`
+- `earnings_upcoming`
+- `guidance_change`
+- `analyst_upgrade`
+- `analyst_downgrade`
+- `dividend_declared`
+- `buyback_announced`
 
 ---
 
-## 4. Specialized Agents: Data, Task, Tools (Summary)
+## 3. State Model Redesign
 
-| Agent | Data it gets | Task | Tools (beyond provided input) |
-|-------|----------------|-----|------------------------------|
-| **Ticker Interpreter** | Per-ticker slice of DigestContext (quote, returns, news, fundamentals, analyst, insider, indicators, platform reports, sector/peers) | Explain move; classify driver; compare to FlowDeck thesis | `get_news`, `get_platform_reports`, `get_fundamentals`, `get_analysts_recommendation`, `get_insider_transactions`, `get_insider_sentiment`, `get_indicators`, `web_search` |
-| **Market Interpreter** | market_movers, global_news, web snippet; portfolio + priority tickers; optional one-liner per ticker | Summarize market backdrop; relevance to portfolio | `get_global_news`, `get_daily_market_movers`, `web_search` |
-| **Narrative Writer** | All ticker_interpretations + market_interpretation | Short narrative digest + "what to watch" | `get_ticker_quote`, `get_platform_reports` |
+### 3.1 New event models
 
-**Implementation pattern:** Each agent is a node that receives state (DigestContext + prior outputs), has access only to its bounded tool set, and can invoke tools to fetch more data before producing its output. Use structured output (Pydantic/JSON) for interpretations. Prompts in `ai_engine/daily_digest/prompts.py`; reuse trading-agents LLM config.
+Define new Pydantic models in `ai_engine/briefing_agent/state.py`.
+
+```python
+EventDomain = Literal["price_technical", "news_information", "fundamental"]
+EventDirection = Literal["bullish", "bearish", "neutral", "mixed"]
+EventStrength = Literal["low", "medium", "high"]
+
+
+class DetectedEvent(BaseModel):
+    event_type: str
+    domain: EventDomain
+    direction: EventDirection
+    strength: EventStrength
+    summary: str
+    detected_on: Optional[str] = None
+    window_start: Optional[str] = None
+    window_end: Optional[str] = None
+    metric_value: Optional[float] = None
+    threshold_value: Optional[float] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class TickerEventSummary(BaseModel):
+    ticker: str
+    events: List[DetectedEvent] = Field(default_factory=list)
+    event_score: float = 0.0
+    dominant_events: List[str] = Field(default_factory=list)
+    bullish_event_count: int = 0
+    bearish_event_count: int = 0
+    neutral_event_count: int = 0
+```
+
+### 3.2 DigestContext additions
+
+Extend `DigestContext` with:
+
+- `ohlcv_history: Dict[str, list[dict]]`
+  - recent daily bars used for event extraction; enough for audits and prompt grounding
+- `event_summaries: Dict[str, TickerEventSummary]`
+  - canonical per-ticker event output
+- `event_scores: Dict[str, float]`
+  - flattened lookup used by ranking
+- `market_events: List[DetectedEvent]`
+  - reserved for future deterministic market-wide event extraction
+
+### 3.3 Why keep both `event_summaries` and `event_scores`
+
+- `event_summaries` is for interpretation and explanation.
+- `event_scores` is for deterministic ranking.
+- This separation avoids re-deriving ranking logic from free-form event lists in later stages.
 
 ---
 
-## 5. File Layout and Integration
+## 4. Workflow Redesign
 
-- `ai_engine/daily_digest/state.py` – DigestContext, workflow state, TickerInterpretation, MarketInterpretation (Pydantic).
-- `ai_engine/daily_digest/context_builder.py` – Single function `build_digest_context(...)` (all deterministic logic: load portfolio → base data → rank → evidence → reports → market context → sector/peer).
-- `ai_engine/daily_digest/agents.py` – Ticker Interpreter, Market Interpreter, Narrative Writer (each with bounded tools; each takes state, can call tools, returns updated state).
-- `ai_engine/daily_digest/prompts.py` – Prompt templates for the three agents.
-- `ai_engine/daily_digest/runner.py` – `run_digest(user_id, digest_date, db, config)` runs: build_digest_context → ticker interpreter(s) → market interpreter → narrative writer; returns final state or DigestResult.
+## 4.1 Revised deterministic pipeline
 
-**Integration:** API endpoint (e.g. `GET /api/digest`) or standalone script for cron; runner is a single callable for easy use inside a LangGraph node.
+### Step 1: Load portfolio and user context
+
+- Load subscribed tickers.
+- Load saved user profile / AI memory.
+- If no portfolio, still build market context as today.
+
+### Step 2: Fetch base market data
+
+For all portfolio tickers:
+
+- quote snapshot
+- daily OHLCV history
+- enough history for:
+  - 1d / 5d / span returns
+  - moving averages
+  - volatility windows
+  - 52-week range checks
+  - volume baselines
+  - support / resistance lookbacks
+
+Minimum recommended history:
+
+- 252 trading days for full event coverage
+- if less is available, compute the subset of events that remain valid
+
+### Step 3: Deterministic event extraction
+
+Run a dedicated event extractor on every ticker's OHLCV history.
+
+**Function:**
+
+`extract_price_events(ticker, bars, quote, span_type, start_date, end_date) -> TickerEventSummary`
+
+This stage should:
+
+- calculate derived indicators once
+- detect events using deterministic rules
+- emit normalized event objects
+- compute a deterministic `event_score`
+
+### Step 4: Priority scoring
+
+Replace the current mostly return-based ranking with a combined score:
+
+`attention_score = f(event_score, return_magnitude, recent_news_presence, abnormal_move, user_focus_override)`
+
+Recommended shape:
+
+- event score becomes the primary signal
+- raw return magnitude remains secondary
+- recent news remains a weak additive signal
+- user-selected focus still overrides ranking
+
+### Step 5: Fetch deeper evidence for priority tickers
+
+After priority tickers are selected:
+
+- ticker news
+- fundamentals
+- analyst recommendations
+- insider transactions
+- platform reports
+- sector / peer context
+
+This keeps the expensive enrichment limited to names that already look important.
+
+### Step 6: Assemble `DigestContext`
+
+The LLM-facing context should now include:
+
+- raw price/return context
+- extracted deterministic events
+- event summaries and event score
+- all current evidence sources
 
 ---
 
-## 6. Testing and Logging
+## 5. Deterministic Event Definitions
 
-- **Unit test** the algorithmic step with mocked fetchers and 2–3 tickers; test ranking and peer mapping in isolation.
-- **Integration test:** Run full pipeline with test user, 1–2 tickers, mock or cheap LLM; assert state shape and non-empty narrative/what_to_watch.
-- **Logging:** Log at pipeline boundaries (e.g. "digest: context built, N priority tickers"; "ticker_interpreter for AAPL"; agent tool calls); do not swallow exceptions.
+These definitions should live in a dedicated module such as:
+
+- `ai_engine/briefing_agent/event_extractor.py`
+
+The exact thresholds can be tuned later, but the interface should be stable.
+
+### 5.1 Price movement events
+
+#### `price_spike_up` / `price_spike_down`
+
+Detect when the latest close-to-close return is unusually large relative to recent realized volatility.
+
+Candidate rule:
+
+- compute latest daily return
+- compute rolling 20-day std dev of daily returns
+- trigger if absolute return >= `max(4%, 2.0 * rolling_std)`
+- map sign to up/down
+
+#### `price_gap_up` / `price_gap_down`
+
+Detect when today's open materially differs from the previous close.
+
+Candidate rule:
+
+- gap % = `(today_open - prev_close) / prev_close * 100`
+- trigger if absolute gap >= `max(2%, 1.5 * avg_abs_gap_20d)`
+
+### 5.2 Volatility regime events
+
+#### `volatility_expansion`
+
+- rolling 10-day realized vol / rolling 60-day realized vol >= 1.5
+
+#### `volatility_compression`
+
+- rolling 10-day realized vol / rolling 60-day realized vol <= 0.67
+
+### 5.3 Trend events
+
+#### `trend_acceleration`
+
+Detect strengthening trend rather than just positive return.
+
+Candidate rule:
+
+- 10-day EMA slope and 20-day EMA slope align
+- short slope magnitude is meaningfully larger than medium slope magnitude
+- price is above 20-day EMA for bullish acceleration or below for bearish acceleration
+
+#### `trend_reversal`
+
+Candidate rule:
+
+- recent direction over prior window differs from current short window
+- short EMA crosses opposite side of medium EMA
+- latest close confirms reversal by remaining beyond crossover level
+
+### 5.4 Structure events
+
+#### `support_break`
+
+- latest close breaks below rolling N-day support level by a buffer
+- example: close < lowest low of prior 20 days by 0.5%
+
+#### `resistance_break`
+
+- latest close breaks above rolling N-day resistance level by a buffer
+- example: close > highest high of prior 20 days by 0.5%
+
+#### `moving_average_cross`
+
+- detect short/medium MA crossover
+- metadata should record which pair crossed, for example `10_over_20_bullish`
+
+### 5.5 Range events
+
+#### `new_52w_high`
+
+- latest high >= max high over prior 252 bars
+
+#### `new_52w_low`
+
+- latest low <= min low over prior 252 bars
+
+### 5.6 Volume events
+
+#### `volume_spike`
+
+- latest volume / rolling 20-day avg volume >= 2.0
+
+#### `unusual_volume_pattern`
+
+Use this for deterministic but less directional patterns, for example:
+
+- multi-day elevated volume without equally large price move
+- high volume on reversal day
+- rising volume into breakout/breakdown sequence
+
+This event should carry richer metadata because the label alone is broad.
 
 ---
 
-## 7. Summary
+## 6. Event Scoring
 
-- **Architecture:** One algorithmic step produces **DigestContext**; three agents (Ticker Interpreter, Market Interpreter, Narrative Writer) consume it and use **tools** to get more information when needed.
-- **State:** DigestContext + workflow state with interpretation fields; all typed in `state.py`.
-- **Agents:** Designed around **what data they get** (from context + prior agents), **what they must do** (task), and **what tools they have** to fetch beyond the input.
-- **Integration:** `run_digest(user_id, date, db, config)` suitable for API or cron; pluggable into LangGraph.
+The extractor should compute a deterministic `event_score` per ticker.
+
+### 6.1 Why score events
+
+- ranking needs one scalar
+- multiple events can co-exist
+- not all events should matter equally
+
+### 6.2 Recommended scoring structure
+
+Each event contributes:
+
+- base weight by event type
+- multiplier by strength
+- optional recency bonus
+
+Example weights:
+
+- high-importance structure/range breaks:
+  - `support_break`, `resistance_break`, `new_52w_high`, `new_52w_low`: high
+- medium-importance:
+  - `price_spike_*`, `price_gap_*`, `trend_reversal`, `moving_average_cross`, `volume_spike`
+- lower-importance contextual regime shifts:
+  - `volatility_expansion`, `volatility_compression`, `trend_acceleration`, `unusual_volume_pattern`
+
+Example:
+
+`event_score = sum(event_weight * strength_multiplier * recency_multiplier)`
+
+This should remain deterministic and auditable.
+
+---
+
+## 7. Agent Redesign
+
+The agents remain in the same order, but their inputs become more explicit.
+
+### 7.1 Focus Selector
+
+Current role:
+
+- choose focus tickers from ranked portfolio names
+
+New role:
+
+- start from `event_score` and `attention_score`
+- prefer names with multiple high-signal events
+- still allow user note / explicit focus tickers to override
+
+Prompt should include:
+
+- event score
+- dominant events
+- concise event summaries
+
+### 7.2 Ticker Interpreter
+
+Current issue:
+
+- it infers what happened mainly from mixed raw data blobs
+
+New role:
+
+- explain the deterministic event set first
+- connect those events to news/fundamentals/reports
+- decide whether the event appears company-, sector-, or macro-driven
+
+Prompt should explicitly separate:
+
+- deterministic price events
+- supporting news/fundamental evidence
+- prior FlowDeck thesis
+
+The interpreter should not decide whether `support_break` happened. It should decide what it means.
+
+### 7.3 Market Interpreter
+
+No structural change, but it should receive:
+
+- aggregate counts of notable ticker events across the portfolio
+- optional market-level event summaries in the future
+
+This lets the market step talk about internal breadth of portfolio risk, for example:
+
+- multiple support breaks
+- several new highs
+- widespread volatility expansion
+
+### 7.4 Narrative Writer
+
+The writer should consume:
+
+- market interpretation
+- ticker interpretations
+- dominant events per ticker
+
+This should improve output quality because the writer can ground the brief in explicit event language:
+
+- "AAPL triggered a resistance break on elevated volume"
+- "MSFT showed volatility compression ahead of earnings"
+
+The writer should still decide presentation, not detection.
+
+---
+
+## 8. File Layout
+
+Recommended structure:
+
+- `ai_engine/briefing_agent/state.py`
+  - add event models and event fields on `DigestContext`
+- `ai_engine/briefing_agent/event_extractor.py`
+  - deterministic event definitions and extraction logic
+- `ai_engine/briefing_agent/context_builder.py`
+  - fetch OHLCV, call extractor, score events, rank tickers, assemble context
+- `ai_engine/briefing_agent/agents.py`
+  - format event summaries into prompts for Focus Selector / Ticker Interpreter / Market Interpreter / Writer
+- `ai_engine/briefing_agent/prompts.py`
+  - update prompts to treat deterministic events as canonical evidence
+
+---
+
+## 9. Testing Strategy
+
+### 9.1 Unit tests for event extraction
+
+Add focused tests for each event family using synthetic OHLCV fixtures:
+
+- spike up/down
+- gap up/down
+- volatility expansion/compression
+- trend acceleration/reversal
+- support/resistance break
+- moving average cross
+- new 52-week high/low
+- volume spike
+- unusual volume pattern
+
+### 9.2 Context builder tests
+
+Verify:
+
+- event summaries appear in `DigestContext`
+- event score influences ranking
+- fallback still works when history is missing
+- portfolio-empty flow still works
+
+### 9.3 Prompt-shape tests
+
+Verify the prompts include:
+
+- dominant events
+- event score or event summary
+- separation between deterministic events and interpretive reasoning
+
+---
+
+## 10. Migration Path
+
+Recommended implementation order:
+
+1. Add state models for events.
+2. Add `event_extractor.py` with price/technical events only.
+3. Store event summaries in `DigestContext`.
+4. Change ranking to incorporate `event_score`.
+5. Update prompt formatting so agents receive event summaries.
+6. Add tests for synthetic price patterns.
+7. Later extend the same event schema to news and fundamentals.
+
+This keeps the redesign incremental while preserving the rest of the brief pipeline.
+
+---
+
+## 11. Summary
+
+- The major redesign is to promote "events" to a first-class deterministic layer.
+- Raw OHLCV is transformed into explicit price/technical events before ranking or interpretation.
+- Ranking becomes event-driven rather than mostly return-driven.
+- Agents stop inferring detection and instead interpret precomputed events.
+- The same event abstraction can later support news and fundamentals without another architectural rewrite.

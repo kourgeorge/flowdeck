@@ -10,6 +10,11 @@ from __future__ import annotations
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
+from backend.processing import (
+    DetectedEvent,
+    ImportantEvent,
+    TickerEventSummary,
+)
 
 # Span type for the brief: daily (single day), weekly (7 days ending on digest_date), custom (explicit start/end).
 SpanType = Literal["daily", "weekly", "custom"]
@@ -79,6 +84,10 @@ class DigestContext(BaseModel):
 
     # Per-ticker data (for priority_tickers; missing key -> agent can use tools)
     quotes: Dict[str, Optional[Dict[str, Any]]] = Field(default_factory=dict)
+    ohlcv_history: Dict[str, List[Dict[str, Any]]] = Field(
+        default_factory=dict,
+        description="Recent daily OHLCV bars used for deterministic event extraction.",
+    )
     returns_1d: Dict[str, Optional[float]] = Field(default_factory=dict)
     returns_5d: Dict[str, Optional[float]] = Field(default_factory=dict)
     returns_span: Dict[str, Optional[float]] = Field(
@@ -86,11 +95,23 @@ class DigestContext(BaseModel):
         description="Return over the full span (e.g. 7d for weekly). Used for ranking when span is not daily.",
     )
     abnormal_signal: Dict[str, bool] = Field(default_factory=dict)
+    event_summaries: Dict[str, TickerEventSummary] = Field(
+        default_factory=dict,
+        description="ticker -> deterministic event summary extracted from currently available platform data.",
+    )
+    event_scores: Dict[str, float] = Field(
+        default_factory=dict,
+        description="ticker -> deterministic event score used in ranking.",
+    )
 
     news: Dict[str, Any] = Field(default_factory=dict)  # ticker -> news payload (e.g. list of articles or str)
     fundamentals: Dict[str, Any] = Field(default_factory=dict)
     analyst_rec: Dict[str, Any] = Field(default_factory=dict)
     insider: Dict[str, Any] = Field(default_factory=dict)
+    future_events: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="ticker -> vendor payload for future events such as earnings/ex-dividend dates.",
+    )
     indicators: Dict[str, Any] = Field(default_factory=dict)
     platform_reports: Dict[str, Dict[str, Any]] = Field(
         default_factory=dict,
@@ -190,6 +211,10 @@ class DigestResult(BaseModel):
         description="Human-readable span for UI, e.g. 'Daily', 'Weekly', 'Mar 6–12, 2025'.",
     )
     priority_tickers: List[str] = Field(default_factory=list, description="Tickers that were analyzed in depth.")
+    important_events: List[ImportantEvent] = Field(
+        default_factory=list,
+        description="Important deterministic events for the selected focus tickers, ordered by importance.",
+    )
     focus_snapshot: Dict[str, Any] = Field(
         default_factory=dict,
         description="Per-ticker snapshot used by the brief UI: ticker -> {price, change_pct, span_type}.",

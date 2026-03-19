@@ -15,12 +15,14 @@ import sys
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
+from backend.processing import extract_ticker_events, parse_rsi_indicator_data
+
 from .state import DigestContext
 
 logger = logging.getLogger(__name__)
 
 # Default attention weights: absolute 1d return, 5d return, abnormal flag, has recent news
-W1, W2, W3, W4 = 0.4, 0.3, 0.2, 0.1
+W_EVENT, W1, W2, W3, W4 = 1.0, 0.2, 0.1, 0.15, 0.1
 ABNORMAL_THRESHOLD_PCT = 3.0  # |1d return| > this (%) -> abnormal_signal True
 
 
@@ -53,8 +55,78 @@ def _get_user_context_snapshot(user_id: int, db: Any) -> Optional[str]:
         return None
 
 
-def _compute_returns_and_abnormal(
+def _load_ohlcv_history(
     fetcher: Any,
+    tickers: List[str],
+    *,
+    period: str = "1y",
+    interval: str = "1d",
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Fetch daily OHLCV history per ticker for deterministic event extraction."""
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for ticker in tickers:
+        try:
+            hist = fetcher.get_historical(ticker, period=period, interval=interval)
+            rows = (hist or {}).get("data") or []
+            out[ticker] = [row for row in rows if isinstance(row, dict)]
+        except Exception as e:
+            logger.debug("Historical data for %s: %s", ticker, e)
+            out[ticker] = []
+    return out
+
+
+def _load_future_events(fetcher: Any, tickers: List[str]) -> Dict[str, Any]:
+    """Fetch structured future-event payloads when available."""
+    out: Dict[str, Any] = {}
+    for ticker in tickers:
+        try:
+            getter = getattr(fetcher, "get_future_events", None)
+            if getter is None:
+                out[ticker] = {}
+                continue
+            out[ticker] = getter(ticker) or {}
+        except Exception as e:
+            logger.debug("Future events for %s: %s", ticker, e)
+            out[ticker] = {}
+    return out
+
+
+def _load_insider_transactions(fetcher: Any, tickers: List[str], limit: int = 20) -> Dict[str, Any]:
+    """Fetch normalized insider transaction payloads per ticker."""
+    out: Dict[str, Any] = {}
+    for ticker in tickers:
+        try:
+            out[ticker] = fetcher.get_insider_transactions(ticker, limit=limit) or {}
+        except Exception as e:
+            logger.debug("Insider transactions for %s: %s", ticker, e)
+            out[ticker] = {}
+    return out
+
+
+def _load_rsi_maps(
+    fetcher: Any,
+    tickers: List[str],
+    *,
+    as_of_date: str,
+    look_back_days: int = 60,
+) -> Dict[str, Dict[str, float]]:
+    """Fetch and parse RSI series per ticker when the backend fetcher supports indicators."""
+    out: Dict[str, Dict[str, float]] = {}
+    getter = getattr(fetcher, "get_indicators", None)
+    if getter is None:
+        return {ticker: {} for ticker in tickers}
+    for ticker in tickers:
+        try:
+            raw = getter(ticker, "rsi", as_of_date, look_back_days)
+            out[ticker] = parse_rsi_indicator_data(raw)
+        except Exception as e:
+            logger.debug("RSI data for %s: %s", ticker, e)
+            out[ticker] = {}
+    return out
+
+
+def _compute_returns_and_abnormal(
+    history_map: Dict[str, List[Dict[str, Any]]],
     tickers: List[str],
     span_trading_days: Optional[int] = None,
 ) -> tuple[
@@ -73,8 +145,7 @@ def _compute_returns_and_abnormal(
 
     for ticker in tickers:
         try:
-            hist = fetcher.get_historical(ticker, period="1mo", interval="1d")
-            data = (hist or {}).get("data") or []
+            data = history_map.get(ticker) or []
             if len(data) < min_bars:
                 returns_1d[ticker] = None
                 returns_5d[ticker] = None
@@ -132,6 +203,7 @@ def _has_recent_news(fetcher: Any, tickers: List[str], lookback_days: int = 2) -
 
 def _rank_tickers(
     tickers: List[str],
+    event_scores: Dict[str, float],
     returns_1d: Dict[str, Optional[float]],
     returns_5d: Dict[str, Optional[float]],
     abnormal_signal: Dict[str, bool],
@@ -143,14 +215,16 @@ def _rank_tickers(
     scores: Dict[str, float] = {}
     if returns_span:
         for t in tickers:
+            ev = event_scores.get(t) or 0.0
             r_span = (returns_span.get(t) or 0.0) if returns_span else 0.0
-            sc = 0.5 * abs(r_span) + (0.5 if has_news.get(t) else 0)
+            sc = W_EVENT * ev + 0.2 * abs(r_span) + (0.5 if has_news.get(t) else 0)
             scores[t] = sc
     else:
         for t in tickers:
+            ev = event_scores.get(t) or 0.0
             r1 = returns_1d.get(t) or 0.0
             r5 = returns_5d.get(t) or 0.0
-            sc = W1 * abs(r1) + W2 * abs(r5) + (W3 if abnormal_signal.get(t) else 0) + (W4 if has_news.get(t) else 0)
+            sc = W_EVENT * ev + W1 * abs(r1) + W2 * abs(r5) + (W3 if abnormal_signal.get(t) else 0) + (W4 if has_news.get(t) else 0)
             scores[t] = sc
     sorted_tickers = sorted(scores.keys(), key=lambda x: -scores[x])
     return scores, sorted_tickers[:max_n]
@@ -281,13 +355,18 @@ def build_digest_context(
             ticker: abs(float(returns_1d.get(ticker) or 0.0))
             for ticker in priority_tickers
         }
+        ohlcv_history = _load_ohlcv_history(fetcher, priority_tickers)
+        future_events = _load_future_events(fetcher, priority_tickers)
+        insider = _load_insider_transactions(fetcher, priority_tickers, limit=20)
+        rsi_maps = _load_rsi_maps(fetcher, priority_tickers, as_of_date=digest_date)
 
         news_lookback = min(lookback_days + 5, 31)
         news: Dict[str, Any] = {}
         fundamentals: Dict[str, Any] = {}
         analyst_rec: Dict[str, Any] = {}
-        insider: Dict[str, Any] = {}
         indicators: Dict[str, Any] = {}
+        event_summaries: Dict[str, Any] = {}
+        event_scores: Dict[str, float] = {}
         for t in priority_tickers:
             try:
                 news[t] = fetcher.get_news(t, lookback_days=news_lookback)
@@ -301,10 +380,21 @@ def build_digest_context(
                 analyst_rec[t] = fetcher.get_analyst_recommendations(t)
             except Exception:
                 analyst_rec[t] = {}
-            try:
-                insider[t] = fetcher.get_insider_transactions(t, limit=20)
-            except Exception:
-                insider[t] = {}
+            event_summary = extract_ticker_events(
+                t,
+                bars=ohlcv_history.get(t) or [],
+                as_of_date=digest_date,
+                future_events=future_events.get(t),
+                insider_transactions=insider.get(t),
+                rsi_data=rsi_maps.get(t),
+                start_date=start_date,
+                end_date=end_date,
+            )
+            event_summaries[t] = event_summary
+            event_scores[t] = event_summary.event_score
+
+        for ticker, score in event_scores.items():
+            attention_scores[ticker] = attention_scores.get(ticker, 0.0) + score
 
         from services.report_service import ReportService  # type: ignore[import-untyped]
         from services.share_service import get_share_url  # type: ignore[import-untyped]
@@ -347,14 +437,18 @@ def build_digest_context(
             priority_tickers=priority_tickers,
             attention_scores=attention_scores,
             quotes=quotes,
+            ohlcv_history=ohlcv_history,
             returns_1d=returns_1d,
             returns_5d={},
             returns_span={},
             abnormal_signal=abnormal_signal,
+            event_summaries=event_summaries,
+            event_scores=event_scores,
             news=news,
             fundamentals=fundamentals,
             analyst_rec=analyst_rec,
             insider=insider,
+            future_events=future_events,
             indicators=indicators,
             platform_reports=platform_reports,
             share_urls=share_urls,
@@ -370,14 +464,33 @@ def build_digest_context(
 
     # Base market data (returns_span when span_trading_days e.g. 7 for weekly)
     quotes = fetcher.get_quotes_batch(tickers) or {}
+    ohlcv_history = _load_ohlcv_history(fetcher, tickers)
     returns_1d, returns_5d, returns_span, abnormal_signal = _compute_returns_and_abnormal(
-        fetcher, tickers, span_trading_days=span_trading_days
+        ohlcv_history, tickers, span_trading_days=span_trading_days
     )
+    future_events = _load_future_events(fetcher, tickers)
+    insider = _load_insider_transactions(fetcher, tickers, limit=20)
+    rsi_maps = _load_rsi_maps(fetcher, tickers, as_of_date=digest_date)
+    event_summaries = {
+        ticker: extract_ticker_events(
+            ticker,
+            bars=ohlcv_history.get(ticker) or [],
+            as_of_date=digest_date,
+            future_events=future_events.get(ticker),
+            insider_transactions=insider.get(ticker),
+            rsi_data=rsi_maps.get(ticker),
+            start_date=start_date,
+            end_date=end_date,
+        )
+        for ticker in tickers
+    }
+    event_scores = {ticker: summary.event_score for ticker, summary in event_summaries.items()}
 
     # Rank: use span return + news when span; else 1d/5d/abnormal/news
     has_news = _has_recent_news(fetcher, tickers, lookback_days=lookback_days)
     attention_scores, priority_tickers = _rank_tickers(
         tickers,
+        event_scores,
         returns_1d,
         returns_5d,
         abnormal_signal,
@@ -392,8 +505,8 @@ def build_digest_context(
     news: Dict[str, Any] = {}
     fundamentals: Dict[str, Any] = {}
     analyst_rec: Dict[str, Any] = {}
-    insider: Dict[str, Any] = {}
     indicators: Dict[str, Any] = {}  # backend has no get_indicators; agents have tool
+    priority_future_events: Dict[str, Any] = {}
 
     for t in priority_tickers:
         try:
@@ -408,10 +521,8 @@ def build_digest_context(
             analyst_rec[t] = fetcher.get_analyst_recommendations(t)
         except Exception:
             analyst_rec[t] = {}
-        try:
-            insider[t] = fetcher.get_insider_transactions(t, limit=20)
-        except Exception:
-            insider[t] = {}
+        priority_future_events[t] = future_events.get(t) or {}
+    insider = {ticker: insider.get(ticker) or {} for ticker in priority_tickers}
 
     # Platform reports and share URLs
     from services.report_service import ReportService  # type: ignore[import-untyped]
@@ -479,14 +590,18 @@ def build_digest_context(
         priority_tickers=priority_tickers,
         attention_scores=attention_scores,
         quotes=quotes,
+        ohlcv_history=ohlcv_history,
         returns_1d=returns_1d,
         returns_5d=returns_5d,
         returns_span=returns_span or {},
         abnormal_signal=abnormal_signal,
+        event_summaries=event_summaries,
+        event_scores=event_scores,
         news=news,
         fundamentals=fundamentals,
         analyst_rec=analyst_rec,
         insider=insider,
+        future_events=priority_future_events,
         indicators=indicators,
         platform_reports=platform_reports,
         share_urls=share_urls,

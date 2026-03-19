@@ -621,6 +621,30 @@ export const tickerApi = {
     return response.data;
   },
 
+  // Get deterministic technical and fundamental events
+  getEvents: async (ticker: string): Promise<{
+    ticker: string;
+    event_score: number;
+    events: Array<{
+      event_type: string;
+      domain: 'price_technical' | 'news_information' | 'fundamental';
+      detected_on: string | null;
+      window_start: string | null;
+      window_end: string | null;
+      strength: 'low' | 'medium' | 'high';
+      metric_value: number | null;
+      threshold_value: number | null;
+      metadata: Record<string, any>;
+      description?: string;
+    }>;
+    dominant_events: string[];
+    event_count: number;
+    error?: string;
+  }> => {
+    const response = await api.get(`/api/data/events/${ticker}`);
+    return response.data;
+  },
+
   // Get analyst recommendations from Yahoo (raw market data via /api/data)
   getAnalystRecommendations: async (ticker: string): Promise<AnalystRecommendationsResponse> => {
     const response = await api.get(`/api/data/analyst-recommendations/${ticker}`);
@@ -795,6 +819,22 @@ export interface DigestResponse {
   what_to_watch: string;
   digest_date: string;
   priority_tickers: string[];
+  important_events?: {
+    ticker: string;
+    importance_score: number;
+    event: {
+      event_type: string;
+      domain: string;
+      detected_on?: string | null;
+      window_start?: string | null;
+      window_end?: string | null;
+      strength: string;
+      metric_value?: number | null;
+      threshold_value?: number | null;
+      metadata?: Record<string, unknown>;
+      description?: string;
+    };
+  }[] | null;
   span_type?: string;
   span_label?: string;
   user_note?: string | null;
@@ -825,6 +865,22 @@ export interface DigestBriefItem {
   span_type?: string;
   span_label?: string;
   priority_tickers: string[];
+  important_events?: {
+    ticker: string;
+    importance_score: number;
+    event: {
+      event_type: string;
+      domain: string;
+      detected_on?: string | null;
+      window_start?: string | null;
+      window_end?: string | null;
+      strength: string;
+      metric_value?: number | null;
+      threshold_value?: number | null;
+      metadata?: Record<string, unknown>;
+      description?: string;
+    };
+  }[] | null;
   user_note?: string | null;
   narrative_style?: string | null;
   user_focus_tickers?: string[] | null;

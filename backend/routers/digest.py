@@ -6,8 +6,9 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from backend.processing import ImportantEvent
 
 from auth import get_current_user
 from database import get_db
@@ -33,6 +34,7 @@ class DigestResponse(BaseModel):
     what_to_watch: str
     digest_date: str
     priority_tickers: list[str]
+    important_events: list[ImportantEvent] = Field(default_factory=list)
     span_type: str = "daily"
     span_label: str = "Daily"
     references: Optional[list[dict]] = None
@@ -58,6 +60,7 @@ class DigestBriefItem(BaseModel):
     span_type: str = "daily"
     span_label: str = "Daily"
     priority_tickers: list[str]
+    important_events: list[ImportantEvent] = Field(default_factory=list)
     user_note: Optional[str] = None
     narrative_style: Optional[str] = None
     user_focus_tickers: Optional[list[str]] = None
@@ -159,6 +162,10 @@ async def get_digest(
         what_to_watch=result.what_to_watch,
         digest_date=result.digest_date,
         priority_tickers=result.priority_tickers,
+        important_events=[
+            event.model_dump() if hasattr(event, "model_dump") else event
+            for event in (getattr(result, "important_events", None) or [])
+        ],
         span_type=getattr(result, "span_type", "daily"),
         span_label=getattr(result, "span_label", "Daily"),
         references=[r.model_dump() for r in (result.references or [])] if hasattr(result, "references") else None,
@@ -210,6 +217,7 @@ def _brief_item_to_response(b) -> DigestBriefItem:
         span_type=b.span_type,
         span_label=b.span_label,
         priority_tickers=b.priority_tickers,
+        important_events=b.important_events,
         user_note=b.user_note,
         narrative_style=b.narrative_style,
         user_focus_tickers=b.user_focus_tickers,

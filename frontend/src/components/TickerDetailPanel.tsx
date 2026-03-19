@@ -20,6 +20,7 @@ import FundamentalPanes from './FundamentalPanes';
 import NewsWidget from './NewsWidget';
 import InsiderTransactionsWidget from './InsiderTransactionsWidget';
 import AIAnalysisLoadingView from './AIAnalysisLoadingView';
+import EventsPanel from './EventsPanel';
 import { parseReportDate } from '../utils/date';
 import { formatPrice } from '../utils/currency';
 import AspectSpiderChart, { getAnalysisScoreEntries } from './AspectSpiderChart';
@@ -48,7 +49,7 @@ const REPORT_PROCESS_ORDER = [
 ];
 const SIMILAR_STOCKS_PER_PAGE = 10;
 
-const MAIN_TAB_IDS = ['overview', 'fundamentals', 'sec-filings', 'insider-transactions', 'news', 'similar-stocks', 'ai-analysis'] as const;
+const MAIN_TAB_IDS = ['overview', 'fundamentals', 'sec-filings', 'insider-transactions', 'news', 'events', 'similar-stocks', 'ai-analysis'] as const;
 type MainTabId = (typeof MAIN_TAB_IDS)[number];
 
 function reportKeyFromParam(param: string | null): string | null {
@@ -110,6 +111,9 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const [isLoadingEdgar, setIsLoadingEdgar] = useState(false);
   const [futureEvents, setFutureEvents] = useState<any>(null);
   const [isLoadingFutureEvents, setIsLoadingFutureEvents] = useState(false);
+  const [eventsData, setEventsData] = useState<any>(null);
+  const [eventsError, setEventsError] = useState<string | undefined>(undefined);
+  const [isLoadingEvents, setIsLoadingEvents] = useState(false);
   const [subscriptionForTicker, setSubscriptionForTicker] = useState<Subscription | null>(null);
   const [emailPreferenceToggling, setEmailPreferenceToggling] = useState(false);
   const [similarTickers, setSimilarTickers] = useState<SimilarTickersResponse | null>(null);
@@ -382,6 +386,13 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     tickerApi.getAnalystRecommendations(ticker).then(setAnalystRecommendations).catch(() => {}).finally(() => setIsLoadingRecommendations(false));
     setIsLoadingFutureEvents(true);
     tickerApi.getFutureEvents(ticker).then(setFutureEvents).catch(() => {}).finally(() => setIsLoadingFutureEvents(false));
+    setIsLoadingEvents(true);
+    setEventsError(undefined);
+    tickerApi
+      .getEvents(ticker)
+      .then(setEventsData)
+      .catch((err) => setEventsError(getErrorMessage(err)))
+      .finally(() => setIsLoadingEvents(false));
   };
 
   useEffect(() => {
@@ -393,6 +404,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     setCompanyOfficers([]); setIsLoadingOfficers(false); setHasLoadedCompanyOfficers(false);
     setFundamentalsSubTab('charts'); setFundInfo(null);
     setAnalysisProgress(null); setEdgarFilings(null); setEdgarFilingsError(null); setFutureEvents(null);
+    setEventsData(null); setEventsError(undefined); setIsLoadingEvents(false);
     setSimilarTickers(null); setSimilarTickerPages({}); setSimilarHasMoreByPage({}); setSimilarStocksPage(1);
     setActiveTab('ai-analysis'); setSelectedReport(null); setLoadError(null); setAnalysisError(null);
     setIsStartingAnalysis(false);
@@ -434,6 +446,8 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       tickerApi.getAnalystRecommendations(ticker).then(setAnalystRecommendations).catch(() => {}).finally(() => setIsLoadingRecommendations(false));
       setIsLoadingFutureEvents(true);
       tickerApi.getFutureEvents(ticker).then(setFutureEvents).catch(() => {}).finally(() => setIsLoadingFutureEvents(false));
+      setIsLoadingEvents(true);
+      tickerApi.getEvents(ticker).then(setEventsData).catch((err) => setEventsError(getErrorMessage(err))).finally(() => setIsLoadingEvents(false));
     } else {
       setStockData(null);
       setIsLoading(true);
@@ -956,6 +970,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                   ...(isUSCompany ? [{ id: 'sec-filings', label: 'SEC Filings' }] : []),
                   ...(hasInsiderTransactions ? [{ id: 'insider-transactions', label: 'Insider Transactions' }] : []),
                   { id: 'news', label: 'News' },
+                  { id: 'events', label: 'Events' },
                   ...(hasSimilarStocks ? [{ id: 'similar-stocks', label: 'Similar Stocks' }] : []),
                   { id: 'ai-analysis', label: 'AI Analysis' },
                 ].map((tab) => {
@@ -1246,6 +1261,18 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                 />
               ) : null}
             </div>
+          )}
+
+          {/* Events Tab */}
+          {activeTab === 'events' && (
+            <EventsPanel
+              ticker={ticker}
+              eventScore={eventsData?.event_score ?? 0}
+              events={eventsData?.events ?? []}
+              dominantEvents={eventsData?.dominant_events ?? []}
+              isLoading={isLoadingEvents}
+              error={eventsError}
+            />
           )}
 
           {/* Similar Stocks Tab */}

@@ -24,6 +24,7 @@ class DigestBriefItem:
         span_type: str = "daily",
         span_label: str = "Daily",
         priority_tickers: Optional[List[str]] = None,
+        important_events: Optional[list[dict]] = None,
         user_note: Optional[str] = None,
         narrative_style: Optional[str] = None,
         user_focus_tickers: Optional[List[str]] = None,
@@ -38,6 +39,7 @@ class DigestBriefItem:
         self.span_type = span_type
         self.span_label = span_label
         self.priority_tickers = priority_tickers or []
+        self.important_events = important_events or []
         self.user_note = user_note
         self.narrative_style = narrative_style
         self.user_focus_tickers = user_focus_tickers
@@ -181,6 +183,10 @@ async def run_and_store_digest(
         "span_type": getattr(result, "span_type", parsed_span_type),
         "span_label": getattr(result, "span_label", "Daily"),
         "priority_tickers": getattr(result, "priority_tickers", []),
+        "important_events": [
+            event.model_dump() if hasattr(event, "model_dump") else event
+            for event in (getattr(result, "important_events", None) or [])
+        ],
         "what_to_watch": getattr(result, "what_to_watch", ""),
     }
     # Optional per-ticker snapshot for UI: price + span-aware percent change.
@@ -283,6 +289,9 @@ def _report_to_brief_item(ex: Execution, report: Report, slot: str) -> DigestBri
     priority_tickers = meta.get("priority_tickers") or []
     if not isinstance(priority_tickers, list):
         priority_tickers = []
+    important_events = meta.get("important_events") or []
+    if not isinstance(important_events, list):
+        important_events = []
     user_note = meta.get("user_note")
     narrative_style = meta.get("narrative_style")
     user_focus_tickers = meta.get("user_focus_tickers") or None
@@ -301,6 +310,7 @@ def _report_to_brief_item(ex: Execution, report: Report, slot: str) -> DigestBri
         span_type=span_type,
         span_label=span_label,
         priority_tickers=[str(t) for t in priority_tickers],
+        important_events=[event for event in important_events if isinstance(event, dict)],
         user_note=str(user_note) if user_note is not None else None,
         narrative_style=str(narrative_style) if narrative_style is not None else None,
         user_focus_tickers=[str(t) for t in (user_focus_tickers or [])] or None,

@@ -48,6 +48,27 @@ def _invoke_with_timeout(chain: Any, messages: list, timeout_seconds: int = 180)
 def _format_ticker_context(ctx: DigestContext, ticker: str) -> str:
     """Format the slice of DigestContext for one ticker as text for the prompt."""
     lines = []
+    event_summary = (getattr(ctx, "event_summaries", None) or {}).get(ticker)
+    if event_summary and getattr(event_summary, "events", None):
+        lines.append(f"Deterministic event score: {getattr(event_summary, 'event_score', 0.0)}")
+        lines.append("Detected events:")
+        for event in event_summary.events:
+            meta_parts = []
+            if getattr(event, "detected_on", None):
+                meta_parts.append(f"date={event.detected_on}")
+            if getattr(event, "strength", None):
+                meta_parts.append(f"strength={event.strength}")
+            if getattr(event, "metric_value", None) is not None:
+                meta_parts.append(f"metric={event.metric_value}")
+            if getattr(event, "threshold_value", None) is not None:
+                meta_parts.append(f"threshold={event.threshold_value}")
+            cross = (getattr(event, "metadata", {}) or {}).get("cross")
+            if cross:
+                meta_parts.append(f"cross={cross}")
+            label = f"- {event.event_type}"
+            if meta_parts:
+                label += f" [{', '.join(meta_parts)}]"
+            lines.append(label)
     q = (ctx.quotes or {}).get(ticker)
     if q:
         lines.append(f"Quote: {json.dumps(q, default=str)[:800]}")
