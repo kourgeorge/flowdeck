@@ -231,7 +231,7 @@ function CompactHeadline({ article }: { article: NewsArticle }) {
       href={article.link}
       target="_blank"
       rel="noopener noreferrer"
-      className="group rounded-2xl border border-slate-700/70 bg-slate-900/65 p-4 transition-colors hover:border-slate-500 hover:bg-slate-900"
+      className="group block rounded-2xl border border-slate-700/70 bg-slate-900/65 p-4 transition-colors hover:border-slate-500 hover:bg-slate-900"
     >
       <div className="flex items-center justify-between gap-3 text-xs text-slate-400">
         <span className="truncate font-medium text-slate-200">{article.publisher}</span>
@@ -308,45 +308,46 @@ const NewsWidget: React.FC<NewsWidgetProps> = ({ articles, ticker, onRetry, isLo
 
   return (
     <div className="rounded-2xl border border-slate-700/80 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800/95 shadow-[0_24px_80px_-42px_rgba(15,23,42,0.9)]">
-      <div className="border-b border-slate-700/70 px-5 py-5 sm:px-6">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+      <div className="border-b border-slate-700/70 px-5 py-4 sm:px-6">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-sky-300/80">News Deck</div>
-            <h3 className="mt-2 text-2xl font-semibold text-white">Latest coverage for {ticker}</h3>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-sky-300/80">News Deck</div>
+            <h3 className="mt-1 text-lg font-semibold text-white sm:text-xl">Latest coverage for {ticker}</h3>
+            <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400 sm:text-sm">
               Lead story, rapid-scan headlines, and source diversity in one practical view.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <div className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-300">
-              <span className="font-semibold text-white">{sortedArticles.length}</span> stories
+          <div className="flex flex-col gap-1.5 xl:items-end">
+            <div className="flex flex-wrap gap-1.5 xl:justify-end">
+              <div className="rounded-full border border-slate-700 bg-slate-900/70 px-2.5 py-1.5 text-xs text-slate-300">
+                <span className="font-semibold text-white">{sortedArticles.length}</span> stories
+              </div>
+              <div className="rounded-full border border-slate-700 bg-slate-900/70 px-2.5 py-1.5 text-xs text-slate-300">
+                <span className="font-semibold text-white">{publisherCount}</span> sources
+              </div>
+              <div className="rounded-full border border-slate-700 bg-slate-900/70 px-2.5 py-1.5 text-xs text-slate-300">
+                Latest {formatRelativeTime(leadArticle.published_timestamp)}
+              </div>
+              {isLoading && (
+                <div className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-1.5 text-xs text-sky-200">
+                  Refreshing feed...
+                </div>
+              )}
             </div>
-            <div className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-300">
-              <span className="font-semibold text-white">{publisherCount}</span> sources
-            </div>
-            <div className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-300">
-              Latest {formatRelativeTime(leadArticle.published_timestamp)}
-            </div>
-            {isLoading && (
-              <div className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm text-sky-200">
-                Refreshing feed...
+            {topPublishers.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 xl:justify-end">
+                {topPublishers.map((publisher) => (
+                  <span
+                    key={publisher}
+                    className="rounded-full border border-slate-700/90 bg-slate-800/80 px-2.5 py-1 text-[11px] font-medium text-slate-300"
+                  >
+                    {publisher}
+                  </span>
+                ))}
               </div>
             )}
           </div>
         </div>
-
-        {topPublishers.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {topPublishers.map((publisher) => (
-              <span
-                key={publisher}
-                className="rounded-full border border-slate-700/90 bg-slate-800/80 px-3 py-1.5 text-xs font-medium text-slate-300"
-              >
-                {publisher}
-              </span>
-            ))}
-          </div>
-        )}
 
         {errorMessage && (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
@@ -373,7 +374,7 @@ const NewsWidget: React.FC<NewsWidgetProps> = ({ articles, ticker, onRetry, isLo
             className="group overflow-hidden rounded-[1.6rem] border border-slate-700/75 bg-slate-900/70 transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-500"
           >
             <div className="relative">
-              <StoryThumbnail article={leadArticle} className="aspect-[16/9] w-full" />
+              <StoryThumbnail article={leadArticle} className="aspect-[16/7.4] w-full" />
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent" />
               <div className="absolute right-4 top-4">
                 <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-slate-950/70 px-3 py-1.5 text-xs font-medium text-white backdrop-blur">
@@ -391,13 +392,13 @@ const NewsWidget: React.FC<NewsWidgetProps> = ({ articles, ticker, onRetry, isLo
                 <span className="font-medium text-slate-200">{leadArticle.publisher}</span>
                 <span>{formatRelativeTime(leadArticle.published_timestamp)}</span>
               </div>
-              <h4 className="mt-4 text-2xl font-semibold leading-tight text-white transition-colors group-hover:text-sky-200 sm:text-[2rem]">
+              <h4 className="mt-4 text-lg font-semibold leading-tight text-white transition-colors group-hover:text-sky-200 sm:text-[1.45rem]">
                 {leadArticle.title}
               </h4>
-              <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-300 sm:text-[15px]">
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
                 {getSummary(leadArticle, ticker)}
               </p>
-              <div className="mt-5 flex flex-wrap items-center gap-3 text-sm text-slate-400">
+              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-400">
                 <span>{formatAbsoluteTime(leadArticle.published_timestamp, leadArticle.published_time)}</span>
                 <span className="hidden h-1 w-1 rounded-full bg-slate-600 sm:block" />
                 <span>Source: {leadArticle.publisher}</span>

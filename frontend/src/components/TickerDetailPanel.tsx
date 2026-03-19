@@ -51,6 +51,7 @@ const SIMILAR_STOCKS_PER_PAGE = 10;
 
 const MAIN_TAB_IDS = ['overview', 'fundamentals', 'sec-filings', 'insider-transactions', 'news', 'events', 'similar-stocks', 'ai-analysis'] as const;
 type MainTabId = (typeof MAIN_TAB_IDS)[number];
+const DEFAULT_MAIN_TAB: MainTabId = 'ai-analysis';
 
 function reportKeyFromParam(param: string | null): string | null {
   if (param === 'overview') return OVERVIEW_TAB_KEY;
@@ -63,6 +64,10 @@ function reportParamFromKey(key: string | null): string | null {
   if (key === CHAT_TAB_KEY) return 'chat';
   if (key) return key;
   return null;
+}
+
+function isMainTabId(value: string | null): value is MainTabId {
+  return !!value && MAIN_TAB_IDS.includes(value as MainTabId);
 }
 
 export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptionChange }: StockDetailPanelProps) {
@@ -86,7 +91,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const runDropdownRef = useRef<HTMLDivElement>(null);
   const [runDropdownPosition, setRunDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null);
   // END EXPERIMENTAL
-  const [activeTab, setActiveTab] = useState('ai-analysis');
+  const [activeTab, setActiveTab] = useState<MainTabId>(DEFAULT_MAIN_TAB);
   const [fundamentalsData, setFundamentalsData] = useState<string | object | null>(null);
   const [financialStatements, setFinancialStatements] = useState<any>(null);
   const [isLoadingFundamentals, setIsLoadingFundamentals] = useState(false);
@@ -163,7 +168,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     const tabParam = searchParams.get('tab');
     const subParam = searchParams.get('sub');
     const reportParam = searchParams.get('report');
-    if (tabParam && MAIN_TAB_IDS.includes(tabParam as MainTabId)) {
+    if (isMainTabId(tabParam)) {
       setActiveTab(tabParam);
       if (tabParam === 'fundamentals' && (subParam === 'charts' || subParam === 'statements')) {
         setFundamentalsSubTab(subParam);
@@ -223,7 +228,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     }
   }, [quoteType, activeTab, setSearchParams]);
 
-  const handleMainTabChange = useCallback((tabId: string) => {
+  const handleMainTabChange = useCallback((tabId: MainTabId) => {
     setActiveTab(tabId);
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
@@ -397,27 +402,36 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
 
   useEffect(() => {
     // Reset all per-ticker state
+    const requestedTab = searchParams.get('tab');
+    const nextTab: MainTabId = isMainTabId(requestedTab) ? requestedTab : DEFAULT_MAIN_TAB;
+    const nextSub = searchParams.get('sub');
+    const nextReport = searchParams.get('report');
+
     insiderFetchIdRef.current += 1;
     setCompanyInfo(null); setExtendedInfo(null); setFundamentalsData(null);
     setFinancialStatements(null); setNewsData([]); setNewsError(null); setInsiderTransactions([]);
     setInsiderTransactionsError(null); setIsLoadingInsiderTransactions(false); setHasLoadedInsiderTransactions(false);
     setCompanyOfficers([]); setIsLoadingOfficers(false); setHasLoadedCompanyOfficers(false);
-    setFundamentalsSubTab('charts'); setFundInfo(null);
+    setFundamentalsSubTab(nextTab === 'fundamentals' && (nextSub === 'charts' || nextSub === 'statements') ? nextSub : 'charts'); setFundInfo(null);
     setAnalysisProgress(null); setEdgarFilings(null); setEdgarFilingsError(null); setFutureEvents(null);
     setEventsData(null); setEventsError(undefined); setIsLoadingEvents(false);
     setSimilarTickers(null); setSimilarTickerPages({}); setSimilarHasMoreByPage({}); setSimilarStocksPage(1);
-    setActiveTab('ai-analysis'); setSelectedReport(null); setLoadError(null); setAnalysisError(null);
+    setActiveTab(nextTab);
+    setSelectedReport(nextTab === 'ai-analysis' ? (reportKeyFromParam(nextReport) ?? null) : null);
+    setLoadError(null); setAnalysisError(null);
     setIsStartingAnalysis(false);
     // EXPERIMENTAL: reset historical run state
     setSelectedRunId(null); setHistoricalReportsData(null);
     // END EXPERIMENTAL
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.set('tab', 'ai-analysis');
-      next.delete('sub');
-      next.delete('report');
-      return next;
-    }, { replace: true });
+    if (!isMainTabId(requestedTab)) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('tab', DEFAULT_MAIN_TAB);
+        next.delete('sub');
+        next.delete('report');
+        return next;
+      }, { replace: true });
+    }
     if (wsClientRef.current) { wsClientRef.current.disconnect(); wsClientRef.current = null; }
 
     if (prefetchedData) {
@@ -975,15 +989,46 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                   { id: 'ai-analysis', label: 'AI Analysis' },
                 ].map((tab) => {
                   const isActive = activeTab === tab.id;
-                  const isBlueTab = tab.id === 'ai-analysis' || tab.id === 'similar-stocks';
+                  const isBlueTab = tab.id === 'ai-analysis';
+                  const isSimilarStocksTab = tab.id === 'similar-stocks';
+                  const isPlatformDataTab = tab.id === 'events';
                   return (
-                    <button key={tab.id} onClick={() => handleMainTabChange(tab.id)}
+                    <button key={tab.id} onClick={() => handleMainTabChange(tab.id as MainTabId)}
                       className={`px-3 py-2 text-sm rounded-t-lg transition-colors border-b-2 -mb-px ${
                         isActive
-                          ? isBlueTab ? 'bg-blue-950/70 text-blue-200 border-blue-500 font-semibold' : 'bg-gray-800 text-white border-blue-500 font-medium'
-                          : isBlueTab ? 'bg-blue-950/40 text-blue-200 hover:text-white hover:bg-blue-950/60 border-blue-700/50 font-semibold' : 'text-gray-400 hover:text-white hover:bg-gray-800/70 border-transparent font-medium'
+                          ? isBlueTab
+                            ? 'bg-indigo-950/70 text-indigo-200 border-indigo-500 font-semibold'
+                            : isSimilarStocksTab
+                              ? 'bg-blue-950/70 text-blue-200 border-blue-500 font-semibold'
+                            : isPlatformDataTab
+                              ? 'bg-sky-950/70 text-sky-200 border-sky-500 font-semibold'
+                              : 'bg-gray-800 text-white border-blue-500 font-medium'
+                          : isBlueTab
+                            ? 'bg-indigo-950/40 text-indigo-200 hover:text-white hover:bg-indigo-950/60 border-indigo-700/50 font-semibold'
+                            : isSimilarStocksTab
+                              ? 'bg-blue-950/40 text-blue-200 hover:text-white hover:bg-blue-950/60 border-blue-700/50 font-semibold'
+                            : isPlatformDataTab
+                              ? 'bg-sky-950/30 text-sky-200 hover:text-white hover:bg-sky-950/50 border-sky-700/50 font-semibold'
+                              : 'text-gray-400 hover:text-white hover:bg-gray-800/70 border-transparent font-medium'
                       }`}>
                       <span className="inline-flex items-center gap-1.5">
+                        {tab.id === 'events' && (
+                          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 18h16M7 15l3-3 3 2 4-5" />
+                            <circle cx="7" cy="15" r="1.2" fill="currentColor" stroke="none" />
+                            <circle cx="10" cy="12" r="1.2" fill="currentColor" stroke="none" />
+                            <circle cx="13" cy="14" r="1.2" fill="currentColor" stroke="none" />
+                            <circle cx="17" cy="9" r="1.2" fill="currentColor" stroke="none" />
+                          </svg>
+                        )}
+                        {tab.id === 'similar-stocks' && (
+                          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 7h8M8 12h8M8 17h5" />
+                            <circle cx="6" cy="7" r="1.2" fill="currentColor" stroke="none" />
+                            <circle cx="18" cy="12" r="1.2" fill="currentColor" stroke="none" />
+                            <circle cx="6" cy="17" r="1.2" fill="currentColor" stroke="none" />
+                          </svg>
+                        )}
                         {tab.id === 'ai-analysis' && (
                           <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <rect x="7" y="7" width="10" height="10" rx="2" strokeWidth={1.8} />

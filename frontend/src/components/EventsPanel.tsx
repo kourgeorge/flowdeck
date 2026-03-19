@@ -70,6 +70,9 @@ const STRENGTH_BADGES: Record<string, string> = {
   high: 'bg-red-900/40 text-red-200 border-red-700/50',
 };
 
+const PANEL_SHELL =
+  'rounded-lg border border-sky-700/40 bg-gradient-to-br from-slate-950 via-sky-950/55 to-blue-950/40 shadow-[0_0_0_1px_rgba(56,189,248,0.05)]';
+
 function formatMetricValue(value: number | null, eventType: string): string {
   if (value === null) return '—';
   
@@ -123,7 +126,7 @@ export default function EventsPanel({
 
   if (error) {
     return (
-      <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+      <div className={`${PANEL_SHELL} p-4`}>
         <div className="flex items-center gap-3 text-red-400">
           <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -136,11 +139,11 @@ export default function EventsPanel({
 
   if (isLoading) {
     return (
-      <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 space-y-4 animate-pulse">
-        <div className="h-6 bg-gray-700 rounded w-40" />
+      <div className={`${PANEL_SHELL} p-4 space-y-4 animate-pulse`}>
+        <div className="h-6 bg-sky-900/40 rounded w-40" />
         <div className="space-y-2">
-          <div className="h-4 bg-gray-700 rounded w-full" />
-          <div className="h-4 bg-gray-700 rounded w-5/6" />
+          <div className="h-4 bg-sky-900/30 rounded w-full" />
+          <div className="h-4 bg-sky-900/30 rounded w-5/6" />
         </div>
       </div>
     );
@@ -149,23 +152,33 @@ export default function EventsPanel({
   return (
     <div className="space-y-4">
       {/* Score Summary */}
-      <div className="bg-gradient-to-r from-gray-900/50 to-gray-800/50 rounded-lg border border-gray-700 p-5">
+      <div className={`${PANEL_SHELL} p-5`}>
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-300/80">Platform Data</p>
+            <p className="text-sm text-sky-100/80 mt-1">Deterministic events generated from cached FlowDeck processing.</p>
+          </div>
+          <div className="hidden sm:flex items-center gap-2 rounded-full border border-sky-700/50 bg-sky-950/50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-200">
+            <span className="h-2 w-2 rounded-full bg-sky-400" />
+            Event Layer
+          </div>
+        </div>
         <div className="grid grid-cols-3 gap-4">
           <div>
-            <p className="text-xs text-gray-400 mb-1">Event Score</p>
+            <p className="text-xs text-sky-100/60 mb-1">Event Score</p>
             <p className={`text-3xl font-bold ${scoreColor}`}>{eventScore.toFixed(1)}</p>
-            <p className="text-xs text-gray-400 mt-1">{scoreLabel}</p>
+            <p className="text-xs text-sky-100/60 mt-1">{scoreLabel}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-400 mb-1">Total Events</p>
-            <p className="text-3xl font-bold text-blue-400">{events.length}</p>
-            <p className="text-xs text-gray-400 mt-1">{events.length === 1 ? 'event' : 'events'}</p>
+            <p className="text-xs text-sky-100/60 mb-1">Total Events</p>
+            <p className="text-3xl font-bold text-sky-300">{events.length}</p>
+            <p className="text-xs text-sky-100/60 mt-1">{events.length === 1 ? 'event' : 'events'}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-400 mb-1">Dominant Signals</p>
+            <p className="text-xs text-sky-100/60 mb-1">Dominant Signals</p>
             <div className="flex flex-wrap gap-1 mt-2">
               {dominantEvents.slice(0, 3).map((eventType) => (
-                <span key={eventType} className="inline-block text-xs px-2 py-1 rounded bg-blue-900/40 text-blue-200 border border-blue-700/50">
+                <span key={eventType} className="inline-block text-xs px-2 py-1 rounded bg-sky-900/40 text-sky-100 border border-sky-700/50">
                   {EVENT_ICONS[eventType] ?? '•'} {eventType.split('_').slice(0, 2).join(' ')}
                 </span>
               ))}
@@ -241,12 +254,12 @@ export default function EventsPanel({
           ))}
         </div>
       ) : (
-        <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 text-center">
-          <svg className="w-12 h-12 text-gray-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className={`${PANEL_SHELL} p-8 text-center`}>
+          <svg className="w-12 h-12 text-sky-700 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
-          <p className="text-gray-400 text-sm">No significant events detected for {ticker}</p>
-          <p className="text-gray-500 text-xs mt-2">Market conditions appear stable</p>
+          <p className="text-sky-100/80 text-sm">No significant events detected for {ticker}</p>
+          <p className="text-sky-200/50 text-xs mt-2">The platform event layer did not flag a notable signal.</p>
         </div>
       )}
     </div>
