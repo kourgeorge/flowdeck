@@ -140,20 +140,20 @@ function getMoverTheme(changeColor: 'gainers' | 'losers' | 'neutral') {
     return {
       dot: 'bg-emerald-600',
       glow: 'bg-emerald-950/20',
-      badge: 'border-emerald-900/40 bg-emerald-950/40 text-emerald-300',
+      text: 'text-emerald-300',
     };
   }
   if (changeColor === 'losers') {
     return {
       dot: 'bg-red-700',
       glow: 'bg-red-950/20',
-      badge: 'border-red-900/40 bg-red-950/40 text-red-300',
+      text: 'text-red-300',
     };
   }
   return {
     dot: 'bg-sky-400',
     glow: 'bg-sky-400/[0.04]',
-    badge: 'border-sky-400/20 bg-sky-400/10 text-sky-200',
+    text: 'text-sky-200',
   };
 }
 
@@ -495,7 +495,7 @@ function MoversTable({
               const clickable = onSelectTicker && sym;
               const pct = row.regularMarketChangePercent ?? null;
               const rowTone = changeColor === 'neutral' ? getChangeSurface(pct) : null;
-              const changeBadgeClass = rowTone ? rowTone.badge : theme.badge;
+              const changeTextClass = rowTone ? rowTone.text : theme.text;
               return (
                 <tr
                   key={sym || i}
@@ -505,8 +505,8 @@ function MoversTable({
                   <td className="px-3 py-2.5 font-medium text-white tabular-nums">
                     {sym || '—'}
                   </td>
-                  <td className="px-3 py-2.5 text-right">
-                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold tabular-nums ${changeBadgeClass}`}>
+                  <td className={`px-3 py-2.5 text-right text-[12px] font-medium tabular-nums ${changeTextClass}`}>
+                    <span>
                       {formatPct(row.regularMarketChangePercent)}
                     </span>
                   </td>
