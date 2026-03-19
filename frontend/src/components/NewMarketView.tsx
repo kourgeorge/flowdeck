@@ -483,9 +483,9 @@ function MoversTable({
             <tr className="border-b border-gray-700 text-slate-400">
               <th className="px-3 py-2 font-medium text-[10px] uppercase tracking-[0.14em]">Ticker</th>
               <th className="px-3 py-2 font-medium text-[10px] uppercase tracking-[0.14em] text-right">Change</th>
-              <th className="px-3 py-2 font-medium text-[10px] uppercase tracking-[0.14em]">Company</th>
               <th className="px-3 py-2 font-medium text-[10px] uppercase tracking-[0.14em] text-right">Price</th>
               <th className="px-3 py-2 font-medium text-[10px] uppercase tracking-[0.14em] text-right">Volume</th>
+              <th className="px-3 py-2 font-medium text-[10px] uppercase tracking-[0.14em]">Company</th>
               <th className="px-3 py-2 font-medium text-[10px] uppercase tracking-[0.14em]">Sector</th>
             </tr>
           </thead>
@@ -510,16 +510,19 @@ function MoversTable({
                       {formatPct(row.regularMarketChangePercent)}
                     </span>
                   </td>
-                  <td className="px-3 py-2.5">
-                    <div className="truncate text-[12px] text-slate-300" title={row.shortName ?? undefined}>
-                      {row.shortName || '—'}
-                    </div>
-                  </td>
                   <td className="px-3 py-2.5 text-right text-[12px] tabular-nums text-slate-200">
                     {formatPrice(row.regularMarketPrice)}
                   </td>
                   <td className="px-3 py-2.5 text-right text-[12px] tabular-nums text-slate-400">
                     {formatVolume(row.regularMarketVolume)}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <div className="truncate text-[12px] text-slate-300" title={row.shortName ?? undefined}>
+                      {row.shortName || '—'}
+                    </div>
+                    <div className="mt-0.5 truncate text-[11px] text-slate-500" title={row.industry ?? undefined}>
+                      {row.industry || '—'}
+                    </div>
                   </td>
                   <td className="px-3 py-2.5 text-[12px] text-slate-400">
                     <div className="truncate" title={row.sector ?? undefined}>
