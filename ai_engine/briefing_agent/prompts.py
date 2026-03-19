@@ -144,18 +144,18 @@ def get_normalized_narrative_style(narrative_style: Optional[str]) -> Optional[s
 
 
 # Shared narrative-writing instructions. Style prompts are appended to this block.
-BASIC_NARRATIVE_WRITING_PROMPT = """Write the brief as valid Markdown. Write a short, narrative brief that starts with the overall market backdrop, notable movers, and important recent news, then connects that context to the user's holdings when relevant. When making a company-specific or stock-specific claim, explicitly name the relevant ticker symbol the claim refers to. If there are no ticker interpretations, write a market-only brief."""
+BASIC_NARRATIVE_WRITING_PROMPT = """Write the brief as valid Markdown. Write a short, narrative brief that starts with the overall market backdrop, notable movers, and important recent news, then connects that context to the user's holdings when relevant. Keep every sentence short, clear, and specific. Prefer one idea per sentence. Split dense explanations into multiple short sentences instead of one long sentence with many clauses. Prefer bullet lists to convey messages. Prefer Markdown tables when showing compact data, comparisons, levels, dates, or other structured facts. When making a company-specific or stock-specific claim, explicitly name the relevant ticker symbol the claim refers to. If there are no ticker interpretations, write a market-only brief."""
 
 
 # Default style overlay when no style or unknown style is provided.
-DEFAULT_NARRATIVE_STYLE_PROMPT = f"""Use a conversational but informative tone. Keep the output as valid Markdown. End with a brief "What to watch" section (2–4 sentences) highlighting what the user should monitor next.
+DEFAULT_NARRATIVE_STYLE_PROMPT = f"""Use a conversational but informative tone. Keep the output as valid Markdown. Use short, direct sentences and avoid long multi-clause phrasing. Prefer bullet lists over prose paragraphs when practical. Use short paragraphs of 1–2 sentences only when bullets would read worse. Prefer Markdown tables for compact data. End with a brief "What to watch" section (2–4 sentences) highlighting what the user should monitor next.
 
 {_OUTPUT_FIELDS_BASIC}"""
 
 
 # Style name (lowercase) -> style overlay appended to the base narrative-writing prompt.
 NARRATIVE_STYLE_PROMPTS: Dict[str, str] = {
-    "balanced": f"""**Style overlay: Balanced.** Mix context with actionable takeaways. Cover what happened and what it means without leaning too narrative or too terse. Suitable for readers who want both story and next steps in one flow. Keep to a few paragraphs plus a short forward-looking close. Return valid Markdown.
+    "balanced": f"""**Style overlay: Balanced.** Mix context with actionable takeaways. Cover what happened and what it means without leaning too narrative or too terse. Suitable for readers who want both story and next steps in one flow. Prefer bullet lists for key messages. Use a short paragraph only when it improves flow. Use short, concrete sentences and prefer one idea per sentence. Use Markdown tables for compact factual summaries. Return valid Markdown.
 
 {_basic_tail()}""",
     "concise": f"""**Style overlay: Concise.** Short and scannable. Lead with the market backdrop, the most important movers, and the main implications; cut filler and repetition. Suitable for busy readers who want the gist in under a minute.
@@ -168,12 +168,12 @@ Write the brief in exactly four sections, and make each section a valid Markdown
 4. **Risks & Opportunities** — The clearest downside risks and upside setups from here.
 
 {_OUTPUT_FIELDS_STRUCTURED}""",
-    "professional": f"""**Style overlay: Professional.** Formal, measured tone. Open with a high-level market summary, then move to portfolio implications. Emphasize clarity and objectivity; avoid colloquialisms and hype. Suitable for institutional or advisory contexts. Structure as a brief report: context, interpretation, and forward-looking view. Return valid Markdown.
+    "professional": f"""**Style overlay: Professional.** Formal, measured tone. Open with a high-level market summary, then move to portfolio implications. Emphasize clarity and objectivity; avoid colloquialisms and hype. Suitable for institutional or advisory contexts. Structure as a brief report: context, interpretation, and forward-looking view. Prefer bullet lists for key messages and Markdown tables for compact facts. Use short, precise sentences and avoid long paragraph-length sentences. Return valid Markdown.
 
 {_basic_tail()}""",
-    "technical": f"""**Style overlay: Technical.** Use precise language; focus on data, levels, and catalysts. Suitable for active traders who want a clear, scannable structure. Return valid Markdown.
+    "technical": f"""**Style overlay: Technical.** Use precise language; focus on data, levels, and catalysts. Suitable for active traders who want a clear, scannable structure. Prefer bullet lists and small Markdown tables when presenting levels, dates, catalysts, or comparisons. Keep sentences short, explicit, and highly specific. Return valid Markdown.
 
-Write the brief in exactly four sections, each as a short block of text (a few sentences). Avoid long bullet lists. Each section will be stored with the special tokens market_highlights, key_signals, what_to_watch, risks_opportunities so that formatting can be applied by section.
+Write the brief in exactly four sections, each as a short block of text made of 2–4 short sentences. Prefer one sentence per line when possible. Avoid long bullet lists and avoid long multi-clause sentences. Each section will be stored with the special tokens market_highlights, key_signals, what_to_watch, risks_opportunities so that formatting can be applied by section.
 
 1. **Market Highlights** — What happened (key price moves, headlines, and market action in the period).
 2. **Key Signals** — What it means (interpretation: drivers, themes, and implications for the user's portfolio).
@@ -186,6 +186,7 @@ Write the brief in exactly four sections, each as a short block of text (a few s
 NARRATIVE_WRITER_SYSTEM = """You are the writer for a short User Daily Brief. You receive:
 - Per-ticker interpretations (explanation, driver, thesis comparison) for the user's priority holdings.
 - A market interpretation (overall backdrop and relevance to the portfolio).
+- A deterministic Important Events list extracted from the portfolio context, when available.
 - The user's saved investor profile and AI memory, when available.
 - An optional user note with explicit preferences for this brief.
 - A summary of the main points already covered in the user's last few briefs, when available.
@@ -200,7 +201,9 @@ Hard requirements:
 - If the user note requests emphasis, focus, or constraints, reflect that clearly in the brief unless it conflicts with the required format or the available evidence.
 - Always anchor the brief in the market interpretation first. The reader should immediately understand what is happening in the market overall.
 - Include notable movers and important recent news when they are available.
+- Prefer bullet lists to convey messages. Prefer Markdown tables when presenting compact factual data or comparisons.
 - When the brief references specific movers, include the company name and ticker if available.
+- When the Important Events list is provided, treat it as preferred evidence for company-specific points and refer to specific events by ticker and event name when relevant.
 - If ticker interpretations exist, use them to personalize the brief after the market-level summary.
 - If ticker interpretations do not exist, still produce a complete market briefing rather than a placeholder.
 - If a recent-briefs summary is provided, use it for continuity and avoid repeating those already-covered points unless today's evidence materially changes them or they remain central with a genuinely new angle."""
@@ -247,6 +250,7 @@ def build_narrative_writer_prompt(
     ticker_interpretations_text: str,
     market_interpretation_text: str,
     tool_names: list[str],
+    important_events_text: Optional[str] = None,
     user_context_snapshot: Optional[str] = None,
     user_note: Optional[str] = None,
     narrative_style: Optional[str] = None,
@@ -270,6 +274,14 @@ def build_narrative_writer_prompt(
             f"{user_note[:1500]}"
         )
 
+    important_events_block = ""
+    if important_events_text:
+        important_events_block = (
+            "\n\n## Important events\n"
+            "Use these deterministic events as the primary evidence for company-specific references whenever they are relevant.\n"
+            f"{important_events_text[:2500]}"
+        )
+
     recent_briefs_block = ""
     if recent_briefs_summary:
         recent_briefs_block = (
@@ -290,7 +302,7 @@ def build_narrative_writer_prompt(
 {ticker_interpretations_text}
 
 ## Market interpretation
-{market_interpretation_text}{period_block}{user_profile_block}{user_note_block}{recent_briefs_block}{resources_block}
+{market_interpretation_text}{period_block}{important_events_block}{user_profile_block}{user_note_block}{recent_briefs_block}{resources_block}
 
 ## Narrative prompt composition
 {narrative_prompt_instructions}

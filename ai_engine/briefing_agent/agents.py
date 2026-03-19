@@ -14,6 +14,8 @@ from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import HumanMessage
 
+from backend.processing import build_important_events
+
 from .state import DigestContext, DigestWorkflowState, MarketInterpretation, TickerInterpretation, FocusSelection, ReferenceItem
 from . import prompts
 
@@ -446,10 +448,32 @@ def run_narrative_writer(
             resources_lines.append(str(ctx.web_search_snippet)[:400])
 
     resources_text = "\n".join(resources_lines) if resources_lines else ""
+    important_events_text = ""
+    if ctx:
+        important_events = build_important_events(
+            getattr(ctx, "event_summaries", {}) or {},
+            ticker_order=ctx.priority_tickers,
+        )
+        important_event_lines: List[str] = []
+        for item in important_events:
+            event = item.event
+            details: List[str] = [f"importance={item.importance_score}", f"strength={event.strength}"]
+            if event.detected_on:
+                details.append(f"date={event.detected_on}")
+            if event.metric_value is not None:
+                details.append(f"metric={event.metric_value}")
+            if event.threshold_value is not None:
+                details.append(f"threshold={event.threshold_value}")
+            important_event_lines.append(
+                f"- {item.ticker}: {event.event_type} ({'; '.join(details)}) — {event.description}"
+            )
+        important_events_text = "\n".join(important_event_lines)
+
     prompt_text = prompts.build_narrative_writer_prompt(
         ticker_interpretations_text=ticker_interpretations_text,
         market_interpretation_text=market_interpretation_text,
         tool_names=["get_ticker_quote", "get_platform_reports"],
+        important_events_text=important_events_text or None,
         user_context_snapshot=ctx.user_context_snapshot if ctx else None,
         user_note=state.user_note,
         narrative_style=state.narrative_style,

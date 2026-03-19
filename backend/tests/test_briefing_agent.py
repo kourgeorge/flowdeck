@@ -126,6 +126,55 @@ class TestRunDigest(unittest.TestCase):
         mock_market.assert_called_once()
         mock_narrative.assert_called_once()
 
+    @patch("ai_engine.briefing_agent.runner.run_narrative_writer", return_value=("Market-only brief", "Watch rates and breadth."))
+    @patch(
+        "ai_engine.briefing_agent.runner.run_recent_briefs_summarizer",
+        return_value="Recent briefs emphasized rates and breadth.",
+    )
+    @patch(
+        "ai_engine.briefing_agent.runner.run_market_interpreter",
+        return_value=MarketInterpretation(
+            summary="Stocks were mixed as macro data dominated.",
+            relevance_to_portfolio="This matters for broad equity exposure.",
+        ),
+    )
+    @patch("ai_engine.briefing_agent.runner.run_ticker_interpreter", return_value={})
+    @patch("ai_engine.briefing_agent.runner.run_focus_selector", return_value=None)
+    @patch("ai_engine.briefing_agent.runner.get_config_from_env", return_value={})
+    @patch(
+        "ai_engine.briefing_agent.runner.get_llm",
+        side_effect=["quick-llm", "deep-llm"],
+    )
+    @patch(
+        "ai_engine.briefing_agent.runner.build_digest_context",
+        return_value=DigestContext(
+            tickers=[],
+            priority_tickers=[],
+            market_movers={"gainers": [{"symbol": "NVDA"}]},
+            global_news={"items": ["Fed"]},
+            web_search_snippet="Macro snippet",
+        ),
+    )
+    def test_run_digest_uses_deep_model_only_for_narrative_writer(
+        self,
+        _mock_context,
+        mock_get_llm,
+        _mock_config,
+        _mock_focus,
+        _mock_ticker,
+        mock_market,
+        mock_recent_summary,
+        mock_narrative,
+    ) -> None:
+        result = run_digest(user_id=7, digest_date="2026-03-16", db=object())
+
+        self.assertEqual(mock_get_llm.call_args_list[0].args[:2], ("quick", {}))
+        self.assertEqual(mock_get_llm.call_args_list[1].args[:2], ("deep", {}))
+        mock_market.assert_called_once_with(unittest.mock.ANY, "quick-llm")
+        mock_recent_summary.assert_called_once_with(unittest.mock.ANY, "quick-llm")
+        mock_narrative.assert_called_once_with(unittest.mock.ANY, "deep-llm")
+        self.assertEqual(result.models_used["deep_think"], None)
+
     @patch("ai_engine.briefing_agent.runner.run_narrative_writer", return_value=("Market plus portfolio context", "Watch earnings and macro."))
     @patch(
         "ai_engine.briefing_agent.runner.run_market_interpreter",
@@ -246,6 +295,9 @@ class TestNarrativePromptComposition(unittest.TestCase):
         self.assertIn(prompts.BASIC_NARRATIVE_WRITING_PROMPT, instructions)
         self.assertIn("valid Markdown", instructions)
         self.assertIn("explicitly name the relevant ticker symbol", instructions)
+        self.assertIn("Keep every sentence short, clear, and specific", instructions)
+        self.assertIn("Prefer bullet lists to convey messages", instructions)
+        self.assertIn("Prefer Markdown tables", instructions)
         self.assertIn("### Style prompt", instructions)
         self.assertIn(prompts.DEFAULT_NARRATIVE_STYLE_PROMPT, instructions)
 
@@ -254,6 +306,8 @@ class TestNarrativePromptComposition(unittest.TestCase):
 
         self.assertIn(prompts.BASIC_NARRATIVE_WRITING_PROMPT, instructions)
         self.assertIn(prompts.NARRATIVE_STYLE_PROMPTS["technical"], instructions)
+        self.assertIn("Keep sentences short, explicit, and highly specific", instructions)
+        self.assertIn("2–4 short sentences", instructions)
         self.assertNotIn(prompts.DEFAULT_NARRATIVE_STYLE_PROMPT, instructions)
 
     def test_concise_prompt_requests_bulleted_sections(self) -> None:
@@ -266,6 +320,15 @@ class TestNarrativePromptComposition(unittest.TestCase):
         self.assertIn("Market Highlights", instructions)
         self.assertIn("Risks & Opportunities", instructions)
 
+    def test_balanced_and_professional_prompts_require_short_specific_sentences(self) -> None:
+        balanced = prompts.build_narrative_prompt_instructions("balanced")
+        professional = prompts.build_narrative_prompt_instructions("professional")
+
+        self.assertIn("Use short, concrete sentences and prefer one idea per sentence", balanced)
+        self.assertIn("Prefer bullet lists for key messages", balanced)
+        self.assertIn("Use short, precise sentences", professional)
+        self.assertIn("Markdown tables for compact facts", professional)
+
     def test_concise_uses_structured_output(self) -> None:
         self.assertTrue(prompts.style_uses_structured_output("concise"))
 
@@ -273,6 +336,9 @@ class TestNarrativePromptComposition(unittest.TestCase):
         self.assertIn("Return valid Markdown only.", prompts.NARRATIVE_WRITER_SYSTEM)
         self.assertIn("Treat the user note as a high-priority instruction", prompts.NARRATIVE_WRITER_SYSTEM)
         self.assertIn("If the user note requests a language, write the entire brief in that language.", prompts.NARRATIVE_WRITER_SYSTEM)
+        self.assertIn("Prefer bullet lists to convey messages", prompts.NARRATIVE_WRITER_SYSTEM)
+        self.assertIn("Prefer Markdown tables", prompts.NARRATIVE_WRITER_SYSTEM)
+        self.assertIn("Important Events list is provided, treat it as preferred evidence", prompts.NARRATIVE_WRITER_SYSTEM)
 
     def test_narrative_writer_prompt_marks_user_note_high_priority(self) -> None:
         prompt = prompts.build_narrative_writer_prompt(
@@ -300,6 +366,22 @@ class TestNarrativePromptComposition(unittest.TestCase):
         self.assertIn("## Summary of recent briefs", prompt)
         self.assertIn("Avoid repeating them unless today's evidence materially changes them", prompt)
         self.assertIn("Recent briefs already emphasized rates pressure", prompt)
+
+    def test_narrative_writer_prompt_includes_important_events(self) -> None:
+        prompt = prompts.build_narrative_writer_prompt(
+            ticker_interpretations_text="### AAPL\n- Explanation: Apple moved higher.",
+            market_interpretation_text="Summary: Mixed session\nRelevance to portfolio: Relevant.",
+            tool_names=["get_ticker_quote"],
+            important_events_text=(
+                "- AAPL: price_spike_up (importance=4.0; strength=high; date=2026-03-16) "
+                "— The stock rose sharply in a single session relative to its recent normal movement."
+            ),
+            period_label="today",
+        )
+
+        self.assertIn("## Important events", prompt)
+        self.assertIn("Use these deterministic events as the primary evidence", prompt)
+        self.assertIn("AAPL: price_spike_up", prompt)
 
     def test_prompts_include_saved_user_profile_context(self) -> None:
         snapshot = "Persona Type: investor\nPreferred AI Style: technical\nSaved AI Memory: Avoid leverage."

@@ -274,7 +274,8 @@ def run_digest(
             ctx.user_context_snapshot
         )
 
-    llm = get_llm("quick", cfg)
+    quick_llm = get_llm("quick", cfg)
+    deep_llm = get_llm("deep", cfg)
 
     # Track token usage where supported (OpenAI/Azure via LangChain callbacks).
     input_tokens: Optional[int] = None
@@ -290,21 +291,21 @@ def run_digest(
     if get_openai_callback is not None:
         with get_openai_callback() as cb:  # type: ignore[misc]
             logger.info("Digest: running focus selector")
-            focus_tickers = run_focus_selector(state, llm)
+            focus_tickers = run_focus_selector(state, quick_llm)
             if focus_tickers:
                 ctx.priority_tickers = focus_tickers
 
             logger.info("Digest: running ticker interpreter for %d tickers", len(ctx.priority_tickers))
-            state.ticker_interpretations = run_ticker_interpreter(state, llm)
+            state.ticker_interpretations = run_ticker_interpreter(state, quick_llm)
 
             logger.info("Digest: running market interpreter")
-            state.market_interpretation = run_market_interpreter(state, llm)
+            state.market_interpretation = run_market_interpreter(state, quick_llm)
 
             logger.info("Digest: summarizing recent briefs")
-            state.recent_briefs_summary = run_recent_briefs_summarizer(state, llm)
+            state.recent_briefs_summary = run_recent_briefs_summarizer(state, quick_llm)
 
             logger.info("Digest: running narrative writer")
-            narrative, what_to_watch = run_narrative_writer(state, llm)
+            narrative, what_to_watch = run_narrative_writer(state, deep_llm)
 
         input_tokens = getattr(cb, "prompt_tokens", None)
         output_tokens = getattr(cb, "completion_tokens", None)
@@ -312,21 +313,21 @@ def run_digest(
         cost_usd = getattr(cb, "total_cost", None)
     else:
         logger.info("Digest: running focus selector")
-        focus_tickers = run_focus_selector(state, llm)
+        focus_tickers = run_focus_selector(state, quick_llm)
         if focus_tickers:
             ctx.priority_tickers = focus_tickers
 
         logger.info("Digest: running ticker interpreter for %d tickers", len(ctx.priority_tickers))
-        state.ticker_interpretations = run_ticker_interpreter(state, llm)
+        state.ticker_interpretations = run_ticker_interpreter(state, quick_llm)
 
         logger.info("Digest: running market interpreter")
-        state.market_interpretation = run_market_interpreter(state, llm)
+        state.market_interpretation = run_market_interpreter(state, quick_llm)
 
         logger.info("Digest: summarizing recent briefs")
-        state.recent_briefs_summary = run_recent_briefs_summarizer(state, llm)
+        state.recent_briefs_summary = run_recent_briefs_summarizer(state, quick_llm)
 
         logger.info("Digest: running narrative writer")
-        narrative, what_to_watch = run_narrative_writer(state, llm)
+        narrative, what_to_watch = run_narrative_writer(state, deep_llm)
 
     state.digest_narrative = narrative
     state.what_to_watch = what_to_watch
@@ -363,6 +364,7 @@ def run_digest(
     models_used = {
         "provider": cfg.get("llm_provider"),
         "quick_think": cfg.get("quick_think_llm"),
+        "deep_think": cfg.get("deep_think_llm"),
     }
     important_events = build_important_events(
         getattr(ctx, "event_summaries", {}) or {},
