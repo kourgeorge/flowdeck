@@ -27,6 +27,11 @@ type MappedItem = OverviewItem & {
   category: 'region' | 'anchor';
 };
 
+type CountryFlagMeta = {
+  code: string;
+  label: string;
+};
+
 const REGION_META: Record<string, RegionMeta> = {
   '^GSPC': { coords: [-74.01, 40.71], location: 'New York, United States', market: 'S&P 500 anchor' },
   '^DJI': { coords: [-73.97, 40.75], location: 'New York, United States', market: 'Dow Jones anchor' },
@@ -108,6 +113,58 @@ const REGION_META: Record<string, RegionMeta> = {
 
 const PRIMARY_TICKERS = new Set(['^GSPC', '^IXIC', '^VIX', '^JN0U.JO']);
 
+const COUNTRY_BY_TICKER_OVERRIDES: Record<string, CountryFlagMeta> = {
+  '^NZ50': { code: 'NZ', label: 'New Zealand' },
+  ENZL: { code: 'NZ', label: 'New Zealand' },
+};
+
+const COUNTRY_MATCHES: Array<CountryFlagMeta & { match: string }> = [
+  { match: 'hong kong', code: 'HK', label: 'Hong Kong' },
+  { match: 'united states', code: 'US', label: 'United States' },
+  { match: 'israel', code: 'IL', label: 'Israel' },
+  { match: 'saudi arabia', code: 'SA', label: 'Saudi Arabia' },
+  { match: 'united arab emirates', code: 'AE', label: 'United Arab Emirates' },
+  { match: 'qatar', code: 'QA', label: 'Qatar' },
+  { match: 'bahrain', code: 'BH', label: 'Bahrain' },
+  { match: 'kuwait', code: 'KW', label: 'Kuwait' },
+  { match: 'united kingdom', code: 'GB', label: 'United Kingdom' },
+  { match: 'germany', code: 'DE', label: 'Germany' },
+  { match: 'france', code: 'FR', label: 'France' },
+  { match: 'belgium', code: 'BE', label: 'Belgium' },
+  { match: 'spain', code: 'ES', label: 'Spain' },
+  { match: 'netherlands', code: 'NL', label: 'Netherlands' },
+  { match: 'switzerland', code: 'CH', label: 'Switzerland' },
+  { match: 'sweden', code: 'SE', label: 'Sweden' },
+  { match: 'austria', code: 'AT', label: 'Austria' },
+  { match: 'denmark', code: 'DK', label: 'Denmark' },
+  { match: 'finland', code: 'FI', label: 'Finland' },
+  { match: 'greece', code: 'GR', label: 'Greece' },
+  { match: 'ireland', code: 'IE', label: 'Ireland' },
+  { match: 'norway', code: 'NO', label: 'Norway' },
+  { match: 'japan', code: 'JP', label: 'Japan' },
+  { match: 'singapore', code: 'SG', label: 'Singapore' },
+  { match: 'australia', code: 'AU', label: 'Australia' },
+  { match: 'south korea', code: 'KR', label: 'South Korea' },
+  { match: 'taiwan', code: 'TW', label: 'Taiwan' },
+  { match: 'india', code: 'IN', label: 'India' },
+  { match: 'indonesia', code: 'ID', label: 'Indonesia' },
+  { match: 'malaysia', code: 'MY', label: 'Malaysia' },
+  { match: 'china', code: 'CN', label: 'China' },
+  { match: 'thailand', code: 'TH', label: 'Thailand' },
+  { match: 'philippines', code: 'PH', label: 'Philippines' },
+  { match: 'vietnam', code: 'VN', label: 'Vietnam' },
+  { match: 'pakistan', code: 'PK', label: 'Pakistan' },
+  { match: 'turkey', code: 'TR', label: 'Turkey' },
+  { match: 'canada', code: 'CA', label: 'Canada' },
+  { match: 'brazil', code: 'BR', label: 'Brazil' },
+  { match: 'mexico', code: 'MX', label: 'Mexico' },
+  { match: 'chile', code: 'CL', label: 'Chile' },
+  { match: 'argentina', code: 'AR', label: 'Argentina' },
+  { match: 'colombia', code: 'CO', label: 'Colombia' },
+  { match: 'peru', code: 'PE', label: 'Peru' },
+  { match: 'south africa', code: 'ZA', label: 'South Africa' },
+];
+
 const MIN_RADIUS = 4;
 const MAX_RADIUS = 12;
 const MAX_CHANGE_FOR_SCALE = 5;
@@ -117,6 +174,21 @@ function getMeta(ticker: string | null | undefined): RegionMeta | null {
   const normalized = ticker?.trim();
   if (!normalized) return null;
   return REGION_META[normalized] ?? REGION_META[normalized.toUpperCase()] ?? null;
+}
+
+function countryCodeToFlagEmoji(code: string): string {
+  return code
+    .toUpperCase()
+    .replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)));
+}
+
+function getCountryFlagMeta(item: Pick<MappedItem, 'ticker' | 'location' | 'market'>): CountryFlagMeta | null {
+  const normalizedTicker = item.ticker.trim().toUpperCase();
+  const override = COUNTRY_BY_TICKER_OVERRIDES[normalizedTicker];
+  if (override) return override;
+
+  const haystack = `${item.location} ${item.market}`.toLowerCase();
+  return COUNTRY_MATCHES.find((entry) => haystack.includes(entry.match)) ?? null;
 }
 
 function toMappedItem(item: OverviewItem, category: 'region' | 'anchor'): MappedItem | null {
@@ -177,8 +249,8 @@ function getMarkerRadius(changePercent: number | null): number {
 function getTone(changePercent: number | null) {
   if (changePercent == null) {
     return {
-      badge: 'border-white/10 bg-white/[0.05] text-slate-300',
-      card: 'border-white/10 bg-slate-950/75',
+      badge: 'border-gray-700 bg-gray-700/50 text-slate-300',
+      card: 'border-gray-700 bg-gray-800/80',
       text: 'text-slate-300',
       fill: 'rgba(148, 163, 184, 0.6)',
       stroke: 'rgba(226, 232, 240, 0.55)',
@@ -188,7 +260,7 @@ function getTone(changePercent: number | null) {
   if (changePercent >= 0) {
     return {
       badge: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200',
-      card: 'border-emerald-500/20 bg-emerald-950/20',
+      card: 'border-emerald-500/20 bg-gray-800/82',
       text: 'text-emerald-200',
       fill: 'rgba(16, 185, 129, 0.78)',
       stroke: 'rgba(167, 243, 208, 0.92)',
@@ -197,7 +269,7 @@ function getTone(changePercent: number | null) {
   }
   return {
     badge: 'border-rose-400/20 bg-rose-400/10 text-rose-200',
-    card: 'border-rose-500/20 bg-rose-950/20',
+    card: 'border-rose-500/20 bg-gray-800/82',
     text: 'text-rose-200',
     fill: 'rgba(244, 63, 94, 0.78)',
     stroke: 'rgba(254, 205, 211, 0.92)',
@@ -215,13 +287,28 @@ function StatCard({
   detail: string;
 }) {
   return (
-    <div className="rounded-[1.1rem] bg-white/[0.03] px-3 py-2.5 backdrop-blur-sm">
+    <div className="rounded-lg border border-gray-700 bg-gray-800/70 px-3.5 py-3">
       <div className="flex items-baseline justify-between gap-2">
-        <div className="truncate text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</div>
-        <div className="shrink-0 text-base font-semibold tracking-tight text-white">{value}</div>
+        <div className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</div>
+        <div className="shrink-0 text-[18px] font-semibold tracking-tight text-white">{value}</div>
       </div>
-      <div className="mt-0.5 truncate text-[11px] leading-snug text-slate-400">{detail}</div>
+      <div className="mt-1 text-[13px] leading-snug text-slate-300">{detail}</div>
     </div>
+  );
+}
+
+function CountryFlagBadge({ item }: { item: Pick<MappedItem, 'ticker' | 'location' | 'market'> }) {
+  const country = getCountryFlagMeta(item);
+  if (!country) return null;
+
+  return (
+    <span
+      className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-gray-700 bg-gray-700/50 text-sm shadow-[0_8px_18px_-14px_rgba(15,23,42,1)]"
+      title={country.label}
+      aria-label={country.label}
+    >
+      {countryCodeToFlagEmoji(country.code)}
+    </span>
   );
 }
 
@@ -237,31 +324,30 @@ function SelectedMarketCard({
   compact?: boolean;
 }) {
   const tone = getTone(item.changePercent);
-  const shellClass = compact ? 'rounded-[1.2rem] p-3.5' : 'rounded-[1.15rem] p-3';
+  const shellClass = compact ? 'rounded-lg p-2.5' : 'rounded-lg p-2.5';
   const statGridClass = compact ? 'grid-cols-1' : 'grid-cols-2';
 
   return (
-    <div className={`border shadow-[0_22px_48px_-28px_rgba(2,6,23,1)] backdrop-blur-md ${tone.card} ${shellClass}`}>
-      <div className="flex items-start justify-between gap-2.5">
+    <div className={`border border-gray-700 bg-gray-800/90 shadow-[0_10px_22px_-22px_rgba(2,6,23,0.95)] ${shellClass}`}>
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <CountryFlagBadge item={item} />
             <span className="text-sm font-semibold tracking-tight text-white">{item.ticker}</span>
             <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${tone.badge}`}>
               {formatPct(item.changePercent)}
             </span>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-              {item.category === 'anchor' ? 'U.S. anchor' : 'Regional'}
-            </span>
           </div>
-          <div className="mt-1.5 text-sm font-medium leading-snug text-slate-100">{item.name}</div>
-          <div className="mt-1 text-[11px] leading-snug text-slate-400">{item.market}</div>
-          <div className={`mt-1 flex ${compact ? 'flex-col items-start gap-2' : 'flex-wrap items-center gap-2'} text-[11px] leading-snug text-slate-500`}>
-            <span>{item.location}</span>
+          <div className="mt-1 text-[13px] font-medium leading-snug text-slate-100">{item.name}</div>
+          <div className="mt-0.5 truncate text-[10px] leading-snug text-slate-400" title={`${item.market} · ${item.location}`}>
+            {item.market} · {item.location}
+          </div>
+          <div className={`mt-1 flex ${compact ? 'flex-col items-start gap-1.5' : 'flex-wrap items-center gap-1.5'} text-[10px] leading-snug text-slate-500`}>
             {onSelectTicker && item.ticker && !item.ticker.startsWith('^') ? (
               <button
                 type="button"
                 onClick={() => onSelectTicker(item.ticker)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-sky-400/25 bg-sky-400/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-100 transition hover:border-sky-300/35 hover:bg-sky-400/15"
+                className="inline-flex items-center gap-1.5 rounded-full border border-gray-700 bg-gray-700/60 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200 transition hover:border-gray-600 hover:bg-gray-700"
               >
                 Open
                 <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -274,7 +360,7 @@ function SelectedMarketCard({
         <button
           type="button"
           onClick={onClear}
-          className="rounded-full border border-white/10 bg-white/[0.04] p-1.5 text-slate-400 transition hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+          className="rounded-full border border-gray-700 bg-transparent p-1.5 text-slate-500 transition hover:border-gray-600 hover:bg-gray-700/40 hover:text-slate-200"
           aria-label="Clear selection"
         >
           <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -283,14 +369,14 @@ function SelectedMarketCard({
         </button>
       </div>
 
-      <div className={`mt-3 grid gap-2 ${statGridClass}`}>
-        <div className="rounded-xl border border-white/10 bg-black/20 px-2.5 py-2">
+      <div className={`mt-2.5 grid gap-1.5 border-t border-white/8 pt-2 ${statGridClass}`}>
+        <div className="rounded-md border border-gray-700 bg-gray-700/35 px-2.5 py-2">
           <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Price</div>
-          <div className="mt-1 text-[13px] font-semibold text-white">{formatPrice(item.price)}</div>
+          <div className="mt-0.5 text-[12px] font-semibold tracking-tight text-white">{formatPrice(item.price)}</div>
         </div>
-        <div className="rounded-xl border border-white/10 bg-black/20 px-2.5 py-2">
+        <div className="rounded-md border border-gray-700 bg-gray-700/35 px-2.5 py-2">
           <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Point move</div>
-          <div className={`mt-1 text-[13px] font-semibold ${tone.text}`}>{formatMove(item.change)}</div>
+          <div className={`mt-0.5 text-[12px] font-semibold tracking-tight ${tone.text}`}>{formatMove(item.change)}</div>
         </div>
       </div>
     </div>
@@ -419,13 +505,13 @@ export default function WorldMapRegionalStocks({
         />
       </div>
 
-      <div className="overflow-hidden rounded-[1.75rem] bg-slate-950/80 shadow-[0_24px_64px_-36px_rgba(15,23,42,0.95)]">
+      <div className="overflow-hidden rounded-xl border border-gray-700 bg-gray-800/80 shadow-[0_20px_48px_-34px_rgba(15,23,42,0.85)]">
         <div className="grid gap-4 p-4 sm:p-5 xl:grid-cols-[minmax(0,1fr)_330px]">
           <div
             ref={mapContainerRef}
-            className="relative overflow-hidden rounded-[1.5rem] bg-slate-950/90"
+            className="relative overflow-hidden rounded-lg bg-gray-800/85"
           >
-            <div className="relative border-b border-white/10 px-4 py-3">
+            <div className="relative border-b border-gray-700 px-4 py-3">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Mapped benchmarks</div>
@@ -434,15 +520,15 @@ export default function WorldMapRegionalStocks({
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-700 bg-gray-700/50 px-2.5 py-1">
                     <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
                     Up
                   </span>
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-700 bg-gray-700/50 px-2.5 py-1">
                     <span className="h-2.5 w-2.5 rounded-full bg-rose-400/80" />
                     Down
                   </span>
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-700 bg-gray-700/50 px-2.5 py-1">
                     <span className="h-2.5 w-2.5 rounded-full bg-slate-300/60" />
                     Flat / no data
                   </span>
@@ -518,8 +604,8 @@ export default function WorldMapRegionalStocks({
               </ComposableMap>
 
               {filteredItems.length === 0 ? (
-                <div className="absolute inset-0 flex items-center justify-center px-6">
-                  <div className="max-w-sm rounded-3xl border border-white/10 bg-slate-950/88 px-6 py-5 text-center shadow-[0_18px_40px_-28px_rgba(15,23,42,1)] backdrop-blur-sm">
+                  <div className="absolute inset-0 flex items-center justify-center px-6">
+                  <div className="max-w-sm rounded-lg border border-gray-700 bg-gray-800/92 px-6 py-5 text-center shadow-[0_18px_40px_-28px_rgba(15,23,42,1)]">
                     <div className="text-sm font-medium text-white">No markets match the current filters</div>
                     <div className="mt-2 text-xs leading-relaxed text-slate-400">
                       Reset filters or broaden the search to bring benchmarks back onto the map.
@@ -530,7 +616,7 @@ export default function WorldMapRegionalStocks({
 
               {countryTooltip ? (
                 <div
-                  className="pointer-events-none absolute z-10 whitespace-nowrap rounded-full border border-white/10 bg-slate-950/92 px-2.5 py-1 text-[11px] font-medium text-slate-200 shadow-lg backdrop-blur-sm"
+                  className="pointer-events-none absolute z-10 whitespace-nowrap rounded-full border border-gray-700 bg-gray-800/95 px-2.5 py-1 text-[11px] font-medium text-slate-200 shadow-lg"
                   style={{
                     left: countryTooltip.x,
                     top: countryTooltip.y,
@@ -542,7 +628,7 @@ export default function WorldMapRegionalStocks({
               ) : null}
 
               {selectedItem ? (
-                <div className="absolute right-4 top-4 z-10 hidden w-[min(19rem,calc(100%-2rem))] sm:block">
+                <div className="absolute right-4 top-4 z-10 hidden w-[min(14.5rem,calc(100%-2rem))] sm:block">
                   <SelectedMarketCard
                     item={selectedItem}
                     onClear={() => setSelectedTicker(null)}
@@ -564,14 +650,13 @@ export default function WorldMapRegionalStocks({
             </div>
           ) : null}
 
-          <aside className="min-h-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/[0.03]">
-            <div className="border-b border-white/10 px-4 py-3">
+          <aside className="min-h-0 overflow-hidden rounded-lg border border-gray-700 bg-gray-800/70">
+            <div className="border-b border-gray-700 px-4 py-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Visible list</div>
-                  <div className="mt-1 text-sm font-medium text-white">Compare mapped markets</div>
+                  <div className="text-sm font-medium text-white">Compare mapped markets</div>
                 </div>
-                <span className="rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[11px] font-medium text-slate-300">
+                <span className="rounded-full border border-gray-700 bg-gray-700/50 px-2.5 py-1 text-[11px] font-medium text-slate-300">
                   {filteredItems.length}
                 </span>
               </div>
@@ -579,7 +664,7 @@ export default function WorldMapRegionalStocks({
 
             <div className="max-h-[620px] space-y-2 overflow-y-auto p-3">
               {filteredItems.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-white/10 bg-black/10 px-4 py-5 text-center text-sm text-slate-500">
+                <div className="rounded-lg border border-dashed border-gray-700 bg-gray-800/50 px-4 py-5 text-center text-sm text-slate-500">
                   Nothing to compare right now.
                 </div>
               ) : (
@@ -592,15 +677,16 @@ export default function WorldMapRegionalStocks({
                       key={item.ticker}
                       type="button"
                       onClick={() => setSelectedTicker(item.ticker)}
-                      className={`w-full rounded-[1.25rem] border px-3.5 py-3 text-left transition ${
+                      className={`w-full rounded-lg border px-3.5 py-3 text-left transition ${
                         selected
                           ? `${tone.card} shadow-[0_18px_36px_-30px_rgba(15,23,42,1)]`
-                          : 'border-white/10 bg-black/10 hover:border-white/15 hover:bg-white/[0.04]'
+                          : 'border-gray-700 bg-gray-800/55 hover:border-gray-600 hover:bg-gray-700/45'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
+                            <CountryFlagBadge item={item} />
                             <span className="text-sm font-semibold text-white">{item.ticker}</span>
                             <span className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
                               {item.category === 'anchor' ? 'Anchor' : 'Regional'}
