@@ -94,13 +94,18 @@ async def lifespan(app: FastAPI):
             def _refresh_market_movers_cache():
                 threading.Thread(target=_run_refresh, args=("refresh_market_movers_cache",), daemon=True).start()
 
+            def _refresh_homepage_widgets_cache():
+                threading.Thread(target=_run_refresh, args=("refresh_homepage_widgets_cache",), daemon=True).start()
+
             scheduler.add_job(_refresh_market_overview_cache, "interval", minutes=5, id="market_overview_refresh")
             scheduler.add_job(_refresh_market_movers_cache, "interval", minutes=5, id="market_movers_refresh")
+            scheduler.add_job(_refresh_homepage_widgets_cache, "interval", minutes=5, id="homepage_widgets_refresh")
             if not scheduler.running:
                 scheduler.start()
             # Populate cache on startup in background so first request is fast (non-blocking)
             threading.Thread(target=_run_refresh, args=("refresh_market_overview_cache",), daemon=True).start()
             threading.Thread(target=_run_refresh, args=("refresh_market_movers_cache",), daemon=True).start()
+            threading.Thread(target=_run_refresh, args=("refresh_homepage_widgets_cache",), daemon=True).start()
         except Exception as e:
             print(f"Failed to start market overview cache refresh: {e}")
 
@@ -126,16 +131,14 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"Failed to start digest scheduler: {e}")
 
-    # Warm homepage widgets cache (MAJOR_TICKERS quotes + company info) so first load is fast
+    # Warm homepage widgets cache (quotes + company info + event summaries) so first load is fast
     import threading as _threading
-    from config import MAJOR_TICKERS
 
     def _warm_homepage_cache():
         try:
             from data_layer import get_data_gateway
             gateway = get_data_gateway()
-            gateway.get_quotes_batch(list(MAJOR_TICKERS))
-            gateway.get_company_info_batch(list(MAJOR_TICKERS))
+            gateway.refresh_homepage_widgets_cache()
         except Exception as e:
             print(f"Homepage cache warm failed: {e}")
 

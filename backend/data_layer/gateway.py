@@ -7,7 +7,11 @@ Used by REST API, AI agents, and other app components.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Dict, List, Optional
+
+from config import MAJOR_TICKERS
+from processing import get_ticker_event_summary
 
 from data_layer.sources.base import (
     EdgarSourceProtocol,
@@ -164,6 +168,19 @@ class DataGateway:
 
     def refresh_market_movers_cache(self) -> None:
         self._market.refresh_market_movers_cache()
+
+    def refresh_homepage_widgets_cache(self) -> None:
+        """Warm homepage widget dependencies for major tickers."""
+        tickers = [ticker.upper() for ticker in MAJOR_TICKERS]
+        if not tickers:
+            return
+
+        self._market.get_quotes_batch(tickers)
+        self._market.get_company_info_batch(tickers)
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        for ticker in tickers:
+            get_ticker_event_summary(self, ticker, as_of_date=today)
 
     def get_indicators(
         self,
