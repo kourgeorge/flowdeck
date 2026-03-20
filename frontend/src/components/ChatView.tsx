@@ -813,6 +813,8 @@ export interface UseChatStateReturn {
   setError: (v: string | null) => void;
   tokenBalance: number | null;
   setTokenBalance: (v: number | null) => void;
+  /** Most recent locally streamed turn that fully completed. */
+  lastCompletedTurn: ChatTurnStatus | null;
   messagesEndRef: React.RefObject<HTMLDivElement>;
   inputRef: React.RefObject<HTMLTextAreaElement>;
   sendMessage: (text: string) => void;
@@ -840,9 +842,11 @@ export function useChatState(
   const [thinkingStatus, setThinkingStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tokenBalance, setTokenBalance] = useState<number | null>(null);
+  const [lastCompletedTurn, setLastCompletedTurn] = useState<ChatTurnStatus | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const lastHiddenAtRef = useRef<number>(0);
+  const activeTurnRef = useRef<ChatTurnStatus | null>(null);
   /** Only callbacks from the current visible stream may update the UI. */
   const visibleStreamIdRef = useRef<number | null>(null);
   const nextStreamIdRef = useRef(0);
@@ -890,6 +894,7 @@ export function useChatState(
       setIsLoading(true);
       setThinkingStatus(null);
       setError(null);
+      activeTurnRef.current = null;
 
       const assistantIndex = newMessages.length;
 
@@ -939,6 +944,16 @@ export function useChatState(
       (tokensUsed, balance, toolsCalled, followUpQuestions, newSessionId, platformTokensUsed, costUsd) => {
         if (!isVisibleStream()) return;
         visibleStreamIdRef.current = null;
+        const currentTurn = activeTurnRef.current;
+        if (currentTurn && (newSessionId == null || currentTurn.session_id === newSessionId)) {
+          setLastCompletedTurn({
+            ...currentTurn,
+            status: 'completed',
+            last_thinking_status: null,
+            error_message: null,
+          });
+        }
+        activeTurnRef.current = null;
         setIsStreaming(false);
         setIsLoading(false);
         setThinkingStatus(null);
@@ -965,6 +980,7 @@ export function useChatState(
       (error) => {
         if (!isVisibleStream()) return;
         visibleStreamIdRef.current = null;
+        activeTurnRef.current = null;
         setIsStreaming(false);
         setIsLoading(false);
         setThinkingStatus(null);
@@ -986,7 +1002,11 @@ export function useChatState(
           setError(getErrorMessage(error, 'Failed to get a response. Please try again.'));
         }
       },
-      onTurnStarted,
+      (turn) => {
+        activeTurnRef.current = turn;
+        setLastCompletedTurn((prev) => (prev?.session_id === turn.session_id ? null : prev));
+        onTurnStarted?.(turn);
+      },
       (status) => {
         if (!isVisibleStream()) return;
         setThinkingStatus(formatThinkingStatus(status));
@@ -1063,6 +1083,7 @@ export function useChatState(
     };
 
     doSend().catch((err) => {
+      activeTurnRef.current = null;
       setIsLoading(false);
       setIsStreaming(false);
       setThinkingStatus(null);
@@ -1106,6 +1127,7 @@ export function useChatState(
     setError,
     tokenBalance,
     setTokenBalance,
+    lastCompletedTurn,
     messagesEndRef,
     inputRef,
     sendMessage,

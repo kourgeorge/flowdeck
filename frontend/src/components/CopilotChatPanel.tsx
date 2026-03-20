@@ -157,7 +157,15 @@ export default function CopilotChatPanel({
     useInternalSession ? createSessionIfNeeded : undefined,
   );
   const chat = externalChatState ?? internalChat;
-  const { isLoading, isStreaming } = chat;
+  const { isLoading, isStreaming, lastCompletedTurn } = chat;
+
+  const shouldRestorePendingTurn = useCallback(
+    (turn?: { id: number; session_id: number; status: string } | null) => {
+      if (!turn || turn.status !== 'running') return false;
+      return !(lastCompletedTurn && turn.session_id === lastCompletedTurn.session_id && turn.id === lastCompletedTurn.id);
+    },
+    [lastCompletedTurn],
+  );
 
   const clearTurnPoll = useCallback(() => {
     if (typeof window === 'undefined') return;
@@ -228,14 +236,18 @@ export default function CopilotChatPanel({
       chat.setMessages(detail.messages.map(apiMessageToChatMessageWithMeta));
       if (detail.active_turn?.status === 'running') {
         setActiveTurnId(detail.active_turn.id);
-        chat.restorePendingTurn(detail.active_turn.last_thinking_status ?? 'Working…');
+        if (shouldRestorePendingTurn(detail.active_turn)) {
+          chat.restorePendingTurn(detail.active_turn.last_thinking_status ?? 'Working…');
+        } else {
+          chat.clearLoadingState();
+        }
       } else {
         setActiveTurnId(null);
         chat.clearLoadingState();
       }
       setHistoryOpen(false);
     }).catch(() => {});
-  }, [chat, clearTurnPoll, setSessionId]);
+  }, [chat, clearTurnPoll, setSessionId, shouldRestorePendingTurn]);
 
   const handleDeleteSession = useCallback((id: number, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -254,7 +266,8 @@ export default function CopilotChatPanel({
   useEffect(() => {
     if (!user || sessionId == null) return;
     const runningTurn = sessions.find((session) => session.id === sessionId)?.active_turn;
-    if (runningTurn?.status !== 'running') return;
+    if (!shouldRestorePendingTurn(runningTurn)) return;
+    if (!runningTurn) return;
 
     if (activeTurnId !== runningTurn.id) {
       setActiveTurnId(runningTurn.id);
@@ -262,7 +275,7 @@ export default function CopilotChatPanel({
     if (!isLoading && !isStreaming) {
       chat.restorePendingTurn(runningTurn.last_thinking_status ?? 'Working…');
     }
-  }, [activeTurnId, chat, isLoading, isStreaming, sessionId, sessions, user]);
+  }, [activeTurnId, chat, isLoading, isStreaming, sessionId, sessions, shouldRestorePendingTurn, user]);
 
   useEffect(() => {
     if (!user || activeTurnId == null || typeof window === 'undefined') return undefined;
@@ -274,7 +287,9 @@ export default function CopilotChatPanel({
         const turn = await chatApi.getChatTurn(activeTurnId);
         if (cancelled) return;
         if (turn.status === 'running') {
-          chat.restorePendingTurn(turn.last_thinking_status ?? 'Working…');
+          if (shouldRestorePendingTurn(turn)) {
+            chat.restorePendingTurn(turn.last_thinking_status ?? 'Working…');
+          }
           turnPollTimeoutRef.current = window.setTimeout(poll, 2000);
           return;
         }
@@ -303,7 +318,7 @@ export default function CopilotChatPanel({
       cancelled = true;
       clearTurnPoll();
     };
-  }, [activeTurnId, chat, clearTurnPoll, refreshSessions, setSessionId, user]);
+  }, [activeTurnId, chat, clearTurnPoll, refreshSessions, setSessionId, shouldRestorePendingTurn, user]);
 
   useEffect(() => () => clearTurnPoll(), [clearTurnPoll]);
 

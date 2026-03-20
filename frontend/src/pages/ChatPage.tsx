@@ -167,14 +167,6 @@ export default function ChatPage() {
     chatApi.getChatSessions().then(setSessions).catch(() => {});
   }, [user]);
 
-  const onStreamDone = useCallback(
-    (newSessionId?: number) => {
-      if (newSessionId != null) setSessionId(newSessionId);
-      refreshSessions();
-    },
-    [refreshSessions],
-  );
-
   const onStreamStart = useCallback(
     (_runningSessionId: number) => {
       refreshSessions();
@@ -217,6 +209,17 @@ export default function ChatPage() {
     });
   }, []);
 
+  const onStreamDone = useCallback(
+    (newSessionId?: number) => {
+      if (newSessionId != null) {
+        setSessionId(newSessionId);
+        removeRunningTurn(newSessionId);
+      }
+      refreshSessions();
+    },
+    [refreshSessions, removeRunningTurn],
+  );
+
   const chat = useChatState(
     undefined,
     undefined,
@@ -237,7 +240,16 @@ export default function ChatPage() {
     setError,
     isLoading,
     isStreaming,
+    lastCompletedTurn,
   } = chat;
+
+  const shouldRestorePendingTurn = useCallback(
+    (turn?: ChatTurnStatus | null) => {
+      if (!turn || turn.status !== 'running') return false;
+      return !(lastCompletedTurn && turn.session_id === lastCompletedTurn.session_id && turn.id === lastCompletedTurn.id);
+    },
+    [lastCompletedTurn],
+  );
 
   const clearTurnPoll = useCallback(() => {
     if (typeof window === 'undefined') return;
@@ -361,7 +373,11 @@ export default function ChatPage() {
       setMessages(detail.messages.map(apiMessageToChatMessageWithMeta));
       if (detail.active_turn?.status === 'running') {
         upsertRunningTurn(detail.active_turn);
-        restorePendingTurn(detail.active_turn.last_thinking_status ?? 'Working…');
+        if (shouldRestorePendingTurn(detail.active_turn)) {
+          restorePendingTurn(detail.active_turn.last_thinking_status ?? 'Working…');
+        } else {
+          clearLoadingState();
+        }
       } else {
         removeRunningTurn(detail.id);
         clearLoadingState();
@@ -369,7 +385,7 @@ export default function ChatPage() {
       if ((options?.collapseHistory ?? true) && isMobileHistory) setHistoryCollapsed(true);
       return detail;
     },
-    [clearLoadingState, isMobileHistory, removeRunningTurn, restorePendingTurn, setMessages, upsertRunningTurn],
+    [clearLoadingState, isMobileHistory, removeRunningTurn, restorePendingTurn, setMessages, shouldRestorePendingTurn, upsertRunningTurn],
   );
 
   useEffect(() => {
@@ -448,11 +464,12 @@ export default function ChatPage() {
   useEffect(() => {
     if (!user || sessionId == null) return;
     const runningTurn = runningTurnsBySession[sessionId] ?? sessions.find((session) => session.id === sessionId)?.active_turn;
-    if (runningTurn?.status !== 'running') return;
+    if (!shouldRestorePendingTurn(runningTurn)) return;
+    if (!runningTurn) return;
     if (!isLoading && !isStreaming) {
       restorePendingTurn(runningTurn.last_thinking_status ?? 'Working…');
     }
-  }, [isLoading, isStreaming, restorePendingTurn, runningTurnsBySession, sessionId, sessions, user]);
+  }, [isLoading, isStreaming, restorePendingTurn, runningTurnsBySession, sessionId, sessions, shouldRestorePendingTurn, user]);
 
   useEffect(() => () => clearTurnPoll(), [clearTurnPoll]);
 
