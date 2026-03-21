@@ -397,6 +397,7 @@ export default function WorldMapRegionalStocks({
   onSelectTicker,
 }: WorldMapRegionalStocksProps) {
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
+  const [selectionDismissed, setSelectionDismissed] = useState(false);
   const [countryTooltip, setCountryTooltip] = useState<CountryTooltip | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
@@ -448,14 +449,22 @@ export default function WorldMapRegionalStocks({
   useEffect(() => {
     if (filteredItems.length === 0) {
       setSelectedTicker(null);
+      setSelectionDismissed(false);
       return;
     }
 
     const selectedStillVisible = selectedTicker && filteredItems.some((item) => item.ticker === selectedTicker);
+    if (selectedStillVisible) return;
+
+    if (selectionDismissed) {
+      setSelectedTicker(null);
+      return;
+    }
+
     if (!selectedStillVisible) {
       setSelectedTicker(filteredItems[0].ticker);
     }
-  }, [filteredItems, selectedTicker]);
+  }, [filteredItems, selectedTicker, selectionDismissed]);
 
   const selectedItem = useMemo(
     () => filteredItems.find((item) => item.ticker === selectedTicker) ?? null,
@@ -513,12 +522,7 @@ export default function WorldMapRegionalStocks({
           >
             <div className="relative border-b border-gray-700 px-4 py-3">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Mapped benchmarks</div>
-                  <div className="mt-1 text-sm font-medium text-white">
-                    {filteredItems.length === 0 ? 'No visible markets' : `${filteredItems.length} visible markers`}
-                  </div>
-                </div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Mapped benchmarks</div>
                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-700 bg-gray-700/50 px-2.5 py-1">
                     <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
@@ -582,11 +586,13 @@ export default function WorldMapRegionalStocks({
                         tabIndex={0}
                         onClick={(event) => {
                           event.stopPropagation();
+                          setSelectionDismissed(false);
                           setSelectedTicker(item.ticker);
                         }}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter' || event.key === ' ') {
                             event.preventDefault();
+                            setSelectionDismissed(false);
                             setSelectedTicker(item.ticker);
                           }
                         }}
@@ -631,7 +637,10 @@ export default function WorldMapRegionalStocks({
                 <div className="absolute right-4 top-4 z-10 hidden w-[min(14.5rem,calc(100%-2rem))] sm:block">
                   <SelectedMarketCard
                     item={selectedItem}
-                    onClear={() => setSelectedTicker(null)}
+                    onClear={() => {
+                      setSelectionDismissed(true);
+                      setSelectedTicker(null);
+                    }}
                     onSelectTicker={onSelectTicker}
                   />
                 </div>
@@ -643,7 +652,10 @@ export default function WorldMapRegionalStocks({
             <div className="sm:hidden">
               <SelectedMarketCard
                 item={selectedItem}
-                onClear={() => setSelectedTicker(null)}
+                onClear={() => {
+                  setSelectionDismissed(true);
+                  setSelectedTicker(null);
+                }}
                 onSelectTicker={onSelectTicker}
                 compact
               />
@@ -676,7 +688,10 @@ export default function WorldMapRegionalStocks({
                     <button
                       key={item.ticker}
                       type="button"
-                      onClick={() => setSelectedTicker(item.ticker)}
+                      onClick={() => {
+                        setSelectionDismissed(false);
+                        setSelectedTicker(item.ticker);
+                      }}
                       className={`w-full rounded-lg border px-3.5 py-3 text-left transition ${
                         selected
                           ? `${tone.card} shadow-[0_18px_36px_-30px_rgba(15,23,42,1)]`
