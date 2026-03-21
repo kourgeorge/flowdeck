@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import TickerListView from '../components/StockListView';
+import MajorStockWidgets from '../components/MajorStockWidgets';
 import TickerSearch from '../components/TickerSearch';
 import AuthModal from '../components/AuthModal';
 import { tickerApi, API_BASE_URL } from '../services/api';
@@ -197,7 +197,14 @@ export default function HomePage() {
             <TickerSearch />
           </div>
 
-          <h2 className="text-2xl font-bold text-white mb-4">Major Stocks</h2>
+          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-white">Major Stocks</h2>
+              <p className="mt-1 text-sm text-gray-400">
+                Live price action, AI scorecards, dominant signals, and the latest report date for the market leaders.
+              </p>
+            </div>
+          </div>
 
           {error && (
             <div className="bg-red-500/10 border border-red-500 text-red-400 px-4 py-3 rounded-lg mb-6">
@@ -216,7 +223,7 @@ export default function HomePage() {
               </button>
             </div>
           ) : (
-            <TickerListView widgets={majorWidgets} tickerToName={tickerToName} preserveOrder />
+            <MajorStockWidgets widgets={majorWidgets} tickerToName={tickerToName} />
           )}
         </div>
       </section>
