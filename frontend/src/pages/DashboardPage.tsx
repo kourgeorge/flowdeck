@@ -281,7 +281,7 @@ export default function DashboardPage() {
 
                 {stockListTab === 'events' && (
                   <div className="rounded-b-2xl border border-gray-700 border-t-0 bg-gray-900/45 p-4 sm:p-5">
-                    <DashboardEventsView widgets={widgets} tickerToName={tickerToName} />
+                    <DashboardEventsView widgets={widgets} tickerToName={tickerToName} dashboardLoading={isLoading} />
                   </div>
                 )}
               </div>

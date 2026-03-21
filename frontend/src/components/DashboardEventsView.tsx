@@ -15,6 +15,7 @@ type DetectedEvent = TickerEventsResponse['events'][number];
 interface DashboardEventsViewProps {
   widgets: TickerWidget[];
   tickerToName: Record<string, string>;
+  dashboardLoading?: boolean;
 }
 
 type EventBundle = {
@@ -29,32 +30,80 @@ type EventBundle = {
   events: DetectedEvent[];
 };
 
-const STRENGTH_STYLES: Record<Strength, string> = {
-  low: 'border-amber-500/35 bg-amber-500/12 text-amber-200',
-  medium: 'border-orange-500/35 bg-orange-500/12 text-orange-200',
-  high: 'border-rose-500/35 bg-rose-500/12 text-rose-200',
+const STRENGTH_META: Record<Strength, { label: string; chip: string }> = {
+  low: {
+    label: 'Low',
+    chip: 'border-emerald-700/50 bg-emerald-900/30 text-emerald-300',
+  },
+  medium: {
+    label: 'Medium',
+    chip: 'border-violet-700/50 bg-violet-900/30 text-violet-300',
+  },
+  high: {
+    label: 'High',
+    chip: 'border-blue-700/50 bg-blue-900/30 text-blue-300',
+  },
 };
 
-const DOMAIN_META: Record<Domain, { label: string; chip: string }> = {
+const DOMAIN_META: Record<Domain, { label: string; chip: string; icon: string }> = {
   price_technical: {
     label: 'Price & technical',
-    chip: 'border-sky-500/30 bg-sky-500/10 text-sky-100',
+    chip: 'border-slate-700 bg-slate-800 text-slate-300',
+    icon: 'border-slate-700 bg-slate-800 text-slate-300',
   },
   news_information: {
     label: 'News & information',
-    chip: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-100',
+    chip: 'border-teal-800/50 bg-teal-950/30 text-teal-300',
+    icon: 'border-teal-800/50 bg-teal-950/30 text-teal-300',
   },
   fundamental: {
     label: 'Fundamental',
-    chip: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100',
+    chip: 'border-amber-800/50 bg-amber-950/30 text-amber-300',
+    icon: 'border-amber-800/50 bg-amber-950/30 text-amber-300',
   },
 };
 
-function formatDetectedLabel(value: string | null): string {
+const EVENT_WEIGHTS: Record<string, number> = {
+  price_spike_up: 2.0,
+  price_spike_down: 2.0,
+  price_gap_up: 2.0,
+  price_gap_down: 2.0,
+  volatility_expansion: 1.25,
+  volatility_compression: 1.0,
+  moving_average_cross: 1.5,
+  new_52w_high: 2.5,
+  new_52w_low: 2.5,
+  volume_spike: 1.5,
+  earnings_upcoming: 1.25,
+  insider_buying: 1.75,
+  insider_selling: 1.75,
+  rsi_bullish_divergence: 2.0,
+  rsi_bearish_divergence: 2.0,
+};
+
+const STRENGTH_MULTIPLIERS: Record<Strength, number> = {
+  low: 1.0,
+  medium: 1.5,
+  high: 2.0,
+};
+
+function formatShortDate(value: string | null): string {
   if (!value) return 'Recent';
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatDateTime(value: string | null): string {
+  if (!value) return 'Recent';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 function formatMetricValue(value: number | null, eventType: string): string | null {
@@ -77,42 +126,62 @@ function formatMetricValue(value: number | null, eventType: string): string | nu
   return value.toFixed(2);
 }
 
-function strongestStrength(events: DetectedEvent[]): Strength | null {
-  if (events.some((event) => event.strength === 'high')) return 'high';
-  if (events.some((event) => event.strength === 'medium')) return 'medium';
-  if (events.some((event) => event.strength === 'low')) return 'low';
-  return null;
+function getEventContribution(event: DetectedEvent): number {
+  const weight = EVENT_WEIGHTS[event.event_type] ?? 1.0;
+  const multiplier = STRENGTH_MULTIPLIERS[event.strength] ?? 1.0;
+  return weight * multiplier;
+}
+
+function getEventWeight(event: DetectedEvent): number {
+  return EVENT_WEIGHTS[event.event_type] ?? 1.0;
+}
+
+function formatMetadataValue(value: unknown): string {
+  if (typeof value === 'number') return value.toFixed(2);
+  return String(value);
+}
+
+function strengthRank(strength: Strength): number {
+  if (strength === 'high') return 3;
+  if (strength === 'medium') return 2;
+  return 1;
 }
 
 function eventSortValue(event: DetectedEvent): number {
-  const strengthWeight = event.strength === 'high' ? 3 : event.strength === 'medium' ? 2 : 1;
   const detectedAt = event.detected_on ? new Date(event.detected_on).getTime() : 0;
-  return strengthWeight * 1_000_000_000_000 + detectedAt;
+  return strengthRank(event.strength) * 1_000_000_000_000 + detectedAt;
 }
 
 function bundleSortValue(bundle: EventBundle): number {
-  return bundle.eventScore * 1000 + bundle.eventCount;
+  const newestEvent = bundle.events[0] ? eventSortValue(bundle.events[0]) : 0;
+  return newestEvent + bundle.eventScore * 1000 + bundle.eventCount;
 }
 
-function SummaryCard({
+function FilterChip({
   label,
-  value,
-  detail,
+  active,
+  onClick,
 }: {
   label: string;
-  value: string;
-  detail: string;
+  active: boolean;
+  onClick: () => void;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-700/70 bg-slate-950/70 p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold tracking-tight text-white">{value}</p>
-      <p className="mt-1 text-xs leading-5 text-slate-400">{detail}</p>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`border px-3 py-1.5 text-xs font-medium transition-colors ${
+        active
+          ? 'rounded-sm border-blue-600 bg-blue-600 text-white'
+          : 'rounded-sm border-gray-700 bg-gray-800 text-gray-300 hover:border-gray-600 hover:bg-gray-700 hover:text-white'
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
-export default function DashboardEventsView({ widgets, tickerToName }: DashboardEventsViewProps) {
+export default function DashboardEventsView({ widgets, tickerToName, dashboardLoading = false }: DashboardEventsViewProps) {
   const [bundles, setBundles] = useState<EventBundle[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [refreshIndex, setRefreshIndex] = useState(0);
@@ -122,6 +191,7 @@ export default function DashboardEventsView({ widgets, tickerToName }: Dashboard
   const [selectedStrength, setSelectedStrength] = useState<StrengthFilter>('all');
   const [selectedDomain, setSelectedDomain] = useState<DomainFilter>('all');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [expandedEvents, setExpandedEvents] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -181,7 +251,7 @@ export default function DashboardEventsView({ widgets, tickerToName }: Dashboard
       setBundles(nextBundles.sort((left, right) => bundleSortValue(right) - bundleSortValue(left)));
       setFailedTickers(nextFailed);
       setLastUpdated(new Date());
-      setLoadError(nextBundles.length === 0 ? 'Unable to load watchlist events right now.' : null);
+      setLoadError(nextBundles.length === 0 ? 'Unable to load portfolio events right now.' : null);
       setIsLoading(false);
     };
 
@@ -189,7 +259,7 @@ export default function DashboardEventsView({ widgets, tickerToName }: Dashboard
       if (cancelled) return;
       setBundles([]);
       setFailedTickers(widgets.map((widget) => widget.ticker));
-      setLoadError('Unable to load watchlist events right now.');
+      setLoadError('Unable to load portfolio events right now.');
       setIsLoading(false);
     });
 
@@ -215,16 +285,6 @@ export default function DashboardEventsView({ widgets, tickerToName }: Dashboard
     [bundles],
   );
 
-  const totalEvents = useMemo(
-    () => bundles.reduce((sum, bundle) => sum + bundle.events.length, 0),
-    [bundles],
-  );
-
-  const highPriorityEvents = useMemo(
-    () => bundles.reduce((sum, bundle) => sum + bundle.events.filter((event) => event.strength === 'high').length, 0),
-    [bundles],
-  );
-
   const visibleBundles = useMemo(() => {
     return eventfulBundles
       .map((bundle) => {
@@ -243,192 +303,181 @@ export default function DashboardEventsView({ widgets, tickerToName }: Dashboard
       .filter((bundle): bundle is EventBundle => bundle !== null);
   }, [eventfulBundles, selectedDomain, selectedStrength, selectedTicker]);
 
+  const visibleEventCount = useMemo(
+    () => visibleBundles.reduce((sum, bundle) => sum + bundle.events.length, 0),
+    [visibleBundles],
+  );
+
+  const visibleHighPriorityCount = useMemo(
+    () => visibleBundles.reduce((sum, bundle) => sum + bundle.events.filter((event) => event.strength === 'high').length, 0),
+    [visibleBundles],
+  );
+
+  const visibleFeed = useMemo(() => {
+    const entries = visibleBundles.flatMap((bundle) => (
+      bundle.events.map((event) => ({ bundle, event }))
+    ));
+    return entries
+      .sort((left, right) => eventSortValue(right.event) - eventSortValue(left.event))
+      .slice(0, 40);
+  }, [visibleBundles]);
+
+  const toggleEventExpanded = (eventKey: string) => {
+    setExpandedEvents((current) => ({
+      ...current,
+      [eventKey]: !current[eventKey],
+    }));
+  };
+
+  if (widgets.length === 0 && dashboardLoading) {
+    return (
+      <div className="border border-gray-700 bg-gray-800/50 p-3 sm:p-4">
+        {[1, 2, 3, 4, 5].map((item) => (
+          <div key={item} className="animate-pulse border-b border-gray-700/70 px-2 py-4 last:border-b-0 sm:px-3">
+            <div className="flex items-start gap-3">
+              <div className="h-9 w-9 rounded-sm bg-gray-700/60" />
+              <div className="flex-1 space-y-2">
+                <div className="flex flex-wrap gap-2">
+                  <div className="h-5 w-28 rounded-sm bg-gray-700/60" />
+                  <div className="h-5 w-20 rounded-sm bg-gray-700/60" />
+                </div>
+                <div className="h-4 w-40 rounded-sm bg-gray-700/60" />
+                <div className="h-4 w-64 rounded-sm bg-gray-700/50" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   if (widgets.length === 0) {
     return (
-      <div className="rounded-[1.75rem] border border-slate-700/70 bg-[linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] p-8 text-center">
+      <div className="border border-gray-700 bg-gray-800/50 px-6 py-10 text-center">
         <p className="text-sm font-medium text-white">No subscribed tickers yet.</p>
-        <p className="mt-2 text-sm text-slate-400">
-          Subscribe to stocks first, then this tab will show the full event stream across your watchlist.
+        <p className="mt-2 text-sm text-gray-400">
+          Subscribe to stocks first, then this view will become a live event monitor for your portfolio.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-5">
-      <section className="overflow-hidden rounded-[1.75rem] border border-slate-700/70 bg-[radial-gradient(circle_at_top_left,rgba(52,211,153,0.10),transparent_30%),radial-gradient(circle_at_top_right,rgba(56,189,248,0.10),transparent_28%),linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] shadow-[0_24px_80px_-42px_rgba(2,6,23,0.95)]">
-        <div className="border-b border-slate-700/70 px-5 py-5 sm:px-6">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <div className="max-w-3xl">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-300/80">Watchlist Event Radar</p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-[1.9rem]">
-                All subscribed-ticker signals in one board.
-              </h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-                Uses the same deterministic event feed as each ticker page, then rolls those signals up into a watchlist-wide event monitor.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2 xl:justify-end">
-              <div className="rounded-full border border-slate-700 bg-slate-900/65 px-3 py-2 text-sm text-slate-300">
-                <span className="font-semibold text-white">{totalEvents}</span> live signals
-              </div>
-              <div className="rounded-full border border-slate-700 bg-slate-900/65 px-3 py-2 text-sm text-slate-300">
-                <span className="font-semibold text-white">{eventfulBundles.length}</span> active tickers
-              </div>
-              {lastUpdated && (
-                <div className="rounded-full border border-slate-700 bg-slate-900/65 px-3 py-2 text-sm text-slate-300">
-                  Updated {lastUpdated.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={() => setRefreshIndex((value) => value + 1)}
-                disabled={isLoading}
-                className="rounded-full border border-emerald-500/35 bg-emerald-500/12 px-4 py-2 text-sm font-medium text-emerald-100 transition-colors hover:border-emerald-400/45 hover:bg-emerald-500/18 disabled:cursor-default disabled:opacity-60"
-              >
-                {isLoading ? 'Refreshing…' : 'Refresh events'}
-              </button>
+    <div className="space-y-3">
+      <section className="px-1 sm:px-0">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-3xl space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-500">Portfolio Events</p>
+            <h2 className="text-2xl font-semibold tracking-tight text-white">
+              Key events across your portfolio.
+            </h2>
+            <div className="flex flex-wrap gap-2 text-xs">
+              <span className="rounded-sm border border-blue-700/50 bg-blue-900/30 px-2.5 py-1 text-blue-300">
+                <span className="font-semibold text-white">{visibleEventCount}</span> matching
+              </span>
+              <span className="rounded-sm border border-violet-700/50 bg-violet-900/30 px-2.5 py-1 text-violet-300">
+                <span className="font-semibold text-white">{visibleBundles.length}</span> active
+              </span>
+              <span className="rounded-sm border border-blue-700/50 bg-blue-900/30 px-2.5 py-1 text-blue-300">
+                <span className="font-semibold text-white">{visibleHighPriorityCount}</span> high
+              </span>
+              <span className="rounded-sm border border-emerald-700/50 bg-emerald-900/30 px-2.5 py-1 text-emerald-300">
+                <span className="font-semibold text-white">{quietBundles.length}</span> quiet
+              </span>
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <SummaryCard
-              label="Subscribed"
-              value={String(widgets.length)}
-              detail="Tickers scanned through the shared ticker-page event pipeline."
-            />
-            <SummaryCard
-              label="Eventful"
-              value={String(eventfulBundles.length)}
-              detail={`${quietBundles.length} quiet ${quietBundles.length === 1 ? 'name' : 'names'} currently without flagged signals.`}
-            />
-            <SummaryCard
-              label="High Priority"
-              value={String(highPriorityEvents)}
-              detail="Signals marked high strength across your watchlist."
-            />
-            <SummaryCard
-              label="Coverage"
-              value={`${Math.round((eventfulBundles.length / Math.max(widgets.length, 1)) * 100)}%`}
-              detail="Share of subscribed names with at least one active deterministic event."
-            />
+          <div className="flex flex-wrap items-center gap-2">
+            {lastUpdated && (
+              <div className="rounded-sm border border-gray-700 bg-gray-800 px-3 py-1 text-xs text-gray-400">
+                Updated {lastUpdated.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setRefreshIndex((value) => value + 1)}
+              disabled={isLoading}
+              className="rounded-sm border border-blue-600 bg-blue-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:cursor-default disabled:opacity-60"
+            >
+              {isLoading ? 'Refreshing…' : 'Refresh'}
+            </button>
           </div>
         </div>
 
-        <div className="px-5 py-4 sm:px-6">
-          <div className="flex flex-col gap-4">
-            <div>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ticker focus</p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedTicker('all')}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                    selectedTicker === 'all'
-                      ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-100'
-                      : 'border-slate-600 bg-slate-900/60 text-slate-300 hover:border-slate-500 hover:bg-slate-800'
-                  }`}
-                >
-                  All eventful
-                </button>
-                {eventfulBundles.map((bundle) => (
-                  <button
-                    key={bundle.ticker}
-                    type="button"
-                    onClick={() => setSelectedTicker(bundle.ticker)}
-                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                      selectedTicker === bundle.ticker
-                        ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-100'
-                        : 'border-slate-600 bg-slate-900/60 text-slate-300 hover:border-slate-500 hover:bg-slate-800'
-                    }`}
-                  >
-                    {bundle.ticker}
-                    <span className={`ml-1.5 ${selectedTicker === bundle.ticker ? 'text-emerald-100/90' : 'text-slate-500'}`}>
-                      {bundle.events.length}
-                    </span>
-                  </button>
-                ))}
-              </div>
+        <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,15rem)_1fr_1fr]">
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-gray-300">Ticker Focus</span>
+            <select
+              value={selectedTicker}
+              onChange={(event) => setSelectedTicker(event.target.value)}
+              className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All active tickers</option>
+              {eventfulBundles.map((bundle) => (
+                <option key={bundle.ticker} value={bundle.ticker}>
+                  {bundle.ticker} ({bundle.events.length})
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">Strength</p>
+            <div className="flex flex-wrap gap-2">
+              {(['all', 'high', 'medium', 'low'] as const).map((strength) => (
+                <FilterChip
+                  key={strength}
+                  label={strength === 'all' ? 'All strengths' : STRENGTH_META[strength].label}
+                  active={selectedStrength === strength}
+                  onClick={() => setSelectedStrength(strength)}
+                />
+              ))}
             </div>
+          </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div>
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Strength</p>
-                <div className="flex flex-wrap gap-2">
-                  {(['all', 'high', 'medium', 'low'] as const).map((strength) => (
-                    <button
-                      key={strength}
-                      type="button"
-                      onClick={() => setSelectedStrength(strength)}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                        selectedStrength === strength
-                          ? 'border-cyan-400/35 bg-cyan-500/14 text-cyan-100'
-                          : 'border-slate-600 bg-slate-900/60 text-slate-300 hover:border-slate-500 hover:bg-slate-800'
-                      }`}
-                    >
-                      {strength === 'all' ? 'All strengths' : `${strength.charAt(0).toUpperCase()}${strength.slice(1)} only`}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Domain</p>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedDomain('all')}
-                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                      selectedDomain === 'all'
-                        ? 'border-cyan-400/35 bg-cyan-500/14 text-cyan-100'
-                        : 'border-slate-600 bg-slate-900/60 text-slate-300 hover:border-slate-500 hover:bg-slate-800'
-                    }`}
-                  >
-                    All domains
-                  </button>
-                  {(['price_technical', 'news_information', 'fundamental'] as const).map((domain) => (
-                    <button
-                      key={domain}
-                      type="button"
-                      onClick={() => setSelectedDomain(domain)}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                        selectedDomain === domain
-                          ? 'border-cyan-400/35 bg-cyan-500/14 text-cyan-100'
-                          : 'border-slate-600 bg-slate-900/60 text-slate-300 hover:border-slate-500 hover:bg-slate-800'
-                      }`}
-                    >
-                      {DOMAIN_META[domain].label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+          <div>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">Domain</p>
+            <div className="flex flex-wrap gap-2">
+              <FilterChip
+                label="All domains"
+                active={selectedDomain === 'all'}
+                onClick={() => setSelectedDomain('all')}
+              />
+              {(['price_technical', 'news_information', 'fundamental'] as const).map((domain) => (
+                <FilterChip
+                  key={domain}
+                  label={DOMAIN_META[domain].label}
+                  active={selectedDomain === domain}
+                  onClick={() => setSelectedDomain(domain)}
+                />
+              ))}
             </div>
           </div>
         </div>
       </section>
 
       {failedTickers.length > 0 && (
-        <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-          Loaded partial watchlist coverage. Missing events for: {failedTickers.join(', ')}.
+        <div className="border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          Partial coverage. Events did not load for: {failedTickers.join(', ')}.
         </div>
       )}
 
       {loadError && (
-        <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+        <div className="border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
           {loadError}
         </div>
       )}
 
       {isLoading && bundles.length === 0 && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {[1, 2, 3, 4].map((item) => (
-            <div key={item} className="animate-pulse rounded-[1.5rem] border border-slate-700/70 bg-slate-900/75 p-5">
-              <div className="h-4 w-28 rounded bg-slate-700/80" />
-              <div className="mt-3 h-7 w-2/3 rounded bg-slate-700/70" />
-              <div className="mt-5 grid gap-3 md:grid-cols-2">
-                <div className="h-28 rounded-2xl bg-slate-800/80" />
-                <div className="h-28 rounded-2xl bg-slate-800/80" />
+        <div className="border border-gray-700 bg-gray-800/50 p-3 sm:p-4">
+          {[1, 2, 3, 4, 5].map((item) => (
+            <div key={item} className="animate-pulse border-b border-gray-700 px-2 py-4 last:border-b-0">
+              <div className="h-4 w-24 rounded bg-gray-700" />
+              <div className="mt-3 h-5 w-1/2 rounded bg-gray-700" />
+              <div className="mt-3 flex gap-2">
+                <div className="h-6 w-24 rounded-full bg-gray-700" />
+                <div className="h-6 w-20 rounded-full bg-gray-700" />
+                <div className="h-6 w-28 rounded-full bg-gray-700" />
               </div>
             </div>
           ))}
@@ -436,156 +485,161 @@ export default function DashboardEventsView({ widgets, tickerToName }: Dashboard
       )}
 
       {!isLoading && visibleBundles.length === 0 && bundles.length > 0 && (
-        <div className="rounded-[1.5rem] border border-slate-700/70 bg-slate-950/70 px-6 py-10 text-center">
+        <div className="border border-gray-700 bg-gray-800/50 px-6 py-10 text-center">
           <p className="text-sm font-medium text-white">No signals match the current filters.</p>
-          <p className="mt-2 text-sm text-slate-400">Try broadening the strength or domain filter to restore the full event feed.</p>
+          <p className="mt-2 text-sm text-gray-400">Broaden the ticker, strength, or domain filter to restore the full event feed.</p>
         </div>
       )}
 
-      {visibleBundles.map((bundle) => {
-        const strongest = strongestStrength(bundle.events);
-        const strongestLabel = strongest ? `${strongest.charAt(0).toUpperCase()}${strongest.slice(1)}` : 'Quiet';
-        const priceChangeColor = bundle.dailyChangePercent >= 0 ? 'text-emerald-300' : 'text-rose-300';
+      {visibleFeed.length > 0 && (
+        <section className="border border-gray-700 bg-gray-900">
+          <div className="divide-y divide-gray-700">
+            {visibleFeed.map(({ bundle, event }, index) => {
+              const metricValue = formatMetricValue(event.metric_value, event.event_type);
+              const thresholdValue = formatMetricValue(event.threshold_value, event.event_type);
+              const priceChangeColor = bundle.dailyChangePercent >= 0 ? 'text-emerald-300' : 'text-rose-300';
+              const metadataEntries = Object.entries(event.metadata ?? {});
+              const domainMeta = DOMAIN_META[event.domain];
+              const eventKey = `${bundle.ticker}-${event.event_type}-${event.detected_on ?? 'recent'}-${event.window_start ?? 'na'}-${event.window_end ?? 'na'}`;
+              const isExpanded = expandedEvents[eventKey] ?? false;
 
-        return (
-          <section
-            key={bundle.ticker}
-            className="overflow-hidden rounded-[1.5rem] border border-slate-700/70 bg-[linear-gradient(180deg,rgba(15,23,42,0.94),rgba(2,6,23,0.98))] shadow-[0_16px_46px_-32px_rgba(2,6,23,0.92)]"
-          >
-            <div className="border-b border-slate-700/70 px-5 py-4 sm:px-6">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Link
-                      to={`/tickers/${bundle.ticker}`}
-                      className="inline-flex items-center rounded-full border border-slate-600 bg-slate-900/80 px-3 py-1 text-sm font-semibold text-white transition-colors hover:border-slate-500 hover:bg-slate-800"
-                    >
-                      {bundle.ticker}
-                    </Link>
-                    <span className="truncate text-sm text-slate-300">{bundle.name}</span>
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-                    <span className="font-mono text-slate-100">
-                      {bundle.currentPrice > 0 ? formatPrice(bundle.currentPrice, bundle.currency) : '—'}
+              return (
+                <article
+                  key={`${bundle.ticker}-${event.event_type}-${event.detected_on ?? 'recent'}-${index}`}
+                  className="grid gap-3 px-5 py-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_auto]"
+                >
+                  <div className="flex gap-3">
+                    <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border ${domainMeta.icon}`}>
+                      <EventIcon eventType={event.event_type} className="h-4 w-4" />
                     </span>
-                    <span className={`font-mono ${priceChangeColor}`}>
-                      {bundle.dailyChangePercent >= 0 ? '+' : ''}{bundle.dailyChangePercent.toFixed(2)}%
-                    </span>
-                    <span className="rounded-full border border-slate-700 bg-slate-900/65 px-2.5 py-1 text-xs font-medium text-slate-300">
-                      {bundle.events.length} active {bundle.events.length === 1 ? 'signal' : 'signals'}
-                    </span>
-                  </div>
-                  {bundle.dominantEvents.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {bundle.dominantEvents.slice(0, 4).map((eventType) => (
-                        <span
-                          key={eventType}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-900/70 px-2.5 py-1 text-xs font-medium text-slate-200"
-                        >
-                          <EventIcon eventType={eventType} className="h-3.5 w-3.5 shrink-0 text-sky-300" />
-                          <span>{formatDominantEventLabel(eventType)}</span>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                        <span className="rounded-sm border border-gray-700 bg-gray-800 px-2.5 py-1 text-gray-400">
+                          {formatDateTime(event.detected_on)}
                         </span>
-                      ))}
+                        <span className={`rounded-sm border px-2.5 py-1 font-medium ${STRENGTH_META[event.strength].chip}`}>
+                          {STRENGTH_META[event.strength].label}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+                        <Link to={`/tickers/${bundle.ticker}`} className="text-sm font-semibold text-white hover:text-slate-200">
+                          {bundle.ticker}
+                        </Link>
+                        <span className="text-sm text-gray-400">{bundle.name}</span>
+                        <span className="text-gray-600">•</span>
+                        <span className="font-mono text-gray-300">
+                          {bundle.currentPrice > 0 ? formatPrice(bundle.currentPrice, bundle.currency) : '—'}
+                        </span>
+                        <span className={`font-mono ${priceChangeColor}`}>
+                          {bundle.dailyChangePercent >= 0 ? '+' : ''}
+                          {bundle.dailyChangePercent.toFixed(2)}%
+                        </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium text-white">
+                          {formatDominantEventLabel(event.event_type)}
+                        </p>
+                        <span className={`rounded-sm border px-2.5 py-1 text-[11px] font-medium ${domainMeta.chip}`}>
+                          {domainMeta.label}
+                        </span>
+                      </div>
+                      {event.description && (
+                        <p className="mt-1 text-sm leading-6 text-gray-400">{event.description}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-start justify-end gap-2 lg:max-w-sm">
+                    {event.window_start && event.window_end && (
+                      <span className="rounded-sm border border-gray-700 bg-gray-800 px-2.5 py-1 text-[11px] text-gray-300">
+                        Window <span className="ml-1 font-mono text-white">{formatShortDate(event.window_start)} to {formatShortDate(event.window_end)}</span>
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => toggleEventExpanded(eventKey)}
+                      className="flex items-center justify-center rounded-sm p-1.5 text-gray-500 transition-colors hover:text-gray-300"
+                      aria-expanded={isExpanded}
+                      aria-label={isExpanded ? 'Hide details' : 'Show details'}
+                    >
+                      <svg
+                        className={`h-4 w-4 shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {isExpanded && (
+                    <div className="lg:col-span-2">
+                      <div className="mt-1">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                          <div className="inline-flex items-baseline gap-1.5">
+                            <span className="text-sm text-gray-400">Score</span>
+                            <span className="text-sm font-mono text-gray-200">{getEventContribution(event).toFixed(2)}</span>
+                          </div>
+                          <div className="inline-flex items-baseline gap-1.5">
+                            <span className="text-sm text-gray-400">Base Weight</span>
+                            <span className="text-sm font-mono text-gray-200">{getEventWeight(event).toFixed(2)}</span>
+                          </div>
+                          {metricValue && (
+                            <div className="inline-flex items-baseline gap-1.5">
+                              <span className="text-sm text-gray-400">Value</span>
+                              <span className="text-sm font-mono text-gray-200">{metricValue}</span>
+                            </div>
+                          )}
+                          {thresholdValue && (
+                            <div className="inline-flex items-baseline gap-1.5">
+                              <span className="text-sm text-gray-400">Threshold</span>
+                              <span className="text-sm font-mono text-gray-200">{thresholdValue}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {metadataEntries.length > 0 && (
+                          <div className="mt-3 space-y-1 border-t border-gray-700 pt-2 text-xs">
+                            {metadataEntries.map(([key, value]) => (
+                              <div key={key} className="flex items-center justify-between gap-3 text-gray-300">
+                                <span className="text-xs text-gray-400">{key.replace(/_/g, ' ')}:</span>
+                                <span className="text-right font-mono text-xs text-gray-200">
+                                  {formatMetadataValue(value)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[22rem]">
-                  <div className="rounded-2xl border border-slate-700/70 bg-slate-950/70 px-4 py-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Event score</p>
-                    <p className="mt-2 text-2xl font-semibold text-white">{bundle.eventScore.toFixed(1)}</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-700/70 bg-slate-950/70 px-4 py-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Strongest</p>
-                    <p className="mt-2 text-2xl font-semibold text-white">{strongestLabel}</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-700/70 bg-slate-950/70 px-4 py-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Detected</p>
-                    <p className="mt-2 text-2xl font-semibold text-white">{formatDetectedLabel(bundle.events[0]?.detected_on ?? null)}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-4 p-5 sm:p-6 xl:grid-cols-2">
-              {bundle.events.map((event, index) => {
-                const metricValue = formatMetricValue(event.metric_value, event.event_type);
-                const thresholdValue = formatMetricValue(event.threshold_value, event.event_type);
-                const domainMeta = DOMAIN_META[event.domain];
-                return (
-                  <article
-                    key={`${bundle.ticker}-${event.event_type}-${index}`}
-                    className="rounded-[1.15rem] border border-slate-700/70 bg-slate-950/72 p-4"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="rounded-full border border-slate-700 bg-slate-900/80 p-1.5 text-sky-300">
-                            <EventIcon eventType={event.event_type} className="h-4 w-4" />
-                          </span>
-                          <p className="truncate text-sm font-semibold text-white">{formatDominantEventLabel(event.event_type)}</p>
-                        </div>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <span className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${domainMeta.chip}`}>
-                            {domainMeta.label}
-                          </span>
-                          <span className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${STRENGTH_STYLES[event.strength]}`}>
-                            {event.strength.charAt(0).toUpperCase() + event.strength.slice(1)}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Detected</p>
-                        <p className="mt-1 text-sm font-medium text-slate-200">{formatDetectedLabel(event.detected_on)}</p>
-                      </div>
-                    </div>
-
-                    {event.description && (
-                      <p className="mt-3 text-sm leading-6 text-slate-300">{event.description}</p>
-                    )}
-
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {metricValue && (
-                        <div className="rounded-full border border-slate-700 bg-slate-900/75 px-3 py-1.5 text-xs text-slate-300">
-                          Value <span className="ml-1 font-mono text-white">{metricValue}</span>
-                        </div>
-                      )}
-                      {thresholdValue && (
-                        <div className="rounded-full border border-slate-700 bg-slate-900/75 px-3 py-1.5 text-xs text-slate-300">
-                          Threshold <span className="ml-1 font-mono text-white">{thresholdValue}</span>
-                        </div>
-                      )}
-                      {event.window_start && event.window_end && (
-                        <div className="rounded-full border border-slate-700 bg-slate-900/75 px-3 py-1.5 text-xs text-slate-300">
-                          Window <span className="ml-1 font-mono text-white">{formatDetectedLabel(event.window_start)} to {formatDetectedLabel(event.window_end)}</span>
-                        </div>
-                      )}
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-        );
-      })}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {!isLoading && quietBundles.length > 0 && selectedTicker === 'all' && (
-        <section className="rounded-[1.5rem] border border-slate-700/70 bg-slate-950/70 px-5 py-5 sm:px-6">
+        <section className="border border-gray-700 bg-gray-900 px-5 py-5 sm:px-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Quiet watchlist</p>
-              <p className="mt-1 text-sm text-slate-300">Subscribed names without currently flagged deterministic signals.</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">Quiet Watchlist</p>
+              <p className="mt-1 text-sm text-gray-400">Names without an active flagged event right now.</p>
             </div>
-            <div className="rounded-full border border-slate-700 bg-slate-900/65 px-3 py-2 text-sm text-slate-300">
+            <div className="rounded-sm border border-emerald-700/50 bg-emerald-900/30 px-3 py-1.5 text-xs text-emerald-300">
               {quietBundles.length} quiet {quietBundles.length === 1 ? 'ticker' : 'tickers'}
             </div>
           </div>
+
           <div className="mt-4 flex flex-wrap gap-2">
             {quietBundles.map((bundle) => (
               <Link
                 key={bundle.ticker}
                 to={`/tickers/${bundle.ticker}`}
-                className="rounded-full border border-slate-700 bg-slate-900/75 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-slate-500 hover:bg-slate-800 hover:text-white"
+                className="rounded-sm border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:border-blue-600/60 hover:bg-gray-700 hover:text-white"
               >
                 {bundle.ticker}
               </Link>
