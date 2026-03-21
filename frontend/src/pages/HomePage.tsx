@@ -95,9 +95,9 @@ export default function HomePage() {
             <div className="flex justify-center mb-6">
               <img src={LOGO_PATH} alt="" className="w-24 h-24 object-contain animate-pulse" />
             </div>
-            <div className="h-16 bg-gray-800 rounded-lg mb-4 mx-auto max-w-3xl animate-pulse"></div>
-            <div className="h-12 bg-gray-800 rounded-lg mb-8 mx-auto max-w-2xl animate-pulse"></div>
-            <div className="h-6 bg-gray-800 rounded-lg mb-12 mx-auto max-w-xl animate-pulse"></div>
+            <div className="h-16 bg-gray-800 rounded-sm mb-4 mx-auto max-w-3xl animate-pulse"></div>
+            <div className="h-12 bg-gray-800 rounded-sm mb-8 mx-auto max-w-2xl animate-pulse"></div>
+            <div className="h-6 bg-gray-800 rounded-sm mb-12 mx-auto max-w-xl animate-pulse"></div>
           </div>
         </section>
       </div>
@@ -132,7 +132,7 @@ export default function HomePage() {
           <div className="flex justify-center mb-5">
             <Link
               to="/copilot"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-900/40 border border-blue-700/50 hover:bg-blue-900/60 hover:border-blue-600 transition-colors group"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-sm bg-blue-900/40 border border-blue-700/50 hover:bg-blue-900/60 hover:border-blue-600 transition-colors group"
             >
               <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -147,19 +147,19 @@ export default function HomePage() {
 
           {/* Stats Bar */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-3xl mx-auto">
-            <div className="bg-blue-900/30 border border-blue-700/50 rounded-lg p-4 text-center">
+            <div className="bg-blue-900/30 border border-blue-700/50 rounded-sm p-4 text-center">
               <div className="text-2xl font-bold text-blue-300 mb-1">
                 {publicStats ? publicStats.total_analyses.toLocaleString() : '—'}
               </div>
               <div className="text-blue-400/80 text-sm">AI Analyses Generated</div>
             </div>
-            <div className="bg-violet-900/30 border border-violet-700/50 rounded-lg p-4 text-center">
+            <div className="bg-violet-900/30 border border-violet-700/50 rounded-sm p-4 text-center">
               <div className="text-2xl font-bold text-violet-300 mb-1">
                 {publicStats ? publicStats.total_reports.toLocaleString() : '—'}
               </div>
               <div className="text-violet-400/80 text-sm">Reports Created</div>
             </div>
-            <div className="bg-emerald-900/30 border border-emerald-700/50 rounded-lg p-4 text-center">
+            <div className="bg-emerald-900/30 border border-emerald-700/50 rounded-sm p-4 text-center">
               <div className="text-2xl font-bold text-emerald-300 mb-1">
                 {publicStats ? publicStats.unique_tickers_analyzed.toLocaleString() : '—'}
               </div>
@@ -169,7 +169,7 @@ export default function HomePage() {
 
           {/* Sign-in CTA — only when not signed in */}
           {!user && (
-            <div className="max-w-2xl mx-auto mt-6 rounded-xl border-2 border-blue-500/60 bg-gradient-to-r from-blue-900/50 to-indigo-900/50 px-6 py-5 shadow-lg shadow-blue-900/20">
+            <div className="max-w-2xl mx-auto mt-6 rounded-md border-2 border-blue-500/60 bg-gradient-to-r from-blue-900/50 to-indigo-900/50 px-6 py-5 shadow-lg shadow-blue-900/20">
               <p className="text-center text-lg sm:text-xl font-semibold text-white mb-2">
                 Sign in or sign up free
               </p>
@@ -179,7 +179,7 @@ export default function HomePage() {
               <div className="flex justify-center">
                 <button
                   onClick={() => setShowAuthModal(true)}
-                  className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg transition-colors shadow-md"
+                  className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-sm transition-colors shadow-md"
                 >
                   Get started free →
                 </button>
@@ -207,17 +207,17 @@ export default function HomePage() {
           </div>
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500 text-red-400 px-4 py-3 rounded-lg mb-6">
+            <div className="bg-red-500/10 border border-red-500 text-red-400 px-4 py-3 rounded-sm mb-6">
               {error}
             </div>
           )}
 
           {widgets.length === 0 ? (
-            <div className="bg-gray-800 rounded-lg border border-gray-700 p-12 text-center">
+            <div className="bg-gray-800 rounded-sm border border-gray-700 p-12 text-center">
               <p className="text-gray-400 mb-4">No stock data available</p>
               <button
                 onClick={loadWidgets}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-sm transition-colors"
               >
                 Retry
               </button>
@@ -245,43 +245,43 @@ export default function HomePage() {
             Platform Features
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+            <div className="bg-gray-800/50 border border-gray-700 rounded-md p-6">
               <h4 className="text-lg font-semibold text-white mb-2">Live Market Data</h4>
               <p className="text-gray-400 text-sm">
                 Real-time prices, volume, and ranges — plus AI-driven recommendations synthesized from news, SEC filings, fundamentals, technicals, and sentiment.
               </p>
             </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+            <div className="bg-gray-800/50 border border-gray-700 rounded-md p-6">
               <h4 className="text-lg font-semibold text-white mb-2">Analytic Signals</h4>
               <p className="text-gray-400 text-sm">
                 FlowDeck automatically extracts important anomalies and market events for each ticker, including price spikes, volatility shifts, insider activity, earnings timing, and other deterministic signals surfaced directly in the platform.
               </p>
             </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+            <div className="bg-gray-800/50 border border-gray-700 rounded-md p-6">
               <h4 className="text-lg font-semibold text-white mb-2">Deep AI Analysis, On Demand</h4>
               <p className="text-gray-400 text-sm">
                 Trigger a full multi-agent analysis for any stock, any time. A committee of specialized AI analysts — covering market data, news, fundamentals, technicals, and risk — each produce their own report before a final recommendation is synthesized. Every angle covered, every time.
               </p>
             </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+            <div className="bg-gray-800/50 border border-gray-700 rounded-md p-6">
               <h4 className="text-lg font-semibold text-white mb-2">Transparent Reports & Recommendations</h4>
               <p className="text-gray-400 text-sm">
                 Get clear <strong className="text-white">BUY / SELL / HOLD</strong> recommendations backed by comprehensive AI analysis — and read the full reasoning across multiple report tabs.
               </p>
             </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+            <div className="bg-gray-800/50 border border-gray-700 rounded-md p-6">
               <h4 className="text-lg font-semibold text-white mb-2">Stock Subscriptions & Dashboard</h4>
               <p className="text-gray-400 text-sm">
                 Subscribe to stocks and get email updates when new analysis reports are available. Track your watchlist and portfolio performance from a personalized dashboard.
               </p>
             </div>
-            <div className="bg-blue-900/20 border border-blue-700/50 rounded-xl p-6">
+            <div className="bg-blue-900/20 border border-blue-700/50 rounded-md p-6">
               <h4 className="text-lg font-semibold text-white mb-2">{COPILOT_NAME} — A Powerful Trading Assistant</h4>
               <p className="text-gray-400 text-sm">
                 {COPILOT_NAME} can <strong className="text-white">search the live web</strong> for breaking news and analyst updates, <strong className="text-white">write and execute Python code</strong> for financial modelling and statistical analysis, and <strong className="text-white">generate interactive charts</strong> — line, bar, area, and scatter — rendered directly in the chat. It also knows your watchlist and preferences, so all of FlowDeck's proprietary reports are accessible in the same conversation with personalized context.
               </p>
             </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+            <div className="bg-gray-800/50 border border-gray-700 rounded-md p-6">
               <h4 className="text-lg font-semibold text-white mb-2">
                 <Link to="/api-docs" className="hover:text-gray-200 transition-colors">REST API — Programmatic Access</Link>
               </h4>
@@ -289,7 +289,7 @@ export default function HomePage() {
                 Integrate FlowDeck into your trading systems with our <strong className="text-white">REST API</strong>. The system is <strong className="text-white">autonomous-agent ready</strong>: agents can register, fetch market data, chat with the AI analyst, and start analyses without human intervention. Create secure API keys, access all AI reports and recommendations programmatically, and fetch real-time market data. Perfect for algorithmic trading, portfolio tools, and custom integrations. <a href="https://flowdeck.biz/api/SKILL.md" target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-white underline">View SKILL.md →</a>
               </p>
             </div>
-            <div className="bg-cyan-900/20 border border-cyan-700/50 rounded-xl p-6">
+            <div className="bg-cyan-900/20 border border-cyan-700/50 rounded-md p-6">
               <h4 className="text-lg font-semibold text-white mb-2">
                 <Link to="/newsroom" className="hover:text-cyan-300 transition-colors">
                   Personal Newsroom
@@ -299,7 +299,7 @@ export default function HomePage() {
                 Open a <strong className="text-white">personal newsroom curated specifically for you</strong> from your subscribed stocks. FlowDeck turns your watchlist into a clean, browsable stream with a lead story, fast-scan headlines, and a tailored news wire for your names.
               </p>
             </div>
-            <div className="bg-indigo-900/20 border border-indigo-700/50 rounded-xl p-6">
+            <div className="bg-indigo-900/20 border border-indigo-700/50 rounded-md p-6">
               <h4 className="text-lg font-semibold text-white mb-2">
                 <Link to="/tps" className="hover:text-indigo-300 transition-colors">TPS — Structured Trade Plans</Link>
               </h4>
@@ -307,7 +307,7 @@ export default function HomePage() {
                 Every AI analysis automatically produces a <strong className="text-white">Trading Plan Specification (TPS)</strong> — a schema-validated JSON object with entry zone, stop-loss, take-profit targets, position sizing, and invalidation rules. No ambiguity, no prose to interpret.
               </p>
             </div>
-            <div className="bg-purple-900/20 border border-purple-700/50 rounded-xl p-6">
+            <div className="bg-purple-900/20 border border-purple-700/50 rounded-md p-6">
               <h4 className="text-lg font-semibold text-white mb-2">
                 <a href="https://flowdeck.biz/api/SKILL.md" target="_blank" rel="noopener noreferrer" className="hover:text-purple-300 transition-colors inline-flex items-center gap-1">
                   SKILL.md — Autonomous Agent Integration
@@ -320,7 +320,7 @@ export default function HomePage() {
                 A comprehensive API guide for AI agents to autonomously interact with FlowDeck. Agents can register, fetch market data, chat with the AI analyst, and start analyses — all without human intervention. <a href="https://flowdeck.biz/api/SKILL.md" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 underline">View SKILL.md →</a>
               </p>
             </div>
-            <div className="bg-amber-900/20 border border-amber-700/60 rounded-xl p-6">
+            <div className="bg-amber-900/20 border border-amber-700/60 rounded-md p-6">
               <h4 className="text-lg font-semibold text-white mb-2">
                 <Link to={user ? '/brief' : '#'} onClick={!user ? () => setShowAuthModal(true) : undefined} className="hover:text-amber-300 transition-colors">Briefing</Link>
               </h4>
@@ -331,24 +331,24 @@ export default function HomePage() {
           </div>
 
           {/* How It Works — 3 steps */}
-          <div className="border border-gray-700 rounded-2xl p-8 bg-gray-800/30">
+          <div className="border border-gray-700 rounded-md p-8 bg-gray-800/30">
             <h3 className="text-lg font-semibold text-gray-300 uppercase tracking-wider mb-6">
               How the AI Analysis Team Works
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+              <div className="bg-gray-800/50 border border-gray-700 rounded-md p-6">
                 <h4 className="text-lg font-semibold text-white mb-2">1. Analyst Team</h4>
                 <p className="text-gray-400 text-sm leading-relaxed">
                   Six specialized AI analysts — covering market trends, news, fundamentals, SEC filings, technicals, and social sentiment — each independently research the stock and produce a scored report. Every angle is covered before any debate begins.
                 </p>
               </div>
-              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+              <div className="bg-gray-800/50 border border-gray-700 rounded-md p-6">
                 <h4 className="text-lg font-semibold text-white mb-2">2. Investment Debate → Trade Plan</h4>
                 <p className="text-gray-400 text-sm leading-relaxed">
                   Bull and Bear researchers argue the investment case across multiple rounds using all analyst reports. A Research Manager then adjudicates, producing a conviction score, return scenarios, and a structured investment plan — which a Trader agent refines into an actionable trade strategy.
                 </p>
               </div>
-              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+              <div className="bg-gray-800/50 border border-gray-700 rounded-md p-6">
                 <h4 className="text-lg font-semibold text-white mb-2">3. Risk Debate → Final Decision</h4>
                 <p className="text-gray-400 text-sm leading-relaxed">
                   Three risk agents — Aggressive, Cautious, and Neutral — debate the trade plan in round-robin. A Risk Judge weighs all upstream scores and risk arguments to produce the final verdict: <strong className="text-green-400">BUY</strong>, <strong className="text-red-400">SELL</strong>, or <strong className="text-yellow-400">HOLD</strong>.
@@ -359,7 +359,7 @@ export default function HomePage() {
             <div className="text-center">
               <Link
                 to="/how-it-works"
-                className="inline-flex items-center px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+                className="inline-flex items-center px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-sm font-medium transition-colors"
               >
                 Read full explanation →
               </Link>
@@ -374,7 +374,7 @@ export default function HomePage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
             {/* Left: copy */}
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-900/40 border border-blue-700/50 mb-5">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-sm bg-blue-900/40 border border-blue-700/50 mb-5">
                 <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
@@ -406,7 +406,7 @@ export default function HomePage() {
               <Link
                 to={user ? '/copilot' : '#'}
                 onClick={!user ? () => setShowAuthModal(true) : undefined}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-sm font-semibold transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -416,7 +416,7 @@ export default function HomePage() {
             </div>
 
             {/* Right: visual mockup of the 3-panel layout */}
-            <div className="rounded-2xl border border-gray-700 bg-gray-800/60 overflow-hidden shadow-2xl">
+            <div className="rounded-md border border-gray-700 bg-gray-800/60 overflow-hidden shadow-2xl">
               {/* Fake window chrome */}
               <div className="flex items-center gap-1.5 px-4 py-2.5 bg-gray-800 border-b border-gray-700">
                 <span className="w-3 h-3 rounded-full bg-red-500/70" />
@@ -437,7 +437,7 @@ export default function HomePage() {
                   {['AAPL', 'NVDA', 'MSFT', 'TSLA', 'GOOGL'].map((t, i) => (
                     <div
                       key={t}
-                      className={`flex items-center justify-between px-2 py-1.5 rounded-lg ${i === 1 ? 'bg-blue-600/30 border border-blue-600/50' : 'hover:bg-gray-700/50'}`}
+                      className={`flex items-center justify-between px-2 py-1.5 rounded-sm ${i === 1 ? 'bg-blue-600/30 border border-blue-600/50' : 'hover:bg-gray-700/50'}`}
                     >
                       <span className={`font-semibold ${i === 1 ? 'text-white' : 'text-gray-300'}`}>{t}</span>
                       <span className={`text-[10px] ${i % 2 === 0 ? 'text-green-400' : 'text-red-400'}`}>
@@ -458,7 +458,7 @@ export default function HomePage() {
                       <div className="text-green-400 text-[10px]">+2.34%</div>
                     </div>
                   </div>
-                  <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-900/40 border border-green-700/50 self-start">
+                  <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm bg-green-900/40 border border-green-700/50 self-start">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
                     <span className="text-green-300 text-[10px] font-semibold">BUY</span>
                   </div>
@@ -472,7 +472,7 @@ export default function HomePage() {
                       </div>
                     ))}
                   </div>
-                  <div className="flex-1 bg-gray-800/50 rounded-lg p-2 mt-1">
+                  <div className="flex-1 bg-gray-800/50 rounded-sm p-2 mt-1">
                     <div className="h-2 bg-gray-700 rounded mb-1.5 w-full" />
                     <div className="h-2 bg-gray-700 rounded mb-1.5 w-4/5" />
                     <div className="h-2 bg-gray-700 rounded w-3/5" />
@@ -489,20 +489,20 @@ export default function HomePage() {
                     <span className="text-white text-[10px] font-semibold">{COPILOT_NAME}</span>
                   </div>
                   <div className="flex-1 p-2 flex flex-col gap-2 overflow-hidden">
-                    <div className="self-end bg-blue-600 text-white rounded-xl rounded-br-sm px-2 py-1 text-[9px] max-w-[90%]">
+                    <div className="self-end bg-blue-600 text-white rounded-md px-2 py-1 text-[9px] max-w-[90%]">
                       What are the key risks for NVDA?
                     </div>
-                    <div className="bg-gray-700/80 text-gray-200 rounded-xl rounded-tl-sm px-2 py-1.5 text-[9px] leading-relaxed">
+                    <div className="bg-gray-700/80 text-gray-200 rounded-md px-2 py-1.5 text-[9px] leading-relaxed">
                       <div className="h-1.5 bg-gray-600 rounded mb-1 w-full" />
                       <div className="h-1.5 bg-gray-600 rounded mb-1 w-4/5" />
                       <div className="h-1.5 bg-gray-600 rounded w-3/5" />
                     </div>
-                    <div className="self-end bg-blue-600 text-white rounded-xl rounded-br-sm px-2 py-1 text-[9px] max-w-[90%]">
+                    <div className="self-end bg-blue-600 text-white rounded-md px-2 py-1 text-[9px] max-w-[90%]">
                       Compare with AMD
                     </div>
                   </div>
                   <div className="px-2 pb-2">
-                    <div className="bg-gray-700/80 rounded-lg border border-gray-600 px-2 py-1.5 flex items-center gap-1">
+                    <div className="bg-gray-700/80 rounded-sm border border-gray-600 px-2 py-1.5 flex items-center gap-1">
                       <span className="text-gray-500 text-[9px] flex-1">Ask about NVDA…</span>
                       <div className="w-4 h-4 rounded bg-blue-600 flex items-center justify-center">
                         <svg className="w-2.5 h-2.5 text-white rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -523,7 +523,7 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
             {/* Left: TPS JSON mockup */}
-            <div className="rounded-2xl border border-indigo-700/50 bg-indigo-950/20 overflow-hidden shadow-2xl order-2 lg:order-1">
+            <div className="rounded-md border border-indigo-700/50 bg-indigo-950/20 overflow-hidden shadow-2xl order-2 lg:order-1">
               {/* Window chrome */}
               <div className="flex items-center justify-between px-4 py-2.5 bg-indigo-900/30 border-b border-indigo-700/40">
                 <div className="flex items-center gap-2">
@@ -536,7 +536,7 @@ export default function HomePage() {
               </div>
               {/* JSON body */}
               <div className="p-4 font-mono text-xs leading-relaxed">
-                <pre className="bg-slate-900/80 rounded-lg p-4 overflow-x-auto whitespace-pre text-left">
+                <pre className="bg-slate-900/80 rounded-sm p-4 overflow-x-auto whitespace-pre text-left">
                   <span className="text-slate-400">{'{'}</span>{'\n'}
                   <span className="text-slate-400">{'  '}</span><span className="text-sky-300">"instrument"</span><span className="text-slate-400">: </span><span className="text-amber-300">"NVDA"</span><span className="text-slate-400">,</span>{'\n'}
                   <span className="text-slate-400">{'  '}</span><span className="text-sky-300">"timeframe"</span><span className="text-slate-400">: </span><span className="text-amber-300">"1D"</span><span className="text-slate-400">,</span>{'\n'}
@@ -561,7 +561,7 @@ export default function HomePage() {
 
             {/* Right: copy */}
             <div className="order-1 lg:order-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-900/40 border border-indigo-700/50 mb-5">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-sm bg-indigo-900/40 border border-indigo-700/50 mb-5">
                 <svg className="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                 </svg>
@@ -590,7 +590,7 @@ export default function HomePage() {
               </ul>
               <Link
                 to="/tps"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-700 hover:bg-indigo-600 text-white rounded-lg font-semibold transition-colors"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-700 hover:bg-indigo-600 text-white rounded-sm font-semibold transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -607,7 +607,7 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
             {/* Left: Code example */}
-            <div className="rounded-2xl border border-emerald-700/50 bg-emerald-950/20 overflow-hidden shadow-2xl order-2 lg:order-1">
+            <div className="rounded-md border border-emerald-700/50 bg-emerald-950/20 overflow-hidden shadow-2xl order-2 lg:order-1">
               {/* Window chrome */}
               <div className="flex items-center justify-between px-4 py-2.5 bg-emerald-900/30 border-b border-emerald-700/40">
                 <div className="flex items-center gap-2">
@@ -620,7 +620,7 @@ export default function HomePage() {
               </div>
               {/* Code body */}
               <div className="p-4 font-mono text-xs leading-relaxed">
-                <pre className="bg-slate-900/80 rounded-lg p-4 overflow-x-auto whitespace-pre text-left">
+                <pre className="bg-slate-900/80 rounded-sm p-4 overflow-x-auto whitespace-pre text-left">
                   <span className="text-purple-400">import</span> <span className="text-white">requests</span>{'\n\n'}
                   <span className="text-slate-400"># Your API key from Profile page</span>{'\n'}
                   <span className="text-sky-300">API_KEY</span> <span className="text-slate-400">=</span> <span className="text-amber-300">"fd_live_your_key_here"</span>{'\n'}
@@ -641,7 +641,7 @@ export default function HomePage() {
 
             {/* Right: copy */}
             <div className="order-1 lg:order-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-900/40 border border-emerald-700/50 mb-5">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-sm bg-emerald-900/40 border border-emerald-700/50 mb-5">
                 <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
                 </svg>
@@ -674,7 +674,7 @@ export default function HomePage() {
               <div className="flex flex-wrap gap-3">
                 <Link
                   to="/api-docs"
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-semibold transition-colors"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-700 hover:bg-emerald-600 text-white rounded-sm font-semibold transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -684,7 +684,7 @@ export default function HomePage() {
                 <Link
                   to={user ? '/profile#api-keys' : '#'}
                   onClick={!user ? () => setShowAuthModal(true) : undefined}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold transition-colors"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-sm font-semibold transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
@@ -695,7 +695,7 @@ export default function HomePage() {
                   href="https://flowdeck.biz/api/SKILL.md"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-purple-700 hover:bg-purple-600 text-white rounded-lg font-semibold transition-colors"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-purple-700 hover:bg-purple-600 text-white rounded-sm font-semibold transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -714,7 +714,7 @@ export default function HomePage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
             {/* Left: copy */}
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-900/40 border border-amber-700/60 mb-5">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-sm bg-amber-900/40 border border-amber-700/60 mb-5">
                 <svg className="w-3.5 h-3.5 text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
@@ -762,7 +762,7 @@ export default function HomePage() {
               <Link
                 to={user ? '/brief' : '#'}
                 onClick={!user ? () => setShowAuthModal(true) : undefined}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-400 text-gray-900 rounded-lg font-semibold transition-colors"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-400 text-gray-900 rounded-sm font-semibold transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 8h5l-1.405 1.405A2 2 0 0118 10.828V17a2 2 0 01-2 2H6a2 2 0 01-2-2V7a2 2 0 012-2h7" />
@@ -772,7 +772,7 @@ export default function HomePage() {
             </div>
 
             {/* Right: visual mockup of a brief */}
-            <div className="rounded-2xl border border-amber-700/60 bg-gray-900/70 overflow-hidden shadow-2xl">
+            <div className="rounded-md border border-amber-700/60 bg-gray-900/70 overflow-hidden shadow-2xl">
               {/* Window chrome */}
               <div className="flex items-center justify-between px-4 py-2.5 bg-gray-800 border-b border-amber-700/50">
                 <div className="flex items-center gap-2">
@@ -888,13 +888,13 @@ export default function HomePage() {
               <div className="flex flex-wrap gap-4 justify-center">
                 <Link
                   to="/dashboard"
-                  className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-lg transition-colors"
+                  className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-sm font-semibold text-lg transition-colors"
                 >
                   Go to Dashboard →
                 </Link>
                 <Link
                   to="/copilot"
-                  className="px-8 py-4 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold text-lg transition-colors flex items-center gap-2"
+                  className="px-8 py-4 bg-gray-700 hover:bg-gray-600 text-white rounded-sm font-semibold text-lg transition-colors flex items-center gap-2"
                 >
                   <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -905,7 +905,7 @@ export default function HomePage() {
             ) : (
               <button
                 onClick={() => setShowAuthModal(true)}
-                className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-lg transition-colors"
+                className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-sm font-semibold text-lg transition-colors"
               >
                 Get Started Free →
               </button>
@@ -929,20 +929,20 @@ export default function HomePage() {
 
           {/* Token Packages */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
-            <div className="bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-center">
+            <div className="bg-gray-800 border border-gray-700 rounded-md px-4 py-3 text-center">
               <h3 className="text-lg font-semibold text-white mb-1">Starter Pack</h3>
               <div className="text-3xl font-bold text-white mb-0.5">500</div>
               <div className="text-gray-400 text-sm mb-2">tokens</div>
               <div className="text-2xl font-semibold text-blue-400">$5.00</div>
             </div>
-            <div className="bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-center">
+            <div className="bg-gray-800 border border-gray-700 rounded-md px-4 py-3 text-center">
               <h3 className="text-lg font-semibold text-white mb-1">Popular Pack</h3>
               <div className="text-3xl font-bold text-white mb-0.5">1,000</div>
               <div className="text-gray-400 text-sm mb-2">tokens</div>
               <div className="text-2xl font-semibold text-blue-400">$9.00</div>
               <div className="text-green-400 text-xs mt-1">Save 10%</div>
             </div>
-            <div className="bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-center">
+            <div className="bg-gray-800 border border-gray-700 rounded-md px-4 py-3 text-center">
               <h3 className="text-lg font-semibold text-white mb-1">Best Value Pack</h3>
               <div className="text-3xl font-bold text-white mb-0.5">2,500</div>
               <div className="text-gray-400 text-sm mb-2">tokens</div>
@@ -955,14 +955,14 @@ export default function HomePage() {
             {user ? (
               <Link
                 to="/profile#purchase-tokens"
-                className="inline-flex items-center px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-lg transition-colors"
+                className="inline-flex items-center px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-sm font-semibold text-lg transition-colors"
               >
                 Buy Tokens →
               </Link>
             ) : (
               <button
                 onClick={() => setShowAuthModal(true)}
-                className="inline-flex items-center px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-lg transition-colors"
+                className="inline-flex items-center px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-sm font-semibold text-lg transition-colors"
               >
                 Buy Tokens →
               </button>
