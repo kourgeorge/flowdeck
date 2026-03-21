@@ -113,24 +113,24 @@ function getRangeLabel(range: '1d' | '1w' | '1mo' | '6mo' | 'ytd'): string {
 function getChangeSurface(changePercent: number | null) {
   if (changePercent == null) {
     return {
-      border: 'border-gray-700',
-      glow: 'bg-gray-700/20',
-      badge: 'border-gray-700 bg-gray-700/50 text-slate-300',
+      border: 'border-slate-600/50',
+      glow: 'bg-slate-400/[0.05]',
+      badge: 'border-slate-500/30 bg-slate-500/10 text-slate-200',
       text: 'text-slate-300',
     };
   }
   if (changePercent >= 0) {
     return {
-      border: 'border-emerald-900/40',
-      glow: 'bg-emerald-950/20',
-      badge: 'border-emerald-900/40 bg-emerald-950/40 text-emerald-300',
+      border: 'border-emerald-400/25',
+      glow: 'bg-emerald-500/[0.08]',
+      badge: 'border-emerald-400/25 bg-emerald-500/12 text-emerald-200',
       text: 'text-emerald-300',
     };
   }
   return {
-    border: 'border-red-900/40',
-    glow: 'bg-red-950/20',
-    badge: 'border-red-900/40 bg-red-950/40 text-red-300',
+    border: 'border-rose-400/25',
+    glow: 'bg-rose-500/[0.08]',
+    badge: 'border-rose-400/25 bg-rose-500/12 text-rose-200',
     text: 'text-red-300',
   };
 }
@@ -139,20 +139,20 @@ function getMoverTheme(changeColor: 'gainers' | 'losers' | 'neutral') {
   if (changeColor === 'gainers') {
     return {
       dot: 'bg-emerald-600',
-      glow: 'bg-emerald-950/20',
+      glow: 'bg-emerald-500/[0.08]',
       text: 'text-emerald-300',
     };
   }
   if (changeColor === 'losers') {
     return {
       dot: 'bg-red-700',
-      glow: 'bg-red-950/20',
+      glow: 'bg-rose-500/[0.08]',
       text: 'text-red-300',
     };
   }
   return {
     dot: 'bg-sky-400',
-    glow: 'bg-sky-400/[0.04]',
+    glow: 'bg-sky-400/[0.08]',
     text: 'text-sky-200',
   };
 }
@@ -168,10 +168,10 @@ function SectionHeading({
 }) {
   return (
     <div className="space-y-1.5">
-      {eyebrow ? <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-gray-400">{eyebrow}</div> : null}
+      {eyebrow ? <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">{eyebrow}</div> : null}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <h2 className="text-lg font-semibold text-white sm:text-xl">{title}</h2>
-        {description ? <p className="max-w-2xl text-xs leading-relaxed text-gray-400 sm:text-sm">{description}</p> : null}
+        {description ? <p className="max-w-2xl text-xs leading-relaxed text-slate-400 sm:text-sm">{description}</p> : null}
       </div>
     </div>
   );
@@ -208,14 +208,22 @@ function PulseCard({
           };
 
   return (
-    <div className="flex min-w-0 items-center gap-2.5 rounded-lg border border-gray-700 bg-gray-800/80 px-3 py-2">
+    <div
+      className={`flex min-w-0 items-center gap-2.5 rounded-xl border px-3 py-2.5 ${
+        tone === 'emerald'
+          ? 'border-emerald-400/25 bg-emerald-500/10'
+          : tone === 'rose'
+            ? 'border-rose-400/25 bg-rose-500/10'
+            : 'border-sky-400/25 bg-sky-500/10'
+      }`}
+    >
       <span className={`h-2 w-2 shrink-0 rounded-full ${toneClasses.dot}`} />
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-baseline justify-between gap-2">
           <div className={`truncate text-[11px] font-semibold uppercase tracking-[0.14em] ${toneClasses.eyebrow}`}>{eyebrow}</div>
           <div className={`shrink-0 text-sm font-semibold tracking-tight ${toneClasses.value}`}>{value}</div>
         </div>
-        <div className="mt-0.5 truncate text-[11px] leading-snug text-gray-400">{detail}</div>
+        <div className="mt-0.5 truncate text-[11px] leading-snug text-slate-300">{detail}</div>
       </div>
     </div>
   );
@@ -249,12 +257,12 @@ function NewsBriefingPanel({
   }, [articles.length, loadStep]);
 
   return (
-    <div className={`rounded-xl border border-gray-700 bg-gray-800/80 shadow-[0_14px_28px_-24px_rgba(15,23,42,0.85)] ${compact ? 'p-3' : 'p-3.5 xl:flex xl:h-[44rem] xl:min-h-0 xl:flex-col'}`}>
+    <div className={`fd-card ${compact ? 'p-3' : 'p-3.5 xl:flex xl:h-[44rem] xl:min-h-0 xl:flex-col'}`}>
       <div className="mb-3 flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-500">News briefing</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">News briefing</div>
         </div>
-        <div className="inline-flex w-fit rounded-full border border-gray-700 bg-gray-700/50 px-2.5 py-1 text-[11px] font-medium text-gray-300">
+        <div className="fd-pill fd-pill-sm inline-flex w-fit">
           {isLoading ? 'Refreshing headlines' : `${articles.length} headlines`}
         </div>
       </div>
@@ -287,8 +295,8 @@ function OverviewCard({
     <div
       role={clickable ? 'button' : undefined}
       onClick={() => clickable && onSelectTicker(item.ticker)}
-      className={`min-h-[4.1rem] min-w-0 rounded-lg border border-gray-700 bg-gray-800/70 px-2.5 py-2 flex flex-col justify-center overflow-hidden transition-colors ${
-        clickable ? 'cursor-pointer hover:border-gray-600 hover:bg-gray-700/70' : ''
+      className={`fd-card-soft min-h-[4.1rem] min-w-0 px-2.5 py-2 flex flex-col justify-center overflow-hidden transition-colors ${
+        clickable ? 'cursor-pointer hover:border-slate-500 hover:bg-slate-900/80' : ''
       }`}
     >
       <div className="flex min-w-0 items-baseline justify-between gap-1.5">
@@ -338,15 +346,15 @@ function OverviewSection({
   const canNext = totalPages > 1 && currentPage < totalPages - 1;
   if (items.length === 0 && totalPages === 0) return null;
   return (
-    <div className="relative overflow-hidden rounded-xl border border-gray-700 bg-gray-800/80 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.85)]">
-      <div className="relative flex items-center justify-between gap-2 border-b border-gray-700 bg-gray-800 px-3 py-2">
+    <div className="fd-card relative overflow-hidden">
+      <div className="relative flex items-center justify-between gap-2 border-b border-slate-700 px-3 py-2">
         <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{title}</h3>
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={onPrev}
             disabled={!canPrev || paginationLoading}
-            className="rounded-md border border-gray-700 bg-gray-700/60 p-1.5 text-slate-300 transition hover:border-gray-600 hover:bg-gray-700 hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-gray-700 disabled:hover:bg-gray-700/60"
+            className="fd-card-soft p-1.5 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800 hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-slate-700 disabled:hover:bg-slate-950/55"
             aria-label="Previous page"
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -360,7 +368,7 @@ function OverviewSection({
             type="button"
             onClick={onNext}
             disabled={!canNext || paginationLoading}
-            className="rounded-md border border-gray-700 bg-gray-700/60 p-1.5 text-slate-300 transition hover:border-gray-600 hover:bg-gray-700 hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-gray-700 disabled:hover:bg-gray-700/60"
+            className="fd-card-soft p-1.5 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800 hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-slate-700 disabled:hover:bg-slate-950/55"
             aria-label="Next page"
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -372,7 +380,7 @@ function OverviewSection({
       <div className="relative min-h-[8.5rem] p-2.5">
         {paginationLoading && (
           <div
-            className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-gray-900/70"
+            className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-slate-950/70"
             aria-live="polite"
             aria-busy="true"
           >
@@ -422,9 +430,9 @@ function MoversTable({
     ? rows.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
     : rows;
   return (
-    <div className="relative flex min-h-0 flex-col overflow-hidden rounded-xl border border-gray-700 bg-gray-800/80 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.85)]">
+    <div className="fd-card relative flex min-h-0 flex-col overflow-hidden">
       <div className={`absolute inset-0 ${theme.glow}`} />
-      <div className="relative flex items-center justify-between gap-2 border-b border-gray-700 bg-gray-800 px-3 py-2 shrink-0">
+      <div className="relative flex items-center justify-between gap-2 border-b border-slate-700 px-3 py-2 shrink-0">
         <div className="min-w-0">
           <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
             <span className={`h-2 w-2 rounded-full ${theme.dot}`} />
@@ -437,7 +445,7 @@ function MoversTable({
               type="button"
               onClick={onPrev}
               disabled={!canPrev}
-              className="rounded-md border border-gray-700 bg-gray-700/60 p-1.5 text-slate-300 transition hover:border-gray-600 hover:bg-gray-700 hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-gray-700 disabled:hover:bg-gray-700/60"
+              className="fd-card-soft p-1.5 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800 hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-slate-700 disabled:hover:bg-slate-950/55"
               aria-label="Previous page"
             >
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -451,7 +459,7 @@ function MoversTable({
               type="button"
               onClick={onNext}
               disabled={!canNext}
-              className="rounded-md border border-gray-700 bg-gray-700/60 p-1.5 text-slate-300 transition hover:border-gray-600 hover:bg-gray-700 hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-gray-700 disabled:hover:bg-gray-700/60"
+              className="fd-card-soft p-1.5 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800 hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-slate-700 disabled:hover:bg-slate-950/55"
               aria-label="Next page"
               aria-busy={paginationLoading}
             >
@@ -465,7 +473,7 @@ function MoversTable({
       <div className="relative min-h-0 flex-1 overflow-x-auto">
         {paginationLoading && (
           <div
-            className="absolute inset-0 z-10 flex items-center justify-center rounded-b-xl bg-gray-900/80"
+            className="absolute inset-0 z-10 flex items-center justify-center rounded-b-xl bg-slate-950/80"
             aria-live="polite"
             aria-busy="true"
           >
@@ -478,9 +486,9 @@ function MoversTable({
             </span>
           </div>
         )}
-        <table className="w-full bg-gray-800 text-left text-xs">
-          <thead className="sticky top-0 z-[1] bg-gray-800">
-            <tr className="border-b border-gray-700 text-slate-400">
+        <table className="w-full bg-slate-900/40 text-left text-xs">
+          <thead className="sticky top-0 z-[1] bg-slate-900/95 backdrop-blur">
+            <tr className="border-b border-slate-700 text-slate-400">
               <th className="px-3 py-2 font-medium text-[10px] uppercase tracking-[0.14em]">Ticker</th>
               <th className="px-3 py-2 font-medium text-[10px] uppercase tracking-[0.14em] text-right">Change</th>
               <th className="px-3 py-2 font-medium text-[10px] uppercase tracking-[0.14em] text-right">Price</th>
@@ -500,7 +508,7 @@ function MoversTable({
                 <tr
                   key={sym || i}
                   onClick={() => clickable && onSelectTicker(sym)}
-                  className={`border-b border-gray-700/70 bg-gray-800 last:border-b-0 ${clickable ? 'cursor-pointer transition-colors hover:bg-gray-700/40' : ''}`}
+                  className={`border-b border-slate-700/70 bg-transparent last:border-b-0 ${clickable ? 'cursor-pointer transition-colors hover:bg-slate-800/45' : ''}`}
                 >
                   <td className="px-3 py-2.5 font-medium text-white tabular-nums">
                     {sym || '—'}
@@ -608,7 +616,7 @@ function RunningHeadlinesStrip({
   if (isLoading) {
     return (
       <div
-        className="overflow-hidden rounded-lg border border-gray-700 bg-[linear-gradient(180deg,rgba(31,41,55,0.92),rgba(17,24,39,0.96))]"
+        className="fd-card-soft overflow-hidden"
         aria-live="polite"
         aria-busy="true"
       >
@@ -621,7 +629,7 @@ function RunningHeadlinesStrip({
                   <div className="absolute inset-[3px] rounded-full bg-sky-300/90" />
                 </div>
               </div>
-              <div className="animate-pulse rounded-md border border-gray-700 bg-gray-800/55 px-3 py-2.5">
+              <div className="fd-card-soft animate-pulse px-3 py-2.5">
                 <div className="h-4 w-5/6 rounded bg-gray-700/80" />
                 <div className="mt-2 h-4 w-3/4 rounded bg-gray-700/75" />
               </div>
@@ -634,7 +642,7 @@ function RunningHeadlinesStrip({
 
   if (articles.length === 0) {
     return (
-      <div className="rounded-lg border border-gray-700 bg-gray-800/70 px-4 py-5 text-sm text-slate-400" aria-live="polite">
+      <div className="fd-card-soft px-4 py-5 text-sm text-slate-400" aria-live="polite">
         No headlines
       </div>
     );
@@ -644,7 +652,7 @@ function RunningHeadlinesStrip({
 
   return (
     <div
-      className="overflow-hidden rounded-lg border border-gray-700 bg-[linear-gradient(180deg,rgba(31,41,55,0.88),rgba(17,24,39,0.96))] xl:flex-1 xl:min-h-0"
+      className="fd-card-soft overflow-hidden xl:flex-1 xl:min-h-0"
       aria-live="polite"
     >
       <div
@@ -1248,7 +1256,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
 
   if (error) {
     return (
-      <div className="bg-gray-800 rounded-xl border border-gray-700 p-8 text-center">
+      <div className="fd-card p-8 text-center">
         <p className="text-red-400 text-xs mb-2">{error}</p>
         <button
           type="button"
@@ -1263,25 +1271,26 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
 
   return (
     <div className="space-y-6 pb-4">
-      <section className="rounded-xl border border-gray-700 bg-gray-800/80 shadow-[0_14px_30px_-26px_rgba(15,23,42,0.8)]">
+      <section className="fd-card border-sky-400/15 bg-slate-900/95">
         <div className="space-y-4 p-4 sm:p-5">
           <div className="space-y-3">
             <div className="space-y-4 xl:grid xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.95fr)] xl:items-start xl:gap-4 xl:space-y-0">
               <div className="space-y-3">
               <div className="flex flex-wrap gap-2">
-                <div className="inline-flex items-center gap-2 rounded-full border border-gray-700 bg-gray-700/50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300">
+                <div className="inline-flex items-center gap-2 rounded-full border border-sky-400/25 bg-sky-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-100">
                   <span className="h-2 w-2 rounded-full bg-sky-400" />
                   Market view
                 </div>
-                <span className="rounded-full border border-gray-700 bg-gray-700/50 px-3 py-1 text-[11px] font-medium text-slate-300">
+                <span className="rounded-full border border-slate-500/30 bg-slate-500/10 px-3 py-1 text-[11px] font-medium text-slate-200">
                   Range: {getRangeLabel(range)}
                 </span>
               </div>
               <div className="space-y-2">
                 <h1 className="max-w-3xl text-xl font-semibold tracking-tight text-white sm:text-2xl">
-                  Market overview, movers, and regional context in one screen.
+                  Market overview, movers, and
+                  <span className="text-sky-300"> regional context</span> in one screen.
                 </h1>
-                <p className="max-w-2xl text-xs leading-relaxed text-gray-400 sm:text-sm">
+                <p className="max-w-2xl text-xs leading-relaxed text-slate-300 sm:text-sm">
                   {heroDescription} Scan the market quickly, then drill into the names or regions that matter.
                 </p>
               </div>
@@ -1325,7 +1334,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
         </div>
       </section>
 
-      <section className="rounded-xl border border-gray-700 bg-gray-800/80 p-3 shadow-[0_12px_26px_-22px_rgba(15,23,42,0.8)]">
+      <section className="fd-card border-slate-600/60 bg-slate-900/92 p-3">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap gap-2">
             <button
@@ -1333,8 +1342,8 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
               onClick={() => handleMarketTabChange('overview')}
               className={`rounded-full border px-4 py-1.5 text-xs font-medium transition sm:text-sm ${
                 activeTab === 'overview'
-                  ? 'border-sky-400/25 bg-sky-400/10 text-white'
-                  : 'border-gray-700 bg-gray-700/50 text-slate-300 hover:border-gray-600 hover:bg-gray-700 hover:text-white'
+                  ? 'border-sky-400/30 bg-sky-500/12 text-sky-100'
+                  : 'border-slate-600/60 bg-slate-500/10 text-slate-300 hover:border-slate-400/60 hover:bg-slate-500/15 hover:text-white'
               }`}
             >
               Overview
@@ -1344,8 +1353,8 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
               onClick={() => handleMarketTabChange('regional')}
               className={`rounded-full border px-4 py-1.5 text-xs font-medium transition sm:text-sm ${
                 activeTab === 'regional'
-                  ? 'border-sky-400/25 bg-sky-400/10 text-white'
-                  : 'border-gray-700 bg-gray-700/50 text-slate-300 hover:border-gray-600 hover:bg-gray-700 hover:text-white'
+                  ? 'border-sky-400/30 bg-sky-500/12 text-sky-100'
+                  : 'border-slate-600/60 bg-slate-500/10 text-slate-300 hover:border-slate-400/60 hover:bg-slate-500/15 hover:text-white'
               }`}
             >
               Regional Map
@@ -1378,8 +1387,8 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
                 onClick={() => setRange(r)}
                 className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] transition sm:text-xs ${
                   range === r
-                    ? 'border-gray-500 bg-gray-700 text-white'
-                    : 'border-gray-700 bg-gray-700/50 text-slate-300 hover:border-gray-600 hover:bg-gray-700 hover:text-white'
+                    ? 'border-cyan-400/30 bg-cyan-500/12 text-cyan-100'
+                    : 'border-slate-600/60 bg-slate-500/10 text-slate-300 hover:border-slate-400/60 hover:bg-slate-500/15 hover:text-white'
                 }`}
               >
                 {r === '1d'
@@ -1451,11 +1460,11 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
               ) : (
                 <div className="grid grid-cols-1 gap-4 animate-pulse sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-4">
                   {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="overflow-hidden rounded-xl border border-gray-700 bg-gray-800/70">
-                      <div className="h-14 border-b border-gray-700 bg-gray-700/60" />
+                    <div key={i} className="fd-card overflow-hidden border-slate-600/60 bg-slate-900/92">
+                      <div className="h-14 border-b border-slate-700 bg-slate-500/10" />
                       <div className="grid grid-cols-2 gap-2.5 p-3">
                         {[1, 2, 3, 4, 5, 6].map((j) => (
-                          <div key={j} className="h-32 rounded-lg bg-gray-700/70" />
+                          <div key={j} className="h-32 rounded-lg bg-slate-500/10" />
                         ))}
                       </div>
                     </div>
@@ -1511,11 +1520,11 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
               ) : (
                 <div className="grid grid-cols-1 gap-6 animate-pulse lg:grid-cols-2 2xl:grid-cols-3">
                   {[1, 2, 3].map((i) => (
-                    <div key={i} className="overflow-hidden rounded-xl border border-gray-700 bg-gray-800/70">
-                      <div className="h-16 border-b border-gray-700 bg-gray-700/60" />
+                    <div key={i} className="fd-card overflow-hidden border-slate-600/60 bg-slate-900/92">
+                      <div className="h-16 border-b border-slate-700 bg-slate-500/10" />
                       <div className="space-y-2 p-3">
                         {[1, 2, 3, 4, 5, 6, 7, 8].map((j) => (
-                          <div key={j} className="h-12 rounded-lg bg-gray-700/70" />
+                          <div key={j} className="h-12 rounded-lg bg-slate-500/10" />
                         ))}
                       </div>
                     </div>
@@ -1545,12 +1554,12 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
 
       {activeTab === 'regional' && (
         <section className="space-y-4">
-          <div className="relative rounded-xl border border-gray-700 bg-gray-800/80 p-3 shadow-[0_12px_26px_-22px_rgba(15,23,42,0.8)] sm:p-4">
+          <div className="fd-card relative border-cyan-400/15 bg-slate-900/95 p-3 sm:p-4">
             {!user ? (
               <>
                 <WorldMapRegionalStocks regionalItems={[]} usIndices={[]} />
                 <div
-                  className="absolute inset-3 flex flex-col items-center justify-center rounded-xl bg-gray-900/88"
+                  className="absolute inset-3 flex flex-col items-center justify-center rounded-xl border border-slate-600/50 bg-slate-950/88"
                   role="status"
                   aria-live="polite"
                 >
@@ -1562,11 +1571,11 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
               </>
             ) : mapDataLoading && mapRegions.length === 0 && mapUsIndices.length === 0 ? (
               <>
-                <div className="overflow-hidden rounded-xl border border-gray-700 bg-gray-800/80">
-                  <div className="h-12 border-b border-gray-700 bg-gray-700/60" />
-                  <div className="w-full animate-pulse bg-gray-700/60" style={{ aspectRatio: '2 / 1' }} />
+                <div className="fd-card overflow-hidden border-slate-600/60 bg-slate-900/92">
+                  <div className="h-12 border-b border-slate-700 bg-slate-500/10" />
+                  <div className="w-full animate-pulse bg-slate-500/10" style={{ aspectRatio: '2 / 1' }} />
                 </div>
-                <div className="absolute left-6 right-6 top-6 z-10 rounded-xl border border-gray-700 bg-gray-800/90 px-4 py-3 shadow-[0_14px_32px_-24px_rgba(0,0,0,0.85)]">
+                <div className="fd-card absolute left-6 right-6 top-6 z-10 border-cyan-400/20 bg-slate-900/96 px-4 py-3 shadow-[0_14px_32px_-24px_rgba(0,0,0,0.85)]">
                   <div className="flex items-center gap-3">
                     <svg className="h-5 w-5 animate-spin shrink-0 text-sky-400" fill="none" viewBox="0 0 24 24" aria-hidden>
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />

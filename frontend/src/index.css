@@ -15,6 +15,17 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  --fd-surface: rgba(15, 23, 42, 0.88);
+  --fd-surface-strong: rgba(15, 23, 42, 0.94);
+  --fd-surface-soft: rgba(2, 6, 23, 0.68);
+  --fd-border: rgba(71, 85, 105, 0.72);
+  --fd-border-soft: rgba(71, 85, 105, 0.6);
+  --fd-pill-border: rgba(51, 65, 85, 0.8);
+  --fd-pill-bg: rgba(15, 23, 42, 0.7);
+  --fd-text-soft: rgb(203 213 225);
+  --fd-radius-card: 0.75rem;
+  --fd-radius-card-tight: 0.5rem;
 }
 
 body {
@@ -31,6 +42,85 @@ body {
 
 * {
   box-sizing: border-box;
+}
+
+@layer components {
+  .fd-page-block {
+    @apply px-1 py-2 sm:px-0 sm:py-3;
+  }
+
+  .fd-page-content {
+    @apply px-1 py-4 sm:px-0 sm:py-5;
+  }
+
+  .fd-card {
+    border: 1px solid var(--fd-border);
+    border-radius: var(--fd-radius-card);
+    background: var(--fd-surface);
+    box-shadow: 0 18px 40px rgba(2, 6, 23, 0.14);
+  }
+
+  .fd-card-strong {
+    border: 1px solid var(--fd-border);
+    border-radius: var(--fd-radius-card);
+    background: var(--fd-surface-strong);
+    box-shadow: 0 20px 48px rgba(2, 6, 23, 0.16);
+  }
+
+  .fd-card-soft {
+    border: 1px solid var(--fd-border-soft);
+    border-radius: var(--fd-radius-card-tight);
+    background: var(--fd-surface-soft);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+
+  .fd-pill {
+    @apply rounded-full;
+    border: 1px solid var(--fd-pill-border);
+    background: var(--fd-pill-bg);
+    color: var(--fd-text-soft);
+  }
+
+  .fd-pill-sm {
+    @apply px-2.5 py-1 text-xs font-medium;
+  }
+
+  .fd-pill-md {
+    @apply px-3 py-1.5 text-sm;
+  }
+
+  .fd-input {
+    @apply w-full rounded-full py-3 pl-10 pr-11 text-sm text-white placeholder:text-slate-500 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500/20;
+    border: 1px solid rgba(71, 85, 105, 0.9);
+    background: rgba(15, 23, 42, 0.85);
+  }
+
+  .fd-action-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-6 py-3 font-semibold text-white transition-colors;
+    background: rgb(37 99 235);
+  }
+
+  .fd-action-primary:hover {
+    background: rgb(29 78 216);
+  }
+
+  .fd-action-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-6 py-3 font-semibold text-white transition-colors;
+    background: rgba(51, 65, 85, 0.85);
+    border: 1px solid rgba(71, 85, 105, 0.9);
+  }
+
+  .fd-action-secondary:hover {
+    background: rgba(71, 85, 105, 0.95);
+  }
+
+  .fd-section-title {
+    @apply text-3xl font-bold text-white sm:text-4xl;
+  }
+
+  .fd-section-copy {
+    @apply text-base leading-relaxed text-slate-400 sm:text-lg;
+  }
 }
 
 @keyframes fade-in {

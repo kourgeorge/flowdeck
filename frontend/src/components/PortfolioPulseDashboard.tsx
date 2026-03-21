@@ -279,10 +279,10 @@ function badgeClassForRecommendation(value: string | null | undefined): string {
 }
 
 function cardClassForRecommendation(value: string): string {
-  if (value === 'BUY') return 'border border-emerald-400/20 bg-[linear-gradient(180deg,rgba(16,185,129,0.18),rgba(6,78,59,0.38))] text-emerald-50';
-  if (value === 'SELL') return 'border border-rose-400/20 bg-[linear-gradient(180deg,rgba(244,63,94,0.18),rgba(76,5,25,0.38))] text-rose-50';
-  if (value === 'HOLD') return 'border border-amber-400/20 bg-[linear-gradient(180deg,rgba(245,158,11,0.2),rgba(120,53,15,0.38))] text-amber-50';
-  return 'border border-slate-500/20 bg-[linear-gradient(180deg,rgba(100,116,139,0.18),rgba(30,41,59,0.42))] text-slate-50';
+  if (value === 'BUY') return 'border border-emerald-400/25 bg-emerald-500/12 text-emerald-50';
+  if (value === 'SELL') return 'border border-rose-400/25 bg-rose-500/12 text-rose-50';
+  if (value === 'HOLD') return 'border border-amber-400/25 bg-amber-500/14 text-amber-50';
+  return 'border border-slate-500/25 bg-slate-500/12 text-slate-50';
 }
 
 function getWidgetConfidence(widget: TickerWidget): number | null {
@@ -1288,9 +1288,9 @@ export default function PortfolioPulseDashboard({
                 <span className="truncate text-slate-300">{item.label}</span>
                 <span className="font-semibold text-white">{item.count}</span>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
+                <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
                 <div
-                  className="h-full rounded-full bg-[linear-gradient(90deg,#22d3ee,#34d399)]"
+                  className="h-full rounded-full bg-cyan-400"
                   style={{ width: `${(item.count / topExposureMax) * 100}%` }}
                 />
               </div>
@@ -1505,7 +1505,7 @@ export default function PortfolioPulseDashboard({
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <section className="relative overflow-hidden rounded-[1.25rem] border border-cyan-500/20 bg-[linear-gradient(135deg,rgba(8,47,73,0.55),rgba(15,23,42,0.95)_36%,rgba(30,41,59,0.98)_100%)] px-5 py-5 shadow-[0_20px_60px_rgba(8,47,73,0.18)] xl:col-span-2">
+        <section className="relative overflow-hidden rounded-[1.25rem] border border-cyan-400/25 bg-slate-900 px-5 py-5 shadow-[0_20px_60px_rgba(8,47,73,0.12)] xl:col-span-2">
           <div className="pointer-events-none absolute -right-16 top-0 h-40 w-40 rounded-full bg-cyan-400/10 blur-3xl" />
           <div className="pointer-events-none absolute bottom-0 left-1/3 h-32 w-32 rounded-full bg-emerald-400/10 blur-3xl" />
           <div className="relative space-y-4">

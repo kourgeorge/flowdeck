@@ -146,7 +146,7 @@ function StoryImage({
 function NewsroomSkeleton() {
   return (
     <div className="space-y-6 animate-pulse">
-      <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 p-6">
+      <div className="fd-card-strong p-6">
         <div className="h-3 w-28 rounded-full bg-slate-700" />
         <div className="mt-4 h-10 w-72 rounded-full bg-slate-700" />
         <div className="mt-3 h-4 w-[32rem] max-w-full rounded-full bg-slate-800" />
@@ -158,7 +158,7 @@ function NewsroomSkeleton() {
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_22rem]">
-        <div className="overflow-hidden rounded-xl border border-slate-700/70 bg-slate-900/60">
+        <div className="fd-card overflow-hidden">
           <div className="aspect-[16/8.5] bg-slate-800" />
           <div className="space-y-3 p-6">
             <div className="h-4 w-48 rounded-full bg-slate-700" />
@@ -167,11 +167,11 @@ function NewsroomSkeleton() {
             <div className="h-4 w-3/4 rounded-full bg-slate-800" />
           </div>
         </div>
-        <div className="rounded-xl border border-slate-700/70 bg-slate-900/55 p-5">
+        <div className="fd-card p-5">
           <div className="h-5 w-32 rounded-full bg-slate-700" />
           <div className="mt-4 space-y-3">
             {[1, 2, 3, 4].map((item) => (
-              <div key={item} className="rounded-lg border border-slate-700/60 bg-slate-950/50 p-4">
+              <div key={item} className="fd-card-soft p-4">
                 <div className="h-4 w-3/4 rounded-full bg-slate-700" />
                 <div className="mt-2 h-4 w-1/2 rounded-full bg-slate-800" />
               </div>
@@ -182,7 +182,7 @@ function NewsroomSkeleton() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         {[1, 2, 3, 4].map((item) => (
-          <div key={item} className="rounded-lg border border-slate-700/70 bg-slate-900/50 p-4">
+          <div key={item} className="fd-card-soft p-4">
             <div className="mb-4 aspect-[16/9] rounded-lg bg-slate-800" />
             <div className="h-4 w-28 rounded-full bg-slate-700" />
             <div className="mt-3 h-6 w-4/5 rounded-full bg-slate-700" />
@@ -211,8 +211,8 @@ function EmptyState({
   const hasAnyRefinement = hasFilters || hasSearch;
 
   return (
-    <div className="rounded-xl border border-slate-700/75 bg-slate-900/60 px-6 py-12 text-center">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-lg border border-slate-700 bg-slate-800/80 text-cyan-300">
+    <div className="fd-card px-6 py-12 text-center">
+      <div className="fd-card-soft mx-auto flex h-14 w-14 items-center justify-center text-cyan-300">
         <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 7H5m14 5H8m11 5H5" />
         </svg>
@@ -305,7 +305,7 @@ function PulseCard({
       href={article.link}
       target="_blank"
       rel="noopener noreferrer"
-      className="group block rounded-lg border border-slate-700/70 bg-slate-950/55 p-4 transition-colors hover:border-slate-500 hover:bg-slate-950"
+      className="fd-card-soft group block p-4 transition-colors hover:border-slate-500 hover:bg-slate-950"
     >
       <div className="flex items-center justify-between gap-3 text-xs text-slate-400">
         <span className="truncate font-medium text-slate-200">{article.publisher}</span>
@@ -342,12 +342,12 @@ function FeedCard({
       href={article.link}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex h-full flex-col overflow-hidden rounded-lg border border-slate-700/75 bg-slate-900/55 transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-500 hover:bg-slate-900"
+      className="fd-card group flex h-full flex-col overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-500 hover:bg-slate-900"
     >
       <StoryImage article={article} className="aspect-[16/9] w-full" />
       <div className="flex flex-1 flex-col p-4">
         <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-slate-400">
-          <span className="rounded-full border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-slate-300">
+          <span className="fd-pill fd-pill-sm">
             {formatTypeLabel(article.type)}
           </span>
           <span>{formatRelativeTime(article.published_timestamp)}</span>
@@ -539,7 +539,7 @@ export default function DashboardNewsSection({
       className={fillHeight ? 'flex min-h-0 flex-1 flex-col' : undefined}
       style={fillHeight ? { maxHeight: 'min(calc(100vh - 12rem), 1200px)' } : undefined}
     >
-      <div className="px-1 py-2 sm:px-0 sm:py-3">
+      <div className="fd-page-block">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-4xl flex-1">
             <div className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-300/80">Watchlist Newsroom</div>
@@ -559,7 +559,7 @@ export default function DashboardNewsSection({
                     }
                   }}
                   placeholder="Search headlines, summaries, publishers, tickers..."
-                  className="w-full rounded-full border border-slate-600 bg-slate-900/85 py-3 pl-10 pr-11 text-sm text-white placeholder:text-slate-500 transition-colors focus:border-cyan-400/60 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+                  className="fd-input focus:border-cyan-400/60"
                   aria-label="Search newsroom content"
                 />
                 {searchQuery.trim() && onClearSearch && (
@@ -580,7 +580,7 @@ export default function DashboardNewsSection({
 
           <div className="flex flex-col gap-3 xl:items-end">
             <div className="flex flex-wrap gap-2 xl:justify-end">
-              <div className="rounded-full border border-slate-700 bg-slate-900/65 px-3 py-2 text-sm text-slate-300">
+              <div className="fd-pill fd-pill-md">
                 <span className="font-semibold text-white">{filteredArticles.length}</span> live stories
               </div>
               {normalizedSearchQuery && (
@@ -588,11 +588,11 @@ export default function DashboardNewsSection({
                   Searching "{searchQuery.trim()}"
                 </div>
               )}
-              <div className="rounded-full border border-slate-700 bg-slate-900/65 px-3 py-2 text-sm text-slate-300">
+              <div className="fd-pill fd-pill-md">
                 <span className="font-semibold text-white">{visiblePublisherCount}</span> sources
               </div>
               {lastUpdated && (
-                <div className="rounded-full border border-slate-700 bg-slate-900/65 px-3 py-2 text-sm text-slate-300">
+                <div className="fd-pill fd-pill-md">
                   Updated {lastUpdated.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
                 </div>
               )}
@@ -611,7 +611,7 @@ export default function DashboardNewsSection({
                 {visibleTopPublishers.map((publisher) => (
                   <span
                     key={publisher}
-                    className="rounded-full border border-slate-700/90 bg-slate-800/80 px-3 py-1.5 text-xs font-medium text-slate-300"
+                    className="fd-pill fd-pill-sm"
                   >
                     {publisher}
                   </span>
@@ -668,7 +668,7 @@ export default function DashboardNewsSection({
         ref={fillHeight ? scrollContainerRef : undefined}
         className={fillHeight ? 'min-h-0 flex-1 overflow-y-auto' : undefined}
       >
-        <div className="px-1 py-4 sm:px-0 sm:py-5">
+        <div className="fd-page-content">
           {isLoading && articles.length === 0 ? (
             <NewsroomSkeleton />
           ) : !leadArticle ? (
@@ -685,7 +685,7 @@ export default function DashboardNewsSection({
                   href={leadArticle.link}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="group overflow-hidden rounded-xl border border-slate-700/75 bg-slate-900/60 transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-500"
+                  className="fd-card group overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-500"
                 >
                   <div className="relative">
                     <StoryImage article={leadArticle} className="aspect-[16/8.5] w-full" />
@@ -700,7 +700,7 @@ export default function DashboardNewsSection({
 
                   <div className="p-5 sm:p-6">
                     <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-slate-400">
-                      <span className="rounded-full border border-slate-700 bg-slate-800/90 px-2.5 py-1 text-slate-300">
+                      <span className="fd-pill fd-pill-sm">
                         {formatTypeLabel(leadArticle.type)}
                       </span>
                       <span className="font-medium text-slate-200">{leadArticle.publisher}</span>
@@ -729,7 +729,7 @@ export default function DashboardNewsSection({
                       <div className="text-sm font-semibold text-white">Watchlist Pulse</div>
                       <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-400">Fast scan</div>
                     </div>
-                    <div className="rounded-full border border-slate-700/80 bg-slate-900/70 px-3 py-1.5 text-xs font-medium text-slate-300">
+                    <div className="fd-pill fd-pill-sm">
                       {pulseArticles.length} stories
                     </div>
                   </div>
@@ -744,7 +744,7 @@ export default function DashboardNewsSection({
                         />
                       ))
                     ) : (
-                      <div className="rounded-lg border border-slate-700/70 bg-slate-950/45 px-4 py-6 text-sm text-slate-400">
+                      <div className="fd-card-soft px-4 py-6 text-sm text-slate-400">
                         No additional headlines in the current filter set.
                       </div>
                     )}
