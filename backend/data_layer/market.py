@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import math
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, TypeVar
 
@@ -78,6 +79,15 @@ def _cached(key: str, ttl: float, fetch: Callable[[], T]) -> T:
     return get_cached(key, ttl, fetch)
 
 
+def _news_cache_key(ticker: str, vendor: str, lookback_days: int) -> str:
+    return f"news:{ticker.upper()}:{vendor}:{lookback_days}"
+
+
+def _ticker_from_news_cache_key(cache_key: str) -> str:
+    parts = cache_key.split(":", 3)
+    return parts[1] if len(parts) > 1 else ""
+
+
 def _quote_to_item(ticker: str, name: str, q: Optional[Dict]) -> Dict[str, Any]:
     if q is None:
         return {"ticker": ticker, "name": name, "price": None, "change": None, "changePercent": None}
@@ -146,24 +156,86 @@ class MarketDataLayer:
 
     def get_news(self, ticker: str, vendor: Optional[str] = None, lookback_days: int = 7) -> Dict[str, Any]:
         v = vendor or "yfinance"
-        return _cached(f"news:{ticker.upper()}:{v}:{lookback_days}", DATA_CACHE_TTL_NEWS,
+        return _cached(_news_cache_key(ticker, v, lookback_days), DATA_CACHE_TTL_NEWS,
                       lambda: yf_get_news(ticker, lookback_days=lookback_days))
 
     def get_news_batch(self, tickers: List[str], vendor: Optional[str] = None, lookback_days: int = 7) -> Dict[str, Any]:
         if not tickers:
             return {"articles": [], "count": 0}
+        normalized_tickers: List[str] = []
+        seen_tickers = set()
+        for ticker in tickers:
+            ticker_upper = ticker.upper()
+            if ticker_upper and ticker_upper not in seen_tickers:
+                normalized_tickers.append(ticker_upper)
+                seen_tickers.add(ticker_upper)
+
+        cache_vendor = vendor or "yfinance"
+        key_ttl = [
+            (_news_cache_key(ticker, cache_vendor, lookback_days), DATA_CACHE_TTL_NEWS)
+            for ticker in normalized_tickers
+        ]
+
+        def batch_fetch(missing_keys: List[str]) -> Dict[str, Dict[str, Any]]:
+            if not missing_keys:
+                return {}
+
+            results: Dict[str, Dict[str, Any]] = {}
+            work_items = [(cache_key, _ticker_from_news_cache_key(cache_key)) for cache_key in missing_keys]
+            max_workers = min(8, len(work_items))
+
+            def _fetch_one(ticker: str) -> Dict[str, Any]:
+                return yf_get_news(ticker, lookback_days=lookback_days)
+
+            if max_workers <= 1:
+                for cache_key, ticker in work_items:
+                    try:
+                        results[cache_key] = _fetch_one(ticker)
+                    except Exception as exc:
+                        logger.warning("News batch fetch failed for %s: %s", ticker, exc, exc_info=True)
+                        results[cache_key] = {
+                            "ticker": ticker,
+                            "date": datetime.now().strftime("%Y-%m-%d"),
+                            "articles": [],
+                            "count": 0,
+                            "error": str(exc),
+                        }
+                return results
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_item = {
+                    executor.submit(_fetch_one, ticker): (cache_key, ticker)
+                    for cache_key, ticker in work_items
+                }
+                for future in as_completed(future_to_item):
+                    cache_key, ticker = future_to_item[future]
+                    try:
+                        results[cache_key] = future.result()
+                    except Exception as exc:
+                        logger.warning("News batch fetch failed for %s: %s", ticker, exc, exc_info=True)
+                        results[cache_key] = {
+                            "ticker": ticker,
+                            "date": datetime.now().strftime("%Y-%m-%d"),
+                            "articles": [],
+                            "count": 0,
+                            "error": str(exc),
+                        }
+            return results
+
+        news_by_cache_key = get_cached_batch(key_ttl, batch_fetch)
         by_key: Dict[str, Dict] = {}
-        for t in tickers:
-            for a in (self.get_news(t, vendor=vendor, lookback_days=lookback_days).get("articles") or []):
+        for ticker in normalized_tickers:
+            cache_key = _news_cache_key(ticker, cache_vendor, lookback_days)
+            payload = news_by_cache_key.get(cache_key) or {}
+            for a in (payload.get("articles") or []):
                 key = a.get("uuid") or a.get("link") or ""
                 if not key:
                     continue
-                tu = t.upper()
                 if key in by_key:
-                    if tu not in (by_key[key].get("tickers") or []):
-                        by_key[key].setdefault("tickers", []).append(tu)
+                    if ticker not in (by_key[key].get("tickers") or []):
+                        by_key[key].setdefault("tickers", []).append(ticker)
                 else:
-                    by_key[key] = {**a, "tickers": [tu]}
+                    by_key[key] = {**a, "tickers": [ticker]}
         articles = sorted(by_key.values(), key=lambda x: x.get("published_timestamp") or 0, reverse=True)
         return {"articles": articles, "count": len(articles)}
 

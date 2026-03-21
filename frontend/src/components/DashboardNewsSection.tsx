@@ -118,9 +118,7 @@ function StoryImage({
 }) {
   if (!article.thumbnail) {
     return (
-      <div className={`${className} relative overflow-hidden bg-gradient-to-br from-slate-800 via-slate-900 to-cyan-950`}>
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(96,165,250,0.22),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.18),transparent_32%)]" />
-        <div className="absolute right-5 top-5 h-24 w-24 rounded-full border border-white/10 bg-white/5 blur-2xl" />
+      <div className={`${className} relative overflow-hidden bg-slate-900`}>
         <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between gap-3 text-xs text-slate-200/90">
           <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">
             {formatTypeLabel(article.type)}
@@ -148,7 +146,7 @@ function StoryImage({
 function NewsroomSkeleton() {
   return (
     <div className="space-y-6 animate-pulse">
-      <div className="rounded-[1.9rem] border border-slate-700/70 bg-slate-900/70 p-6">
+      <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 p-6">
         <div className="h-3 w-28 rounded-full bg-slate-700" />
         <div className="mt-4 h-10 w-72 rounded-full bg-slate-700" />
         <div className="mt-3 h-4 w-[32rem] max-w-full rounded-full bg-slate-800" />
@@ -160,7 +158,7 @@ function NewsroomSkeleton() {
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_22rem]">
-        <div className="overflow-hidden rounded-[1.8rem] border border-slate-700/70 bg-slate-900/60">
+        <div className="overflow-hidden rounded-xl border border-slate-700/70 bg-slate-900/60">
           <div className="aspect-[16/8.5] bg-slate-800" />
           <div className="space-y-3 p-6">
             <div className="h-4 w-48 rounded-full bg-slate-700" />
@@ -169,11 +167,11 @@ function NewsroomSkeleton() {
             <div className="h-4 w-3/4 rounded-full bg-slate-800" />
           </div>
         </div>
-        <div className="rounded-[1.8rem] border border-slate-700/70 bg-slate-900/55 p-5">
+        <div className="rounded-xl border border-slate-700/70 bg-slate-900/55 p-5">
           <div className="h-5 w-32 rounded-full bg-slate-700" />
           <div className="mt-4 space-y-3">
             {[1, 2, 3, 4].map((item) => (
-              <div key={item} className="rounded-2xl border border-slate-700/60 bg-slate-950/50 p-4">
+              <div key={item} className="rounded-lg border border-slate-700/60 bg-slate-950/50 p-4">
                 <div className="h-4 w-3/4 rounded-full bg-slate-700" />
                 <div className="mt-2 h-4 w-1/2 rounded-full bg-slate-800" />
               </div>
@@ -184,8 +182,8 @@ function NewsroomSkeleton() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         {[1, 2, 3, 4].map((item) => (
-          <div key={item} className="rounded-[1.4rem] border border-slate-700/70 bg-slate-900/50 p-4">
-            <div className="mb-4 aspect-[16/9] rounded-2xl bg-slate-800" />
+          <div key={item} className="rounded-lg border border-slate-700/70 bg-slate-900/50 p-4">
+            <div className="mb-4 aspect-[16/9] rounded-lg bg-slate-800" />
             <div className="h-4 w-28 rounded-full bg-slate-700" />
             <div className="mt-3 h-6 w-4/5 rounded-full bg-slate-700" />
             <div className="mt-2 h-4 w-full rounded-full bg-slate-800" />
@@ -213,8 +211,8 @@ function EmptyState({
   const hasAnyRefinement = hasFilters || hasSearch;
 
   return (
-    <div className="rounded-[1.8rem] border border-slate-700/75 bg-slate-900/60 px-6 py-12 text-center">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-700 bg-slate-800/80 text-cyan-300">
+    <div className="rounded-xl border border-slate-700/75 bg-slate-900/60 px-6 py-12 text-center">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-lg border border-slate-700 bg-slate-800/80 text-cyan-300">
         <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 7H5m14 5H8m11 5H5" />
         </svg>
@@ -307,7 +305,7 @@ function PulseCard({
       href={article.link}
       target="_blank"
       rel="noopener noreferrer"
-      className="group block rounded-2xl border border-slate-700/70 bg-slate-950/55 p-4 transition-colors hover:border-slate-500 hover:bg-slate-950"
+      className="group block rounded-lg border border-slate-700/70 bg-slate-950/55 p-4 transition-colors hover:border-slate-500 hover:bg-slate-950"
     >
       <div className="flex items-center justify-between gap-3 text-xs text-slate-400">
         <span className="truncate font-medium text-slate-200">{article.publisher}</span>
@@ -344,7 +342,7 @@ function FeedCard({
       href={article.link}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex h-full flex-col overflow-hidden rounded-[1.4rem] border border-slate-700/75 bg-slate-900/55 transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-500 hover:bg-slate-900"
+      className="group flex h-full flex-col overflow-hidden rounded-lg border border-slate-700/75 bg-slate-900/55 transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-500 hover:bg-slate-900"
     >
       <StoryImage article={article} className="aspect-[16/9] w-full" />
       <div className="flex flex-1 flex-col p-4">
@@ -391,16 +389,21 @@ export default function DashboardNewsSection({
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const requestIdRef = useRef(0);
   const tickersKey = tickers.join(',');
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
 
   const fetchNews = useCallback(async () => {
     const portfolioTickers = tickersKey ? tickersKey.split(',') : [];
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
 
     if (portfolioTickers.length === 0) {
       setArticles([]);
       setSelectedTickers([]);
       setLastUpdated(new Date());
+      setError(null);
+      setIsLoading(false);
       return;
     }
 
@@ -408,40 +411,26 @@ export default function DashboardNewsSection({
     setError(null);
 
     try {
-      const results = await Promise.allSettled(
-        portfolioTickers.map((ticker) => tickerApi.getNews(ticker))
+      const response = await tickerApi.getNewsBatch(portfolioTickers);
+      if (requestId !== requestIdRef.current) return;
+
+      setArticles(
+        (response.articles ?? []).map((article) => ({
+          ...article,
+          publisher: article.publisher ?? '',
+          type: article.type ?? '',
+          thumbnail: article.thumbnail ?? null,
+        }))
       );
-
-      const byKey = new Map<string, NewsArticleWithTicker>();
-      results.forEach((result, index) => {
-        if (result.status === 'fulfilled' && result.value?.articles?.length) {
-          const ticker = portfolioTickers[index];
-          if (!ticker) return;
-
-          result.value.articles.forEach((article) => {
-            const key = article.uuid || article.link;
-            const existing = byKey.get(key);
-
-            if (existing) {
-              if (!existing.tickers.includes(ticker)) {
-                existing.tickers.push(ticker);
-              }
-            } else {
-              byKey.set(key, { ...article, tickers: [ticker] });
-            }
-          });
-        }
-      });
-
-      const merged = Array.from(byKey.values());
-      merged.sort((left, right) => (right.published_timestamp ?? 0) - (left.published_timestamp ?? 0));
-      setArticles(merged);
       setLastUpdated(new Date());
       setDisplayCount(PAGE_SIZE);
     } catch (fetchError) {
+      if (requestId !== requestIdRef.current) return;
       setError(fetchError instanceof Error ? fetchError.message : 'Failed to load news');
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [tickersKey]);
 
@@ -477,12 +466,28 @@ export default function DashboardNewsSection({
     setSelectedTickers([]);
   }, []);
 
-  const filteredArticles = articles.filter((article) => {
-    const matchesTickers = selectedTickers.length === 0
-      || article.tickers.some((ticker) => selectedTickers.includes(ticker));
+  const selectedTickerSet = new Set(selectedTickers);
+  const tickerCounts = tickers.reduce<Record<string, number>>((accumulator, ticker) => {
+    accumulator[ticker] = 0;
+    return accumulator;
+  }, {});
+  const filteredArticles: NewsArticleWithTicker[] = [];
 
-    if (!matchesTickers) return false;
-    if (!normalizedSearchQuery) return true;
+  for (const article of articles) {
+    for (const ticker of article.tickers) {
+      if (ticker in tickerCounts) {
+        tickerCounts[ticker] += 1;
+      }
+    }
+
+    const matchesTickers = selectedTickerSet.size === 0
+      || article.tickers.some((ticker) => selectedTickerSet.has(ticker));
+
+    if (!matchesTickers) continue;
+    if (!normalizedSearchQuery) {
+      filteredArticles.push(article);
+      continue;
+    }
 
     const searchableText = [
       article.title,
@@ -492,14 +497,13 @@ export default function DashboardNewsSection({
       article.tickers.join(' '),
     ].join(' ').toLowerCase();
 
-    return searchableText.includes(normalizedSearchQuery);
-  });
+    if (searchableText.includes(normalizedSearchQuery)) {
+      filteredArticles.push(article);
+    }
+  }
+
   const displayList = filteredArticles.slice(0, displayCount);
   const hasMore = displayList.length < filteredArticles.length;
-  const tickerCounts = tickers.reduce<Record<string, number>>((accumulator, ticker) => {
-    accumulator[ticker] = articles.filter((article) => article.tickers.includes(ticker)).length;
-    return accumulator;
-  }, {});
 
   useEffect(() => {
     if (!hasMore || !loadMoreRef.current || (fillHeight && !scrollContainerRef.current)) return;
@@ -532,12 +536,10 @@ export default function DashboardNewsSection({
 
   return (
     <section
-      className={`rounded-[2rem] border border-slate-700/75 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.08),transparent_28%),radial-gradient(circle_at_top_right,rgba(96,165,250,0.10),transparent_32%),linear-gradient(180deg,rgba(15,23,42,0.96),rgba(10,15,28,0.98))] shadow-[0_28px_90px_-48px_rgba(8,15,34,0.92)] ${
-        fillHeight ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : ''
-      }`}
+      className={fillHeight ? 'flex min-h-0 flex-1 flex-col' : undefined}
       style={fillHeight ? { maxHeight: 'min(calc(100vh - 12rem), 1200px)' } : undefined}
     >
-      <div className="border-b border-slate-700/70 px-5 py-6 sm:px-7">
+      <div className="px-1 py-2 sm:px-0 sm:py-3">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-4xl flex-1">
             <div className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-300/80">Watchlist Newsroom</div>
@@ -656,7 +658,7 @@ export default function DashboardNewsSection({
         </div>
 
         {error && (
-          <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          <div className="mt-5 rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
             Showing the last successful newsroom pull. Refresh failed: {error}
           </div>
         )}
@@ -666,7 +668,7 @@ export default function DashboardNewsSection({
         ref={fillHeight ? scrollContainerRef : undefined}
         className={fillHeight ? 'min-h-0 flex-1 overflow-y-auto' : undefined}
       >
-        <div className="px-5 py-6 sm:px-7 sm:py-7">
+        <div className="px-1 py-4 sm:px-0 sm:py-5">
           {isLoading && articles.length === 0 ? (
             <NewsroomSkeleton />
           ) : !leadArticle ? (
@@ -683,11 +685,11 @@ export default function DashboardNewsSection({
                   href={leadArticle.link}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="group overflow-hidden rounded-[1.8rem] border border-slate-700/75 bg-slate-900/60 transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-500"
+                  className="group overflow-hidden rounded-xl border border-slate-700/75 bg-slate-900/60 transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-500"
                 >
                   <div className="relative">
                     <StoryImage article={leadArticle} className="aspect-[16/8.5] w-full" />
-                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/25 to-transparent" />
+                    <div className="pointer-events-none absolute inset-0 bg-slate-950/20" />
                     <div className="absolute right-4 top-4">
                       <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-slate-950/70 px-3 py-1.5 text-xs font-medium text-white backdrop-blur">
                         Lead story
@@ -721,13 +723,13 @@ export default function DashboardNewsSection({
                   </div>
                 </a>
 
-                <div className="rounded-[1.8rem] border border-slate-700/75 bg-slate-900/55 p-4 sm:p-5">
+                <div className="p-1 sm:p-0">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-sm font-semibold text-white">Watchlist Pulse</div>
                       <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-400">Fast scan</div>
                     </div>
-                    <div className="rounded-full border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs font-medium text-slate-300">
+                    <div className="rounded-full border border-slate-700/80 bg-slate-900/70 px-3 py-1.5 text-xs font-medium text-slate-300">
                       {pulseArticles.length} stories
                     </div>
                   </div>
@@ -742,7 +744,7 @@ export default function DashboardNewsSection({
                         />
                       ))
                     ) : (
-                      <div className="rounded-2xl border border-slate-700/70 bg-slate-950/45 px-4 py-6 text-sm text-slate-400">
+                      <div className="rounded-lg border border-slate-700/70 bg-slate-950/45 px-4 py-6 text-sm text-slate-400">
                         No additional headlines in the current filter set.
                       </div>
                     )}

@@ -184,6 +184,82 @@ class TestMarketDataLayerQuote(unittest.TestCase):
         self.assertEqual(single_result["fifty_two_week_high"], 555.45)
 
 
+class TestMarketDataLayerNews(unittest.TestCase):
+    def setUp(self) -> None:
+        clear_cache()
+
+    @patch("data_layer.market.yf_get_news")
+    @patch("data_layer.market.get_cached_batch")
+    def test_get_news_batch_dedupes_articles_and_tickers(
+        self,
+        mock_get_cached_batch: object,
+        mock_yf_get_news: object,
+    ) -> None:
+        def cached_batch_impl(key_ttl, batch_fn):
+            keys = [key for key, _ in key_ttl]
+            return batch_fn(keys)
+
+        mock_get_cached_batch.side_effect = cached_batch_impl
+        mock_yf_get_news.side_effect = lambda ticker, lookback_days=7: {
+            "ticker": ticker,
+            "articles": [
+                {
+                    "uuid": "shared-story",
+                    "title": "Shared story",
+                    "publisher": "Reuters",
+                    "link": "https://example.com/shared",
+                    "published_time": "2026-03-20 10:00:00",
+                    "published_timestamp": 1_763_468_400,
+                    "type": "story",
+                    "thumbnail": None,
+                },
+                {
+                    "uuid": f"{ticker}-solo",
+                    "title": f"{ticker} solo story",
+                    "publisher": "Bloomberg",
+                    "link": f"https://example.com/{ticker.lower()}",
+                    "published_time": "2026-03-20 09:00:00",
+                    "published_timestamp": 1_763_464_800,
+                    "type": "story",
+                    "thumbnail": None,
+                },
+            ],
+            "count": 2,
+        }
+
+        layer = MarketDataLayer()
+        result = layer.get_news_batch(["AAPL", "MSFT", "AAPL"])
+
+        self.assertEqual(mock_yf_get_news.call_count, 2)
+        mock_yf_get_news.assert_any_call("AAPL", lookback_days=7)
+        mock_yf_get_news.assert_any_call("MSFT", lookback_days=7)
+        self.assertEqual(result["count"], 3)
+
+        shared = next(article for article in result["articles"] if article["uuid"] == "shared-story")
+        self.assertEqual(shared["tickers"], ["AAPL", "MSFT"])
+
+    @patch("data_layer.market.get_cached_batch")
+    def test_get_news_batch_uses_news_cache_keys(
+        self,
+        mock_get_cached_batch: object,
+    ) -> None:
+        captured_keys: list[str] = []
+
+        def cached_batch_impl(key_ttl, batch_fn):
+            captured_keys.extend(key for key, _ in key_ttl)
+            return {}
+
+        mock_get_cached_batch.side_effect = cached_batch_impl
+
+        layer = MarketDataLayer()
+        layer.get_news_batch(["AAPL", "MSFT"], vendor="yfinance", lookback_days=5)
+
+        self.assertEqual(
+            captured_keys,
+            ["news:AAPL:yfinance:5", "news:MSFT:yfinance:5"],
+        )
+
+
 class TestMarketDataLayerRedditCompanySocial(unittest.TestCase):
     """Tests for get_reddit_company_social (Reddit vendor)."""
 
