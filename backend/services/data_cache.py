@@ -89,8 +89,12 @@ class _SQLiteTTLStore:
             parent = Path(self._path).parent
             if parent:
                 parent.mkdir(parents=True, exist_ok=True)
-            conn = sqlite3.connect(self._path, timeout=10.0)
-            conn.execute("PRAGMA busy_timeout=10000")
+            conn = sqlite3.connect(self._path, timeout=30.0)
+            # WAL lets readers proceed while a writer commits, which matters because
+            # the startup refresh jobs and live requests share this cache file.
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA busy_timeout=30000")
             self._ensure_tables(conn)
             self._local.conn = conn
         return conn

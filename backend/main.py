@@ -2,8 +2,10 @@
 
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+from functools import partial
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -13,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # Ensure backend loggers have sensible defaults (uvicorn configures root; our loggers propagate)
 logging.getLogger("services.analysis_service").setLevel(logging.INFO)
 logging.getLogger("services.report_service").setLevel(logging.INFO)
+logger = logging.getLogger(__name__)
 
 env_path = Path(__file__).parent / ".env"
 load_dotenv(dotenv_path=env_path)
@@ -77,43 +80,43 @@ async def lifespan(app: FastAPI):
             if scheduler is None:
                 from apscheduler.schedulers.background import BackgroundScheduler
                 scheduler = BackgroundScheduler()
-            import threading
-
-            def _run_refresh(fn):
+            def _run_refresh(fn: str) -> None:
+                started_at = time.monotonic()
                 try:
                     from data_layer import get_data_gateway
                     gateway = get_data_gateway()
-                    if hasattr(gateway, fn):
-                        getattr(gateway, fn)()
-                except Exception as e:
-                    print(f"Market cache refresh ({fn}) failed: {e}")
-
-            def _refresh_market_overview_cache():
-                threading.Thread(target=_run_refresh, args=("refresh_market_overview_cache",), daemon=True).start()
-
-            def _refresh_market_movers_cache():
-                threading.Thread(target=_run_refresh, args=("refresh_market_movers_cache",), daemon=True).start()
-
-            def _refresh_homepage_widgets_cache():
-                threading.Thread(target=_run_refresh, args=("refresh_homepage_widgets_cache",), daemon=True).start()
+                    refresh_fn = getattr(gateway, fn, None)
+                    if refresh_fn is None:
+                        logger.warning("Market cache refresh skipped: gateway has no %s", fn)
+                        return
+                    logger.info("Starting market cache refresh: %s", fn)
+                    refresh_fn()
+                    logger.info(
+                        "Completed market cache refresh: %s in %.2fs",
+                        fn,
+                        time.monotonic() - started_at,
+                    )
+                except Exception:
+                    logger.exception("Market cache refresh (%s) failed", fn)
+                    raise
 
             refresh_base = datetime.now()
             scheduler.add_job(
-                _refresh_market_overview_cache,
+                partial(_run_refresh, "refresh_market_overview_cache"),
                 "interval",
                 minutes=5,
                 id="market_overview_refresh",
                 next_run_time=refresh_base,
             )
             scheduler.add_job(
-                _refresh_market_movers_cache,
+                partial(_run_refresh, "refresh_market_movers_cache"),
                 "interval",
                 minutes=5,
                 id="market_movers_refresh",
                 next_run_time=refresh_base + timedelta(minutes=1),
             )
             scheduler.add_job(
-                _refresh_homepage_widgets_cache,
+                partial(_run_refresh, "refresh_homepage_widgets_cache"),
                 "interval",
                 minutes=5,
                 id="homepage_widgets_refresh",
