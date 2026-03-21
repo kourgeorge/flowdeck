@@ -190,6 +190,17 @@ body {
   display: none;
 }
 
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
 
 /* Suppress focus outline on recharts SVG (radar/chart clicks) */
 .recharts-wrapper svg,

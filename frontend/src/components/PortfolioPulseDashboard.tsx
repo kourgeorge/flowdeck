@@ -504,30 +504,32 @@ function MoversList({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-      {rows.map((row) => {
-        const symbol = row.symbol ?? '';
-        const sectorLabel = formatSectorAbbreviation(row.sector || row.industry);
-        const companyName = row.shortName || 'Unknown company';
-        return (
-          <button
-            key={`${symbol}-${row.shortName ?? ''}`}
-            type="button"
-            onClick={() => symbol && onSelectTicker(symbol)}
-            className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 overflow-hidden rounded-[0.95rem] border border-slate-700/70 bg-slate-950/40 px-3 py-2.5 text-left transition-colors hover:border-slate-500/70 hover:bg-slate-900"
-          >
-            <span className="truncate text-[11px] font-semibold text-white">{symbol || '—'}</span>
-            <span className={`shrink-0 whitespace-nowrap text-right text-xs font-semibold ${((row.regularMarketChangePercent ?? 0) >= 0) ? 'text-emerald-300' : 'text-rose-300'}`}>
-              {formatPercent(row.regularMarketChangePercent)}
-            </span>
-            <p className="truncate text-[11px] leading-4 text-slate-400">{sectorLabel}</p>
-            <p className="shrink-0 whitespace-nowrap text-right text-[11px] leading-4 text-slate-400">
-              {formatCompactNumber(row.regularMarketVolume)}
-            </p>
-            <p className="col-span-2 truncate text-[11px] leading-4 text-slate-300">{companyName}</p>
-          </button>
-        );
-      })}
+    <div className="scrollbar-hide h-[13.5rem] overflow-y-auto">
+      <div className="grid grid-cols-1 gap-1.5">
+        {rows.map((row) => {
+          const symbol = row.symbol ?? '';
+          const sectorLabel = formatSectorAbbreviation(row.sector || row.industry);
+          const companyName = row.shortName || 'Unknown company';
+          return (
+            <button
+              key={`${symbol}-${row.shortName ?? ''}`}
+              type="button"
+              onClick={() => symbol && onSelectTicker(symbol)}
+              className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 overflow-hidden rounded-[0.95rem] border border-slate-700/70 bg-slate-950/40 px-3 py-2.5 text-left transition-colors hover:border-slate-500/70 hover:bg-slate-900"
+            >
+              <span className="truncate text-[11px] font-semibold text-white">{symbol || '—'}</span>
+              <span className={`shrink-0 whitespace-nowrap text-right text-xs font-semibold ${((row.regularMarketChangePercent ?? 0) >= 0) ? 'text-emerald-300' : 'text-rose-300'}`}>
+                {formatPercent(row.regularMarketChangePercent)}
+              </span>
+              <p className="truncate text-[11px] leading-4 text-slate-400">{sectorLabel}</p>
+              <p className="shrink-0 whitespace-nowrap text-right text-[11px] leading-4 text-slate-400">
+                {formatCompactNumber(row.regularMarketVolume)}
+              </p>
+              <p className="col-span-2 truncate text-[11px] leading-4 text-slate-300">{companyName}</p>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1357,7 +1359,7 @@ export default function PortfolioPulseDashboard({
         {moversControls}
       </div>
       <MoversList
-        rows={marketMoverRows.slice(0, 6)}
+        rows={marketMoverRows}
         isLoading={isLoadingMovers}
         onSelectTicker={(ticker) => navigate(`/tickers/${ticker}`)}
       />
