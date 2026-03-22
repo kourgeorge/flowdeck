@@ -110,11 +110,10 @@ export default function MajorStockWidgets({ widgets, tickerToName }: MajorStockW
             key={widget.ticker}
             type="button"
             onClick={() => navigate(`/tickers/${widget.ticker}`)}
-            className="group relative h-full overflow-hidden rounded-xl border border-slate-600/60 bg-slate-900/94 p-4 text-left shadow-[0_20px_60px_-36px_rgba(15,23,42,0.72)] transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-400/25 hover:bg-slate-900 hover:shadow-[0_28px_80px_-36px_rgba(8,47,73,0.34)]"
+            className="group relative h-full overflow-hidden rounded-xl border border-slate-600/60 bg-slate-900/94 p-3 text-left shadow-[0_20px_60px_-36px_rgba(15,23,42,0.72)] transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-400/25 hover:bg-slate-900 hover:shadow-[0_28px_80px_-36px_rgba(8,47,73,0.34)]"
           >
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-sky-500/[0.04]" />
-            <div className="relative flex h-full flex-col gap-3">
-              <div className="space-y-3 rounded-lg bg-sky-500/[0.05] px-3 py-3">
+            <div className="relative flex h-full flex-col gap-2.5">
+              <div className="space-y-1.5 rounded-lg bg-sky-500/[0.05] px-2.5 py-2.5">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="inline-flex items-center rounded-sm border border-slate-500/30 bg-slate-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-200">
                     {getMarketStatusLabel(widget.market_status)}
@@ -123,23 +122,24 @@ export default function MajorStockWidgets({ widgets, tickerToName }: MajorStockW
                 </div>
 
                 <div className="flex items-start justify-between gap-3">
-                  <h3 className="min-w-0 flex-1 text-[1.35rem] font-semibold tracking-[-0.03em] text-white">{widget.ticker}</h3>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-[1.35rem] font-semibold tracking-[-0.03em] text-white">{widget.ticker}</h3>
+                    <p className="break-words text-sm leading-tight text-slate-400">{name}</p>
+                  </div>
                   <div className="shrink-0 text-right">
                     <div className="text-xl font-semibold tracking-[-0.03em] text-white">
                       {widget.current_price > 0 ? formatPrice(widget.current_price, widget.currency) : '—'}
                     </div>
-                    <div className={`mt-1 text-sm font-medium ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                    <div className={`mt-0.5 text-sm font-medium ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
                       {priceChangeLabel}
                     </div>
                   </div>
                 </div>
-
-                <p className="break-words text-sm leading-snug text-slate-400">{name}</p>
               </div>
 
               <div className="p-1">
                 <div className="mb-2 flex items-center justify-between">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Radar</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">AI Analysis</div>
                   {averageScore != null ? (
                     <div className="rounded-sm border border-cyan-400/20 bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold tabular-nums text-cyan-100">
                       {averageScore.toFixed(1)}/10
@@ -158,14 +158,6 @@ export default function MajorStockWidgets({ widgets, tickerToName }: MajorStockW
               </div>
 
               <div className="min-w-0 p-1">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                    AI Analysis
-                  </div>
-                  <span className="rounded-sm border border-slate-500/30 bg-slate-500/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-slate-300">
-                    {scoreEntries.length} factors
-                  </span>
-                </div>
                 {scoreEntries.length > 0 ? (
                   <div className="overflow-hidden rounded-xl border border-slate-600/50 bg-slate-950/72">
                     <div className="grid grid-cols-2 gap-px bg-slate-700/60">

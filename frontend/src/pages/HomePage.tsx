@@ -69,10 +69,8 @@ function SignificantSevenSkeleton() {
       {SIGNIFICANT_SEVEN_TICKERS.map((ticker) => (
         <div
           key={ticker}
-          className="relative h-full overflow-hidden rounded-xl border border-slate-600/60 bg-slate-900/94 p-4 shadow-[0_20px_60px_-36px_rgba(15,23,42,0.72)]"
+          className="relative h-full overflow-hidden rounded-xl border border-slate-600/60 bg-slate-900/94 p-3 shadow-[0_20px_60px_-36px_rgba(15,23,42,0.72)]"
         >
-          <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-r from-slate-800 via-slate-700/60 to-slate-800 opacity-60" />
-
           <div className="relative flex h-full flex-col gap-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
