@@ -298,7 +298,7 @@ class MarketDataLayer:
         return _cached(f"future_events:{ticker.upper()}", DATA_CACHE_TTL_ANALYST, lambda: yf_get_future_events(ticker))
 
     def get_similar_tickers(self, ticker: str, limit: int = 10, offset: int = 0) -> Dict[str, Any]:
-        return _cached(f"similar_tickers:v2:{ticker.upper()}:{limit}:{offset}", DATA_CACHE_TTL_SIMILAR_TICKERS,
+        return _cached(f"similar_tickers:v3:{ticker.upper()}:{limit}:{offset}", DATA_CACHE_TTL_SIMILAR_TICKERS,
                       lambda: yahoo_query.get_similar_tickers(ticker, limit=limit, offset=offset, get_quotes_batch=self.get_quotes_batch))
 
     def get_daily_market_movers(self, count: int = 8) -> Dict[str, Any]:

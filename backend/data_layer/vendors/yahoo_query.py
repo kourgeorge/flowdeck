@@ -16,6 +16,26 @@ from typing import Any, Callable, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 
+_SIMILAR_TICKER_FUNDAMENTAL_FIELDS = (
+    "market_cap",
+    "trailing_pe",
+    "forward_pe",
+    "trailing_eps",
+    "forward_eps",
+    "ebitda",
+    "revenue",
+    "profit_margin",
+    "gross_margin",
+    "operating_margin",
+    "ebitda_margin",
+    "beta",
+    "dividend_yield",
+    "fifty_two_week_high",
+    "fifty_two_week_low",
+    "target_mean_price",
+)
+
+
 def _coerce_float(value: Any) -> Optional[float]:
     if value is None or isinstance(value, bool):
         return None
@@ -223,6 +243,39 @@ def _load_major_tickers_and_cache() -> tuple[List[str], Dict[str, Dict[str, Any]
     return major_tickers, sector_cache
 
 
+def _refresh_sparse_similar_rows(rows: List[Dict[str, Any]]) -> None:
+    """Refresh sparse similar-stock fundamentals for the visible page.
+
+    The on-disk major-stocks cache can be incomplete or stale. Refreshing only the
+    visible page keeps the endpoint responsive while repairing missing display data.
+    """
+
+    sparse_symbols = [
+        row.get("ticker")
+        for row in rows
+        if row.get("ticker") and any(row.get(field) is None for field in _SIMILAR_TICKER_FUNDAMENTAL_FIELDS)
+    ]
+    if not sparse_symbols:
+        return
+
+    fresh_info = get_sector_info_batch([str(symbol) for symbol in sparse_symbols])
+    if not isinstance(fresh_info, dict):
+        return
+
+    refreshable_fields = ("name", "sector", "industry", "recommendation_key", *_SIMILAR_TICKER_FUNDAMENTAL_FIELDS)
+    for row in rows:
+        symbol = row.get("ticker")
+        if not symbol:
+            continue
+        latest = fresh_info.get(str(symbol).upper()) or fresh_info.get(str(symbol))
+        if not isinstance(latest, dict):
+            continue
+        for field in refreshable_fields:
+            value = latest.get(field)
+            if value is not None:
+                row[field] = value
+
+
 def get_similar_tickers(
     ticker: str,
     limit: int = 10,
@@ -359,6 +412,9 @@ def get_similar_tickers(
 
     total_count = len(all_matches)
     similar_stocks = all_matches[safe_offset : safe_offset + safe_limit]
+
+    if similar_stocks:
+        _refresh_sparse_similar_rows(similar_stocks)
 
     if get_quotes_batch and similar_stocks:
         symbols = [r["ticker"] for r in similar_stocks if r.get("ticker")]
