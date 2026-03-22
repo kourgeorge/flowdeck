@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import DashboardNewsSection from '../components/DashboardNewsSection';
+import DashboardNewsSection, { NewsroomSkeleton } from '../components/DashboardNewsSection';
 import PageHeader from '../components/PageHeader';
 import TickerSearch from '../components/TickerSearch';
 import { SIGNIFICANT_SEVEN_RANK, SIGNIFICANT_SEVEN_TICKERS } from '../constants/majorTickers';
@@ -102,15 +102,7 @@ export default function NewsroomPage() {
             )}
 
             {pageIsLoading && displayTickers.length === 0 ? (
-              <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-                <div className="flex items-center gap-2 text-gray-300 text-sm">
-                  <svg className="w-4 h-4 text-blue-400 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                  </svg>
-                  <span>Loading newsroom...</span>
-                </div>
-              </div>
+              <NewsroomSkeleton />
             ) : displayTickers.length > 0 ? (
               <DashboardNewsSection
                 tickers={displayTickers}

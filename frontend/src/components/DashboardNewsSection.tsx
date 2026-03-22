@@ -143,7 +143,7 @@ function StoryImage({
   );
 }
 
-function NewsroomSkeleton() {
+export function NewsroomSkeleton() {
   return (
     <div className="space-y-6 animate-pulse">
       <div className="fd-card-strong p-6">
