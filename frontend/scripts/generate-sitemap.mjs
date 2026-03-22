@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 const SITE_URL = (process.env.VITE_SITE_URL ?? 'https://flowdeck.biz').replace(/\/$/, '');
 const today = new Date().toISOString().slice(0, 10);
+const SITEMAP_TICKERS = ['NVDA', 'AAPL', 'GOOGL', 'MSFT', 'AMZN', 'META', 'TSLA'];
 
 const staticRoutes = [
   { path: '/', changefreq: 'daily', priority: '1.0' },
@@ -41,9 +42,14 @@ function renderUrl(loc, changefreq, priority) {
   ].join('\n');
 }
 
-const tickerUrls = stocks
-  .map((stock) => stock?.ticker)
-  .filter((ticker, index, all) => typeof ticker === 'string' && ticker.length > 0 && all.indexOf(ticker) === index)
+const availableTickers = new Set(
+  stocks
+    .map((stock) => stock?.ticker)
+    .filter((ticker) => typeof ticker === 'string' && ticker.length > 0)
+);
+
+const tickerUrls = SITEMAP_TICKERS
+  .filter((ticker) => availableTickers.has(ticker))
   .map((ticker) => renderUrl(`${SITE_URL}/tickers/${encodeURIComponent(ticker)}`, 'daily', '0.7'));
 
 const staticUrls = staticRoutes.map((route) => renderUrl(`${SITE_URL}${route.path}`, route.changefreq, route.priority));
