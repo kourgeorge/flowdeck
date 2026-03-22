@@ -88,6 +88,8 @@ export interface ReportData {
   neutral_viewpoint?: string[] | null;
   /** TPS-YAML v0.1 structured trading plan emitted by the Trader agent */
   tps_plan?: string | null;
+  current_price?: number | null;
+  currency?: string | null;
 }
 
 export interface TickerPageData {

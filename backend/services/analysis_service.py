@@ -339,6 +339,25 @@ class AnalysisService:
                 meta.update({k: v for k, v in extra.items() if v is not None})
                 return {"metadata": meta, "content": content or ""}
 
+            def _get_analysis_quote_meta() -> Dict[str, Any]:
+                try:
+                    from data_layer import get_data_gateway
+                    quote = get_data_gateway().get_quote(ticker)
+                except Exception:
+                    return {}
+                if not isinstance(quote, dict):
+                    return {}
+                current_price = quote.get("current_price")
+                currency = quote.get("currency")
+                meta: Dict[str, Any] = {}
+                if isinstance(current_price, (int, float)):
+                    meta["current_price"] = float(current_price)
+                if isinstance(currency, str) and currency.strip():
+                    meta["currency"] = currency.strip().upper()
+                return meta
+
+            analysis_quote_meta = _get_analysis_quote_meta()
+
             def _write_report_to_filesystem(key, content, report_dir: Path):
                 """Write report content as a markdown file in the results folder."""
                 try:
@@ -525,7 +544,9 @@ class AnalysisService:
                     meta = _build_report_json(content, chunk.get("recommendation_score"), "Conviction Score", _takeaways(content),
                         expected_return_pct=chunk.get("expected_return_pct"),
                         bear_case_return_pct=chunk.get("bear_case_return_pct"),
-                        bull_case_return_pct=chunk.get("bull_case_return_pct"))
+                        bull_case_return_pct=chunk.get("bull_case_return_pct"),
+                        current_price=analysis_quote_meta.get("current_price"),
+                        currency=analysis_quote_meta.get("currency"))
                     data = {**meta, "bull_viewpoint": bull, "bear_viewpoint": bear}
                     inner = meta.get("metadata", meta)
                     usage = (chunk.get("report_usage") or {}).get("investment_plan")

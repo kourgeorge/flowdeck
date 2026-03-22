@@ -194,6 +194,25 @@ def main() -> None:
         meta.update({k: v for k, v in extra.items() if v is not None})
         return {"metadata": meta, "content": content or ""}
 
+    def _get_analysis_quote_meta() -> dict[str, object]:
+        try:
+            from data_layer import get_data_gateway
+            quote = get_data_gateway().get_quote(ticker)
+        except Exception:
+            return {}
+        if not isinstance(quote, dict):
+            return {}
+        current_price = quote.get("current_price")
+        currency = quote.get("currency")
+        meta: dict[str, object] = {}
+        if isinstance(current_price, (int, float)):
+            meta["current_price"] = float(current_price)
+        if isinstance(currency, str) and currency.strip():
+            meta["currency"] = currency.strip().upper()
+        return meta
+
+    analysis_quote_meta = _get_analysis_quote_meta()
+
     def _write_report(key, content, score, label, llm_usage=None, resources=None, **extra):
         try:
             data = _build_report_json(content, score, label, _takeaways(content), **extra)
@@ -304,6 +323,8 @@ def main() -> None:
                         expected_return_pct=chunk.get("expected_return_pct"),
                         bear_case_return_pct=chunk.get("bear_case_return_pct"),
                         bull_case_return_pct=chunk.get("bull_case_return_pct"),
+                        current_price=analysis_quote_meta.get("current_price"),
+                        currency=analysis_quote_meta.get("currency"),
                     )
                     usage = (chunk.get("report_usage") or {}).get("investment_plan")
                     if usage:

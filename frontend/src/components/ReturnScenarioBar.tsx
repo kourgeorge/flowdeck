@@ -10,19 +10,29 @@
  *     expected={8}
  *     bear={-12}
  *     bull={15}
+ *     referencePrice={145.25}
+ *     currency="USD"
  *   />
  */
+
+import { formatPrice } from '../utils/currency';
 
 interface ReturnScenarioBarProps {
   expected?: number | null;
   bear?: number | null;
   bull?: number | null;
+  referencePrice?: number | null;
+  currency?: string | null;
   /** compact = smaller text / tighter spacing (default: false) */
   compact?: boolean;
 }
 
 function fmt(v: number) {
   return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
+}
+
+function toAbsoluteValue(returnPct: number, currentPrice: number) {
+  return currentPrice * (1 + returnPct / 100);
 }
 
 /** Map a value in [min, max] to a 0–100 percentage position */
@@ -35,10 +45,17 @@ export default function ReturnScenarioBar({
   expected,
   bear,
   bull,
+  referencePrice,
+  currency,
   compact = false,
 }: ReturnScenarioBarProps) {
   const hasAny = expected != null || bear != null || bull != null;
   if (!hasAny) return null;
+  const hasReferencePrice = typeof referencePrice === 'number' && Number.isFinite(referencePrice);
+  const displayValue = (value: number) => {
+    if (!hasReferencePrice) return fmt(value);
+    return formatPrice(toAbsoluteValue(value, referencePrice), currency);
+  };
 
   // Determine axis range — pad 10 % on each side so labels don't clip
   const values = [expected, bear, bull].filter((v): v is number => v != null);
@@ -52,6 +69,7 @@ export default function ReturnScenarioBar({
   // Zero-line position (only shown when axis crosses zero)
   const showZero = axisMin < 0 && axisMax > 0;
   const zeroPos = toPos(0, axisMin, axisMax);
+  const zeroLabel = hasReferencePrice ? formatPrice(referencePrice, currency) : null;
 
   const barH = compact ? 'h-1.5' : 'h-2';
 
@@ -76,10 +94,20 @@ export default function ReturnScenarioBar({
 
         {/* Zero line */}
         {showZero && (
-          <div
-            className="absolute -translate-x-1/2"
-            style={{ left: `${zeroPos}%`, top: '-4px', bottom: '-4px', width: 3, background: 'rgba(209,213,219,0.75)', borderRadius: 1 }}
-          />
+          <>
+            {zeroLabel && (
+              <div
+                className={`absolute -translate-x-1/2 whitespace-nowrap rounded bg-gray-900/90 px-1.5 py-0.5 font-medium text-gray-200 ring-1 ring-gray-700/80 ${compact ? 'text-[10px]' : 'text-xs'}`}
+                style={{ left: `${zeroPos}%`, top: compact ? '-22px' : '-26px' }}
+              >
+                {zeroLabel}
+              </div>
+            )}
+            <div
+              className="absolute -translate-x-1/2"
+              style={{ left: `${zeroPos}%`, top: '-4px', bottom: '-4px', width: 3, background: 'rgba(209,213,219,0.75)', borderRadius: 1 }}
+            />
+          </>
         )}
 
         {/* Bear marker */}
@@ -123,19 +151,19 @@ export default function ReturnScenarioBar({
       {/* Value chips row */}
       <div className={`flex flex-wrap gap-2 mt-1`}>
         {bear != null && (
-          <Chip label="Bear" value={fmt(bear)} color="red" compact={compact} />
+          <Chip label="Bear" value={displayValue(bear)} color="red" compact={compact} />
         )}
         {expected != null && (
           <Chip
             label="Expected"
-            value={fmt(expected)}
+            value={displayValue(expected)}
             color={expected >= 0 ? 'green' : 'red'}
             compact={compact}
             highlight
           />
         )}
         {bull != null && (
-          <Chip label="Bull" value={fmt(bull)} color="green" compact={compact} />
+          <Chip label="Bull" value={displayValue(bull)} color="green" compact={compact} />
         )}
       </div>
     </div>

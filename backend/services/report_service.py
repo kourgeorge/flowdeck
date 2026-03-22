@@ -67,6 +67,8 @@ def _report_row_to_dict(row: Report, date: str) -> Dict[str, Any]:
         "expected_return_pct": meta.get("expected_return_pct"),
         "bear_case_return_pct": meta.get("bear_case_return_pct"),
         "bull_case_return_pct": meta.get("bull_case_return_pct"),
+        "current_price": meta.get("current_price"),
+        "currency": meta.get("currency"),
         "confidence": meta.get("confidence"),
         "models_used": meta.get("models_used"),
         "input_tokens": meta.get("input_tokens"),
@@ -94,7 +96,7 @@ _EMPTY = {
     "content": None, "score": None, "score_label": None, "key_takeaways": [],
     "analysis_date": None, "generated_at": None, "days_ago": None,
     "recommendation": None, "expected_return_pct": None, "bear_case_return_pct": None,
-    "bull_case_return_pct": None, "confidence": None,
+    "bull_case_return_pct": None, "current_price": None, "currency": None, "confidence": None,
 }
 
 

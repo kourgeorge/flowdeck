@@ -70,6 +70,42 @@ function isMainTabId(value: string | null): value is MainTabId {
   return !!value && MAIN_TAB_IDS.includes(value as MainTabId);
 }
 
+function toAnalysisDateKey(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return value.includes('_') ? value.slice(0, value.indexOf('_')) : value.slice(0, 10);
+}
+
+function getHistoricalPeriodForDate(dateKey: string): string {
+  const target = new Date(`${dateKey}T00:00:00Z`);
+  if (Number.isNaN(target.getTime())) return 'max';
+  const now = new Date();
+  const diffDays = Math.max(0, Math.ceil((now.getTime() - target.getTime()) / (1000 * 60 * 60 * 24)));
+  if (diffDays <= 5) return '5d';
+  if (diffDays <= 31) return '1mo';
+  if (diffDays <= 92) return '3mo';
+  if (diffDays <= 184) return '6mo';
+  if (diffDays <= 366) return '1y';
+  if (diffDays <= 731) return '2y';
+  if (diffDays <= 1826) return '5y';
+  if (diffDays <= 3652) return '10y';
+  return 'max';
+}
+
+function getHistoricalCloseForDate(
+  points: Array<{ date?: string; close?: number; adj_close?: number }> | undefined,
+  dateKey: string,
+): number | null {
+  if (!Array.isArray(points) || points.length === 0) return null;
+  for (let idx = points.length - 1; idx >= 0; idx -= 1) {
+    const point = points[idx];
+    const pointDate = toAnalysisDateKey(point?.date);
+    if (!pointDate || pointDate > dateKey) continue;
+    const price = typeof point.close === 'number' ? point.close : point.adj_close;
+    if (typeof price === 'number' && Number.isFinite(price)) return price;
+  }
+  return null;
+}
+
 export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptionChange }: StockDetailPanelProps) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -138,12 +174,14 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const [isLoadingOfficers, setIsLoadingOfficers] = useState(false);
   const [hasLoadedCompanyOfficers, setHasLoadedCompanyOfficers] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [analysisReferencePrice, setAnalysisReferencePrice] = useState<number | null>(null);
 
   const refreshedQuote = useQuoteRefresh(ticker, 60000);
   const prevPriceRef = useRef<number | null>(null);
   const wsClientRef = useRef<WebSocketClient | null>(null);
   const insiderFetchIdRef = useRef(0);
   const viewingHistoricalRunRef = useRef(false);
+  const analysisReferencePriceCacheRef = useRef<Record<string, number | null>>({});
 
   const quoteType = companyInfo?.quoteType ?? (
     fundamentalsData && typeof fundamentalsData === 'object' && 'QuoteType' in fundamentalsData
@@ -275,6 +313,60 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   useEffect(() => {
     viewingHistoricalRunRef.current = !!selectedRunId;
   }, [selectedRunId]);
+
+  const activeAnalysisDate = selectedRunId != null
+    ? stockData?.historical_analyses.find((x) => x.analysis_run_id === selectedRunId)?.date ?? stockData?.report_date ?? null
+    : stockData?.report_date ?? null;
+  const activeAnalysisDateKey = toAnalysisDateKey(activeAnalysisDate);
+  const activeInvestmentPlanReport = selectedRunId != null
+    ? historicalReportsData?.investment_plan
+    : stockData?.reports_with_scores?.investment_plan;
+  const analysisReferencePriceFromMetadata = typeof activeInvestmentPlanReport?.current_price === 'number'
+    ? activeInvestmentPlanReport.current_price
+    : null;
+
+  useEffect(() => {
+    if (analysisReferencePriceFromMetadata != null) {
+      setAnalysisReferencePrice(analysisReferencePriceFromMetadata);
+      return;
+    }
+
+    if (!ticker || !activeAnalysisDateKey) {
+      setAnalysisReferencePrice(null);
+      return;
+    }
+
+    const cacheKey = `${ticker}:${activeAnalysisDateKey}`;
+    if (Object.prototype.hasOwnProperty.call(analysisReferencePriceCacheRef.current, cacheKey)) {
+      setAnalysisReferencePrice(analysisReferencePriceCacheRef.current[cacheKey] ?? null);
+      return;
+    }
+
+    let cancelled = false;
+    setAnalysisReferencePrice(null);
+
+    const loadAnalysisReferencePrice = async () => {
+      try {
+        const historical = await tickerApi.getHistoricalPrices(
+          ticker,
+          getHistoricalPeriodForDate(activeAnalysisDateKey),
+          '1d',
+        );
+        const price = getHistoricalCloseForDate(historical?.data, activeAnalysisDateKey);
+        analysisReferencePriceCacheRef.current[cacheKey] = price;
+        if (!cancelled) setAnalysisReferencePrice(price);
+      } catch {
+        analysisReferencePriceCacheRef.current[cacheKey] = null;
+        if (!cancelled) setAnalysisReferencePrice(null);
+      }
+    };
+
+    void loadAnalysisReferencePrice();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ticker, activeAnalysisDateKey, analysisReferencePriceFromMetadata]);
 
   const applyStockData = (data: TickerPageData) => {
     setStockData(data);
@@ -1504,15 +1596,14 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                     </div>
                   )}
                   {stockData.has_reports && (stockData.report_date || selectedRunId != null) && (() => {
-                    const activeDate = selectedRunId != null
-                      ? stockData.historical_analyses.find((x) => x.analysis_run_id === selectedRunId)?.date ?? stockData.report_date ?? null
-                      : stockData.report_date ?? null;
                     const summaryScoreEntries = getAnalysisScoreEntries(activeReportsSource ?? null);
                     const activeConfidence = selectedRunId ? null : stockData.recommendation?.confidence ?? null;
                     const planReport = activeReportsSource?.investment_plan;
                     const activeExpected = selectedRunId ? (planReport?.expected_return_pct ?? null) : stockData.expected_return_pct ?? null;
                     const activeBear = selectedRunId ? (planReport?.bear_case_return_pct ?? null) : stockData.bear_case_return_pct ?? null;
                     const activeBull = selectedRunId ? (planReport?.bull_case_return_pct ?? null) : stockData.bull_case_return_pct ?? null;
+                    const activeReferencePrice = analysisReferencePriceFromMetadata ?? analysisReferencePrice;
+                    const activeCurrency = planReport?.currency ?? quote?.currency ?? stockData.quote?.currency ?? null;
                     const hasReturnScenarios = activeExpected != null || activeBear != null || activeBull != null;
                     return (
                     <>
@@ -1532,7 +1623,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                                 Running…
                               </span>
                             ) : (
-                              parseReportDate(activeDate)?.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) ?? 'N/A'
+                              parseReportDate(activeAnalysisDate)?.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) ?? 'N/A'
                             )}
                           </div>
                           {modelsUsed && (modelsUsed.provider || modelsUsed.deep_think || modelsUsed.quick_think) && (
@@ -1577,6 +1668,8 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                               expected={activeExpected}
                               bear={activeBear}
                               bull={activeBull}
+                              referencePrice={activeReferencePrice}
+                              currency={activeCurrency}
                               compact
                             />
                           )}

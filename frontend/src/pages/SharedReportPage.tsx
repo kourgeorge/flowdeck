@@ -46,6 +46,8 @@ interface SharedTickerReport {
     expected_return_pct?: number | null;
     bear_case_return_pct?: number | null;
     bull_case_return_pct?: number | null;
+    current_price?: number | null;
+    currency?: string | null;
     key_takeaways?: string[];
     bull_viewpoint?: string[] | null;
     bear_viewpoint?: string[] | null;
@@ -381,7 +383,14 @@ export default function SharedReportPage() {
           </div>
           {hasReturnScenarios && (
             <div className="mt-3 pt-3 border-t border-gray-600/50">
-              <ReturnScenarioBar expected={expectedPct} bear={bearPct} bull={bullPct} compact />
+              <ReturnScenarioBar
+                expected={expectedPct}
+                bear={bearPct}
+                bull={bullPct}
+                referencePrice={plan?.current_price ?? null}
+                currency={plan?.currency ?? null}
+                compact
+              />
             </div>
           )}
         </div>

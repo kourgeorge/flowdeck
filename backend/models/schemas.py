@@ -167,8 +167,10 @@ class ReportData(BaseModel):
     expected_return_pct: Optional[float] = None
     bear_case_return_pct: Optional[float] = None
     bull_case_return_pct: Optional[float] = None
+    current_price: Optional[float] = None
+    currency: Optional[str] = None
 
-    @field_validator('expected_return_pct', 'bear_case_return_pct', 'bull_case_return_pct', mode='before')
+    @field_validator('expected_return_pct', 'bear_case_return_pct', 'bull_case_return_pct', 'current_price', mode='before')
     @classmethod
     def sanitize_return_pcts(cls, v):
         return _sanitize_float(v) if v is not None else None

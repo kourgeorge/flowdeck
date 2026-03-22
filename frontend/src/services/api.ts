@@ -784,6 +784,8 @@ export const tickerApi = {
     expected_return_pct?: number | null;
     bear_case_return_pct?: number | null;
     bull_case_return_pct?: number | null;
+    current_price?: number | null;
+    currency?: string | null;
   }>> => {
     const token = getStoredToken();
     const response = await api.get(`/api/tickers/${ticker}/reports/${analysisRunId}`, {
