@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from statistics import mean, pstdev
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, computed_field
@@ -78,6 +77,7 @@ _EVENT_WEIGHT: Dict[str, float] = {
     "rsi_bearish_divergence": 2.0,
 }
 _STRENGTH_MULTIPLIER: Dict[EventStrength, float] = {"low": 1.0, "medium": 1.5, "high": 2.0}
+_PRICE_TECHNICAL_LOOKBACK_DAYS = 10
 _UPCOMING_EARNINGS_LOOKAHEAD_DAYS = 30
 _INSIDER_LOOKBACK_DAYS = 30
 _INSIDER_VALUE_THRESHOLD = 100_000.0
@@ -123,19 +123,74 @@ def _strength_from_ratio(ratio: Optional[float]) -> EventStrength:
 
 
 def _score_events(events: List[DetectedEvent]) -> tuple[float, List[str]]:
-    weighted: List[tuple[str, float]] = []
+    weighted: Dict[str, float] = {}
     total = 0.0
     for event in events:
         contribution = _EVENT_WEIGHT.get(event.event_type, 1.0) * _STRENGTH_MULTIPLIER.get(event.strength, 1.0)
         total += contribution
-        weighted.append((event.event_type, contribution))
-    weighted.sort(key=lambda item: item[1], reverse=True)
-    dominant = [name for name, _score in weighted]
+        weighted[event.event_type] = weighted.get(event.event_type, 0.0) + contribution
+    dominant = [
+        name
+        for name, _score in sorted(
+            weighted.items(),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+    ]
     return round(total, 4), dominant
 
 
 def _valid_values(values: List[Optional[float]]) -> List[float]:
     return [value for value in values if value is not None]
+
+
+def _build_prefix_stats(values: List[Optional[float]]) -> tuple[List[int], List[float], List[float]]:
+    counts = [0]
+    sums = [0.0]
+    sum_squares = [0.0]
+    for value in values:
+        if value is None:
+            counts.append(counts[-1])
+            sums.append(sums[-1])
+            sum_squares.append(sum_squares[-1])
+            continue
+        counts.append(counts[-1] + 1)
+        sums.append(sums[-1] + value)
+        sum_squares.append(sum_squares[-1] + (value * value))
+    return counts, sums, sum_squares
+
+
+def _window_count(prefix_counts: List[int], start: int, end: int) -> int:
+    return prefix_counts[end] - prefix_counts[start]
+
+
+def _window_mean(
+    prefix_counts: List[int],
+    prefix_sums: List[float],
+    start: int,
+    end: int,
+) -> Optional[float]:
+    count = _window_count(prefix_counts, start, end)
+    if count <= 0:
+        return None
+    return (prefix_sums[end] - prefix_sums[start]) / count
+
+
+def _window_pstdev(
+    prefix_counts: List[int],
+    prefix_sums: List[float],
+    prefix_sum_squares: List[float],
+    start: int,
+    end: int,
+) -> Optional[float]:
+    count = _window_count(prefix_counts, start, end)
+    if count <= 0:
+        return None
+    total = prefix_sums[end] - prefix_sums[start]
+    total_squares = prefix_sum_squares[end] - prefix_sum_squares[start]
+    mean_value = total / count
+    variance = max(0.0, (total_squares / count) - (mean_value * mean_value))
+    return variance ** 0.5
 
 
 def _normalize_bars(bars: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -399,6 +454,7 @@ def extract_price_technical_events(
     ticker: str,
     *,
     bars: List[Dict[str, Any]],
+    lookback_days: int = _PRICE_TECHNICAL_LOOKBACK_DAYS,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
 ) -> TickerEventSummary:
@@ -414,208 +470,282 @@ def extract_price_technical_events(
     lows = [row["low"] for row in normalized]
     volumes = [row["volume"] for row in normalized]
     dates = [row["date"] for row in normalized]
+    date_points = [_parse_date(value) or datetime.utcnow() for value in dates]
 
-    end_dt = _parse_date(end_date or dates[-1]) or datetime.utcnow()
-    start_dt = _parse_date(start_date or dates[0]) or _parse_date(dates[0]) or end_dt
-    latest_date = dates[-1]
+    earliest_dt = date_points[0]
+    end_dt = _parse_date(end_date or dates[-1]) or date_points[-1] or datetime.utcnow()
+    if start_date:
+        start_dt = _parse_date(start_date) or earliest_dt
+    else:
+        normalized_lookback_days = max(1, int(lookback_days))
+        start_dt = max(earliest_dt, end_dt - timedelta(days=normalized_lookback_days - 1))
 
     daily_returns: List[Optional[float]] = [
         _safe_pct_change(closes[idx], closes[idx - 1]) for idx in range(1, len(closes))
     ]
-    valid_returns = _valid_values(daily_returns)
-    prior_returns_20 = [value for value in daily_returns[-21:-1] if value is not None]
+    abs_gaps: List[Optional[float]] = [None] + [
+        abs(_safe_pct_change(opens[idx], closes[idx - 1]))
+        if _safe_pct_change(opens[idx], closes[idx - 1]) is not None
+        else None
+        for idx in range(1, len(opens))
+    ]
+    positive_volumes: List[Optional[float]] = [
+        value if value is not None and value > 0 else None for value in volumes
+    ]
+    daily_return_counts, daily_return_sums, daily_return_sum_squares = _build_prefix_stats(daily_returns)
+    gap_counts, gap_sums, _gap_sum_squares = _build_prefix_stats(abs_gaps)
+    volume_counts, volume_sums, _volume_sum_squares = _build_prefix_stats(positive_volumes)
+    close_counts, close_sums, _close_sum_squares = _build_prefix_stats(closes)
+
+    valid_daily_returns = [value for value in daily_returns if value is not None]
+    valid_return_prefix_counts = [0]
+    for value in daily_returns:
+        valid_return_prefix_counts.append(valid_return_prefix_counts[-1] + (1 if value is not None else 0))
+    valid_return_counts, valid_return_sums, valid_return_sum_squares = _build_prefix_stats(valid_daily_returns)
 
     events: List[DetectedEvent] = []
-
-    latest_return = daily_returns[-1]
-    if latest_return is not None and prior_returns_20:
-        vol20 = pstdev(prior_returns_20) if len(prior_returns_20) >= 2 else 0.0
-        threshold = max(4.0, 2.0 * vol20)
-        if abs(latest_return) >= threshold:
-            ratio = abs(latest_return) / threshold if threshold > 0 else None
-            event_type = "price_spike_up" if latest_return > 0 else "price_spike_down"
-            events.append(
-                DetectedEvent(
-                    event_type=event_type,
-                    domain="price_technical",
-                    detected_on=latest_date,
-                    window_start=start_dt.strftime("%Y-%m-%d"),
-                    window_end=end_dt.strftime("%Y-%m-%d"),
-                    strength=_strength_from_ratio(ratio),
-                    metric_value=round(latest_return, 4),
-                    threshold_value=round(threshold, 4),
-                    metadata={"return_1d_pct": round(latest_return, 4), "rolling_vol_20d_pct": round(vol20, 4)},
-                )
-            )
-
-    latest_open = opens[-1]
-    prev_close = closes[-2]
-    gap_pct = _safe_pct_change(latest_open, prev_close)
-    prior_gaps = [
-        abs(gap)
-        for gap in (
-            _safe_pct_change(opens[idx], closes[idx - 1]) for idx in range(1, len(opens) - 1)
-        )
-        if gap is not None
+    window_indices = [
+        idx for idx, point in enumerate(date_points)
+        if start_dt <= point <= end_dt
     ]
-    if gap_pct is not None and prior_gaps:
-        avg_gap = mean(prior_gaps[-20:]) if prior_gaps else 0.0
-        threshold = max(2.0, 1.5 * avg_gap)
-        if abs(gap_pct) >= threshold:
-            ratio = abs(gap_pct) / threshold if threshold > 0 else None
-            event_type = "price_gap_up" if gap_pct > 0 else "price_gap_down"
-            events.append(
-                DetectedEvent(
-                    event_type=event_type,
-                    domain="price_technical",
-                    detected_on=latest_date,
-                    window_start=start_dt.strftime("%Y-%m-%d"),
-                    window_end=end_dt.strftime("%Y-%m-%d"),
-                    strength=_strength_from_ratio(ratio),
-                    metric_value=round(gap_pct, 4),
-                    threshold_value=round(threshold, 4),
-                    metadata={
-                        "gap_pct": round(gap_pct, 4),
-                        "prev_close": prev_close,
-                        "open": latest_open,
-                        "avg_abs_gap_20d_pct": round(avg_gap, 4),
-                    },
-                )
-            )
 
-    if len(valid_returns) >= 60:
-        short_vol = pstdev(valid_returns[-10:]) if len(valid_returns[-10:]) >= 2 else 0.0
-        long_vol = pstdev(valid_returns[-60:]) if len(valid_returns[-60:]) >= 2 else 0.0
-        if long_vol > 0:
-            ratio = short_vol / long_vol
-            if ratio >= 1.5:
+    for idx in window_indices:
+        event_date = dates[idx]
+
+        if idx >= 1:
+            latest_return = daily_returns[idx - 1]
+            prior_start = max(0, idx - 21)
+            prior_end = idx - 1
+            prior_return_count = _window_count(daily_return_counts, prior_start, prior_end)
+            if latest_return is not None and prior_return_count > 0:
+                vol20 = _window_pstdev(
+                    daily_return_counts,
+                    daily_return_sums,
+                    daily_return_sum_squares,
+                    prior_start,
+                    prior_end,
+                )
+                vol20 = vol20 if vol20 is not None and prior_return_count >= 2 else 0.0
+                threshold = max(4.0, 2.0 * vol20)
+                if abs(latest_return) >= threshold:
+                    ratio = abs(latest_return) / threshold if threshold > 0 else None
+                    event_type = "price_spike_up" if latest_return > 0 else "price_spike_down"
+                    events.append(
+                        DetectedEvent(
+                            event_type=event_type,
+                            domain="price_technical",
+                            detected_on=event_date,
+                            window_start=dates[max(0, idx - 20)],
+                            window_end=event_date,
+                            strength=_strength_from_ratio(ratio),
+                            metric_value=round(latest_return, 4),
+                            threshold_value=round(threshold, 4),
+                            metadata={
+                                "return_1d_pct": round(latest_return, 4),
+                                "rolling_vol_20d_pct": round(vol20, 4),
+                            },
+                        )
+                    )
+
+            latest_open = opens[idx]
+            prev_close = closes[idx - 1]
+            gap_pct = _safe_pct_change(latest_open, prev_close)
+            prior_gap_start = max(1, idx - 20)
+            prior_gap_end = idx
+            avg_gap = _window_mean(gap_counts, gap_sums, prior_gap_start, prior_gap_end)
+            if gap_pct is not None and avg_gap is not None:
+                threshold = max(2.0, 1.5 * avg_gap)
+                if abs(gap_pct) >= threshold:
+                    ratio = abs(gap_pct) / threshold if threshold > 0 else None
+                    event_type = "price_gap_up" if gap_pct > 0 else "price_gap_down"
+                    events.append(
+                        DetectedEvent(
+                            event_type=event_type,
+                            domain="price_technical",
+                            detected_on=event_date,
+                            window_start=dates[max(0, idx - 20)],
+                            window_end=event_date,
+                            strength=_strength_from_ratio(ratio),
+                            metric_value=round(gap_pct, 4),
+                            threshold_value=round(threshold, 4),
+                            metadata={
+                                "gap_pct": round(gap_pct, 4),
+                                "prev_close": prev_close,
+                                "open": latest_open,
+                                "avg_abs_gap_20d_pct": round(avg_gap, 4),
+                            },
+                        )
+                    )
+
+            current_volume = volumes[idx]
+            prior_volume_start = max(0, idx - 20)
+            prior_volume_end = idx
+            avg_volume = _window_mean(volume_counts, volume_sums, prior_volume_start, prior_volume_end)
+            if current_volume is not None and avg_volume is not None:
+                if avg_volume > 0:
+                    ratio = current_volume / avg_volume
+                    if ratio >= 2.0:
+                        events.append(
+                            DetectedEvent(
+                                event_type="volume_spike",
+                                domain="price_technical",
+                                detected_on=event_date,
+                                window_start=dates[max(0, idx - 20)],
+                                window_end=event_date,
+                                strength=_strength_from_ratio(ratio / 2.0),
+                                metric_value=round(ratio, 4),
+                                threshold_value=2.0,
+                                metadata={
+                                    "current_volume": int(current_volume),
+                                    "avg_volume_20d": round(avg_volume, 2),
+                                },
+                            )
+                        )
+
+        valid_return_end = valid_return_prefix_counts[idx]
+        if valid_return_end >= 60:
+            short_vol = _window_pstdev(
+                valid_return_counts,
+                valid_return_sums,
+                valid_return_sum_squares,
+                valid_return_end - 10,
+                valid_return_end,
+            )
+            short_vol = short_vol if short_vol is not None else 0.0
+            long_vol = _window_pstdev(
+                valid_return_counts,
+                valid_return_sums,
+                valid_return_sum_squares,
+                valid_return_end - 60,
+                valid_return_end,
+            )
+            long_vol = long_vol if long_vol is not None else 0.0
+            if long_vol > 0:
+                ratio = short_vol / long_vol
+                if ratio >= 1.5:
+                    events.append(
+                        DetectedEvent(
+                            event_type="volatility_expansion",
+                            domain="price_technical",
+                            detected_on=event_date,
+                            window_start=dates[max(0, idx - 59)],
+                            window_end=event_date,
+                            strength=_strength_from_ratio(ratio / 1.5),
+                            metric_value=round(ratio, 4),
+                            threshold_value=1.5,
+                            metadata={
+                                "short_vol_10d_pct": round(short_vol, 4),
+                                "long_vol_60d_pct": round(long_vol, 4),
+                            },
+                        )
+                    )
+                elif ratio <= 0.67:
+                    compression_ratio = 0.67 / ratio if ratio > 0 else 2.0
+                    events.append(
+                        DetectedEvent(
+                            event_type="volatility_compression",
+                            domain="price_technical",
+                            detected_on=event_date,
+                            window_start=dates[max(0, idx - 59)],
+                            window_end=event_date,
+                            strength=_strength_from_ratio(compression_ratio),
+                            metric_value=round(ratio, 4),
+                            threshold_value=0.67,
+                            metadata={
+                                "short_vol_10d_pct": round(short_vol, 4),
+                                "long_vol_60d_pct": round(long_vol, 4),
+                            },
+                        )
+                    )
+
+        if idx >= 1:
+            ma_short_prev = _window_mean(close_counts, close_sums, max(0, idx - 20), idx)
+            ma_short_now = _window_mean(close_counts, close_sums, max(0, idx - 19), idx + 1)
+            ma_long_prev = _window_mean(close_counts, close_sums, max(0, idx - 50), idx)
+            ma_long_now = _window_mean(close_counts, close_sums, max(0, idx - 49), idx + 1)
+            if None not in (ma_short_prev, ma_long_prev, ma_short_now, ma_long_now) and ma_short_prev <= ma_long_prev and ma_short_now > ma_long_now:
+                ratio = abs(ma_short_now - ma_long_now) / max(abs(ma_long_now), 1e-9)
                 events.append(
                     DetectedEvent(
-                        event_type="volatility_expansion",
+                        event_type="moving_average_cross",
                         domain="price_technical",
-                        detected_on=latest_date,
-                        window_start=dates[-60],
-                        window_end=latest_date,
-                        strength=_strength_from_ratio(ratio / 1.5),
-                        metric_value=round(ratio, 4),
-                        threshold_value=1.5,
-                        metadata={"short_vol_10d_pct": round(short_vol, 4), "long_vol_60d_pct": round(long_vol, 4)},
+                        detected_on=event_date,
+                        window_start=dates[max(0, idx - 49)],
+                        window_end=event_date,
+                        strength=_strength_from_ratio(ratio * 100.0),
+                        metric_value=round(ma_short_now - ma_long_now, 4),
+                        threshold_value=0.0,
+                        metadata={
+                            "short_window": 20,
+                            "long_window": 50,
+                            "cross": "bullish",
+                            "ma_short": round(ma_short_now, 4),
+                            "ma_long": round(ma_long_now, 4),
+                        },
                     )
                 )
-            elif ratio <= 0.67:
-                compression_ratio = 0.67 / ratio if ratio > 0 else 2.0
+            elif None not in (ma_short_prev, ma_long_prev, ma_short_now, ma_long_now) and ma_short_prev >= ma_long_prev and ma_short_now < ma_long_now:
+                ratio = abs(ma_short_now - ma_long_now) / max(abs(ma_long_now), 1e-9)
                 events.append(
                     DetectedEvent(
-                        event_type="volatility_compression",
+                        event_type="moving_average_cross",
                         domain="price_technical",
-                        detected_on=latest_date,
-                        window_start=dates[-60],
-                        window_end=latest_date,
-                        strength=_strength_from_ratio(compression_ratio),
-                        metric_value=round(ratio, 4),
-                        threshold_value=0.67,
-                        metadata={"short_vol_10d_pct": round(short_vol, 4), "long_vol_60d_pct": round(long_vol, 4)},
+                        detected_on=event_date,
+                        window_start=dates[max(0, idx - 49)],
+                        window_end=event_date,
+                        strength=_strength_from_ratio(ratio * 100.0),
+                        metric_value=round(ma_short_now - ma_long_now, 4),
+                        threshold_value=0.0,
+                        metadata={
+                            "short_window": 20,
+                            "long_window": 50,
+                            "cross": "bearish",
+                            "ma_short": round(ma_short_now, 4),
+                            "ma_long": round(ma_long_now, 4),
+                        },
                     )
                 )
 
-    if len(closes) >= 50:
-        short_prev_values = _valid_values(closes[-21:-1])
-        short_now_values = _valid_values(closes[-20:])
-        long_prev_values = _valid_values(closes[-51:-1])
-        long_now_values = _valid_values(closes[-50:])
-        if short_prev_values and short_now_values and long_prev_values and long_now_values:
-            ma_short_prev = mean(short_prev_values)
-            ma_short_now = mean(short_now_values)
-            ma_long_prev = mean(long_prev_values)
-            ma_long_now = mean(long_now_values)
-        else:
-            ma_short_prev = ma_short_now = ma_long_prev = ma_long_now = None
-        if None not in (ma_short_prev, ma_long_prev, ma_short_now, ma_long_now) and ma_short_prev <= ma_long_prev and ma_short_now > ma_long_now:
-            ratio = abs(ma_short_now - ma_long_now) / max(abs(ma_long_now), 1e-9)
-            events.append(
-                DetectedEvent(
-                    event_type="moving_average_cross",
-                    domain="price_technical",
-                    detected_on=latest_date,
-                    window_start=dates[-50],
-                    window_end=latest_date,
-                    strength=_strength_from_ratio(ratio * 100.0),
-                    metric_value=round(ma_short_now - ma_long_now, 4),
-                    threshold_value=0.0,
-                    metadata={"short_window": 20, "long_window": 50, "cross": "bullish", "ma_short": round(ma_short_now, 4), "ma_long": round(ma_long_now, 4)},
-                )
-            )
-        elif None not in (ma_short_prev, ma_long_prev, ma_short_now, ma_long_now) and ma_short_prev >= ma_long_prev and ma_short_now < ma_long_now:
-            ratio = abs(ma_short_now - ma_long_now) / max(abs(ma_long_now), 1e-9)
-            events.append(
-                DetectedEvent(
-                    event_type="moving_average_cross",
-                    domain="price_technical",
-                    detected_on=latest_date,
-                    window_start=dates[-50],
-                    window_end=latest_date,
-                    strength=_strength_from_ratio(ratio * 100.0),
-                    metric_value=round(ma_short_now - ma_long_now, 4),
-                    threshold_value=0.0,
-                    metadata={"short_window": 20, "long_window": 50, "cross": "bearish", "ma_short": round(ma_short_now, 4), "ma_long": round(ma_long_now, 4)},
-                )
-            )
-
-    if len(highs) >= 252 and highs[-1] is not None:
-        prior_high_values = _valid_values(highs[-252:-1])
-        prior_high = max(prior_high_values) if prior_high_values else None
-        if prior_high is not None and highs[-1] >= prior_high:
-            ratio = highs[-1] / prior_high if prior_high > 0 else None
-            events.append(
-                DetectedEvent(
-                    event_type="new_52w_high",
-                    domain="price_technical",
-                    detected_on=latest_date,
-                    window_start=dates[-252],
-                    window_end=latest_date,
-                    strength=_strength_from_ratio(ratio),
-                    metric_value=round(highs[-1], 4),
-                    threshold_value=round(prior_high, 4),
-                    metadata={"current_high": round(highs[-1], 4), "prior_52w_high": round(prior_high, 4)},
-                )
-            )
-    if len(lows) >= 252 and lows[-1] is not None:
-        prior_low_values = _valid_values(lows[-252:-1])
-        prior_low = min(prior_low_values) if prior_low_values else None
-        if prior_low is not None and lows[-1] <= prior_low:
-            ratio = prior_low / lows[-1] if lows[-1] and lows[-1] > 0 else None
-            events.append(
-                DetectedEvent(
-                    event_type="new_52w_low",
-                    domain="price_technical",
-                    detected_on=latest_date,
-                    window_start=dates[-252],
-                    window_end=latest_date,
-                    strength=_strength_from_ratio(ratio),
-                    metric_value=round(lows[-1], 4),
-                    threshold_value=round(prior_low, 4),
-                    metadata={"current_low": round(lows[-1], 4), "prior_52w_low": round(prior_low, 4)},
-                )
-            )
-
-    current_volume = volumes[-1]
-    prior_volume_window = [value for value in volumes[-21:-1] if value is not None and value > 0]
-    if current_volume is not None and prior_volume_window:
-        avg_volume = mean(prior_volume_window)
-        if avg_volume > 0:
-            ratio = current_volume / avg_volume
-            if ratio >= 2.0:
+        if idx >= 1 and idx + 1 >= 252 and highs[idx] is not None:
+            prior_high_values = _valid_values(highs[max(0, idx - 251): idx])
+            prior_high = max(prior_high_values) if prior_high_values else None
+            if prior_high is not None and highs[idx] >= prior_high:
+                ratio = highs[idx] / prior_high if prior_high > 0 else None
                 events.append(
                     DetectedEvent(
-                        event_type="volume_spike",
+                        event_type="new_52w_high",
                         domain="price_technical",
-                        detected_on=latest_date,
-                        window_start=dates[-21],
-                        window_end=latest_date,
-                        strength=_strength_from_ratio(ratio / 2.0),
-                        metric_value=round(ratio, 4),
-                        threshold_value=2.0,
-                        metadata={"current_volume": int(current_volume), "avg_volume_20d": round(avg_volume, 2)},
+                        detected_on=event_date,
+                        window_start=dates[max(0, idx - 251)],
+                        window_end=event_date,
+                        strength=_strength_from_ratio(ratio),
+                        metric_value=round(highs[idx], 4),
+                        threshold_value=round(prior_high, 4),
+                        metadata={
+                            "current_high": round(highs[idx], 4),
+                            "prior_52w_high": round(prior_high, 4),
+                        },
+                    )
+                )
+        if idx >= 1 and idx + 1 >= 252 and lows[idx] is not None:
+            prior_low_values = _valid_values(lows[max(0, idx - 251): idx])
+            prior_low = min(prior_low_values) if prior_low_values else None
+            if prior_low is not None and lows[idx] <= prior_low:
+                ratio = prior_low / lows[idx] if lows[idx] and lows[idx] > 0 else None
+                events.append(
+                    DetectedEvent(
+                        event_type="new_52w_low",
+                        domain="price_technical",
+                        detected_on=event_date,
+                        window_start=dates[max(0, idx - 251)],
+                        window_end=event_date,
+                        strength=_strength_from_ratio(ratio),
+                        metric_value=round(lows[idx], 4),
+                        threshold_value=round(prior_low, 4),
+                        metadata={
+                            "current_low": round(lows[idx], 4),
+                            "prior_52w_low": round(prior_low, 4),
+                        },
                     )
                 )
 
@@ -706,6 +836,7 @@ def extract_ticker_events(
     future_events: Any = None,
     insider_transactions: Any = None,
     rsi_data: Optional[Dict[str, float]] = None,
+    price_technical_lookback_days: int = _PRICE_TECHNICAL_LOOKBACK_DAYS,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
 ) -> TickerEventSummary:
@@ -714,6 +845,7 @@ def extract_ticker_events(
     technical = extract_price_technical_events(
         ticker,
         bars=bars,
+        lookback_days=price_technical_lookback_days,
         start_date=start_date,
         end_date=end_date,
     )

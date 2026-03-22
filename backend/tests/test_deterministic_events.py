@@ -160,6 +160,34 @@ class TestDeterministicPriceEvents(unittest.TestCase):
         self.assertIn("volume_spike", event_types)
         self.assertGreater(summary.event_score, 0.0)
 
+    def test_extract_price_events_include_recent_10_day_history(self) -> None:
+        closes = [100.0] * 15 + [80.0, 81.0, 82.0, 83.0, 84.0, 85.0, 86.0, 87.0, 88.0, 100.0]
+        bars = _bars_from_closes(closes, start=date(2025, 1, 1))
+
+        summary = extract_price_technical_events("AAPL", bars=bars)
+        spike_events = [event for event in summary.events if event.event_type in {"price_spike_down", "price_spike_up"}]
+
+        self.assertEqual({event.event_type for event in spike_events}, {"price_spike_down", "price_spike_up"})
+        self.assertEqual(
+            {event.event_type: event.detected_on for event in spike_events},
+            {
+                "price_spike_down": "2025-01-16",
+                "price_spike_up": "2025-01-25",
+            },
+        )
+        self.assertEqual(summary.dominant_events.count("price_spike_down"), 1)
+        self.assertEqual(summary.dominant_events.count("price_spike_up"), 1)
+
+    def test_extract_price_events_respects_custom_lookback_days(self) -> None:
+        closes = [100.0] * 15 + [80.0, 81.0, 82.0, 83.0, 84.0, 85.0, 86.0, 87.0, 88.0, 100.0]
+        bars = _bars_from_closes(closes, start=date(2025, 1, 1))
+
+        summary = extract_price_technical_events("AAPL", bars=bars, lookback_days=5)
+        spike_events = [event for event in summary.events if event.event_type in {"price_spike_down", "price_spike_up"}]
+
+        self.assertEqual([event.event_type for event in spike_events], ["price_spike_up"])
+        self.assertEqual(spike_events[0].detected_on, "2025-01-25")
+
     def test_extract_price_events_detects_volatility_expansion(self) -> None:
         closes = [100.0 + (0.1 if i % 2 == 0 else -0.1) for i in range(70)]
         closes += [95.0, 105.0, 94.0, 106.0, 93.0, 107.0, 92.0, 108.0, 91.0, 109.0]
