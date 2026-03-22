@@ -63,6 +63,7 @@ def get_ticker_event_summary(
     history_interval: str = "1d",
     insider_limit: int = 50,
     rsi_look_back_days: int = 60,
+    price_technical_lookback_days: int = 10,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     bars: Optional[List[Dict[str, Any]]] = None,
@@ -105,6 +106,7 @@ def get_ticker_event_summary(
             future_events=resolved_future_events,
             insider_transactions=resolved_insider,
             rsi_data=resolved_rsi,
+            price_technical_lookback_days=price_technical_lookback_days,
             start_date=start_date,
             end_date=end_date,
         )
@@ -121,6 +123,7 @@ def get_ticker_event_summary(
             end_date or "-",
             insider_limit,
             rsi_look_back_days,
+            price_technical_lookback_days,
         ],
         ttl_seconds=PROCESSING_CACHE_TTL_TICKER_EVENTS,
         fetch_fn=_compute,

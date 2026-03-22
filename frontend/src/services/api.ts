@@ -622,7 +622,7 @@ export const tickerApi = {
   },
 
   // Get deterministic technical and fundamental events
-  getEvents: async (ticker: string): Promise<{
+  getEvents: async (ticker: string, params?: { lookbackDays?: number }): Promise<{
     ticker: string;
     event_score: number;
     events: Array<{
@@ -641,7 +641,9 @@ export const tickerApi = {
     event_count: number;
     error?: string;
   }> => {
-    const response = await api.get(`/api/data/events/${ticker}`);
+    const response = await api.get(`/api/data/events/${ticker}`, {
+      params: params?.lookbackDays != null ? { lookback_days: params.lookbackDays } : undefined,
+    });
     return response.data;
   },
 

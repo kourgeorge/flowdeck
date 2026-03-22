@@ -361,7 +361,10 @@ async def data_analyst_recommendations(ticker: str):
 
 
 @router.get("/events/{ticker}")
-async def data_deterministic_events(ticker: str):
+async def data_deterministic_events(
+    ticker: str,
+    lookback_days: int = Query(10, ge=1, le=365, description="Trailing days for price/technical event detection."),
+):
     """Get deterministic technical and fundamental events for a ticker."""
     await _ensure_ticker_exists(ticker)
     try:
@@ -375,6 +378,7 @@ async def data_deterministic_events(ticker: str):
             _gateway(),
             ticker,
             as_of_date=today,
+            price_technical_lookback_days=lookback_days,
         )
         return result.model_dump()
     except Exception as e:
