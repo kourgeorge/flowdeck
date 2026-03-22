@@ -87,6 +87,21 @@ class AdminReportsResponse(BaseModel):
     total: int
 
 
+class AdminReportDetailResponse(BaseModel):
+    id: int
+    ticker: str
+    analysis_run_id: int
+    report_type: str
+    created_at: datetime
+    content: Optional[str] = None
+    metadata: Optional[dict[str, Any]] = None
+    metadata_raw: Optional[str] = None
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    total_tokens: Optional[int] = None
+    cost_usd: Optional[float] = None
+
+
 class AdminAnalysisItem(BaseModel):
     id: int
     ticker: str
@@ -291,6 +306,19 @@ def get_admin_reports(
         reports=[AdminReportItem(**it) for it in items],
         total=total,
     )
+
+
+@router.get("/reports/{report_id}", response_model=AdminReportDetailResponse)
+def get_admin_report_detail(
+    report_id: int,
+    _user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Raw report payload for a single report row in admin."""
+    item = admin_service.get_report_detail(db, report_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return AdminReportDetailResponse(**item)
 
 
 @router.get("/analyses", response_model=AdminAnalysesResponse)

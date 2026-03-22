@@ -46,6 +46,21 @@ export interface AdminReportItem {
   cost_usd?: number;
 }
 
+export interface AdminReportDetail {
+  id: number;
+  ticker: string;
+  analysis_run_id: number;
+  report_type: string;
+  created_at: string;
+  content: string | null;
+  metadata: Record<string, unknown> | null;
+  metadata_raw: string | null;
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
+  cost_usd?: number;
+}
+
 export interface AdminAnalysisItem {
   id: number;
   ticker: string;
@@ -165,6 +180,14 @@ export const adminApi = {
     const res = await api.get<{ reports: AdminReportItem[]; total: number }>(
       '/api/admin/reports',
       { params: { limit }, headers: authHeaders() },
+    );
+    return res.data;
+  },
+
+  getReport: async (reportId: number): Promise<AdminReportDetail> => {
+    const res = await api.get<AdminReportDetail>(
+      `/api/admin/reports/${reportId}`,
+      { headers: authHeaders() },
     );
     return res.data;
   },

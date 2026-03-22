@@ -120,6 +120,42 @@ def list_reports(db: Session, limit: int) -> tuple[list[dict], int]:
     return items, total
 
 
+def get_report_detail(db: Session, report_id: int) -> Optional[dict[str, Any]]:
+    """Return one report with raw content and metadata for admin inspection."""
+    row = (
+        db.query(Report, Execution.id, Execution.subject_id)
+        .outerjoin(Execution, Report.execution_id == Execution.id)
+        .filter(Report.id == report_id)
+        .first()
+    )
+    if not row:
+        return None
+
+    report, ex_id, subject_id = row
+    metadata = None
+    if report.metadata_json:
+        try:
+            metadata = json.loads(report.metadata_json) or {}
+        except Exception:
+            metadata = None
+
+    meta_for_costs = metadata if isinstance(metadata, dict) else {}
+    return {
+        "id": report.id,
+        "ticker": subject_id or "",
+        "analysis_run_id": ex_id or 0,
+        "report_type": report.report_type,
+        "created_at": report.created_at,
+        "content": report.content,
+        "metadata": metadata,
+        "metadata_raw": report.metadata_json,
+        "input_tokens": meta_for_costs.get("input_tokens"),
+        "output_tokens": meta_for_costs.get("output_tokens"),
+        "total_tokens": meta_for_costs.get("total_tokens"),
+        "cost_usd": meta_for_costs.get("cost_usd"),
+    }
+
+
 def list_analyses(db: Session, limit: int) -> tuple[list[dict], int]:
     """Recent analysis runs with creator email and token/cost sums. Returns (items, total)."""
     total = db.query(func.count(Execution.id)).scalar() or 0

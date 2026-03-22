@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useMemo, useCallback } from 'react';
+import { Fragment, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -16,6 +16,7 @@ import {
   type AdminStats,
   type AdminUserItem,
   type AdminReportItem,
+  type AdminReportDetail,
   type AdminAnalysisItem,
   type AdminSubscriptionItem,
   type AnalysisDailyCount,
@@ -33,6 +34,99 @@ type MissionSortKey = 'ticker' | 'company' | 'type' | 'market_cap' | 'sector' | 
 type MissionSortDirection = 'asc' | 'desc';
 type ViewRunsSortKey = 'ticker' | 'analysis_run_id' | 'unique_views' | 'viewed';
 type ViewRunsSortDirection = 'asc' | 'desc';
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function formatJsonPrimitive(value: unknown): string {
+  if (typeof value === 'string') return `"${value}"`;
+  if (value === null) return 'null';
+  return String(value);
+}
+
+function JsonViewerNode({
+  label,
+  value,
+  defaultExpanded = false,
+}: {
+  label?: string;
+  value: unknown;
+  defaultExpanded?: boolean;
+}) {
+  const isArray = Array.isArray(value);
+  const isObject = isJsonObject(value);
+  const isContainer = isArray || isObject;
+  const entries = isArray
+    ? value.map((item, index) => [String(index), item] as const)
+    : isObject
+      ? Object.entries(value)
+      : [];
+  const [expanded, setExpanded] = useState(defaultExpanded);
+
+  if (!isContainer) {
+    return (
+      <div className="flex flex-wrap items-start gap-2 py-0.5">
+        {label && <span className="font-medium text-sky-300">{label}:</span>}
+        <span
+          className={
+            typeof value === 'string'
+              ? 'break-all text-emerald-300'
+              : value === null
+                ? 'text-fuchsia-300'
+                : typeof value === 'number'
+                  ? 'text-amber-300'
+                  : typeof value === 'boolean'
+                    ? 'text-violet-300'
+                    : 'text-gray-200'
+          }
+        >
+          {formatJsonPrimitive(value)}
+        </span>
+      </div>
+    );
+  }
+
+  const isEmpty = entries.length === 0;
+  const summary = isArray ? `[${entries.length}]` : `{${entries.length}}`;
+
+  return (
+    <div className="py-0.5">
+      <button
+        type="button"
+        onClick={() => setExpanded((prev) => !prev)}
+        className="flex items-center gap-2 text-left text-gray-200 transition-colors hover:text-white"
+      >
+        <span className={`inline-block text-[10px] text-gray-500 transition-transform ${expanded ? 'rotate-90' : ''}`}>
+          ▶
+        </span>
+        {label && <span className="font-medium text-sky-300">{label}:</span>}
+        <span className="text-gray-400">{isEmpty ? (isArray ? '[]' : '{}') : summary}</span>
+      </button>
+
+      {expanded && !isEmpty && (
+        <div className="mt-1 ml-2 border-l border-gray-800 pl-3">
+          {entries.map(([entryKey, entryValue]) => (
+            <JsonViewerNode
+              key={entryKey}
+              label={isArray ? undefined : entryKey}
+              value={entryValue}
+              defaultExpanded={false}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function JsonViewer({ data }: { data: unknown }) {
+  return (
+    <div className="max-h-[45vh] overflow-auto rounded-xl border border-gray-800 bg-gray-950/80 p-4 text-xs font-mono text-gray-200">
+      <JsonViewerNode value={data} defaultExpanded />
+    </div>
+  );
+}
 
 function formatDate(s?: string | null, use24Hour = false): string {
   if (!s) return '—';
@@ -146,6 +240,10 @@ export default function AdminDashboardPage() {
   const [usersTotal, setUsersTotal] = useState(0);
   const [reports, setReports] = useState<AdminReportItem[]>([]);
   const [reportsTotal, setReportsTotal] = useState(0);
+  const [selectedReport, setSelectedReport] = useState<AdminReportItem | null>(null);
+  const [selectedReportDetail, setSelectedReportDetail] = useState<AdminReportDetail | null>(null);
+  const [loadingReportDetail, setLoadingReportDetail] = useState(false);
+  const [reportDetailError, setReportDetailError] = useState<string | null>(null);
   const [analyses, setAnalyses] = useState<AdminAnalysisItem[]>([]);
   const [analysesTotal, setAnalysesTotal] = useState(0);
   const [analysisTickerFilter, setAnalysisTickerFilter] = useState('');
@@ -208,6 +306,8 @@ export default function AdminDashboardPage() {
   const [addAmountByUser, setAddAmountByUser] = useState<Record<number, string>>({});
   const [latestReportsCollapsed, setLatestReportsCollapsed] = useState(true);
   const [expandedSubscriptionUserIds, setExpandedSubscriptionUserIds] = useState<Set<number>>(new Set());
+  const reportDetailsRef = useRef<Record<number, AdminReportDetail>>({});
+  const reportDetailRequestRef = useRef(0);
 
   // Sync URL -> tab state (reload / back restores tab)
   useEffect(() => {
@@ -447,6 +547,65 @@ export default function AdminDashboardPage() {
     }
   };
 
+  const closeReportDetail = useCallback(() => {
+    reportDetailRequestRef.current += 1;
+    setSelectedReport(null);
+    setSelectedReportDetail(null);
+    setReportDetailError(null);
+    setLoadingReportDetail(false);
+  }, []);
+
+  const openReportDetail = useCallback(async (report: AdminReportItem) => {
+    const requestId = reportDetailRequestRef.current + 1;
+    reportDetailRequestRef.current = requestId;
+
+    setSelectedReport(report);
+    setSelectedReportDetail(null);
+    setReportDetailError(null);
+
+    const cached = reportDetailsRef.current[report.id];
+    if (cached) {
+      setSelectedReportDetail(cached);
+      setLoadingReportDetail(false);
+      return;
+    }
+
+    setLoadingReportDetail(true);
+    try {
+      const detail = await adminApi.getReport(report.id);
+      if (reportDetailRequestRef.current !== requestId) return;
+      reportDetailsRef.current[report.id] = detail;
+      setSelectedReportDetail(detail);
+    } catch (err: unknown) {
+      if (reportDetailRequestRef.current !== requestId) return;
+      const ax = err as { response?: { data?: { detail?: string } } };
+      setReportDetailError(ax.response?.data?.detail ?? 'Failed to load report details');
+    } finally {
+      if (reportDetailRequestRef.current === requestId) {
+        setLoadingReportDetail(false);
+      }
+    }
+  }, []);
+
+  const selectedReportPayload = useMemo(() => {
+    if (!selectedReportDetail) return null;
+    return {
+      id: selectedReportDetail.id,
+      ticker: selectedReportDetail.ticker,
+      analysis_run_id: selectedReportDetail.analysis_run_id,
+      report_type: selectedReportDetail.report_type,
+      created_at: selectedReportDetail.created_at,
+      input_tokens: selectedReportDetail.input_tokens ?? null,
+      output_tokens: selectedReportDetail.output_tokens ?? null,
+      total_tokens: selectedReportDetail.total_tokens ?? null,
+      cost_usd: selectedReportDetail.cost_usd ?? null,
+      metadata: selectedReportDetail.metadata ?? null,
+      ...(selectedReportDetail.metadata == null && selectedReportDetail.metadata_raw
+        ? { metadata_raw: selectedReportDetail.metadata_raw }
+        : {}),
+    };
+  }, [selectedReportDetail]);
+
   const runMissionForTickers = async (tickers: string[], forceOverride?: boolean) => {
     if (tickers.length === 0) return;
     setMissionActionError(null);
@@ -545,6 +704,15 @@ export default function AdminDashboardPage() {
     if (missionItems.length > 0 || missionLoading) return;
     void refreshMissionControl();
   }, [activeTab, missionItems.length, missionLoading, user?.is_admin]);
+
+  useEffect(() => {
+    if (!selectedReport) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeReportDetail();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedReport, closeReportDetail]);
 
   if (!user) {
     return (
@@ -1416,10 +1584,12 @@ export default function AdminDashboardPage() {
                 </button>
               </div>
               {!latestReportsCollapsed && (
-                <div
-                  id="latest-reports-table"
-                  className="overflow-x-auto overflow-y-auto max-h-96 rounded-lg border border-gray-700 bg-gray-800/80"
-                >
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-400">Click any report row to inspect its raw payload and metadata.</p>
+                  <div
+                    id="latest-reports-table"
+                    className="overflow-x-auto overflow-y-auto max-h-96 rounded-lg border border-gray-700 bg-gray-800/80"
+                  >
                   <table className="w-full min-w-[500px] text-left text-sm">
                     <thead className="sticky top-0 bg-gray-800 z-10">
                       <tr className="border-b border-gray-700">
@@ -1434,11 +1604,25 @@ export default function AdminDashboardPage() {
                     </thead>
                     <tbody>
                       {reports.map((r) => (
-                        <tr key={r.id} className="border-b border-gray-700/50">
+                        <tr
+                          key={r.id}
+                          className="border-b border-gray-700/50 cursor-pointer transition-colors hover:bg-gray-700/30 focus:bg-gray-700/30"
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Open raw report data for ${r.ticker} ${r.report_type}`}
+                          onClick={() => void openReportDetail(r)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              void openReportDetail(r);
+                            }
+                          }}
+                        >
                           <td className="px-4 py-3">
                             <Link
                               to={`/tickers/${r.ticker}`}
                               className="text-blue-400 hover:text-blue-300 font-medium"
+                              onClick={(event) => event.stopPropagation()}
                             >
                               {r.ticker}
                             </Link>
@@ -1459,6 +1643,7 @@ export default function AdminDashboardPage() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               )}
             </section>
@@ -1466,6 +1651,104 @@ export default function AdminDashboardPage() {
         )}
         </div>
       </div>
+
+      {selectedReport && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onClick={closeReportDetail}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="admin-report-raw-data-title"
+        >
+          <div
+            className="flex max-h-[85vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-gray-700 bg-gray-900 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-gray-800 px-5 py-4">
+              <div>
+                <h2 id="admin-report-raw-data-title" className="text-lg font-semibold text-white">
+                  Report raw data
+                </h2>
+                <p className="mt-1 text-sm text-gray-400">
+                  {selectedReport.ticker} • {selectedReport.report_type} • run {selectedReport.analysis_run_id}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeReportDetail}
+                className="rounded-lg border border-gray-700 px-3 py-1.5 text-sm text-gray-300 transition hover:border-gray-600 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="space-y-4 overflow-y-auto px-5 py-4">
+              {loadingReportDetail ? (
+                <div className="flex min-h-40 items-center justify-center">
+                  <div className="text-center">
+                    <svg className="mx-auto mb-3 h-7 w-7 animate-spin text-blue-400" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    <p className="text-sm text-gray-400">Loading report payload…</p>
+                  </div>
+                </div>
+              ) : reportDetailError ? (
+                <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                  {reportDetailError}
+                </div>
+              ) : selectedReportDetail ? (
+                <>
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-xl border border-gray-800 bg-gray-950/60 px-4 py-3">
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Created</p>
+                      <p className="mt-1 text-sm text-gray-200">{formatDate(selectedReportDetail.created_at, true)}</p>
+                    </div>
+                    <div className="rounded-xl border border-gray-800 bg-gray-950/60 px-4 py-3">
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Input tokens</p>
+                      <p className="mt-1 text-sm text-gray-200">
+                        {selectedReportDetail.input_tokens != null
+                          ? selectedReportDetail.input_tokens.toLocaleString()
+                          : '—'}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-gray-800 bg-gray-950/60 px-4 py-3">
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Output tokens</p>
+                      <p className="mt-1 text-sm text-gray-200">
+                        {selectedReportDetail.output_tokens != null
+                          ? selectedReportDetail.output_tokens.toLocaleString()
+                          : '—'}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-gray-800 bg-gray-950/60 px-4 py-3">
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Cost</p>
+                      <p className="mt-1 text-sm text-gray-200">
+                        {selectedReportDetail.cost_usd != null
+                          ? `$${selectedReportDetail.cost_usd.toFixed(4)}`
+                          : '—'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <section>
+                    <h3 className="mb-2 text-sm font-semibold text-white">Raw payload</h3>
+                    <JsonViewer data={selectedReportPayload} />
+                  </section>
+
+                  {selectedReportDetail.content && (
+                    <section>
+                      <h3 className="mb-2 text-sm font-semibold text-white">Content</h3>
+                      <pre className="max-h-72 overflow-auto rounded-xl border border-gray-800 bg-gray-950/80 p-4 text-xs text-gray-200 whitespace-pre-wrap break-words">
+                        {selectedReportDetail.content}
+                      </pre>
+                    </section>
+                  )}
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
