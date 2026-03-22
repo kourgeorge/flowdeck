@@ -108,9 +108,22 @@ def _format_ticker_context(ctx: DigestContext, ticker: str) -> str:
         thesis_parts = []
         for k, v in reports.items():
             if isinstance(v, dict):
+                report_recommendation = v.get("recommendation")
+                expected_return = v.get("expected_return_pct")
+                confidence = v.get("confidence")
+                meta_parts = []
+                if report_recommendation:
+                    meta_parts.append(f"recommendation={report_recommendation}")
+                if expected_return is not None:
+                    meta_parts.append(f"expected_return_pct={expected_return}")
+                if confidence is not None:
+                    meta_parts.append(f"confidence={confidence}")
                 c = v.get("content") or v.get("key_takeaways")
                 if c:
-                    thesis_parts.append(f"{k}: {str(c)[:400]}")
+                    prefix = f"{k}"
+                    if meta_parts:
+                        prefix += f" [{', '.join(meta_parts)}]"
+                    thesis_parts.append(f"{prefix}: {str(c)[:400]}")
             elif v:
                 thesis_parts.append(f"{k}: {str(v)[:400]}")
         if thesis_parts:
@@ -272,6 +285,7 @@ def run_ticker_interpreter(
                     explanation=f"(Interpretation timed out after 3 minutes)",
                     driver="unclear",
                     thesis_comparison="",
+                    recommendation="HOLD: recommendation unavailable because the interpretation timed out.",
                 )
                 continue
             logger.info("Digest: LLM response received for ticker_interpreter %s", ticker)
@@ -282,6 +296,11 @@ def run_ticker_interpreter(
                     explanation=getattr(result, "explanation", str(result)),
                     driver=getattr(result, "driver", "unclear"),
                     thesis_comparison=getattr(result, "thesis_comparison", ""),
+                    recommendation=getattr(
+                        result,
+                        "recommendation",
+                        "HOLD: recommendation unavailable in the model response.",
+                    ),
                 )
             logger.info("Digest: ticker_interpreter done for %s", ticker)
         except Exception as e:
@@ -290,6 +309,7 @@ def run_ticker_interpreter(
                 explanation=f"(Interpretation unavailable: {e})",
                 driver="unclear",
                 thesis_comparison="",
+                recommendation="HOLD: recommendation unavailable because the interpretation failed.",
             )
     return interpretations
 
@@ -398,7 +418,13 @@ def run_narrative_writer(
     """Run the Narrative Writer; return (digest_narrative, what_to_watch)."""
     ticker_texts = []
     for t, interp in (state.ticker_interpretations or {}).items():
-        ticker_texts.append(f"### {t}\n- Explanation: {interp.explanation}\n- Driver: {interp.driver}\n- Thesis comparison: {interp.thesis_comparison}")
+        ticker_texts.append(
+            f"### {t}\n"
+            f"- Explanation: {interp.explanation}\n"
+            f"- Driver: {interp.driver}\n"
+            f"- Thesis comparison: {interp.thesis_comparison}\n"
+            f"- Recommendation: {interp.recommendation}"
+        )
     ticker_interpretations_text = "\n\n".join(ticker_texts) if ticker_texts else "(none)"
 
     mi = state.market_interpretation
@@ -515,12 +541,12 @@ def run_narrative_writer(
             key_signals = getattr(result, "key_signals", "") or ""
             what_to_watch = getattr(result, "what_to_watch", "") or ""
             risks_opportunities = getattr(result, "risks_opportunities", "") or ""
-            # Special tokens allow parsing/formatting by section (market_highlights, key_signals, what_to_watch, risks_opportunities).
+            # Special tokens allow parsing/formatting by section (market_highlights, key_signals, risks_opportunities, what_to_watch).
             sections = [
                 ("Market Highlights", "market_highlights", market_highlights),
                 ("Key Signals", "key_signals", key_signals),
-                ("What to Watch", "what_to_watch", what_to_watch),
                 ("Risks & Opportunities", "risks_opportunities", risks_opportunities),
+                ("What to Watch", "what_to_watch", what_to_watch),
             ]
             narrative = "\n\n".join(
                 f"## {title}\n{token}\n{body.strip()}" for title, token, body in sections if body.strip()

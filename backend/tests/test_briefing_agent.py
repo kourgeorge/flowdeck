@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from backend.processing import DetectedEvent, TickerEventSummary
+from ai_engine.briefing_agent.agents import _format_ticker_context
 from ai_engine.briefing_agent import prompts
 from ai_engine.briefing_agent.context_builder import build_digest_context
 from ai_engine.briefing_agent.runner import run_digest
@@ -82,6 +83,30 @@ class TestBuildDigestContext(unittest.TestCase):
         self.assertEqual(result.global_news, {"items": ["Fed", "CPI"]})
         self.assertEqual(result.web_search_snippet, "Macro snippet")
         self.assertEqual(result.quotes["NSA"]["name"], "National Storage Affiliates Trust")
+
+
+class TestTickerContextFormatting(unittest.TestCase):
+    def test_format_ticker_context_includes_platform_report_recommendation(self) -> None:
+        ctx = DigestContext(
+            tickers=["AAPL"],
+            priority_tickers=["AAPL"],
+            platform_reports={
+                "AAPL": {
+                    "final_trade_decision": {
+                        "recommendation": "BUY",
+                        "expected_return_pct": 12.5,
+                        "confidence": 0.78,
+                        "content": "Demand and margin trends remain supportive.",
+                    }
+                }
+            },
+        )
+
+        text = _format_ticker_context(ctx, "AAPL")
+
+        self.assertIn("recommendation=BUY", text)
+        self.assertIn("expected_return_pct=12.5", text)
+        self.assertIn("confidence=0.78", text)
 
 
 class TestRunDigest(unittest.TestCase):
@@ -298,6 +323,8 @@ class TestNarrativePromptComposition(unittest.TestCase):
         self.assertIn("Keep every sentence short, clear, and specific", instructions)
         self.assertIn("Prefer bullet lists to convey messages", instructions)
         self.assertIn("Prefer Markdown tables", instructions)
+        self.assertIn("explain why the move happened, not just what happened", instructions)
+        self.assertIn("state the recommendation clearly", instructions)
         self.assertIn("### Style prompt", instructions)
         self.assertIn(prompts.DEFAULT_NARRATIVE_STYLE_PROMPT, instructions)
 
@@ -319,6 +346,7 @@ class TestNarrativePromptComposition(unittest.TestCase):
         self.assertIn("Each bullet must be a single short sentence", instructions)
         self.assertIn("Market Highlights", instructions)
         self.assertIn("Risks & Opportunities", instructions)
+        self.assertLess(instructions.index("Risks & Opportunities"), instructions.index("What to Watch"))
 
     def test_balanced_and_professional_prompts_require_short_specific_sentences(self) -> None:
         balanced = prompts.build_narrative_prompt_instructions("balanced")
@@ -331,6 +359,10 @@ class TestNarrativePromptComposition(unittest.TestCase):
 
     def test_concise_uses_structured_output(self) -> None:
         self.assertTrue(prompts.style_uses_structured_output("concise"))
+        self.assertIn(
+            "market_highlights, key_signals, risks_opportunities, what_to_watch",
+            prompts.build_narrative_prompt_instructions("concise"),
+        )
 
     def test_writer_system_requires_markdown(self) -> None:
         self.assertIn("Return valid Markdown only.", prompts.NARRATIVE_WRITER_SYSTEM)
@@ -339,6 +371,23 @@ class TestNarrativePromptComposition(unittest.TestCase):
         self.assertIn("Prefer bullet lists to convey messages", prompts.NARRATIVE_WRITER_SYSTEM)
         self.assertIn("Prefer Markdown tables", prompts.NARRATIVE_WRITER_SYSTEM)
         self.assertIn("Important Events list is provided, treat it as preferred evidence", prompts.NARRATIVE_WRITER_SYSTEM)
+        self.assertIn("explain the likely why behind the move", prompts.NARRATIVE_WRITER_SYSTEM)
+        self.assertIn("state the recommendation clearly", prompts.NARRATIVE_WRITER_SYSTEM)
+
+    def test_ticker_interpreter_prompt_requires_recommendation_and_causal_interpretation(self) -> None:
+        self.assertIn("Explain what happened for this ticker in the period and why", prompts.TICKER_INTERPRETER_SYSTEM)
+        self.assertIn("cross-check them against news, fundamentals, analyst signals", prompts.TICKER_INTERPRETER_SYSTEM)
+        self.assertIn("supports BUY, HOLD, or SELL", prompts.TICKER_INTERPRETER_SYSTEM)
+        self.assertIn("thesis_comparison, recommendation", prompts.TICKER_INTERPRETER_SYSTEM)
+
+        prompt = prompts.build_ticker_interpreter_prompt(
+            ticker="AAPL",
+            context_text="Quote: {}",
+            tool_names=["get_news"],
+            user_context_snapshot="Long-term investor",
+        )
+
+        self.assertIn("and recommendation", prompt)
 
     def test_narrative_writer_prompt_marks_user_note_high_priority(self) -> None:
         prompt = prompts.build_narrative_writer_prompt(
@@ -369,7 +418,7 @@ class TestNarrativePromptComposition(unittest.TestCase):
 
     def test_narrative_writer_prompt_includes_important_events(self) -> None:
         prompt = prompts.build_narrative_writer_prompt(
-            ticker_interpretations_text="### AAPL\n- Explanation: Apple moved higher.",
+            ticker_interpretations_text="### AAPL\n- Explanation: Apple moved higher.\n- Recommendation: BUY: demand held up.",
             market_interpretation_text="Summary: Mixed session\nRelevance to portfolio: Relevant.",
             tool_names=["get_ticker_quote"],
             important_events_text=(
@@ -382,6 +431,21 @@ class TestNarrativePromptComposition(unittest.TestCase):
         self.assertIn("## Important events", prompt)
         self.assertIn("Use these deterministic events as the primary evidence", prompt)
         self.assertIn("AAPL: price_spike_up", prompt)
+
+    def test_narrative_writer_prompt_carries_recommendation_text(self) -> None:
+        prompt = prompts.build_narrative_writer_prompt(
+            ticker_interpretations_text=(
+                "### AAPL\n"
+                "- Explanation: Apple rose after strong services commentary.\n"
+                "- Driver: company\n"
+                "- Thesis comparison: Thesis still holds.\n"
+                "- Recommendation: BUY: the new evidence supports the existing thesis."
+            ),
+            market_interpretation_text="Summary: Mixed session\nRelevance to portfolio: Relevant.",
+            tool_names=["get_ticker_quote"],
+        )
+
+        self.assertIn("- Recommendation: BUY: the new evidence supports the existing thesis.", prompt)
 
     def test_prompts_include_saved_user_profile_context(self) -> None:
         snapshot = "Persona Type: investor\nPreferred AI Style: technical\nSaved AI Memory: Avoid leverage."

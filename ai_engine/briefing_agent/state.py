@@ -33,6 +33,12 @@ class TickerInterpretation(BaseModel):
     thesis_comparison: str = Field(
         description="How today's developments compare to the latest FlowDeck thesis from platform reports."
     )
+    recommendation: str = Field(
+        description=(
+            "Clear recommendation for this ticker based on the latest evidence. "
+            "Start with BUY, HOLD, or SELL, then explain briefly why."
+        )
+    )
 
 
 class MarketInterpretation(BaseModel):
