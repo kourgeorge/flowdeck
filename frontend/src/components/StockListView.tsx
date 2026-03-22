@@ -65,6 +65,10 @@ function getConfidenceValue(widget: TickerWidgetType): number {
 }
 
 function renderEventChips(widget: TickerWidgetType) {
+  if (widget.dominant_events == null && widget.event_count == null) {
+    return <span className="text-xs text-gray-500">Loading signals…</span>;
+  }
+
   const dominantEvents = widget.dominant_events ?? [];
   if (dominantEvents.length === 0) {
     return <span className="text-xs text-gray-500">No signals</span>;

@@ -24,7 +24,10 @@ from models.schemas import (
 from data_layer import get_data_gateway
 from services import token_service
 from services.share_service import get_share_url
-from processing import get_ticker_event_summary
+from processing import (
+    get_cached_ticker_event_summary,
+    warm_ticker_event_summary_async,
+)
 
 router = APIRouter(prefix="/api/tickers", tags=["tickers"])
 
@@ -125,15 +128,22 @@ def _get_ticker_widgets_sync(
     event_summaries: dict[str, dict[str, object]] = {}
     for ticker in ticker_list:
         try:
-            summary = get_ticker_event_summary(gw, ticker, as_of_date=today)
-            event_summaries[ticker] = {
-                "dominant_events": summary.dominant_events[:3],
-                "event_count": summary.event_count,
-            }
+            summary = get_cached_ticker_event_summary(ticker, as_of_date=today)
+            if summary is None:
+                warm_ticker_event_summary_async(gw, ticker, as_of_date=today)
+                event_summaries[ticker] = {
+                    "dominant_events": None,
+                    "event_count": None,
+                }
+            else:
+                event_summaries[ticker] = {
+                    "dominant_events": summary.dominant_events[:3],
+                    "event_count": summary.event_count,
+                }
         except Exception:
             event_summaries[ticker] = {
-                "dominant_events": [],
-                "event_count": 0,
+                "dominant_events": None,
+                "event_count": None,
             }
 
     for ticker in ticker_list:
@@ -184,7 +194,7 @@ def _get_ticker_widgets_sync(
 
         is_major = (ticker.upper() in major_set) if use_major_split else None
         company_name = company_names.get(ticker)
-        event_summary = event_summaries.get(ticker, {"dominant_events": [], "event_count": 0})
+        event_summary = event_summaries.get(ticker, {"dominant_events": None, "event_count": None})
         if quote:
             widget = TickerWidget(
                 ticker=ticker,

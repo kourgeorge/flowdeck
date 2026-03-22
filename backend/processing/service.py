@@ -2,19 +2,80 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 from typing import Any, Dict, List, Optional
 
 try:
     from config import PROCESSING_CACHE_TTL_TICKER_EVENTS
-    from services.platform_cache import get_or_set
+    from services.data_cache import get_cached_raw
+    from services.platform_cache import get_or_set, make_cache_key
 except ModuleNotFoundError:  # pragma: no cover - package-style import path
     from backend.config import PROCESSING_CACHE_TTL_TICKER_EVENTS
-    from backend.services.platform_cache import get_or_set
+    from backend.services.data_cache import get_cached_raw
+    from backend.services.platform_cache import get_or_set, make_cache_key
 
 from .event import TickerEventSummary, extract_ticker_events, parse_rsi_indicator_data
 
 _TICKER_EVENT_CACHE_NAMESPACE = "processing:ticker_events"
 _TICKER_EVENT_CACHE_VERSION = "v1"
+_TICKER_EVENT_WARMER = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ticker-event-summary")
+_TICKER_EVENT_WARMING_KEYS: set[str] = set()
+_TICKER_EVENT_WARMING_LOCK = Lock()
+
+
+def _ticker_event_cache_parts(
+    ticker: str,
+    *,
+    as_of_date: str,
+    history_period: str,
+    history_interval: str,
+    insider_limit: int,
+    rsi_look_back_days: int,
+    price_technical_lookback_days: int,
+    start_date: Optional[str],
+    end_date: Optional[str],
+) -> List[Any]:
+    return [
+        ticker.upper(),
+        as_of_date,
+        history_period,
+        history_interval,
+        start_date or "-",
+        end_date or "-",
+        insider_limit,
+        rsi_look_back_days,
+        price_technical_lookback_days,
+    ]
+
+
+def _ticker_event_cache_key(
+    ticker: str,
+    *,
+    as_of_date: str,
+    history_period: str,
+    history_interval: str,
+    insider_limit: int,
+    rsi_look_back_days: int,
+    price_technical_lookback_days: int,
+    start_date: Optional[str],
+    end_date: Optional[str],
+) -> str:
+    return make_cache_key(
+        _TICKER_EVENT_CACHE_NAMESPACE,
+        *_ticker_event_cache_parts(
+            ticker,
+            as_of_date=as_of_date,
+            history_period=history_period,
+            history_interval=history_interval,
+            insider_limit=insider_limit,
+            rsi_look_back_days=rsi_look_back_days,
+            price_technical_lookback_days=price_technical_lookback_days,
+            start_date=start_date,
+            end_date=end_date,
+        ),
+        version=_TICKER_EVENT_CACHE_VERSION,
+    )
 
 
 def _historical_bars(fetcher: Any, ticker: str, *, period: str, interval: str) -> List[Dict[str, Any]]:
@@ -52,6 +113,96 @@ def _rsi_map(fetcher: Any, ticker: str, *, as_of_date: str, look_back_days: int)
         return parse_rsi_indicator_data(raw)
     except Exception:
         return {}
+
+
+def get_cached_ticker_event_summary(
+    ticker: str,
+    *,
+    as_of_date: str,
+    history_period: str = "1y",
+    history_interval: str = "1d",
+    insider_limit: int = 50,
+    rsi_look_back_days: int = 60,
+    price_technical_lookback_days: int = 10,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> Optional[TickerEventSummary]:
+    """Return a cached ticker event summary when available, without computing on miss."""
+
+    payload = get_cached_raw(
+        _ticker_event_cache_key(
+            ticker,
+            as_of_date=as_of_date,
+            history_period=history_period,
+            history_interval=history_interval,
+            insider_limit=insider_limit,
+            rsi_look_back_days=rsi_look_back_days,
+            price_technical_lookback_days=price_technical_lookback_days,
+            start_date=start_date,
+            end_date=end_date,
+        )
+    )
+    if payload is None:
+        return None
+    try:
+        return TickerEventSummary.model_validate(payload)
+    except Exception:
+        return None
+
+
+def warm_ticker_event_summary_async(
+    fetcher: Any,
+    ticker: str,
+    *,
+    as_of_date: str,
+    history_period: str = "1y",
+    history_interval: str = "1d",
+    insider_limit: int = 50,
+    rsi_look_back_days: int = 60,
+    price_technical_lookback_days: int = 10,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> bool:
+    """Warm the ticker event cache in the background when a summary is missing."""
+
+    cache_key = _ticker_event_cache_key(
+        ticker,
+        as_of_date=as_of_date,
+        history_period=history_period,
+        history_interval=history_interval,
+        insider_limit=insider_limit,
+        rsi_look_back_days=rsi_look_back_days,
+        price_technical_lookback_days=price_technical_lookback_days,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    with _TICKER_EVENT_WARMING_LOCK:
+        if cache_key in _TICKER_EVENT_WARMING_KEYS:
+            return False
+        _TICKER_EVENT_WARMING_KEYS.add(cache_key)
+
+    def _warm() -> None:
+        try:
+            get_ticker_event_summary(
+                fetcher,
+                ticker,
+                as_of_date=as_of_date,
+                history_period=history_period,
+                history_interval=history_interval,
+                insider_limit=insider_limit,
+                rsi_look_back_days=rsi_look_back_days,
+                price_technical_lookback_days=price_technical_lookback_days,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        except Exception:
+            pass
+        finally:
+            with _TICKER_EVENT_WARMING_LOCK:
+                _TICKER_EVENT_WARMING_KEYS.discard(cache_key)
+
+    _TICKER_EVENT_WARMER.submit(_warm)
+    return True
 
 
 def get_ticker_event_summary(
@@ -114,17 +265,17 @@ def get_ticker_event_summary(
 
     payload = get_or_set(
         _TICKER_EVENT_CACHE_NAMESPACE,
-        parts=[
+        parts=_ticker_event_cache_parts(
             ticker_upper,
-            as_of_date,
-            history_period,
-            history_interval,
-            start_date or "-",
-            end_date or "-",
-            insider_limit,
-            rsi_look_back_days,
-            price_technical_lookback_days,
-        ],
+            as_of_date=as_of_date,
+            history_period=history_period,
+            history_interval=history_interval,
+            insider_limit=insider_limit,
+            rsi_look_back_days=rsi_look_back_days,
+            price_technical_lookback_days=price_technical_lookback_days,
+            start_date=start_date,
+            end_date=end_date,
+        ),
         ttl_seconds=PROCESSING_CACHE_TTL_TICKER_EVENTS,
         fetch_fn=_compute,
         version=_TICKER_EVENT_CACHE_VERSION,
