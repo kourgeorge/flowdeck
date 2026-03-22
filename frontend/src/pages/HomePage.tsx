@@ -6,7 +6,7 @@ import AuthModal from '../components/AuthModal';
 import { tickerApi, API_BASE_URL } from '../services/api';
 import type { TickerWidget as StockWidgetType } from '../services/types';
 import { LOGO_PATH, COPILOT_NAME } from '../config';
-import { SIGNIFICANT_SEVEN_RANK } from '../constants/majorTickers';
+import { SIGNIFICANT_SEVEN_RANK, SIGNIFICANT_SEVEN_TICKERS } from '../constants/majorTickers';
 import { useAuth } from '../contexts/AuthContext';
 
 interface PublicStats {
@@ -37,7 +37,7 @@ function HomeCard({
     amber: 'rounded-xl border border-amber-400/25 bg-amber-500/12 shadow-[0_18px_44px_rgba(245,158,11,0.08)]',
   }[tone];
 
-  return <div className={`${toneClass} ${className}`}>{children}</div>;
+  return <div className={`${toneClass} min-w-0 ${className}`}>{children}</div>;
 }
 
 function HomePill({
@@ -61,6 +61,73 @@ function HomePill({
   }[tone];
 
   return <div className={`${toneClass} ${className}`}>{children}</div>;
+}
+
+function SignificantSevenSkeleton() {
+  return (
+    <div className="mx-auto grid max-w-6xl auto-rows-fr grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 animate-pulse">
+      {SIGNIFICANT_SEVEN_TICKERS.map((ticker) => (
+        <div
+          key={ticker}
+          className="relative h-full overflow-hidden rounded-xl border border-slate-600/60 bg-slate-900/94 p-4 shadow-[0_20px_60px_-36px_rgba(15,23,42,0.72)]"
+        >
+          <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-r from-slate-800 via-slate-700/60 to-slate-800 opacity-60" />
+
+          <div className="relative flex h-full flex-col gap-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="h-3 w-14 rounded-full bg-slate-700" />
+                <div className="mt-3 h-6 w-24 rounded-full bg-slate-600" />
+                <div className="mt-2 h-4 w-32 rounded-full bg-slate-800" />
+                <div className="mt-2 h-3 w-24 rounded-full bg-slate-800" />
+              </div>
+              <div className="h-7 w-16 rounded-full bg-slate-700" />
+            </div>
+
+            <div className="rounded-xl border border-slate-600/50 bg-slate-950/78 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="h-3 w-12 rounded-full bg-slate-700" />
+                <div className="h-5 w-14 rounded-full bg-slate-700" />
+              </div>
+              <div className="mx-auto h-[112px] w-[112px] rounded-full border border-dashed border-slate-700 bg-slate-800/80" />
+            </div>
+
+            <div className="rounded-xl border border-slate-600/50 bg-slate-950/72 p-3">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="h-3 w-16 rounded-full bg-slate-700" />
+                <div className="h-5 w-16 rounded-full bg-slate-800" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {[1, 2, 3, 4].map((item) => (
+                  <div key={item} className="h-9 rounded-lg bg-slate-800" />
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="h-3 w-14 rounded-full bg-slate-700" />
+                <div className="h-3 w-12 rounded-full bg-slate-800" />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {[1, 2, 3].map((item) => (
+                  <div key={item} className="h-6 w-24 rounded-full bg-slate-800" />
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-auto flex items-center justify-between gap-3 border-t border-gray-700 pt-3">
+              <div>
+                <div className="h-3 w-16 rounded-full bg-slate-800" />
+                <div className="mt-2 h-4 w-24 rounded-full bg-slate-700" />
+              </div>
+              <div className="h-8 w-28 rounded-full bg-slate-700" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function HomePage() {
@@ -102,7 +169,7 @@ export default function HomePage() {
       setIsLoading(true);
       setError(null);
       const today = new Date().toISOString().slice(0, 10);
-      const response = await tickerApi.getWidgets(undefined, today);
+      const response = await tickerApi.getWidgets([...SIGNIFICANT_SEVEN_TICKERS], today);
       setWidgets(response.widgets);
     } catch (err: any) {
       console.error('Failed to load widgets:', err);
@@ -120,7 +187,7 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, []);
 
-  const MAJOR_STOCKS_LIMIT = 10;
+  const MAJOR_STOCKS_LIMIT = SIGNIFICANT_SEVEN_TICKERS.length;
   const hasMajorFlag = widgets.some((w) => w.is_major === true || w.is_major === false);
   const majorFiltered = hasMajorFlag
     ? widgets.filter((w) => w.is_major === true)
@@ -134,26 +201,8 @@ export default function HomePage() {
     })
     .slice(0, MAJOR_STOCKS_LIMIT);
 
-  if (isLoading && widgets.length === 0) {
-    return (
-      <div className="min-h-screen">
-        {/* Hero Section - Loading */}
-        <section className="bg-gray-900 px-4 py-16 sm:py-20 lg:py-24">
-          <div className="max-w-6xl mx-auto text-center">
-            <div className="flex justify-center mb-6">
-              <img src={LOGO_PATH} alt="" className="w-24 h-24 object-contain animate-pulse" />
-            </div>
-            <div className="h-16 bg-gray-800 rounded-sm mb-4 mx-auto max-w-3xl animate-pulse"></div>
-            <div className="h-12 bg-gray-800 rounded-sm mb-8 mx-auto max-w-2xl animate-pulse"></div>
-            <div className="h-6 bg-gray-800 rounded-sm mb-12 mx-auto max-w-xl animate-pulse"></div>
-          </div>
-        </section>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen overflow-x-hidden">
       {/* SECTION 1: HERO */}
       <section className="bg-gray-900 px-4 py-10 sm:py-12 lg:py-14 pb-6 sm:pb-6 lg:pb-6">
         <div className="max-w-6xl mx-auto">
@@ -168,7 +217,7 @@ export default function HomePage() {
                 to="/copilot"
                 className="group"
               >
-                <HomePill tone="blue" className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium">
+                <HomePill tone="blue" className="inline-flex max-w-full flex-wrap items-center justify-center gap-2 px-4 py-2 text-center text-sm font-medium sm:flex-nowrap">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
@@ -234,13 +283,13 @@ export default function HomePage() {
 
       {/* SECTION 2: LIVE MARKET SNAPSHOT */}
       <section className="px-4 py-6 sm:py-8 bg-gray-900">
-        <div className="max-w-layout mx-auto">
+        <div className="max-w-6xl mx-auto">
           {/* Ticker Search */}
-          <div className="mb-6">
+          <div className="mb-6 max-w-3xl mx-auto">
             <TickerSearch />
           </div>
 
-          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div className="mb-5 text-center sm:text-left">
             <div>
               <h2 className="fd-section-title text-2xl sm:text-3xl">Major Stocks</h2>
               <p className="mt-1 text-sm text-slate-400">
@@ -255,7 +304,18 @@ export default function HomePage() {
             </div>
           )}
 
-          {widgets.length === 0 ? (
+          {isLoading && widgets.length === 0 ? (
+            <div>
+              <div className="mb-4 flex items-center gap-2 text-sm text-slate-400">
+                <svg className="w-4 h-4 text-blue-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                <span>Loading major stocks…</span>
+              </div>
+              <SignificantSevenSkeleton />
+            </div>
+          ) : widgets.length === 0 ? (
             <HomeCard className="p-12 text-center">
               <p className="text-slate-400 mb-4">No stock data available</p>
               <button
@@ -414,7 +474,7 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
             {/* Left: copy */}
-            <div>
+            <div className="min-w-0">
               <HomePill tone="blue" className="inline-flex items-center gap-2 px-3 py-1.5 mb-5 text-xs font-semibold uppercase tracking-wider">
                 <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -601,7 +661,7 @@ export default function HomePage() {
             </HomeCard>
 
             {/* Right: copy */}
-            <div className="order-1 lg:order-2">
+            <div className="order-1 min-w-0 lg:order-2">
               <HomePill tone="indigo" className="inline-flex items-center gap-2 px-3 py-1.5 mb-5 text-xs font-semibold uppercase tracking-wider">
                 <svg className="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -681,7 +741,7 @@ export default function HomePage() {
             </HomeCard>
 
             {/* Right: copy */}
-            <div className="order-1 lg:order-2">
+            <div className="order-1 min-w-0 lg:order-2">
               <HomePill tone="emerald" className="inline-flex items-center gap-2 px-3 py-1.5 mb-5 text-xs font-semibold uppercase tracking-wider">
                 <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
@@ -754,7 +814,7 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
             {/* Left: copy */}
-            <div>
+            <div className="min-w-0">
               <HomePill tone="amber" className="inline-flex items-center gap-2 px-3 py-1.5 mb-5 text-xs font-semibold uppercase tracking-wider">
                 <svg className="w-3.5 h-3.5 text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path

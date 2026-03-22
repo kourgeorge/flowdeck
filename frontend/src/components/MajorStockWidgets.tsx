@@ -95,13 +95,12 @@ export default function MajorStockWidgets({ widgets, tickerToName }: MajorStockW
   const navigate = useNavigate();
 
   return (
-    <div className="grid auto-rows-fr grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+    <div className="mx-auto grid max-w-6xl auto-rows-fr grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {widgets.map((widget) => {
         const name = widget.name || tickerToName[widget.ticker] || widget.ticker;
         const scoreEntries = getAnalysisScoreEntries(widget.report_scores);
         const averageScore = getAverageScore(scoreEntries);
         const isPositive = widget.daily_change_percent >= 0;
-        const confidencePercent = widget.confidence != null ? Math.round(widget.confidence * 100) : null;
         const priceChangeLabel = widget.current_price > 0
           ? `${formatPrice(widget.daily_change, widget.currency)} (${isPositive ? '+' : ''}${widget.daily_change_percent.toFixed(2)}%)`
           : 'Price unavailable';
@@ -113,35 +112,29 @@ export default function MajorStockWidgets({ widgets, tickerToName }: MajorStockW
             onClick={() => navigate(`/tickers/${widget.ticker}`)}
             className="group relative h-full overflow-hidden rounded-xl border border-slate-600/60 bg-slate-900/94 p-4 text-left shadow-[0_20px_60px_-36px_rgba(15,23,42,0.72)] transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-400/25 hover:bg-slate-900 hover:shadow-[0_28px_80px_-36px_rgba(8,47,73,0.34)]"
           >
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-sky-500/[0.04]" />
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-sky-500/[0.04]" />
             <div className="relative flex h-full flex-col gap-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                    <span className="inline-flex items-center rounded-sm border border-slate-500/30 bg-slate-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-200">
-                      {getMarketStatusLabel(widget.market_status)}
-                    </span>
-                    {getRecommendationBadge(widget.recommendation)}
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="text-[1.35rem] font-semibold tracking-[-0.03em] text-white">{widget.ticker}</h3>
-                    <p className="truncate text-sm text-slate-400">{name}</p>
+              <div className="space-y-3 rounded-lg bg-sky-500/[0.05] px-3 py-3">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="inline-flex items-center rounded-sm border border-slate-500/30 bg-slate-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-200">
+                    {getMarketStatusLabel(widget.market_status)}
+                  </span>
+                  {getRecommendationBadge(widget.recommendation)}
+                </div>
+
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="min-w-0 flex-1 text-[1.35rem] font-semibold tracking-[-0.03em] text-white">{widget.ticker}</h3>
+                  <div className="shrink-0 text-right">
+                    <div className="text-xl font-semibold tracking-[-0.03em] text-white">
+                      {widget.current_price > 0 ? formatPrice(widget.current_price, widget.currency) : '—'}
+                    </div>
+                    <div className={`mt-1 text-sm font-medium ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                      {priceChangeLabel}
+                    </div>
                   </div>
                 </div>
 
-                <div className="shrink-0 text-right">
-                  <div className="text-xl font-semibold tracking-[-0.03em] text-white">
-                    {widget.current_price > 0 ? formatPrice(widget.current_price, widget.currency) : '—'}
-                  </div>
-                  <div className={`mt-1 text-sm font-medium ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                    {priceChangeLabel}
-                  </div>
-                  {confidencePercent != null ? (
-                    <div className="mt-1 text-[11px] uppercase tracking-[0.14em] text-slate-400">
-                      Confidence {confidencePercent}%
-                    </div>
-                  ) : null}
-                </div>
+                <p className="break-words text-sm leading-snug text-slate-400">{name}</p>
               </div>
 
               <div className="p-1">

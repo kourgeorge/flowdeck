@@ -240,6 +240,18 @@ function getEventWeight(event: DetectedEvent): number {
   return EVENT_WEIGHTS[event.event_type] ?? 1.0;
 }
 
+function getEventSortTimestamp(event: DetectedEvent): number {
+  const candidates = [event.detected_on, event.window_end, event.window_start];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const timestamp = new Date(candidate).getTime();
+    if (!Number.isNaN(timestamp)) return timestamp;
+  }
+
+  return 0;
+}
+
 function EventsMoreInfo() {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -309,6 +321,11 @@ export default function EventsPanel({
     return 'Low Activity';
   }, [eventScore]);
 
+  const sortedEvents = useMemo(
+    () => [...events].sort((a, b) => getEventSortTimestamp(b) - getEventSortTimestamp(a)),
+    [events],
+  );
+
   if (error) {
     return (
       <div className={`${PANEL_SHELL} p-4`}>
@@ -352,8 +369,8 @@ export default function EventsPanel({
           </div>
           <div>
             <p className="text-sm text-gray-400 mb-1">Total Events</p>
-            <p className="text-2xl font-semibold text-gray-200">{events.length}</p>
-            <p className="text-sm text-gray-400 mt-0.5">{events.length === 1 ? 'event' : 'events'}</p>
+            <p className="text-2xl font-semibold text-gray-200">{sortedEvents.length}</p>
+            <p className="text-sm text-gray-400 mt-0.5">{sortedEvents.length === 1 ? 'event' : 'events'}</p>
           </div>
           <div>
             <p className="text-sm text-gray-400 mb-1">Dominant Signals</p>
@@ -372,9 +389,9 @@ export default function EventsPanel({
       <EventsMoreInfo />
 
       {/* Events List */}
-      {events.length > 0 ? (
+      {sortedEvents.length > 0 ? (
         <div className="grid gap-3 lg:grid-cols-2">
-          {events.map((event, idx) => (
+          {sortedEvents.map((event, idx) => (
             <div key={idx} className={`rounded-lg border border-gray-700 border-l-2 bg-gray-800 p-3 ${DOMAIN_COLORS[event.domain]}`}>
               {/* Header: Icon, Label, Strength */}
               <div className="flex items-start justify-between gap-3">
