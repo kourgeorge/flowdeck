@@ -89,21 +89,15 @@ const STRENGTH_MULTIPLIERS: Record<Strength, number> = {
 
 function formatShortDate(value: string | null): string {
   if (!value) return 'Recent';
+  const dateOnlyMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch;
+    const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+    return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-function formatDateTime(value: string | null): string {
-  if (!value) return 'Recent';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
 }
 
 function formatMetricValue(value: number | null, eventType: string): string | null {
@@ -515,7 +509,7 @@ export default function DashboardEventsView({ widgets, tickerToName, dashboardLo
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2 text-[11px]">
                         <span className="rounded-sm border border-gray-700 bg-gray-800 px-2.5 py-1 text-gray-400">
-                          {formatDateTime(event.detected_on)}
+                          {formatShortDate(event.detected_on)}
                         </span>
                         <span className={`rounded-sm border px-2.5 py-1 font-medium ${STRENGTH_META[event.strength].chip}`}>
                           {STRENGTH_META[event.strength].label}
