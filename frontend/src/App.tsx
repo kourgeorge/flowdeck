@@ -19,11 +19,17 @@ import CopilotPage from './pages/CopilotPage';
 import DocsPage from './pages/DocsPage';
 import AuthCallbackPage from './pages/AuthCallbackPage';
 import SharedReportPage from './pages/SharedReportPage';
+import HowItWorksPage from './pages/HowItWorksPage';
+import TpsPage from './pages/TpsPage';
+import ArchitecturePage from './pages/ArchitecturePage';
+import ApiDocsPage from './pages/ApiDocsPage';
+import RouteSeoManager from './components/RouteSeoManager';
 
 function App() {
   return (
     <AuthProvider>
     <Router>
+      <RouteSeoManager />
       <Routes>
         <Route path="r/:token" element={<SharedReportPage />} />
         <Route element={<Layout />}>
@@ -40,11 +46,11 @@ function App() {
           <Route path="subscriptions" element={<Navigate to="/dashboard" replace />} />
           <Route path="admin" element={<AdminDashboardPage />} />
           <Route path="docs" element={<DocsPage />} />
-          <Route path="how-it-works" element={<Navigate to="/docs?tab=how-it-works" replace />} />
-          <Route path="how-it-works/tps" element={<Navigate to="/docs?tab=tps" replace />} />
-          <Route path="tps" element={<Navigate to="/docs?tab=tps" replace />} />
-          <Route path="architecture" element={<Navigate to="/docs?tab=architecture" replace />} />
-          <Route path="api-docs" element={<Navigate to="/docs?tab=api" replace />} />
+          <Route path="how-it-works" element={<HowItWorksPage />} />
+          <Route path="how-it-works/tps" element={<Navigate to="/tps" replace />} />
+          <Route path="tps" element={<TpsPage />} />
+          <Route path="architecture" element={<ArchitecturePage />} />
+          <Route path="api-docs" element={<ApiDocsPage />} />
           <Route path="terms" element={<TermsOfUsePage />} />
           <Route path="contact" element={<ContactUsPage />} />
           <Route path="payment/success" element={<PaymentSuccessPage />} />

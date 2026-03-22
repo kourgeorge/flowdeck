@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /brief
+Disallow: /chat
+Disallow: /copilot
+Disallow: /profile
+Disallow: /admin
+Disallow: /subscriptions
+Disallow: /payment/
+Disallow: /auth/
+Disallow: /r/
+Disallow: /docs
+
+Sitemap: https://flowdeck.biz/sitemap.xml
