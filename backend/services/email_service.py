@@ -844,10 +844,6 @@ def send_daily_digest_email_to_user(execution_id: int, user_email: str) -> bool:
             lines.append("Focus: " + ", ".join(str(t) for t in priority_tickers))
         lines.append("")
         lines.append(narrative.strip())
-        if what_to_watch:
-            lines.append("")
-            lines.append("What to watch")
-            lines.append(what_to_watch.strip())
         lines.append("")
         lines.append(f"View this brief in Flowdeck: {brief_url}")
         text_body = "\n".join(lines)
