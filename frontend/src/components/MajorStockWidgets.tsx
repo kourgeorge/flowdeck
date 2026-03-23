@@ -39,11 +39,6 @@ function getRecommendationBadge(rec: string | null) {
     );
 }
 
-function getMarketStatusLabel(status: string | null | undefined): string {
-  if (!status) return 'Market';
-  return status.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
 function getAverageScore(scoreEntries: [string, { score: number | null }][]): number | null {
   const values = scoreEntries
     .map(([, data]) => data.score)
@@ -114,13 +109,6 @@ export default function MajorStockWidgets({ widgets, tickerToName }: MajorStockW
           >
             <div className="relative flex h-full flex-col gap-2.5">
               <div className="space-y-1.5 rounded-lg bg-sky-500/[0.05] px-2.5 py-2.5">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="inline-flex items-center rounded-sm border border-slate-500/30 bg-slate-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-200">
-                    {getMarketStatusLabel(widget.market_status)}
-                  </span>
-                  {getRecommendationBadge(widget.recommendation)}
-                </div>
-
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <h3 className="text-[1.35rem] font-semibold tracking-[-0.03em] text-white">{widget.ticker}</h3>
@@ -138,13 +126,16 @@ export default function MajorStockWidgets({ widgets, tickerToName }: MajorStockW
               </div>
 
               <div className="p-1">
-                <div className="mb-2 flex items-center justify-between">
+                <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">AI Analysis</div>
-                  {averageScore != null ? (
-                    <div className="rounded-sm border border-cyan-400/20 bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold tabular-nums text-cyan-100">
-                      {averageScore.toFixed(1)}/10
-                    </div>
-                  ) : null}
+                  <div className="flex items-center gap-2">
+                    {averageScore != null ? (
+                      <div className="rounded-sm border border-cyan-400/20 bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold tabular-nums text-cyan-100">
+                        {averageScore.toFixed(1)}/10
+                      </div>
+                    ) : null}
+                    {getRecommendationBadge(widget.recommendation)}
+                  </div>
                 </div>
                 <div className="flex items-center justify-center rounded-xl border border-slate-600/50 bg-slate-950/78 py-2">
                   {scoreEntries.length > 0 ? (
