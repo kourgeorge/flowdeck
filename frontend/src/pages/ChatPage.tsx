@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ChatView, { useChatState, type ChatMessageWithMeta } from '../components/ChatView';
 import PageHeader from '../components/PageHeader';
+import TickerSearch from '../components/TickerSearch';
 import { useAuth } from '../contexts/AuthContext';
 import { profileApi } from '../services/authApi';
 import { chatApi, type ChatMessageWithMetaApi, type ChatSessionListItem, type ChatTurnStatus } from '../services/api';
@@ -571,6 +572,12 @@ export default function ChatPage() {
           </>
         )}
       </PageHeader>
+
+      <div className="px-4 pt-2 border-b border-gray-700 bg-gray-900 shrink-0">
+        <div className="pb-2">
+          <TickerSearch compact />
+        </div>
+      </div>
 
       {user && isMobileHistory && !historyCollapsed && (
         <>

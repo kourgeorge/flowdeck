@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import DailyDigestRunPanel from '../components/DailyDigestRunPanel';
 import PageHeader from '../components/PageHeader';
+import TickerSearch from '../components/TickerSearch';
 import { useAuth } from '../contexts/AuthContext';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { digestApi, type DigestBriefItem, type DigestResponse } from '../services/api';
@@ -546,6 +547,12 @@ export default function BriefPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <PageHeader title="Briefing Desk" icon={<BriefIcon />} />
+
+      <div className="px-4 pt-2 border-b border-gray-700 bg-gray-900 shrink-0">
+        <div className="pb-2">
+          <TickerSearch compact />
+        </div>
+      </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="px-4 py-6 sm:p-6 lg:p-8">
