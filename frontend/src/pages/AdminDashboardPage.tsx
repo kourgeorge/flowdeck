@@ -907,6 +907,124 @@ export default function AdminDashboardPage() {
                 </tbody>
               </table>
             </div>
+            <section className="mb-10">
+              <h2 className="text-lg font-semibold text-white mb-4">
+                Report views (runs: {viewRunsTotal}, views: {stats?.total_report_views ?? 0})
+              </h2>
+              <div className="overflow-x-auto overflow-y-auto max-h-[36rem] rounded-lg border border-gray-700 bg-gray-800/80">
+                <table className="w-full min-w-[760px] text-left text-sm">
+                  <thead className="sticky top-0 bg-gray-800 z-10">
+                    <tr className="border-b border-gray-700">
+                      <th className="px-4 py-3 text-gray-400 font-medium">
+                        <button
+                          type="button"
+                          onClick={() => toggleViewRunsSort('ticker')}
+                          className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                        >
+                          Ticker <span className="text-xs">{viewRunsSortIndicator('ticker')}</span>
+                        </button>
+                      </th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">
+                        <button
+                          type="button"
+                          onClick={() => toggleViewRunsSort('analysis_run_id')}
+                          className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                        >
+                          Run ID <span className="text-xs">{viewRunsSortIndicator('analysis_run_id')}</span>
+                        </button>
+                      </th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">
+                        <button
+                          type="button"
+                          onClick={() => toggleViewRunsSort('unique_views')}
+                          className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                        >
+                          Unique views <span className="text-xs">{viewRunsSortIndicator('unique_views')}</span>
+                        </button>
+                      </th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">Viewer email</th>
+                      <th className="px-4 py-3 text-gray-400 font-medium">
+                        <button
+                          type="button"
+                          onClick={() => toggleViewRunsSort('viewed')}
+                          className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                        >
+                          Viewed <span className="text-xs">{viewRunsSortIndicator('viewed')}</span>
+                        </button>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedViewRuns.map((run) => {
+                      const runKey = `${run.ticker}::${run.analysis_run_id}`;
+                      const runViews = viewsByRun[runKey] ?? [];
+                      const sortedRunViews = getSortedRunViews(runViews);
+                      const isExpanded = expandedViewRunKeys.has(runKey);
+                      const isLoadingRunViews = loadingRunViewKeys.has(runKey);
+
+                      return (
+                        <Fragment key={runKey}>
+                          <tr key={runKey} className="border-b border-gray-700/50 bg-gray-800">
+                            <td className="px-4 py-3">
+                              <button
+                                type="button"
+                                onClick={() => toggleRunExpanded(run.ticker, run.analysis_run_id)}
+                                className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 font-medium"
+                                aria-expanded={isExpanded}
+                                aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${run.ticker} ${run.analysis_run_id}`}
+                              >
+                                <span className={`inline-block transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                                  ▶
+                                </span>
+                                <span>{run.ticker}</span>
+                              </button>
+                            </td>
+                            <td className="px-4 py-3 text-gray-300 font-mono text-xs">{run.analysis_run_id}</td>
+                            <td className="px-4 py-3 text-white">{run.unique_views.toLocaleString()}</td>
+                            <td className="px-4 py-3 text-gray-500">
+                              {isExpanded
+                                ? isLoadingRunViews
+                                  ? 'Loading viewers...'
+                                  : `${runViews.length} viewer${runViews.length === 1 ? '' : 's'}`
+                                : 'Expand to view viewers'}
+                            </td>
+                            <td className="px-4 py-3 text-gray-400">{formatDate(run.last_viewed_at)}</td>
+                          </tr>
+                          {isExpanded &&
+                            !isLoadingRunViews &&
+                            sortedRunViews.map((view) => (
+                              <tr key={view.id} className="border-b border-gray-700/30 bg-gray-900/40">
+                                <td className="px-4 py-2 text-gray-500">↳</td>
+                                <td className="px-4 py-2 text-gray-600 font-mono text-xs">{view.analysis_run_id}</td>
+                                <td className="px-4 py-2 text-gray-600">-</td>
+                                <td className="px-4 py-2 text-gray-300">{view.viewer_email}</td>
+                                <td className="px-4 py-2 text-gray-400">{formatDate(view.viewed_at)}</td>
+                              </tr>
+                            ))}
+                          {isExpanded && !isLoadingRunViews && runViews.length === 0 && (
+                            <tr className="border-b border-gray-700/30 bg-gray-900/40">
+                              <td className="px-4 py-2 text-gray-500">↳</td>
+                              <td className="px-4 py-2 text-gray-600 font-mono text-xs">{run.analysis_run_id}</td>
+                              <td className="px-4 py-2 text-gray-600">-</td>
+                              <td className="px-4 py-2 text-gray-500" colSpan={2}>
+                                No viewer rows found for this run.
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                    {viewRuns.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-6 text-center text-gray-400">
+                          No report views yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
 
             <h2 className="text-lg font-semibold text-white">Subscriptions ({subscriptionsTotal})</h2>
             <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-800/80">
@@ -1465,125 +1583,6 @@ export default function AdminDashboardPage() {
                         </td>
                       </tr>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="mb-10">
-              <h2 className="text-lg font-semibold text-white mb-4">
-                Report views hierarchy (runs: {viewRunsTotal}, views: {stats?.total_report_views ?? 0})
-              </h2>
-              <div className="overflow-x-auto overflow-y-auto max-h-[36rem] rounded-lg border border-gray-700 bg-gray-800/80">
-                <table className="w-full min-w-[760px] text-left text-sm">
-                  <thead className="sticky top-0 bg-gray-800 z-10">
-                    <tr className="border-b border-gray-700">
-                      <th className="px-4 py-3 text-gray-400 font-medium">
-                        <button
-                          type="button"
-                          onClick={() => toggleViewRunsSort('ticker')}
-                          className="inline-flex items-center gap-1 hover:text-white transition-colors"
-                        >
-                          Ticker <span className="text-xs">{viewRunsSortIndicator('ticker')}</span>
-                        </button>
-                      </th>
-                      <th className="px-4 py-3 text-gray-400 font-medium">
-                        <button
-                          type="button"
-                          onClick={() => toggleViewRunsSort('analysis_run_id')}
-                          className="inline-flex items-center gap-1 hover:text-white transition-colors"
-                        >
-                          Run ID <span className="text-xs">{viewRunsSortIndicator('analysis_run_id')}</span>
-                        </button>
-                      </th>
-                      <th className="px-4 py-3 text-gray-400 font-medium">
-                        <button
-                          type="button"
-                          onClick={() => toggleViewRunsSort('unique_views')}
-                          className="inline-flex items-center gap-1 hover:text-white transition-colors"
-                        >
-                          Unique views <span className="text-xs">{viewRunsSortIndicator('unique_views')}</span>
-                        </button>
-                      </th>
-                      <th className="px-4 py-3 text-gray-400 font-medium">Viewer email</th>
-                      <th className="px-4 py-3 text-gray-400 font-medium">
-                        <button
-                          type="button"
-                          onClick={() => toggleViewRunsSort('viewed')}
-                          className="inline-flex items-center gap-1 hover:text-white transition-colors"
-                        >
-                          Viewed <span className="text-xs">{viewRunsSortIndicator('viewed')}</span>
-                        </button>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedViewRuns.map((run) => {
-                      const runKey = `${run.ticker}::${run.analysis_run_id}`;
-                      const runViews = viewsByRun[runKey] ?? [];
-                      const sortedRunViews = getSortedRunViews(runViews);
-                      const isExpanded = expandedViewRunKeys.has(runKey);
-                      const isLoadingRunViews = loadingRunViewKeys.has(runKey);
-
-                      return (
-                        <Fragment key={runKey}>
-                          <tr key={runKey} className="border-b border-gray-700/50 bg-gray-800">
-                            <td className="px-4 py-3">
-                              <button
-                                type="button"
-                                onClick={() => toggleRunExpanded(run.ticker, run.analysis_run_id)}
-                                className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 font-medium"
-                                aria-expanded={isExpanded}
-                                aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${run.ticker} ${run.analysis_run_id}`}
-                              >
-                                <span className={`inline-block transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
-                                  ▶
-                                </span>
-                                <span>{run.ticker}</span>
-                              </button>
-                            </td>
-                            <td className="px-4 py-3 text-gray-300 font-mono text-xs">{run.analysis_run_id}</td>
-                            <td className="px-4 py-3 text-white">{run.unique_views.toLocaleString()}</td>
-                            <td className="px-4 py-3 text-gray-500">
-                              {isExpanded
-                                ? isLoadingRunViews
-                                  ? 'Loading viewers...'
-                                  : `${runViews.length} viewer${runViews.length === 1 ? '' : 's'}`
-                                : 'Expand to view viewers'}
-                            </td>
-                            <td className="px-4 py-3 text-gray-400">{formatDate(run.last_viewed_at)}</td>
-                          </tr>
-                          {isExpanded &&
-                            !isLoadingRunViews &&
-                            sortedRunViews.map((view) => (
-                              <tr key={view.id} className="border-b border-gray-700/30 bg-gray-900/40">
-                                <td className="px-4 py-2 text-gray-500">↳</td>
-                                <td className="px-4 py-2 text-gray-600 font-mono text-xs">{view.analysis_run_id}</td>
-                                <td className="px-4 py-2 text-gray-600">-</td>
-                                <td className="px-4 py-2 text-gray-300">{view.viewer_email}</td>
-                                <td className="px-4 py-2 text-gray-400">{formatDate(view.viewed_at)}</td>
-                              </tr>
-                            ))}
-                          {isExpanded && !isLoadingRunViews && runViews.length === 0 && (
-                            <tr className="border-b border-gray-700/30 bg-gray-900/40">
-                              <td className="px-4 py-2 text-gray-500">↳</td>
-                              <td className="px-4 py-2 text-gray-600 font-mono text-xs">{run.analysis_run_id}</td>
-                              <td className="px-4 py-2 text-gray-600">-</td>
-                              <td className="px-4 py-2 text-gray-500" colSpan={2}>
-                                No viewer rows found for this run.
-                              </td>
-                            </tr>
-                          )}
-                        </Fragment>
-                      );
-                    })}
-                    {viewRuns.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="px-4 py-6 text-center text-gray-400">
-                          No report views yet.
-                        </td>
-                      </tr>
-                    )}
                   </tbody>
                 </table>
               </div>
