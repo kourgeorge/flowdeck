@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { tickerApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import TickerSearch from './TickerSearch';
 import WorldMapRegionalStocks from './WorldMapRegionalStocks';
 
 export type HeadlineArticle = {
@@ -209,7 +208,7 @@ function PulseCard({
 
   return (
     <div
-      className={`flex min-w-0 items-center gap-2.5 rounded-xl border px-3 py-2.5 ${
+      className={`flex min-w-0 items-center gap-2.5 rounded-xl border px-3 py-2 ${
         tone === 'emerald'
           ? 'border-emerald-400/25 bg-emerald-500/10'
           : tone === 'rose'
@@ -219,11 +218,13 @@ function PulseCard({
     >
       <span className={`h-2 w-2 shrink-0 rounded-full ${toneClasses.dot}`} />
       <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-baseline justify-between gap-2">
-          <div className={`truncate text-[11px] font-semibold uppercase tracking-[0.14em] ${toneClasses.eyebrow}`}>{eyebrow}</div>
-          <div className={`shrink-0 text-sm font-semibold tracking-tight ${toneClasses.value}`}>{value}</div>
+        <div className="flex min-w-0 items-center justify-between gap-2 text-sm">
+          <span className={`shrink-0 font-semibold uppercase tracking-[0.12em] ${toneClasses.eyebrow}`}>{eyebrow}</span>
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-slate-300">{detail}</span>
+            <span className={`shrink-0 font-semibold ${toneClasses.value}`}>{value}</span>
+          </div>
         </div>
-        <div className="mt-0.5 truncate text-[11px] leading-snug text-slate-300">{detail}</div>
       </div>
     </div>
   );
@@ -1293,9 +1294,6 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
                 <p className="max-w-2xl text-xs leading-relaxed text-slate-300 sm:text-sm">
                   {heroDescription} Scan the market quickly, then drill into the names or regions that matter.
                 </p>
-              </div>
-              <div className="max-w-2xl">
-                <TickerSearch compact />
               </div>
               </div>
               <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
