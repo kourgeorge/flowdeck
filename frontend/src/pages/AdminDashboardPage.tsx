@@ -277,6 +277,7 @@ export default function AdminDashboardPage() {
   const [missionRunningForTicker, setMissionRunningForTicker] = useState<string | null>(null);
   const [missionBulkRunning, setMissionBulkRunning] = useState(false);
   const [missionForceRerun, setMissionForceRerun] = useState(false);
+  const [missionTickerFilter, setMissionTickerFilter] = useState('');
   const [missionSort, setMissionSort] = useState<{
     key: MissionSortKey;
     direction: MissionSortDirection;
@@ -341,9 +342,19 @@ export default function AdminDashboardPage() {
       .sort((a, b) => a.user_email.localeCompare(b.user_email, undefined, { sensitivity: 'base' }));
   }, [subscriptions]);
 
+  const filteredMissionItems = useMemo(() => {
+    const query = missionTickerFilter.trim().toLowerCase();
+    if (!query) return missionItems;
+    return missionItems.filter((item) => {
+      const tickerMatches = item.ticker.toLowerCase().includes(query);
+      const companyMatches = String(item.name ?? '').toLowerCase().includes(query);
+      return tickerMatches || companyMatches;
+    });
+  }, [missionItems, missionTickerFilter]);
+
   const sortedMissionItems = useMemo(
     () =>
-      [...missionItems].sort((a, b) => {
+      [...filteredMissionItems].sort((a, b) => {
         let cmp = 0;
         switch (missionSort.key) {
           case 'ticker':
@@ -382,7 +393,7 @@ export default function AdminDashboardPage() {
         if (cmp !== 0) return cmp;
         return a.ticker.localeCompare(b.ticker);
       }),
-    [missionItems, missionSort],
+    [filteredMissionItems, missionSort],
   );
 
   const sortedViewRuns = useMemo(
@@ -421,7 +432,7 @@ export default function AdminDashboardPage() {
   const selectedMissionTickerSet = new Set(selectedMissionTickers);
   const allMissionTickers = sortedMissionItems.map((item) => item.ticker);
   const allMissionSelected =
-    sortedMissionItems.length > 0 && selectedMissionTickers.length === sortedMissionItems.length;
+    sortedMissionItems.length > 0 && allMissionTickers.every((ticker) => selectedMissionTickerSet.has(ticker));
 
   const toggleMissionSort = (key: MissionSortKey) => {
     setMissionSort((prev) => {
@@ -1032,6 +1043,19 @@ export default function AdminDashboardPage() {
             </div>
 
             <div className="mb-4 flex flex-wrap items-center gap-3">
+              <div className="min-w-[260px] flex-1 max-w-md">
+                <label htmlFor="mission-ticker-filter" className="sr-only">
+                  Filter mission control by ticker or company name
+                </label>
+                <input
+                  id="mission-ticker-filter"
+                  type="text"
+                  value={missionTickerFilter}
+                  onChange={(e) => setMissionTickerFilter(e.target.value)}
+                  placeholder="Filter by ticker or company"
+                  className="w-full rounded border border-gray-700 bg-gray-900 px-3 py-1.5 text-sm text-white placeholder:text-gray-500 focus:border-blue-500 focus:outline-none"
+                />
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -1084,6 +1108,12 @@ export default function AdminDashboardPage() {
               </div>
             )}
 
+            {missionTickerFilter.trim() && (
+              <div className="mb-3 text-sm text-gray-400">
+                Showing {sortedMissionItems.length} of {missionItems.length} mission-control rows.
+              </div>
+            )}
+
             <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-lg border border-gray-700 bg-gray-800/80">
               <table className="w-full min-w-[1280px] text-left text-sm">
                 <thead className="sticky top-0 bg-gray-800 z-10">
@@ -1094,9 +1124,9 @@ export default function AdminDashboardPage() {
                         checked={allMissionSelected}
                         onChange={(e) => {
                           if (e.target.checked) {
-                            setSelectedMissionTickers(allMissionTickers);
+                            setSelectedMissionTickers((prev) => Array.from(new Set([...prev, ...allMissionTickers])));
                           } else {
-                            setSelectedMissionTickers([]);
+                            setSelectedMissionTickers((prev) => prev.filter((ticker) => !allMissionTickers.includes(ticker)));
                           }
                         }}
                         aria-label="Select all major tickers"
