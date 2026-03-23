@@ -156,25 +156,6 @@ function getMoverTheme(changeColor: 'gainers' | 'losers' | 'neutral') {
   };
 }
 
-function SectionHeading({
-  eyebrow,
-  title,
-  description,
-}: {
-  eyebrow?: string;
-  title: string;
-  description?: string;
-}) {
-  return (
-    <div className="space-y-1.5">
-      {eyebrow ? <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">{eyebrow}</div> : null}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-        <h2 className="text-lg font-semibold text-white sm:text-xl">{title}</h2>
-        {description ? <p className="max-w-2xl text-xs leading-relaxed text-slate-400 sm:text-sm">{description}</p> : null}
-      </div>
-    </div>
-  );
-}
 
 function PulseCard({
   eyebrow,
@@ -296,23 +277,23 @@ function OverviewCard({
     <div
       role={clickable ? 'button' : undefined}
       onClick={() => clickable && onSelectTicker(item.ticker)}
-      className={`fd-card-soft min-h-[4.1rem] min-w-0 px-2.5 py-2 flex flex-col justify-center overflow-hidden transition-colors ${
+      className={`fd-card-soft min-h-[3.2rem] min-w-0 px-2 py-1.5 flex flex-col justify-center overflow-hidden transition-colors ${
         clickable ? 'cursor-pointer hover:border-slate-500 hover:bg-slate-900/80' : ''
       }`}
     >
-      <div className="flex min-w-0 items-baseline justify-between gap-1.5">
-        <span className="min-w-0 truncate text-[12px] font-medium text-slate-300" title={item.name}>
+      <div className="flex min-w-0 items-baseline justify-between gap-1">
+        <span className="min-w-0 truncate text-[10px] font-medium text-slate-300" title={item.name}>
           {item.name}
         </span>
         {item.ticker && (
-          <span className="shrink-0 text-[11px] tabular-nums text-slate-500">{item.ticker}</span>
+          <span className="shrink-0 text-[10px] font-semibold tabular-nums text-slate-500">{item.ticker}</span>
         )}
       </div>
-      <div className="mt-1 flex min-w-0 items-baseline justify-between gap-1.5">
-        <span className="min-w-0 truncate text-[13px] font-semibold tabular-nums text-white" title={formatPrice(item.price)}>
+      <div className="mt-0.5 flex min-w-0 items-baseline justify-between gap-1">
+        <span className="min-w-0 truncate text-[11px] font-semibold tabular-nums text-white" title={formatPrice(item.price)}>
           {formatPrice(item.price)}
         </span>
-        <span className={`shrink-0 text-[12px] font-medium tabular-nums ${changeClass}`}>
+        <span className={`shrink-0 text-[10px] font-medium tabular-nums ${changeClass}`}>
           {formatPct(item.changePercent)}
         </span>
       </div>
@@ -348,37 +329,37 @@ function OverviewSection({
   if (items.length === 0 && totalPages === 0) return null;
   return (
     <div className="fd-card relative overflow-hidden">
-      <div className="relative flex items-center justify-between gap-2 border-b border-slate-700 px-3 py-2">
-        <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{title}</h3>
-        <div className="flex items-center gap-1">
+      <div className="relative flex items-center justify-between gap-2 border-b border-slate-700 px-2 py-1.5">
+        <h3 className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">{title}</h3>
+        <div className="flex items-center gap-0.5">
           <button
             type="button"
             onClick={onPrev}
             disabled={!canPrev || paginationLoading}
-            className="fd-card-soft p-1.5 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800 hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-slate-700 disabled:hover:bg-slate-950/55"
+            className="fd-card-soft p-1 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800 hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-slate-700 disabled:hover:bg-slate-950/55"
             aria-label="Previous page"
           >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <span className="min-w-[3rem] text-center text-[11px] tabular-nums text-slate-500">
+          <span className="min-w-[2.5rem] text-center text-[9px] tabular-nums text-slate-500">
             {totalPages > 0 ? `${currentPage + 1}/${totalPages}` : '—'}
           </span>
           <button
             type="button"
             onClick={onNext}
             disabled={!canNext || paginationLoading}
-            className="fd-card-soft p-1.5 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800 hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-slate-700 disabled:hover:bg-slate-950/55"
+            className="fd-card-soft p-1 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800 hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-slate-700 disabled:hover:bg-slate-950/55"
             aria-label="Next page"
           >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </button>
         </div>
       </div>
-      <div className="relative min-h-[8.5rem] p-2.5">
+      <div className="relative min-h-[6.5rem] p-2">
         {paginationLoading && (
           <div
             className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-slate-950/70"
@@ -391,7 +372,7 @@ function OverviewSection({
             </svg>
           </div>
         )}
-        <div className="grid grid-cols-2 gap-1.5">
+        <div className="grid grid-cols-2 gap-1">
           {items.map((item) => (
             <OverviewCard key={item.ticker} item={item} onSelectTicker={onSelectTicker} />
           ))}
@@ -433,38 +414,38 @@ function MoversTable({
   return (
     <div className="fd-card relative flex min-h-0 flex-col overflow-hidden">
       <div className={`absolute inset-0 ${theme.glow}`} />
-      <div className="relative flex items-center justify-between gap-2 border-b border-slate-700 px-3 py-2 shrink-0">
+      <div className="relative flex items-center justify-between gap-2 border-b border-slate-700 px-2.5 py-1.5 shrink-0">
         <div className="min-w-0">
-          <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
-            <span className={`h-2 w-2 rounded-full ${theme.dot}`} />
+          <h3 className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-300">
+            <span className={`h-1.5 w-1.5 rounded-full ${theme.dot}`} />
             {title}
           </h3>
         </div>
         {totalPages > 1 && onPrev != null && onNext != null && (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
             <button
               type="button"
               onClick={onPrev}
               disabled={!canPrev}
-              className="fd-card-soft p-1.5 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800 hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-slate-700 disabled:hover:bg-slate-950/55"
+              className="fd-card-soft p-1 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800 hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-slate-700 disabled:hover:bg-slate-950/55"
               aria-label="Previous page"
             >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
-            <span className="min-w-[3rem] text-center text-[11px] tabular-nums text-slate-500">
+            <span className="min-w-[2.5rem] text-center text-[10px] tabular-nums text-slate-500">
               {currentPage + 1}/{totalPages}
             </span>
             <button
               type="button"
               onClick={onNext}
               disabled={!canNext}
-              className="fd-card-soft p-1.5 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800 hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-slate-700 disabled:hover:bg-slate-950/55"
+              className="fd-card-soft p-1 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800 hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-slate-700 disabled:hover:bg-slate-950/55"
               aria-label="Next page"
               aria-busy={paginationLoading}
             >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
@@ -490,12 +471,12 @@ function MoversTable({
         <table className="w-full bg-slate-900/40 text-left text-xs">
           <thead className="sticky top-0 z-[1] bg-slate-900/95 backdrop-blur">
             <tr className="border-b border-slate-700 text-slate-400">
-              <th className="px-3 py-2 font-medium text-[10px] uppercase tracking-[0.14em]">Ticker</th>
-              <th className="px-3 py-2 font-medium text-[10px] uppercase tracking-[0.14em] text-right">Change</th>
-              <th className="px-3 py-2 font-medium text-[10px] uppercase tracking-[0.14em] text-right">Price</th>
-              <th className="px-3 py-2 font-medium text-[10px] uppercase tracking-[0.14em] text-right">Volume</th>
-              <th className="px-3 py-2 font-medium text-[10px] uppercase tracking-[0.14em]">Company</th>
-              <th className="px-3 py-2 font-medium text-[10px] uppercase tracking-[0.14em]">Sector</th>
+              <th className="px-2 py-1 font-medium text-[9px] uppercase tracking-[0.12em]">Ticker</th>
+              <th className="px-2 py-1 font-medium text-[9px] uppercase tracking-[0.12em] text-right">Change</th>
+              <th className="px-2 py-1 font-medium text-[9px] uppercase tracking-[0.12em] text-right">Price</th>
+              <th className="px-2 py-1 font-medium text-[9px] uppercase tracking-[0.12em] text-right">Volume</th>
+              <th className="px-2 py-1 font-medium text-[9px] uppercase tracking-[0.12em]">Company</th>
+              <th className="px-2 py-1 font-medium text-[9px] uppercase tracking-[0.12em]">Sector</th>
             </tr>
           </thead>
           <tbody>
@@ -511,29 +492,29 @@ function MoversTable({
                   onClick={() => clickable && onSelectTicker(sym)}
                   className={`border-b border-slate-700/70 bg-transparent last:border-b-0 ${clickable ? 'cursor-pointer transition-colors hover:bg-slate-800/45' : ''}`}
                 >
-                  <td className="px-3 py-2.5 font-medium text-white tabular-nums">
+                  <td className="px-2 py-1.5 font-semibold text-white text-[11px] tabular-nums">
                     {sym || '—'}
                   </td>
-                  <td className={`px-3 py-2.5 text-right text-[12px] font-medium tabular-nums ${changeTextClass}`}>
+                  <td className={`px-2 py-1.5 text-right text-[11px] font-medium tabular-nums ${changeTextClass}`}>
                     <span>
                       {formatPct(row.regularMarketChangePercent)}
                     </span>
                   </td>
-                  <td className="px-3 py-2.5 text-right text-[12px] tabular-nums text-slate-200">
+                  <td className="px-2 py-1.5 text-right text-[11px] tabular-nums text-slate-200">
                     {formatPrice(row.regularMarketPrice)}
                   </td>
-                  <td className="px-3 py-2.5 text-right text-[12px] tabular-nums text-slate-400">
+                  <td className="px-2 py-1.5 text-right text-[11px] tabular-nums text-slate-400">
                     {formatVolume(row.regularMarketVolume)}
                   </td>
-                  <td className="px-3 py-2.5">
-                    <div className="truncate text-[12px] text-slate-300" title={row.shortName ?? undefined}>
+                  <td className="px-2 py-1.5">
+                    <div className="truncate text-[11px] text-slate-300" title={row.shortName ?? undefined}>
                       {row.shortName || '—'}
                     </div>
-                    <div className="mt-0.5 truncate text-[11px] text-slate-500" title={row.industry ?? undefined}>
+                    <div className="mt-0.5 truncate text-[10px] text-slate-500" title={row.industry ?? undefined}>
                       {row.industry || '—'}
                     </div>
                   </td>
-                  <td className="px-3 py-2.5 text-[12px] text-slate-400">
+                  <td className="px-2 py-1.5 text-[11px] text-slate-400">
                     <div className="truncate" title={row.sector ?? undefined}>
                       {row.sector || '—'}
                     </div>
@@ -1407,11 +1388,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
       {activeTab === 'overview' && (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-stretch">
           <div className="space-y-6">
-            <section className="space-y-4">
-              <SectionHeading
-                title="Cross-asset overview"
-              />
-
+            <section>
               {overview ? (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-4">
                   <OverviewSection
@@ -1472,10 +1449,6 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
             </section>
 
             <section className="space-y-4">
-              <SectionHeading
-                title="Today&apos;s market movers"
-              />
-
               {gainers.length > 0 || losers.length > 0 || mostActive.length > 0 ? (
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 2xl:grid-cols-3">
                   <MoversTable
