@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { createChart, IChartApi, ISeriesApi, CandlestickData, HistogramData, UTCTimestamp, ColorType } from 'lightweight-charts';
 import { tickerApi } from '../services/api';
 
@@ -58,6 +58,31 @@ export default function PriceTrendWidget({ ticker, period = '6mo', height = 300,
     { label: '10Y', value: '10y' },
     { label: 'MAX', value: 'max' },
   ];
+
+  const selectedPeriodLabel = periods.find((p) => p.value === selectedPeriod)?.label ?? selectedPeriod.toUpperCase();
+
+  const percentChange = useMemo(() => {
+    if (!data?.data?.length) return null;
+
+    const timestampForEntry = (entry: HistoricalPrice): number => {
+      if (entry.timestamp != null) return entry.timestamp;
+      const parsed = Date.parse(entry.date);
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+
+    const sorted = [...data.data].sort(
+      (a, b) => timestampForEntry(a) - timestampForEntry(b)
+    );
+
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+
+    if (!first || !last || first.close == null || last.close == null || first.close === 0) {
+      return null;
+    }
+
+    return ((last.close - first.close) / first.close) * 100;
+  }, [data]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -225,8 +250,23 @@ export default function PriceTrendWidget({ ticker, period = '6mo', height = 300,
 
   return (
     <div className={rootClass}>
-      <div className={fillTile ? 'mb-2 shrink-0' : 'mb-4'}>
+      <div className={`${fillTile ? 'mb-2 shrink-0' : 'mb-4'} flex items-center justify-between gap-3`}>
         <h3 className="text-lg font-semibold text-white">Price Trend</h3>
+        {percentChange != null && (
+          <div className="text-right leading-tight">
+            <span
+              className={`text-sm font-semibold ${
+                percentChange >= 0 ? 'text-emerald-400' : 'text-red-400'
+              }`}
+            >
+              {percentChange >= 0 ? '+' : ''}
+              {percentChange.toFixed(2)}%
+            </span>
+            <div className="text-[10px] uppercase tracking-widest text-gray-400">
+              {selectedPeriodLabel}
+            </div>
+          </div>
+        )}
       </div>
 
       <div
