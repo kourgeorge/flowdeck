@@ -259,6 +259,98 @@ def _get_portfolio_overview(user_id: int, db: Any) -> str:
 
 
 # ---------------------------------------------------------------------------
+# UpdateUserMemoryTool
+# ---------------------------------------------------------------------------
+
+_UPDATE_USER_MEMORY_SPEC = ToolSpec(
+    name="update_user_memory",
+    version="1.0",
+    description=(
+        "Save or append information to the user's persistent AI memory. "
+        "This memory persists across all future conversations and helps personalize responses. "
+        "Use when the user explicitly asks you to remember something (e.g., 'remember that I...', "
+        "'save this preference', 'keep in mind that...') or when they share important context "
+        "about their investment style, preferences, constraints, or goals that should be remembered long-term. "
+        "The memory is appended to existing notes, so you can add new information without overwriting."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "memory_note": {
+                "type": "string",
+                "description": "The information to save to the user's memory. Be concise but specific.",
+            }
+        },
+        "required": ["memory_note"],
+    },
+    tags=["user", "memory", "preferences"],
+)
+
+
+class UpdateUserMemoryTool(BaseTool):
+    """Saves information to the user's persistent AI memory. Requires user_id + db at construction."""
+
+    spec = _UPDATE_USER_MEMORY_SPEC
+
+    def __init__(self, user_id: int, db: Any) -> None:
+        self._user_id = user_id
+        self._db = db
+
+    def execute(self, ctx: ExecutionContext, **kwargs) -> ToolResult:
+        try:
+            memory_note = kwargs.get("memory_note", "")
+            if not memory_note:
+                return ToolResult(ok=False, error={"code": "MISSING_PARAM", "message": "memory_note is required"})
+            result = _update_user_memory(self._user_id, self._db, memory_note)
+            return ToolResult(ok=True, data=result)
+        except Exception as exc:
+            logger.exception("UpdateUserMemoryTool error: %s", exc)
+            return ToolResult(ok=False, error={"code": "TOOL_ERROR", "message": str(exc)})
+
+
+def _update_user_memory(user_id: int, db: Any, memory_note: str) -> str:
+    import sys
+    import os
+    _backend_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "backend")
+    if _backend_dir not in sys.path:
+        sys.path.insert(0, os.path.abspath(_backend_dir))
+
+    from models.db_models import UserProfile  # type: ignore[import]
+    from datetime import datetime
+
+    # Get or create profile
+    profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+    if profile is None:
+        profile = UserProfile(user_id=user_id)
+        db.add(profile)
+        db.flush()
+
+    # Clean the memory note
+    memory_note = memory_note.strip()
+    if not memory_note:
+        return "No memory note provided."
+
+    # Append to existing memory with timestamp
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d")
+    new_entry = f"[{timestamp}] {memory_note}"
+
+    if profile.ai_memory_text:
+        # Append with newline separator
+        profile.ai_memory_text = f"{profile.ai_memory_text}\n{new_entry}"
+    else:
+        profile.ai_memory_text = new_entry
+
+    # Truncate if too long (keep last 4000 chars)
+    if len(profile.ai_memory_text) > 4000:
+        profile.ai_memory_text = profile.ai_memory_text[-4000:]
+
+    db.commit()
+    db.refresh(profile)
+
+    return f"✓ Saved to your AI memory: {memory_note}\n\nThis will be remembered in all future conversations."
+
+
+# ---------------------------------------------------------------------------
 # Factory function
 # ---------------------------------------------------------------------------
 
@@ -271,5 +363,6 @@ def make_user_context_tools(user_id: int, db: Any) -> list[BaseTool]:
         UserContextTool(user_id=user_id, db=db),
         UserSubscriptionsTool(user_id=user_id, db=db),
         PortfolioOverviewTool(user_id=user_id, db=db),
+        UpdateUserMemoryTool(user_id=user_id, db=db),
     ]
 

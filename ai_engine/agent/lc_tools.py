@@ -350,7 +350,23 @@ def make_user_lc_tools(user_id: int, db: Any) -> list:
         ctx = ExecutionContext(user_id=user_id, db=db)
         return PortfolioOverviewTool(user_id=user_id, db=db).execute(ctx).to_str()
 
-    return [get_user_context, get_user_subscriptions, get_portfolio_overview]
+    @tool
+    def update_user_memory(memory_note: str) -> str:
+        """Save or append information to the user's persistent AI memory.
+        This memory persists across all future conversations and helps personalize responses.
+        Use when the user explicitly asks you to remember something (e.g., 'remember that I...',
+        'save this preference', 'keep in mind that...') or when they share important context
+        about their investment style, preferences, constraints, or goals that should be remembered long-term.
+        
+        Args:
+            memory_note: The information to save to the user's memory. Be concise but specific.
+        """
+        from ai_engine.agent.tools.user_context import UpdateUserMemoryTool
+        from ai_engine.agent.tool import ExecutionContext
+        ctx = ExecutionContext(user_id=user_id, db=db)
+        return UpdateUserMemoryTool(user_id=user_id, db=db).execute(ctx, memory_note=memory_note).to_str()
+
+    return [get_user_context, get_user_subscriptions, get_portfolio_overview, update_user_memory]
 
 
 # ---------------------------------------------------------------------------

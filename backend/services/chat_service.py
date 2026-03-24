@@ -129,7 +129,8 @@ def _build_system_prompt(
     user_ctx_section = """
 15. Call `get_user_context` to retrieve the current user's account profile, investor preferences, and saved AI memory.
 16. Call `get_user_subscriptions` to see which stocks the user is subscribed/watching on FlowDeck.
-17. Call `get_portfolio_overview` to get live quotes AND AI recommendations for ALL of the user's subscribed stocks at once — use this when the user asks about their portfolio or how their stocks are doing.""" if has_user_ctx else ""
+17. Call `get_portfolio_overview` to get live quotes AND AI recommendations for ALL of the user's subscribed stocks at once — use this when the user asks about their portfolio or how their stocks are doing.
+18. Call `update_user_memory` to save information to the user's persistent AI memory when they explicitly ask you to remember something (e.g., "remember that I love tech sector", "save this preference", "keep in mind that...") or when they share important context about their investment style, preferences, constraints, or goals that should be remembered long-term. This memory persists across all future conversations.""" if has_user_ctx else ""
 
     watchlist_tickers: List[str] = (context or {}).get("tickers", [])
     watchlist_section = ""
