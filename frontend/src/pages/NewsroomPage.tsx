@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import DashboardNewsSection, { NewsroomSkeleton } from '../components/DashboardNewsSection';
+import PageHeader from '../components/PageHeader';
 import TickerSearch from '../components/TickerSearch';
 import { SIGNIFICANT_SEVEN_RANK, SIGNIFICANT_SEVEN_TICKERS } from '../constants/majorTickers';
 import { useAuth } from '../contexts/AuthContext';
@@ -75,12 +76,10 @@ export default function NewsroomPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="shrink-0 mx-4 mt-4 mb-2 border border-sky-400/15 bg-slate-900/95 rounded-lg px-4 py-2 flex items-center gap-3">
-        <div className="flex items-center justify-center text-blue-400 shrink-0 [&_svg]:w-4 [&_svg]:h-4">
-          <NewsroomIcon />
-        </div>
-        <span className="text-sm font-semibold text-white">Personal Newsroom</span>
-      </div>
+      <PageHeader
+        title="Personal Newsroom"
+        icon={<NewsroomIcon />}
+      />
 
       <div className="px-4 pt-2 border-b border-gray-700 bg-gray-900 shrink-0">
         <div className="pb-2">

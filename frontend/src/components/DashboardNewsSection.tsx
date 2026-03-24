@@ -539,123 +539,143 @@ export default function DashboardNewsSection({
       className={fillHeight ? 'flex min-h-0 flex-1 flex-col' : undefined}
       style={fillHeight ? { maxHeight: 'min(calc(100vh - 12rem), 1200px)' } : undefined}
     >
-      <div className="fd-page-block">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-4xl flex-1">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-300/80">Watchlist Newsroom</div>
-            <div className="mt-5 max-w-3xl">
-              <label className="relative block">
-                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-500">
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" />
-                  </svg>
-                </span>
-                <input
-                  type="search"
-                  value={searchQuery}
-                  onChange={(event) => {
-                    if (onSearchQueryChange) {
-                      onSearchQueryChange(event.target.value);
-                    }
-                  }}
-                  placeholder="Search headlines, summaries, publishers, tickers..."
-                  className="fd-input focus:border-cyan-400/60"
-                  aria-label="Search newsroom content"
-                />
-                {searchQuery.trim() && onClearSearch && (
-                  <button
-                    type="button"
-                    onClick={onClearSearch}
-                    className="absolute inset-y-0 right-2 flex items-center rounded-full px-2 text-slate-400 transition-colors hover:text-white"
-                    aria-label="Clear newsroom search"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12M18 6 6 18" />
-                    </svg>
-                  </button>
-                )}
-              </label>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3 xl:items-end">
-            <div className="flex flex-wrap gap-2 xl:justify-end">
-              <div className="fd-pill fd-pill-md">
-                <span className="font-semibold text-white">{filteredArticles.length}</span> live stories
-              </div>
-              {normalizedSearchQuery && (
-                <div className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-100">
-                  Searching "{searchQuery.trim()}"
+      <section className="fd-card border-cyan-400/15 bg-slate-900/95 mb-6">
+        <div className="space-y-4 p-4 sm:p-5">
+          <div className="space-y-4 xl:grid xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.95fr)] xl:items-start xl:gap-4 xl:space-y-0">
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/25 bg-cyan-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100">
+                  <span className="h-2 w-2 rounded-full bg-cyan-400" />
+                  Watchlist Newsroom
                 </div>
-              )}
-              <div className="fd-pill fd-pill-md">
-                <span className="font-semibold text-white">{visiblePublisherCount}</span> sources
-              </div>
-              {lastUpdated && (
-                <div className="fd-pill fd-pill-md">
-                  Updated {lastUpdated.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={fetchNews}
-                disabled={isLoading}
-                className="rounded-full border border-slate-600 bg-slate-900/70 px-4 py-2 text-sm font-medium text-white transition-colors hover:border-slate-500 hover:bg-slate-800 disabled:cursor-default disabled:opacity-60"
-              >
-                {isLoading ? 'Refreshing...' : 'Refresh newsroom'}
-              </button>
-            </div>
-
-            {visibleTopPublishers.length > 0 && (
-              <div className="flex flex-wrap gap-2 xl:justify-end">
-                {visibleTopPublishers.map((publisher) => (
-                  <span
-                    key={publisher}
-                    className="fd-pill fd-pill-sm"
-                  >
-                    {publisher}
+                {normalizedSearchQuery && (
+                  <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-[11px] font-medium text-cyan-100">
+                    Searching "{searchQuery.trim()}"
                   </span>
-                ))}
+                )}
               </div>
-            )}
+              
+              <div className="space-y-2">
+                <h2 className="max-w-3xl text-xl font-semibold tracking-tight text-white sm:text-2xl">
+                  Your curated news feed from <span className="text-cyan-300">subscribed stocks</span>
+                </h2>
+                <p className="max-w-2xl text-xs leading-relaxed text-slate-300 sm:text-sm">
+                  Stay informed with real-time headlines, summaries, and market-moving stories from your watchlist.
+                </p>
+              </div>
+
+              <div className="max-w-3xl">
+                <label className="relative block">
+                  <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-500">
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" />
+                    </svg>
+                  </span>
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onChange={(event) => {
+                      if (onSearchQueryChange) {
+                        onSearchQueryChange(event.target.value);
+                      }
+                    }}
+                    placeholder="Search headlines, summaries, publishers, tickers..."
+                    className="fd-input focus:border-cyan-400/60"
+                    aria-label="Search newsroom content"
+                  />
+                  {searchQuery.trim() && onClearSearch && (
+                    <button
+                      type="button"
+                      onClick={onClearSearch}
+                      className="absolute inset-y-0 right-2 flex items-center rounded-full px-2 text-slate-400 transition-colors hover:text-white"
+                      aria-label="Clear newsroom search"
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12M18 6 6 18" />
+                      </svg>
+                    </button>
+                  )}
+                </label>
+              </div>
+
+              <div className="flex flex-wrap gap-2 items-center">
+                <div className="rounded-full border border-slate-500/30 bg-slate-500/10 px-3 py-1.5 text-[11px] font-medium text-slate-200">
+                  <span className="font-semibold text-white">{filteredArticles.length}</span> live stories
+                </div>
+                <div className="rounded-full border border-slate-500/30 bg-slate-500/10 px-3 py-1.5 text-[11px] font-medium text-slate-200">
+                  <span className="font-semibold text-white">{visiblePublisherCount}</span> sources
+                </div>
+                {lastUpdated && (
+                  <div className="rounded-full border border-slate-500/30 bg-slate-500/10 px-3 py-1.5 text-[11px] font-medium text-slate-200">
+                    Updated {lastUpdated.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={fetchNews}
+                  disabled={isLoading}
+                  className="rounded-full border border-slate-600 bg-slate-900/70 px-4 py-1.5 text-[11px] font-medium text-white transition-colors hover:border-slate-500 hover:bg-slate-800 disabled:cursor-default disabled:opacity-60 sm:text-sm"
+                >
+                  {isLoading ? 'Refreshing...' : 'Refresh newsroom'}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {visibleTopPublishers.length > 0 && (
+                <div className="flex flex-wrap gap-2 xl:justify-end">
+                  {visibleTopPublishers.map((publisher) => (
+                    <span
+                      key={publisher}
+                      className="fd-pill fd-pill-sm"
+                    >
+                      {publisher}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                <button
+                  type="button"
+                  onClick={clearTickerFilters}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    selectedTickers.length === 0
+                      ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-100'
+                      : 'border-slate-600 bg-slate-900/65 text-slate-300 hover:border-slate-500 hover:bg-slate-800'
+                  }`}
+                >
+                  All watchlist
+                </button>
+                {tickers.map((ticker) => {
+                  const active = selectedTickers.includes(ticker);
+
+                  return (
+                    <button
+                      key={ticker}
+                      type="button"
+                      onClick={() => toggleTickerTag(ticker)}
+                      aria-pressed={active}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                        active
+                          ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-100'
+                          : 'border-slate-600 bg-slate-900/65 text-slate-300 hover:border-slate-500 hover:bg-slate-800'
+                      }`}
+                    >
+                      {ticker}
+                      <span className={`ml-1.5 ${active ? 'text-cyan-100/90' : 'text-slate-400'}`}>
+                        {tickerCounts[ticker] ?? 0}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
+      </section>
 
-        <div className="mt-5 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={clearTickerFilters}
-            className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-              selectedTickers.length === 0
-                ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-100'
-                : 'border-slate-600 bg-slate-900/65 text-slate-300 hover:border-slate-500 hover:bg-slate-800'
-            }`}
-          >
-            All watchlist
-          </button>
-          {tickers.map((ticker) => {
-            const active = selectedTickers.includes(ticker);
-
-            return (
-              <button
-                key={ticker}
-                type="button"
-                onClick={() => toggleTickerTag(ticker)}
-                aria-pressed={active}
-                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                  active
-                    ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-100'
-                    : 'border-slate-600 bg-slate-900/65 text-slate-300 hover:border-slate-500 hover:bg-slate-800'
-                }`}
-              >
-                {ticker}
-                <span className={`ml-1.5 ${active ? 'text-cyan-100/90' : 'text-slate-400'}`}>
-                  {tickerCounts[ticker] ?? 0}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+      <div className="fd-page-block">
 
         {error && (
           <div className="mt-5 rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
