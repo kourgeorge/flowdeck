@@ -959,7 +959,9 @@ def get_analyst_recommendations(
                 "target_price": None,
                 "breakdown": {},
                 "total_analysts": 0,
-                "latest_date": None
+                "latest_date": None,
+                "financial_data": {},
+                "price_targets": {}
             }
         
         def _count_from_row(row: pd.Series, *keys: str) -> int:
@@ -1039,13 +1041,33 @@ def get_analyst_recommendations(
             elif key in ("hold",):
                 recommendation = "HOLD"
         
+        # Extract detailed financial data for price targets
+        financial_data = {
+            "currentPrice": info.get('currentPrice'),
+            "targetLowPrice": info.get('targetLowPrice'),
+            "targetMeanPrice": info.get('targetMeanPrice'),
+            "targetHighPrice": info.get('targetHighPrice'),
+            "targetMedianPrice": info.get('targetMedianPrice'),
+            "numberOfAnalystOpinions": info.get('numberOfAnalystOpinions'),
+        }
+        
+        # Also provide price_targets in alternative format for compatibility
+        price_targets = {
+            "current": info.get('currentPrice'),
+            "low": info.get('targetLowPrice'),
+            "average": info.get('targetMeanPrice'),
+            "high": info.get('targetHighPrice'),
+        }
+        
         return {
             "ticker": ticker.upper(),
             "recommendation": recommendation,
             "target_price": float(target_price) if target_price else None,
             "breakdown": breakdown,
             "total_analysts": total,
-            "latest_date": latest_date
+            "latest_date": latest_date,
+            "financial_data": financial_data,
+            "price_targets": price_targets,
         }
         
     except Exception as e:
@@ -1057,6 +1079,8 @@ def get_analyst_recommendations(
             "breakdown": {},
             "total_analysts": 0,
             "latest_date": None,
+            "financial_data": {},
+            "price_targets": {},
             "error": str(e)
         }
 

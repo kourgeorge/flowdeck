@@ -292,7 +292,7 @@ class MarketDataLayer:
                       lambda: interface_get_ticker_data(ticker, start_date, end_date))
 
     def get_analyst_recommendations(self, ticker: str) -> Dict[str, Any]:
-        return _cached(f"analyst:v5:{ticker.upper()}", DATA_CACHE_TTL_ANALYST, lambda: yf_get_analyst_recommendations(ticker))
+        return _cached(f"analyst:v6:{ticker.upper()}", DATA_CACHE_TTL_ANALYST, lambda: yf_get_analyst_recommendations(ticker))
 
     def get_future_events(self, ticker: str) -> Dict[str, Any]:
         return _cached(f"future_events:{ticker.upper()}", DATA_CACHE_TTL_ANALYST, lambda: yf_get_future_events(ticker))
