@@ -152,6 +152,15 @@ export default function RouteSeoManager() {
       };
     }
 
+    if (pathname === '/privacy') {
+      return {
+        title: 'Privacy Policy',
+        description: 'Learn how Flowdeck collects, uses, and protects your personal information and data privacy.',
+        path: pathname,
+        type: 'article',
+      };
+    }
+
     if (pathname === '/contact') {
       return {
         title: 'Contact',

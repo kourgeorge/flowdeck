@@ -5,6 +5,7 @@ import HomePage from './pages/HomePage';
 import ProfilePage from './pages/ProfilePage';
 import TickerPage from './pages/StockPage';
 import TermsOfUsePage from './pages/TermsOfUsePage';
+import PrivacyPage from './pages/PrivacyPage';
 import ContactUsPage from './pages/ContactUsPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import BriefPage from './pages/BriefPage';
@@ -52,6 +53,7 @@ function App() {
           <Route path="architecture" element={<ArchitecturePage />} />
           <Route path="api-docs" element={<ApiDocsPage />} />
           <Route path="terms" element={<TermsOfUsePage />} />
+          <Route path="privacy" element={<PrivacyPage />} />
           <Route path="contact" element={<ContactUsPage />} />
           <Route path="payment/success" element={<PaymentSuccessPage />} />
           <Route path="payment/cancel" element={<PaymentCancelPage />} />

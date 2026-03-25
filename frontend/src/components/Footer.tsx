@@ -12,6 +12,8 @@ export default function Footer() {
         <span>·</span>
         <Link to="/terms" className="hover:text-gray-300 transition-colors">Terms of Use</Link>
         <span>·</span>
+        <Link to="/privacy" className="hover:text-gray-300 transition-colors">Privacy Policy</Link>
+        <span>·</span>
         <Link to="/contact" className="hover:text-gray-300 transition-colors">Contact</Link>
         <span>·</span>
         <span>© {currentYear}</span>
