@@ -248,6 +248,8 @@ export default function AdminDashboardPage() {
   const [analysesTotal, setAnalysesTotal] = useState(0);
   const [analysisTickerFilter, setAnalysisTickerFilter] = useState('');
   const [analysisCreatorFilter, setAnalysisCreatorFilter] = useState('');
+  const [loadingMoreAnalyses, setLoadingMoreAnalyses] = useState(false);
+  const analysesContainerRef = useRef<HTMLDivElement>(null);
   const [subscriptions, setSubscriptions] = useState<AdminSubscriptionItem[]>([]);
   const [subscriptionsTotal, setSubscriptionsTotal] = useState(0);
   const [viewRuns, setViewRuns] = useState<AdminReportViewRunItem[]>([]);
@@ -724,6 +726,37 @@ export default function AdminDashboardPage() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedReport, closeReportDetail]);
+
+  // Scroll handler for loading more analyses
+  const handleAnalysesScroll = useCallback(async () => {
+    const container = analysesContainerRef.current;
+    if (!container || loadingMoreAnalyses || analyses.length >= analysesTotal) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
+
+    // Load more when scrolled 80% down
+    if (scrollPercentage > 0.8) {
+      setLoadingMoreAnalyses(true);
+      try {
+        const result = await adminApi.getAnalyses(50, analyses.length);
+        setAnalyses((prev) => [...prev, ...result.analyses]);
+        setAnalysesTotal(result.total);
+      } catch (err) {
+        console.error('Failed to load more analyses:', err);
+      } finally {
+        setLoadingMoreAnalyses(false);
+      }
+    }
+  }, [analyses.length, analysesTotal, loadingMoreAnalyses]);
+
+  useEffect(() => {
+    const container = analysesContainerRef.current;
+    if (!container) return;
+
+    container.addEventListener('scroll', handleAnalysesScroll);
+    return () => container.removeEventListener('scroll', handleAnalysesScroll);
+  }, [handleAnalysesScroll]);
 
   if (!user) {
     return (
@@ -1514,7 +1547,10 @@ export default function AdminDashboardPage() {
                   />
                 </div>
               </div>
-              <div className="overflow-x-auto overflow-y-auto max-h-96 rounded-lg border border-gray-700 bg-gray-800/80">
+              <div
+                ref={analysesContainerRef}
+                className="overflow-x-auto overflow-y-auto max-h-96 rounded-lg border border-gray-700 bg-gray-800/80"
+              >
                 <table className="w-full min-w-[500px] text-left text-sm">
                     <thead className="sticky top-0 bg-gray-800 z-10">
                       <tr className="border-b border-gray-700">
@@ -1583,9 +1619,23 @@ export default function AdminDashboardPage() {
                         </td>
                       </tr>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                    {loadingMoreAnalyses && (
+                      <tr>
+                        <td colSpan={9} className="px-4 py-3 text-center text-gray-400">
+                          Loading more analyses...
+                        </td>
+                      </tr>
+                    )}
+                    {!loadingMoreAnalyses && analyses.length < analysesTotal && (
+                      <tr>
+                        <td colSpan={9} className="px-4 py-3 text-center text-gray-500 text-xs">
+                          Scroll down to load more ({analyses.length} of {analysesTotal})
+                        </td>
+                      </tr>
+                    )}
+                 </tbody>
+               </table>
+             </div>
             </section>
 
             <section className="mb-10">

@@ -194,10 +194,11 @@ export const adminApi = {
 
   getAnalyses: async (
     limit = 50,
+    offset = 0,
   ): Promise<{ analyses: AdminAnalysisItem[]; total: number }> => {
     const res = await api.get<{ analyses: AdminAnalysisItem[]; total: number }>(
       '/api/admin/analyses',
-      { params: { limit }, headers: authHeaders() },
+      { params: { limit, offset }, headers: authHeaders() },
     );
     return res.data;
   },

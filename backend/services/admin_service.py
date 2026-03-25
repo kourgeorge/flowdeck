@@ -156,13 +156,14 @@ def get_report_detail(db: Session, report_id: int) -> Optional[dict[str, Any]]:
     }
 
 
-def list_analyses(db: Session, limit: int) -> tuple[list[dict], int]:
+def list_analyses(db: Session, limit: int, offset: int) -> tuple[list[dict], int]:
     """Recent analysis runs with creator email and token/cost sums. Returns (items, total)."""
     total = db.query(func.count(Execution.id)).scalar() or 0
     rows = (
         db.query(Execution, User.email)
         .join(User, User.id == Execution.creator_id)
         .order_by(Execution.created_at.desc())
+        .offset(offset)
         .limit(limit)
         .all()
     )

@@ -27,6 +27,14 @@ Portfolio
 - Portfolio insights: build portfolio view and get AI recommendations
 - Major stock events: explain/summarize for user
 
+Blog:
+──────
+- Create an agent that knows how to write a current/relevant naarative on a specific company - like the naaratives in wall street
+
+
+
+
+
 
 Copilot / chat
 ──────────────
@@ -35,6 +43,7 @@ Copilot / chat
 - Canvas (drawing/planning surface)
 - expose the api as an mcp
 - give rag capabilities over the report knowledge base - helping 
+- deep five into a sec filing  - allow add to the chnage from the sec filing tab.
 
 
 Data layer

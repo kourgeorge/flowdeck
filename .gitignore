@@ -84,6 +84,10 @@ eval_data/
 *.csv
 watchlist_consulting/out/
 
+# Docker volumes
+data/
+logs/
+
 # Legacy (uncomment if you want to ignore)
 # src/
 

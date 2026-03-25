@@ -1,0 +1,397 @@
+# Kubernetes deployment configuration for IBM Cloud
+# This file defines the deployment for Flowdeck on IBM Cloud Kubernetes Service (IKS)
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flowdeck
+
+---
+# ConfigMap for application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flowdeck-config
+  namespace: flowdeck
+data:
+  CORS_ORIGINS: "https://your-domain.com"
+  ENABLE_DAILY_SYNC: "false"
+  ENABLE_MARKET_OVERVIEW_CACHE_REFRESH: "true"
+  ENABLE_DIGEST_SCHEDULER: "false"
+  DATABASE_URL: "sqlite:///./data/flowdeck.db"
+  PAYPAL_MODE: "live"
+
+---
+# Secret for sensitive data (create this separately with actual values)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: flowdeck-secrets
+  namespace: flowdeck
+type: Opaque
+stringData:
+  OPENAI_API_KEY: "your-openai-key"
+  ALPHA_VANTAGE_API_KEY: "your-alpha-vantage-key"
+  JWT_SECRET: "your-jwt-secret"
+  GOOGLE_CLIENT_ID: "your-google-client-id"
+  GOOGLE_CLIENT_SECRET: "your-google-client-secret"
+  PAYPAL_CLIENT_ID: "your-paypal-client-id"
+  PAYPAL_CLIENT_SECRET: "your-paypal-client-secret"
+  SMTP_HOST: "your-smtp-host"
+  SMTP_PORT: "587"
+  SMTP_USER: "your-smtp-user"
+  SMTP_PASSWORD: "your-smtp-password"
+  SMTP_FROM: "noreply@your-domain.com"
+
+---
+# PersistentVolumeClaim for data storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: flowdeck-data-pvc
+  namespace: flowdeck
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: ibmc-block-gold
+
+---
+# Backend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flowdeck-backend
+  namespace: flowdeck
+  labels:
+    app: flowdeck
+    component: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: flowdeck
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: flowdeck
+        component: backend
+    spec:
+      containers:
+      - name: backend
+        image: us.icr.io/your-namespace/flowdeck-backend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8002
+          name: http
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: flowdeck-config
+              key: DATABASE_URL
+        - name: CORS_ORIGINS
+          valueFrom:
+            configMapKeyRef:
+              name: flowdeck-config
+              key: CORS_ORIGINS
+        - name: ENABLE_DAILY_SYNC
+          valueFrom:
+            configMapKeyRef:
+              name: flowdeck-config
+              key: ENABLE_DAILY_SYNC
+        - name: ENABLE_MARKET_OVERVIEW_CACHE_REFRESH
+          valueFrom:
+            configMapKeyRef:
+              name: flowdeck-config
+              key: ENABLE_MARKET_OVERVIEW_CACHE_REFRESH
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: flowdeck-secrets
+              key: OPENAI_API_KEY
+        - name: ALPHA_VANTAGE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: flowdeck-secrets
+              key: ALPHA_VANTAGE_API_KEY
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: flowdeck-secrets
+              key: JWT_SECRET
+        - name: GOOGLE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: flowdeck-secrets
+              key: GOOGLE_CLIENT_ID
+              optional: true
+        - name: GOOGLE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: flowdeck-secrets
+              key: GOOGLE_CLIENT_SECRET
+              optional: true
+        - name: PAYPAL_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: flowdeck-secrets
+              key: PAYPAL_CLIENT_ID
+              optional: true
+        - name: PAYPAL_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: flowdeck-secrets
+              key: PAYPAL_CLIENT_SECRET
+              optional: true
+        - name: PAYPAL_MODE
+          valueFrom:
+            configMapKeyRef:
+              name: flowdeck-config
+              key: PAYPAL_MODE
+        - name: SMTP_HOST
+          valueFrom:
+            secretKeyRef:
+              name: flowdeck-secrets
+              key: SMTP_HOST
+              optional: true
+        - name: SMTP_PORT
+          valueFrom:
+            secretKeyRef:
+              name: flowdeck-secrets
+              key: SMTP_PORT
+              optional: true
+        - name: SMTP_USER
+          valueFrom:
+            secretKeyRef:
+              name: flowdeck-secrets
+              key: SMTP_USER
+              optional: true
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: flowdeck-secrets
+              key: SMTP_PASSWORD
+              optional: true
+        - name: SMTP_FROM
+          valueFrom:
+            secretKeyRef:
+              name: flowdeck-secrets
+              key: SMTP_FROM
+              optional: true
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        volumeMounts:
+        - name: data
+          mountPath: /app/data
+        - name: logs
+          mountPath: /app/logs
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: flowdeck-data-pvc
+      - name: logs
+        emptyDir: {}
+
+---
+# Backend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: flowdeck-backend
+  namespace: flowdeck
+  labels:
+    app: flowdeck
+    component: backend
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8002
+    targetPort: 8002
+    protocol: TCP
+    name: http
+  selector:
+    app: flowdeck
+    component: backend
+
+---
+# Frontend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flowdeck-frontend
+  namespace: flowdeck
+  labels:
+    app: flowdeck
+    component: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: flowdeck
+      component: frontend
+  template:
+    metadata:
+      labels:
+        app: flowdeck
+        component: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: us.icr.io/your-namespace/flowdeck-frontend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+          name: http
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+---
+# Frontend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: flowdeck-frontend
+  namespace: flowdeck
+  labels:
+    app: flowdeck
+    component: frontend
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  selector:
+    app: flowdeck
+    component: frontend
+
+---
+# Ingress for external access
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: flowdeck-ingress
+  namespace: flowdeck
+  annotations:
+    kubernetes.io/ingress.class: "public-iks-k8s-nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  tls:
+  - hosts:
+    - your-domain.com
+    secretName: flowdeck-tls
+  rules:
+  - host: your-domain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: flowdeck-frontend
+            port:
+              number: 80
+
+---
+# HorizontalPodAutoscaler for backend
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: flowdeck-backend-hpa
+  namespace: flowdeck
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: flowdeck-backend
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+# HorizontalPodAutoscaler for frontend
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: flowdeck-frontend-hpa
+  namespace: flowdeck
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: flowdeck-frontend
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+
+# Made with Bob

@@ -326,9 +326,10 @@ def get_admin_analyses(
     _user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
     limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
 ):
     """Recent analysis runs with creator email and sum of report tokens/cost."""
-    items, total = admin_service.list_analyses(db, limit)
+    items, total = admin_service.list_analyses(db, limit, offset)
     return AdminAnalysesResponse(
         analyses=[AdminAnalysisItem(**it) for it in items],
         total=total,
