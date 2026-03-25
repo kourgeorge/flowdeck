@@ -98,8 +98,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!cancelled) {
           applyMeProfile(t, me);
         }
-      } catch {
-        // Keep stored user as-is if refresh fails.
+      } catch (error) {
+        // If token validation fails, clear stored auth and sign out
+        if (!cancelled) {
+          clearStoredAuth();
+          setToken(null);
+          setUser(null);
+        }
       } finally {
         if (!cancelled) {
           setIsReady(true);
