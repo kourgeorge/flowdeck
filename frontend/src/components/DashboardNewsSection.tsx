@@ -526,9 +526,54 @@ export default function DashboardNewsSection({
     return () => observer.disconnect();
   }, [fillHeight, filteredArticles.length, hasMore]);
 
-  const leadArticle = displayList[0] ?? null;
-  const pulseArticles = displayList.slice(1, 5);
-  const feedArticles = displayList.slice(5);
+  // Separate articles with and without images
+  // Lead story and Latest Wire (feed) should prioritize articles with images
+  // Watchlist Pulse can use articles without images
+  let leadArticle: NewsArticleWithTicker | null = null;
+  let pulseArticles: NewsArticleWithTicker[] = [];
+  let feedArticles: NewsArticleWithTicker[] = [];
+  
+  if (displayList.length > 0) {
+    const articlesWithImages: NewsArticleWithTicker[] = [];
+    const articlesWithoutImages: NewsArticleWithTicker[] = [];
+    
+    // Separate articles by whether they have images
+    displayList.forEach(article => {
+      if (article.thumbnail) {
+        articlesWithImages.push(article);
+      } else {
+        articlesWithoutImages.push(article);
+      }
+    });
+    
+    // Select lead story: prioritize articles with images
+    if (articlesWithImages.length > 0) {
+      leadArticle = articlesWithImages[0];
+      articlesWithImages.shift(); // Remove lead from the list
+    } else if (articlesWithoutImages.length > 0) {
+      // Fallback if no articles have images
+      leadArticle = articlesWithoutImages[0];
+      articlesWithoutImages.shift();
+    }
+    
+    // Watchlist Pulse (4 articles): prioritize articles WITHOUT images
+    // since this section doesn't display images
+    pulseArticles = [
+      ...articlesWithoutImages.slice(0, 4),
+      ...articlesWithImages.slice(0, Math.max(0, 4 - articlesWithoutImages.length))
+    ].slice(0, 4);
+    
+    // Remove pulse articles from both arrays
+    const pulseUuids = new Set(pulseArticles.map(a => a.uuid));
+    const remainingWithImages = articlesWithImages.filter(a => !pulseUuids.has(a.uuid));
+    const remainingWithoutImages = articlesWithoutImages.slice(pulseArticles.filter(a => !a.thumbnail).length);
+    
+    // Latest Wire (feed): prioritize articles WITH images since this section displays them
+    feedArticles = [
+      ...remainingWithImages,
+      ...remainingWithoutImages
+    ];
+  }
   const visiblePublisherCount = new Set(filteredArticles.map((article) => article.publisher).filter(Boolean)).size;
   const visibleTopPublishers = Array.from(
     new Set(filteredArticles.map((article) => article.publisher).filter(Boolean))
