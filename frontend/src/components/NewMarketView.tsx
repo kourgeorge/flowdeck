@@ -199,7 +199,7 @@ function PulseCard({
     >
       <span className={`h-2 w-2 shrink-0 rounded-full ${toneClasses.dot}`} />
       <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center justify-between gap-2 text-sm">
+        <div className="flex min-w-0 items-center justify-between gap-2 text-xs">
           <span className={`shrink-0 font-semibold uppercase tracking-[0.12em] ${toneClasses.eyebrow}`}>{eyebrow}</span>
           <div className="flex min-w-0 items-center gap-2">
             <span className="truncate text-slate-300">{detail}</span>
