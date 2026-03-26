@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef, type CSSProperties } from 'react';
+import { Link } from 'react-router-dom';
 import { tickerApi } from '../services/api';
 
 export interface NewsArticleWithTicker {
@@ -260,11 +261,9 @@ function EmptyState({
 function TickerPills({
   article,
   selectedTickers,
-  onToggleTicker,
 }: {
   article: NewsArticleWithTicker;
   selectedTickers: string[];
-  onToggleTicker: (ticker: string) => void;
 }) {
   if (article.tickers.length === 0) return null;
 
@@ -274,19 +273,18 @@ function TickerPills({
         const active = selectedTickers.includes(ticker);
 
         return (
-          <button
+          <Link
             key={ticker}
-            type="button"
-            onClick={() => onToggleTicker(ticker)}
-            aria-pressed={active}
+            to={`/ticker/${ticker}`}
             className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
               active
                 ? 'border-sky-400/60 bg-sky-500/15 text-sky-100'
                 : 'border-slate-600 bg-slate-800/80 text-slate-300 hover:border-slate-500 hover:bg-slate-700'
             }`}
+            onClick={(e) => e.stopPropagation()}
           >
             {ticker}
-          </button>
+          </Link>
         );
       })}
     </div>
@@ -296,11 +294,9 @@ function TickerPills({
 function PulseCard({
   article,
   selectedTickers,
-  onToggleTicker,
 }: {
   article: NewsArticleWithTicker;
   selectedTickers: string[];
-  onToggleTicker: (ticker: string) => void;
 }) {
   return (
     <a
@@ -317,7 +313,7 @@ function PulseCard({
         {article.title}
       </h4>
       <div className="mt-3">
-        <TickerPills article={article} selectedTickers={selectedTickers} onToggleTicker={onToggleTicker} />
+        <TickerPills article={article} selectedTickers={selectedTickers} />
       </div>
       <div className="mt-3 flex items-center justify-between gap-3 text-xs uppercase tracking-[0.16em] text-slate-400">
         <span>{formatTypeLabel(article.type)}</span>
@@ -333,11 +329,9 @@ function PulseCard({
 function FeedCard({
   article,
   selectedTickers,
-  onToggleTicker,
 }: {
   article: NewsArticleWithTicker;
   selectedTickers: string[];
-  onToggleTicker: (ticker: string) => void;
 }) {
   return (
     <a
@@ -361,7 +355,7 @@ function FeedCard({
           {getSummary(article)}
         </p>
         <div className="mt-4">
-          <TickerPills article={article} selectedTickers={selectedTickers} onToggleTicker={onToggleTicker} />
+          <TickerPills article={article} selectedTickers={selectedTickers} />
         </div>
         <div className="mt-4 flex items-center justify-between gap-3 text-sm">
           <span className="truncate font-medium text-slate-200">{article.publisher}</span>
@@ -805,7 +799,7 @@ export default function DashboardNewsSection({
                       {getSummary(leadArticle)}
                     </p>
                     <div className="mt-4">
-                      <TickerPills article={leadArticle} selectedTickers={selectedTickers} onToggleTicker={toggleTickerTag} />
+                      <TickerPills article={leadArticle} selectedTickers={selectedTickers} />
                     </div>
                     <div className="mt-5 flex flex-wrap items-center gap-3 text-sm text-slate-400">
                       <span>{formatAbsoluteTime(leadArticle.published_timestamp, leadArticle.published_time)}</span>
@@ -832,7 +826,6 @@ export default function DashboardNewsSection({
                           key={article.uuid || article.link}
                           article={article}
                           selectedTickers={selectedTickers}
-                          onToggleTicker={toggleTickerTag}
                         />
                       ))
                     ) : (
@@ -863,7 +856,6 @@ export default function DashboardNewsSection({
                         key={article.uuid || article.link}
                         article={article}
                         selectedTickers={selectedTickers}
-                        onToggleTicker={toggleTickerTag}
                       />
                     ))}
                   </div>
