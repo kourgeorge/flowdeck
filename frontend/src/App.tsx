@@ -35,7 +35,6 @@ function App() {
         <Route path="r/:token" element={<SharedReportPage />} />
         <Route element={<Layout />}>
           <Route index element={<HomePage />} />
-          <Route path="ticker/:ticker" element={<TickerPage />} />
           <Route path="tickers/:ticker" element={<TickerPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="dashboard" element={<DashboardPage />} />
