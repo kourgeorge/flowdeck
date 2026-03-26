@@ -55,7 +55,7 @@ export default function NewsroomPage() {
       } catch {
         if (!cancelled) {
           setPublicWidgets([]);
-          setPublicError('Failed to load the Significant 7 newsroom preview.');
+        setPublicError('Failed to load the major stocks newsroom preview.');
         }
       } finally {
         if (!cancelled) setIsLoadingPublicWidgets(false);
@@ -100,7 +100,7 @@ export default function NewsroomPage() {
           <div className="max-w-layout mx-auto min-w-0 w-full overflow-x-hidden">
             {!user && (
               <div className="mb-6 rounded-xl border border-blue-700/40 bg-blue-950/40 px-4 py-3 text-sm text-blue-100">
-                Viewing a public Newsroom preview powered by the Significant 7.{' '}
+              Viewing a public Newsroom preview powered by major stocks.{' '}
                 <Link to="/" className="font-medium text-white underline decoration-blue-400/60 underline-offset-2 hover:text-blue-100">
                   Sign in
                 </Link>{' '}
