@@ -275,7 +275,7 @@ function TickerPills({
         return (
           <Link
             key={ticker}
-            to={`/ticker/${ticker}`}
+            to={`/tickers/${ticker}`}
             className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
               active
                 ? 'border-sky-400/60 bg-sky-500/15 text-sky-100'

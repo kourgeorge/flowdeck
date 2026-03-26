@@ -215,8 +215,16 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
         const key = reportKeyFromParam(reportParam);
         if (key) setSelectedReport(key);
       }
+    } else if (!tabParam) {
+      // No tab param in URL, set default and update URL
+      setActiveTab(DEFAULT_MAIN_TAB);
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('tab', DEFAULT_MAIN_TAB);
+        return next;
+      }, { replace: true });
     }
-  }, [searchParams]);
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     if (activeTab === 'fundamentals' && quoteType != null && quoteType !== 'EQUITY') {
