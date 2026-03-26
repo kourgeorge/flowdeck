@@ -27,6 +27,8 @@ interface DashboardNewsSectionProps {
   onSearchQueryChange?: (value: string) => void;
   /** Optional clear handler for the external search UI. */
   onClearSearch?: () => void;
+  /** Map of ticker to event count for smart ranking */
+  tickerEventCounts?: Record<string, number>;
 }
 
 const PAGE_SIZE = 20;
@@ -373,6 +375,46 @@ function FeedCard({
   );
 }
 
+/**
+ * Calculate article ranking score based on:
+ * - Image presence (100 points)
+ * - Event count from related tickers (5 points per event)
+ * - Recency (tiered: 0-2h=25pts, 2-6h=15pts, 6-12h=8pts, 12-24h=3pts, older=0pts)
+ */
+function calculateArticleScore(
+  article: NewsArticleWithTicker,
+  tickerEventCounts: Record<string, number> = {}
+): number {
+  let score = 0;
+
+  // Image presence: 100 points
+  if (article.thumbnail) {
+    score += 100;
+  }
+
+  // Event count: sum events from all related tickers, multiply by 5
+  const totalEvents = article.tickers.reduce((sum, ticker) => {
+    return sum + (tickerEventCounts[ticker] || 0);
+  }, 0);
+  score += totalEvents * 5;
+
+  // Recency: tiered scoring
+  if (article.published_timestamp) {
+    const ageHours = (Date.now() - article.published_timestamp * 1000) / (1000 * 60 * 60);
+    if (ageHours < 2) {
+      score += 25;
+    } else if (ageHours < 6) {
+      score += 15;
+    } else if (ageHours < 12) {
+      score += 8;
+    } else if (ageHours < 24) {
+      score += 3;
+    }
+  }
+
+  return score;
+}
+
 export default function DashboardNewsSection({
   tickers,
   refreshIntervalMs = 120000,
@@ -380,6 +422,7 @@ export default function DashboardNewsSection({
   searchQuery = '',
   onSearchQueryChange,
   onClearSearch,
+  tickerEventCounts = {},
 }: DashboardNewsSectionProps) {
   const [articles, setArticles] = useState<NewsArticleWithTicker[]>([]);
   const [selectedTickers, setSelectedTickers] = useState<string[]>([]);
@@ -526,53 +569,37 @@ export default function DashboardNewsSection({
     return () => observer.disconnect();
   }, [fillHeight, filteredArticles.length, hasMore]);
 
-  // Separate articles with and without images
-  // Lead story and Latest Wire (feed) should prioritize articles with images
-  // Watchlist Pulse can use articles without images
+  // Smart ranking: sort articles by score (image + event count + recency)
   let leadArticle: NewsArticleWithTicker | null = null;
   let pulseArticles: NewsArticleWithTicker[] = [];
   let feedArticles: NewsArticleWithTicker[] = [];
   
   if (displayList.length > 0) {
-    const articlesWithImages: NewsArticleWithTicker[] = [];
-    const articlesWithoutImages: NewsArticleWithTicker[] = [];
-    
-    // Separate articles by whether they have images
-    displayList.forEach(article => {
-      if (article.thumbnail) {
-        articlesWithImages.push(article);
-      } else {
-        articlesWithoutImages.push(article);
-      }
+    // Sort all articles by score (highest first)
+    const sortedArticles = [...displayList].sort((a, b) => {
+      return calculateArticleScore(b, tickerEventCounts) - calculateArticleScore(a, tickerEventCounts);
     });
     
-    // Select lead story: prioritize articles with images
-    if (articlesWithImages.length > 0) {
-      leadArticle = articlesWithImages[0];
-      articlesWithImages.shift(); // Remove lead from the list
-    } else if (articlesWithoutImages.length > 0) {
-      // Fallback if no articles have images
-      leadArticle = articlesWithoutImages[0];
-      articlesWithoutImages.shift();
-    }
+    // Lead story: highest scoring article
+    leadArticle = sortedArticles[0];
     
-    // Watchlist Pulse (4 articles): prioritize articles WITHOUT images
-    // since this section doesn't display images
+    // Watchlist Pulse: next 4 articles (prefer those without images since section doesn't display them)
+    const remainingAfterLead = sortedArticles.slice(1);
+    const articlesWithoutImages = remainingAfterLead.filter(a => !a.thumbnail);
+    const articlesWithImages = remainingAfterLead.filter(a => a.thumbnail);
+    
     pulseArticles = [
       ...articlesWithoutImages.slice(0, 4),
       ...articlesWithImages.slice(0, Math.max(0, 4 - articlesWithoutImages.length))
     ].slice(0, 4);
     
-    // Remove pulse articles from both arrays
+    // Latest Wire: remaining articles (prefer those with images since section displays them)
     const pulseUuids = new Set(pulseArticles.map(a => a.uuid));
-    const remainingWithImages = articlesWithImages.filter(a => !pulseUuids.has(a.uuid));
-    const remainingWithoutImages = articlesWithoutImages.slice(pulseArticles.filter(a => !a.thumbnail).length);
+    const remainingAfterPulse = remainingAfterLead.filter(a => !pulseUuids.has(a.uuid));
+    const feedWithImages = remainingAfterPulse.filter(a => a.thumbnail);
+    const feedWithoutImages = remainingAfterPulse.filter(a => !a.thumbnail);
     
-    // Latest Wire (feed): prioritize articles WITH images since this section displays them
-    feedArticles = [
-      ...remainingWithImages,
-      ...remainingWithoutImages
-    ];
+    feedArticles = [...feedWithImages, ...feedWithoutImages];
   }
   const visiblePublisherCount = new Set(filteredArticles.map((article) => article.publisher).filter(Boolean)).size;
   const visibleTopPublishers = Array.from(

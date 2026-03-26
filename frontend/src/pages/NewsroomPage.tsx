@@ -73,6 +73,14 @@ export default function NewsroomPage() {
   const displayWidgets = user ? widgets : publicWidgets;
   const displayTickers = displayWidgets.map((widget) => widget.ticker);
   const pageIsLoading = user ? isLoading : isLoadingPublicWidgets;
+  
+  // Build event counts map for smart news ranking
+  const tickerEventCounts = displayWidgets.reduce<Record<string, number>>((acc, widget) => {
+    if (widget.event_count != null) {
+      acc[widget.ticker] = widget.event_count;
+    }
+    return acc;
+  }, {});
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -115,6 +123,7 @@ export default function NewsroomPage() {
                 searchQuery={searchQuery}
                 onSearchQueryChange={setSearchQuery}
                 onClearSearch={() => setSearchQuery('')}
+                tickerEventCounts={tickerEventCounts}
               />
             ) : (
               <div className="bg-gray-800 rounded-lg border border-gray-700 p-10 text-center">
