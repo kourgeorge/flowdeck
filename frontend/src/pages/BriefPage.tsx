@@ -645,6 +645,8 @@ export default function BriefPage() {
                         const firstOfMonth = new Date(year, monthIndex, 1);
                         const startWeekday = firstOfMonth.getDay();
                         const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+                        const today = new Date();
+                        const todayStr = formatDate(today.getFullYear(), today.getMonth(), today.getDate());
                         return (
                           <>
                             {Array.from({ length: startWeekday }).map((_, idx) => (
@@ -656,6 +658,8 @@ export default function BriefPage() {
                               const hasDigest = digestDateSet.has(dateStr);
                               const count = digestCountByDate[dateStr] ?? 0;
                               const isSelected = selectedDigestDate === dateStr;
+                              const isToday = dateStr === todayStr;
+                              const isCreatingReport = digestLoading && isToday;
                               const baseClasses =
                                 'h-8 relative flex items-center justify-center rounded cursor-pointer border text-xs font-mono';
                               const variant = hasDigest
@@ -663,21 +667,31 @@ export default function BriefPage() {
                                   ? 'bg-emerald-400 border-emerald-300 text-slate-950'
                                   : 'bg-slate-900/80 border-emerald-500/60 text-emerald-100 hover:bg-slate-800'
                                 : 'bg-slate-900 border-slate-800 text-slate-500';
+                              const loadingClasses = isCreatingReport ? 'animate-pulse ring-2 ring-emerald-400/50' : '';
                               return (
                                 <button
                                   key={dateStr}
                                   type="button"
-                                  className={`${baseClasses} ${variant} min-w-0`}
-                                  disabled={!hasDigest}
+                                  className={`${baseClasses} ${variant} ${loadingClasses} min-w-0`}
+                                  disabled={!hasDigest && !isCreatingReport}
                                   onClick={() => hasDigest && handleSelectDigestDate(dateStr)}
                                   title={
-                                    hasDigest
+                                    isCreatingReport
+                                      ? 'Creating new brief...'
+                                      : hasDigest
                                       ? `${count} brief${count !== 1 ? 's' : ''} on ${dateStr}`
                                       : 'No brief for this day'
                                   }
                                 >
-                                  {day}
-                                  {hasDigest && count > 1 && (
+                                  {isCreatingReport ? (
+                                    <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                  ) : (
+                                    day
+                                  )}
+                                  {hasDigest && count > 1 && !isCreatingReport && (
                                     <span className="absolute bottom-0 right-0.5 text-[9px] leading-none opacity-80">x{count}</span>
                                   )}
                                 </button>
