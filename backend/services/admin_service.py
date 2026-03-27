@@ -600,6 +600,7 @@ def get_mission_control_items(db: Session) -> list[dict]:
         """
         Calculate priority score for rerunning analysis.
         Higher score = higher priority.
+        Only considers stocks that have been executed at least once.
         
         Factors:
         1. Status bonus (0-50 points) - failed executions get high priority
@@ -608,15 +609,18 @@ def get_mission_control_items(db: Session) -> list[dict]:
         4. Days since last run (0-30 points, older = higher priority)
         
         Max score: 150 points
+        Returns 0 for never-executed stocks.
         """
+        # Never executed = 0 priority (excluded from consideration)
+        if last_status is None:
+            return 0.0
+        
         score = 0.0
         
-        # Status bonus (0-50 points) - NEW
+        # Status bonus (0-50 points)
         # Failed executions should be retried with high priority
         if last_status == "failed":
             score += 50.0  # High priority for failed runs
-        elif last_status is None:
-            score += 30.0  # Never run gets medium-high priority
         # completed status gets 0 bonus (normal priority)
         
         # Market cap component (0-40 points)
@@ -644,8 +648,9 @@ def get_mission_control_items(db: Session) -> list[dict]:
             days_since = (now - last_completed_at).total_seconds() / 86400
             score += min(30.0, max(0.0, days_since))
         else:
-            # Never run = maximum age priority
-            score += 30.0
+            # Has status but no completed_at (shouldn't happen, but handle gracefully)
+            # Give moderate age priority
+            score += 15.0
         
         return round(score, 2)
 
