@@ -1183,7 +1183,7 @@ export default function AdminDashboardPage() {
                           </td>
                           <td className="px-3 py-2 text-gray-300">{r.date ?? '—'}</td>
                           <td className="px-3 py-2 text-gray-300">{r.current_agent ?? '—'}</td>
-                          <td className="px-3 py-2 text-gray-500">{r.updated_at ?? '—'}</td>
+                          <td className="px-3 py-2 text-gray-500">{formatDate(r.updated_at, true)}</td>
                           <td className="px-3 py-2">
                             <button
                               type="button"
