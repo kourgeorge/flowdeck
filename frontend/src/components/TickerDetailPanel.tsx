@@ -1037,38 +1037,13 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const analystLowDownsidePct = analystHasPriceCurrent && analystHasPriceLow && analystPriceCurrent !== 0
     ? ((analystPriceLow - analystPriceCurrent) / analystPriceCurrent) * 100
     : null;
-  const analystLatestTrendRow = analystTrendDisplayRows.length > 0
-    ? analystTrendDisplayRows[analystTrendDisplayRows.length - 1]
-    : null;
-  const analystLatestConsensusSegments = analystLatestTrendRow
-    ? analystTrendSeries.map((series) => {
-      const value = Number(analystLatestTrendRow[series.key]) || 0;
-      const pct = analystLatestTrendRow.total > 0 ? (value / analystLatestTrendRow.total) * 100 : 0;
-      return { ...series, value, pct };
-    })
-    : [];
-  const analystDominantConsensus = analystLatestConsensusSegments.length > 0
-    ? analystLatestConsensusSegments.reduce((top, segment) => (
-      segment.value > top.value ? segment : top
-    ))
-    : null;
-  const getRecommendationBadgeClasses = (label: string | null | undefined): string => {
-    const normalized = String(label ?? '').trim().toUpperCase().replace(/\s+/g, '_');
-    switch (normalized) {
-      case 'STRONG_BUY':
-        return 'border-emerald-500/30 bg-emerald-500/15 text-emerald-200';
-      case 'BUY':
-        return 'border-lime-500/30 bg-lime-500/15 text-lime-200';
-      case 'HOLD':
-        return 'border-amber-400/30 bg-amber-400/15 text-amber-100';
-      case 'SELL':
-        return 'border-orange-500/30 bg-orange-500/15 text-orange-200';
-      case 'STRONG_SELL':
-        return 'border-rose-500/30 bg-rose-500/15 text-rose-200';
-      default:
-        return 'border-gray-600 bg-gray-800/80 text-gray-200';
-    }
-  };
+  const analystTrendMaxValue = analystTrendDisplayRows.reduce((max, row) => {
+    const rowMax = analystTrendSeries.reduce(
+      (innerMax, series) => Math.max(innerMax, Number(row[series.key]) || 0),
+      0,
+    );
+    return Math.max(max, rowMax);
+  }, 0);
   const analystTargetMarkers = [
     analystHasPriceLow ? {
       key: 'low',
@@ -1501,118 +1476,56 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                     </div>
 
                     <div className="rounded-xl border border-gray-700 bg-gray-900/30 p-4 md:col-span-7 lg:col-span-8">
-                      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-                        <div>
-                          <h4 className="text-lg font-semibold text-white">Recommendations</h4>
-                          <p className="mt-1 text-sm text-gray-400">
-                            Monthly mix of analyst calls with the current consensus highlighted.
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                            getRecommendationBadgeClasses(analystRecommendations.recommendation)
-                          }`}>
-                            Current: {analystRecommendations.recommendation || 'N/A'}
-                          </span>
-                          {analystDominantConsensus && (
-                            <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                              analystDominantConsensus.badgeClass
-                            }`}>
-                              Consensus: {analystDominantConsensus.label}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {analystLatestConsensusSegments.length > 0 && (
-                        <div className="mb-4 rounded-xl border border-white/10 bg-black/20 p-3">
-                          <div className="flex items-center justify-between gap-3 text-xs">
-                            <span className="font-semibold uppercase tracking-[0.18em] text-gray-400">
-                              {analystLatestTrendRow ? `${formatRecommendationPeriodLabel(analystLatestTrendRow.period)} Consensus` : 'Consensus'}
-                            </span>
-                            <span className="text-gray-300">Total {analystLatestTrendRow?.total ?? 0}</span>
-                          </div>
-                          <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-gray-800">
-                            {analystLatestConsensusSegments.map((segment) => (
-                              <div
-                                key={`latest-${segment.key}`}
-                                className={segment.colorClass}
-                                style={{ width: `${segment.pct}%` }}
-                                title={`${segment.label}: ${segment.value}`}
-                              />
-                            ))}
-                          </div>
-                          <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-5">
-                            {analystLatestConsensusSegments.map((segment) => (
-                              <div key={`latest-stat-${segment.key}`} className="rounded-lg border border-white/10 bg-white/[0.03] p-2">
-                                <div className="flex items-center gap-2">
-                                  <span className={`h-2.5 w-2.5 rounded-full ${segment.dotClass}`} />
-                                  <span className="text-xs text-gray-300">{segment.label}</span>
-                                </div>
-                                <div className="mt-1 text-sm font-semibold text-white">{segment.value}</div>
-                                <div className="text-[11px] text-gray-500">{segment.pct.toFixed(0)}%</div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
+                      <h4 className="text-lg font-semibold text-white mb-4">Recommendations</h4>
                       {analystTrendDisplayRows.length > 0 ? (
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                          {analystTrendDisplayRows.map((row) => {
-                            const total = Number(row.total) || 0;
-                            const segments = analystTrendSeries.map((series) => {
-                              const value = Number(row[series.key]) || 0;
-                              const pct = total > 0 ? (value / total) * 100 : 0;
-                              return { ...series, value, pct };
-                            });
-                            const dominantSegment = segments.reduce((top, segment) => (
-                              segment.value > top.value ? segment : top
-                            ));
-                            return (
-                              <div key={row.period} className="rounded-xl border border-gray-700 bg-gray-800/45 p-3">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <div className="text-sm font-semibold text-white">{formatRecommendationPeriodLabel(row.period)}</div>
-                                    <div className="mt-1 text-xs text-gray-400">Total analysts: {total}</div>
-                                  </div>
-                                  <span className={`inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-semibold ${
-                                    dominantSegment.badgeClass
-                                  }`}>
-                                    {dominantSegment.label}
-                                  </span>
-                                </div>
-                                <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-gray-700/80">
-                                  {segments.map((segment) => (
-                                    <div
-                                      key={`${row.period}-${segment.key}`}
-                                      className={segment.colorClass}
-                                      style={{ width: `${segment.pct}%` }}
-                                      title={`${segment.label}: ${segment.value}`}
-                                    />
-                                  ))}
-                                </div>
-                                <div className="mt-3 grid grid-cols-2 gap-2">
-                                  {segments.map((segment) => (
-                                    <div key={`${row.period}-${segment.key}-stat`} className="flex items-center justify-between rounded-lg bg-black/20 px-2.5 py-2">
-                                      <div className="flex items-center gap-2 min-w-0">
-                                        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${segment.dotClass}`} />
-                                        <span className="truncate text-xs text-gray-300">{segment.label}</span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                          {analystTrendDisplayRows.map((row) => (
+                            <div key={row.period} className="rounded border border-gray-700 bg-gray-800/40 p-2.5">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-semibold text-white">{formatRecommendationPeriodLabel(row.period)}</span>
+                                <span className="text-xs text-gray-300">Total {Number(row.total) || 0}</span>
+                              </div>
+                              <div className="space-y-1.5">
+                                {analystTrendSeries.map((series) => {
+                                  const value = Number(row[series.key]) || 0;
+                                  const widthPct = analystTrendMaxValue > 0 ? (value / analystTrendMaxValue) * 100 : 0;
+                                  return (
+                                    <div key={`${row.period}-${series.key}`} className="space-y-0.5">
+                                      <div className="flex items-center justify-between text-[11px] text-gray-300">
+                                        <span>{series.label}</span>
+                                        <span>{value}</span>
                                       </div>
-                                      <div className="text-right">
-                                        <div className="text-xs font-semibold text-white">{segment.value}</div>
-                                        <div className="text-[11px] text-gray-500">{segment.pct.toFixed(0)}%</div>
+                                      <div className="h-2.5 rounded bg-gray-700/80 overflow-hidden">
+                                        <div
+                                          className={`h-full ${series.colorClass}`}
+                                          style={{ width: `${widthPct}%` }}
+                                          title={`${series.label}: ${value}`}
+                                        />
                                       </div>
                                     </div>
-                                  ))}
-                                </div>
+                                  );
+                                })}
                               </div>
-                            );
-                          })}
+                            </div>
+                          ))}
                         </div>
                       ) : (
                         <div className="text-sm text-gray-400">No monthly recommendation history available.</div>
                       )}
+                      <div className="mt-3 pt-2 border-t border-gray-700 flex items-center justify-between">
+                        <span className="text-sm font-semibold text-gray-300">Current Recommendation</span>
+                        <span className={`text-sm font-bold ${
+                          analystRecommendations.recommendation === 'BUY'
+                            ? 'text-green-400'
+                            : analystRecommendations.recommendation === 'SELL'
+                              ? 'text-red-400'
+                              : analystRecommendations.recommendation === 'HOLD'
+                                ? 'text-yellow-300'
+                                : 'text-gray-300'
+                        }`}>
+                          {analystRecommendations.recommendation || 'N/A'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
