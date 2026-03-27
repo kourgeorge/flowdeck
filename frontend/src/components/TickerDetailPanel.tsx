@@ -106,6 +106,64 @@ function getHistoricalCloseForDate(
   return null;
 }
 
+type HistoricalPriceEntry = {
+  date?: string;
+  timestamp?: number | null;
+  close?: number;
+  adj_close?: number;
+};
+
+type AnalystChartHistoryPoint = {
+  date: string;
+  label: string;
+  value: number;
+  timestamp: number;
+};
+
+function getHistoricalEntryTime(point: HistoricalPriceEntry): number | null {
+  if (typeof point.timestamp === 'number' && Number.isFinite(point.timestamp)) return point.timestamp;
+  if (!point.date) return null;
+  const parsed = Date.parse(point.date);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function buildAnalystHistoryPoints(points: HistoricalPriceEntry[] | null | undefined): AnalystChartHistoryPoint[] {
+  if (!Array.isArray(points) || points.length === 0) return [];
+
+  const monthlyPoints = new Map<string, AnalystChartHistoryPoint>();
+
+  [...points]
+    .map((point) => {
+      const timestamp = getHistoricalEntryTime(point);
+      const value = typeof point.close === 'number' && Number.isFinite(point.close)
+        ? point.close
+        : point.adj_close;
+      if (timestamp == null || typeof value !== 'number' || !Number.isFinite(value)) return null;
+      const date = point.date ?? new Date(timestamp).toISOString().slice(0, 10);
+      const d = new Date(timestamp);
+      const monthKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      return {
+        date,
+        label: d.toLocaleDateString(undefined, { month: 'short' }),
+        value,
+        timestamp,
+        monthKey,
+      };
+    })
+    .filter((point): point is AnalystChartHistoryPoint & { monthKey: string } => point != null)
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .forEach((point) => {
+      monthlyPoints.set(point.monthKey, {
+        date: point.date,
+        label: point.label,
+        value: point.value,
+        timestamp: point.timestamp,
+      });
+    });
+
+  return Array.from(monthlyPoints.values()).slice(-6);
+}
+
 export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptionChange }: StockDetailPanelProps) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -155,6 +213,8 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const [eventsData, setEventsData] = useState<any>(null);
   const [eventsError, setEventsError] = useState<string | undefined>(undefined);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+  const [analystPriceHistory, setAnalystPriceHistory] = useState<HistoricalPriceEntry[]>([]);
+  const [isLoadingAnalystPriceHistory, setIsLoadingAnalystPriceHistory] = useState(false);
   const [subscriptionForTicker, setSubscriptionForTicker] = useState<Subscription | null>(null);
   const [emailPreferenceToggling, setEmailPreferenceToggling] = useState(false);
   const [similarTickers, setSimilarTickers] = useState<SimilarTickersResponse | null>(null);
@@ -515,6 +575,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     setFundamentalsSubTab(nextTab === 'fundamentals' && (nextSub === 'charts' || nextSub === 'statements') ? nextSub : 'charts'); setFundInfo(null);
     setAnalysisProgress(null); setEdgarFilings(null); setEdgarFilingsError(null); setFutureEvents(null);
     setEventsData(null); setEventsError(undefined); setIsLoadingEvents(false);
+    setAnalystPriceHistory([]); setIsLoadingAnalystPriceHistory(false);
     setSimilarTickers(null); setSimilarTickerPages({}); setSimilarHasMoreByPage({}); setSimilarStocksPage(1);
     setActiveTab(nextTab);
     setSelectedReport(nextTab === 'ai-analysis' ? (reportKeyFromParam(nextReport) ?? null) : null);
@@ -568,6 +629,28 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       loadStockData();
     }
     return () => { if (wsClientRef.current) wsClientRef.current.disconnect(); };
+  }, [ticker]);
+
+  useEffect(() => {
+    if (!ticker) return;
+    let cancelled = false;
+    setIsLoadingAnalystPriceHistory(true);
+
+    tickerApi.getHistoricalPrices(ticker, '6mo', '1d')
+      .then((response) => {
+        if (cancelled) return;
+        setAnalystPriceHistory(Array.isArray(response?.data) ? response.data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setAnalystPriceHistory([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingAnalystPriceHistory(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [ticker]);
 
   // If prefetch completes after mount, hydrate immediately instead of waiting for full fetch.
@@ -927,9 +1010,6 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const analystHasPriceAverage = Number.isFinite(analystPriceAverage);
   const analystHasPriceLow = Number.isFinite(analystPriceLow);
   const analystHasPriceHigh = Number.isFinite(analystPriceHigh);
-  const analystPriceValues = [analystPriceLow, analystPriceCurrent, analystPriceAverage, analystPriceHigh]
-    .filter((n) => Number.isFinite(n));
-  const analystHasAnyTargets = analystPriceValues.length > 0;
   const analystBreakdownHasCounts = (analystRecommendations?.breakdown && typeof analystRecommendations.breakdown === 'object')
     ? Object.values(analystRecommendations.breakdown).some((v) => Number(v) > 0)
     : false;
@@ -997,46 +1077,6 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       badgeClass: 'border-rose-500/30 bg-rose-500/15 text-rose-200',
     },
   ] as const;
-  const analystTargetRangeMin = analystPriceValues.length > 0 ? Math.min(...analystPriceValues) : null;
-  const analystTargetRangeMax = analystPriceValues.length > 0 ? Math.max(...analystPriceValues) : null;
-  const analystTargetRangeSpan = (
-    analystTargetRangeMin != null &&
-    analystTargetRangeMax != null &&
-    Number.isFinite(analystTargetRangeMin) &&
-    Number.isFinite(analystTargetRangeMax)
-  )
-    ? analystTargetRangeMax - analystTargetRangeMin
-    : null;
-  const analystTargetRangePadding = analystTargetRangeSpan != null
-    ? (analystTargetRangeSpan > 0
-      ? analystTargetRangeSpan * 0.08
-      : Math.max(Math.abs(analystTargetRangeMax ?? analystPriceCurrent ?? 0) * 0.05, 1))
-    : null;
-  const analystTargetVisualMin = analystTargetRangeMin != null && analystTargetRangePadding != null
-    ? analystTargetRangeMin - analystTargetRangePadding
-    : null;
-  const analystTargetVisualMax = analystTargetRangeMax != null && analystTargetRangePadding != null
-    ? analystTargetRangeMax + analystTargetRangePadding
-    : null;
-  const getAnalystTargetPosition = (value: number): number => {
-    if (
-      !Number.isFinite(value) ||
-      analystTargetVisualMin == null ||
-      analystTargetVisualMax == null ||
-      analystTargetVisualMax <= analystTargetVisualMin
-    ) return 50;
-    const pct = ((value - analystTargetVisualMin) / (analystTargetVisualMax - analystTargetVisualMin)) * 100;
-    return Math.min(100, Math.max(0, pct));
-  };
-  const analystMeanUpsidePct = analystHasPriceCurrent && analystHasPriceAverage && analystPriceCurrent !== 0
-    ? ((analystPriceAverage - analystPriceCurrent) / analystPriceCurrent) * 100
-    : null;
-  const analystHighUpsidePct = analystHasPriceCurrent && analystHasPriceHigh && analystPriceCurrent !== 0
-    ? ((analystPriceHigh - analystPriceCurrent) / analystPriceCurrent) * 100
-    : null;
-  const analystLowDownsidePct = analystHasPriceCurrent && analystHasPriceLow && analystPriceCurrent !== 0
-    ? ((analystPriceLow - analystPriceCurrent) / analystPriceCurrent) * 100
-    : null;
   const analystTrendMaxValue = analystTrendDisplayRows.reduce((max, row) => {
     const rowMax = analystTrendSeries.reduce(
       (innerMax, series) => Math.max(innerMax, Number(row[series.key]) || 0),
@@ -1044,47 +1084,98 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     );
     return Math.max(max, rowMax);
   }, 0);
-  const analystTargetMarkers = [
-    analystHasPriceLow ? {
-      key: 'low',
-      label: 'Low',
-      value: analystPriceLow,
-      accentClass: 'bg-fuchsia-400',
-      textClass: 'text-fuchsia-200',
-      placementClass: 'top-full mt-3',
-    } : null,
-    analystHasPriceCurrent ? {
-      key: 'current',
-      label: 'Current',
-      value: analystPriceCurrent,
-      accentClass: 'bg-white',
-      textClass: 'text-white',
-      placementClass: 'bottom-full mb-3',
-    } : null,
-    analystHasPriceAverage ? {
-      key: 'mean',
-      label: 'Mean',
-      value: analystPriceAverage,
-      accentClass: 'bg-cyan-400',
-      textClass: 'text-cyan-200',
-      placementClass: 'bottom-full mb-3',
-    } : null,
-    analystHasPriceHigh ? {
-      key: 'high',
-      label: 'High',
-      value: analystPriceHigh,
-      accentClass: 'bg-emerald-400',
-      textClass: 'text-emerald-200',
-      placementClass: 'top-full mt-3',
-    } : null,
-  ].filter((marker): marker is {
+  const analystHistoryPoints = buildAnalystHistoryPoints(analystPriceHistory);
+  const analystChartActualPoints = analystHistoryPoints.length > 0
+    ? analystHistoryPoints.map((point, index) => (
+      index === analystHistoryPoints.length - 1 && analystHasPriceCurrent
+        ? { ...point, label: 'Now', value: analystPriceCurrent }
+        : point
+    ))
+    : analystHasPriceCurrent
+      ? [{ date: '', label: 'Now', value: analystPriceCurrent, timestamp: Date.now() }]
+      : [];
+  const analystForecastPoints = [
+    analystHasPriceLow ? { key: 'low', label: 'Low', value: analystPriceLow, color: '#f472b6', textClass: 'text-fuchsia-200' } : null,
+    analystHasPriceAverage ? { key: 'mean', label: 'Mean', value: analystPriceAverage, color: '#22d3ee', textClass: 'text-cyan-200' } : null,
+    analystHasPriceHigh ? { key: 'high', label: 'High', value: analystPriceHigh, color: '#34d399', textClass: 'text-emerald-200' } : null,
+  ].filter((point): point is {
     key: string;
     label: string;
     value: number;
-    accentClass: string;
+    color: string;
     textClass: string;
-    placementClass: string;
-  } => marker != null);
+  } => point != null);
+  const analystTrendChartValues = [
+    ...analystChartActualPoints.map((point) => point.value),
+    ...analystForecastPoints.map((point) => point.value),
+  ];
+  const analystHasTrendChart = analystTrendChartValues.length > 0;
+  const analystChartWidth = 520;
+  const analystChartHeight = 220;
+  const analystChartPadding = { top: 20, right: 92, bottom: 30, left: 14 };
+  const analystChartPlotLeft = analystChartPadding.left;
+  const analystChartForecastX = analystChartWidth - analystChartPadding.right;
+  const analystChartActualEndX = analystChartPlotLeft + (analystChartForecastX - analystChartPlotLeft) * 0.72;
+  const analystChartMinValue = analystHasTrendChart ? Math.min(...analystTrendChartValues) : 0;
+  const analystChartMaxValue = analystHasTrendChart ? Math.max(...analystTrendChartValues) : 1;
+  const analystChartValueRange = Math.max(analystChartMaxValue - analystChartMinValue, analystChartMaxValue * 0.05, 1);
+  const analystChartYMin = analystChartMinValue - analystChartValueRange * 0.14;
+  const analystChartYMax = analystChartMaxValue + analystChartValueRange * 0.14;
+  const getAnalystChartY = (value: number): number => {
+    const plotHeight = analystChartHeight - analystChartPadding.top - analystChartPadding.bottom;
+    if (analystChartYMax <= analystChartYMin) return analystChartPadding.top + plotHeight / 2;
+    const pct = (value - analystChartYMin) / (analystChartYMax - analystChartYMin);
+    return analystChartHeight - analystChartPadding.bottom - (pct * plotHeight);
+  };
+  const getAnalystChartActualX = (index: number, total: number): number => {
+    if (total <= 1) return analystChartActualEndX;
+    return analystChartPlotLeft + ((analystChartActualEndX - analystChartPlotLeft) * index) / (total - 1);
+  };
+  const analystRenderedActualPoints = analystChartActualPoints.map((point, index, points) => ({
+    ...point,
+    x: getAnalystChartActualX(index, points.length),
+    y: getAnalystChartY(point.value),
+  }));
+  const analystActualPath = analystRenderedActualPoints
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
+    .join(' ');
+  const analystAnchorPoint = analystRenderedActualPoints.length > 0
+    ? analystRenderedActualPoints[analystRenderedActualPoints.length - 1]
+    : null;
+  const analystRenderedForecastPoints = analystForecastPoints.map((point) => ({
+    ...point,
+    x: analystChartForecastX,
+    y: getAnalystChartY(point.value),
+  }));
+  const getForecastValueLayout = (point: { key: string; x: number; y: number }) => {
+    if (point.key === 'high') {
+      return {
+        valueX: point.x + 12,
+        valueY: Math.max(analystChartPadding.top + 22, point.y - 3),
+        textAnchor: 'start' as const,
+      };
+    }
+    if (point.key === 'low') {
+      return {
+        valueX: point.x + 12,
+        valueY: Math.min(analystChartHeight - analystChartPadding.bottom - 6, point.y + 16),
+        textAnchor: 'start' as const,
+      };
+    }
+    return {
+      valueX: point.x + 12,
+      valueY: Math.max(analystChartPadding.top + 22, point.y + 4),
+      textAnchor: 'start' as const,
+    };
+  };
+  const analystGridLines = Array.from({ length: 4 }, (_, index) => {
+    const value = analystChartYMax - ((analystChartYMax - analystChartYMin) * index) / 3;
+    return {
+      key: `grid-${index}`,
+      value,
+      y: getAnalystChartY(value),
+    };
+  });
 
   const handleNextSimilarStocksPage = async () => {
     if (!canGoToNextSimilarStocksPage || isLoadingSimilarTickers) return;
@@ -1365,108 +1456,173 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                 <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 sm:p-6">
                   <h3 className="text-sm sm:text-base font-semibold text-white mb-3 sm:mb-4">Analyst Recommendations</h3>
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6">
-                    <div className="rounded-xl border border-cyan-500/20 bg-gradient-to-br from-cyan-500/12 via-slate-900 to-slate-950 p-4 md:col-span-5 lg:col-span-4">
+                    <div className="rounded-xl border border-gray-700 bg-gray-900/30 p-4 md:col-span-5 lg:col-span-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cyan-200/80">
-                            Average Price Target
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-gray-400">
+                            Price Trend & Targets
                           </div>
-                          <div className="mt-2 text-3xl sm:text-[2rem] leading-none font-semibold text-white">
-                            {analystHasPriceAverage ? formatPrice(analystPriceAverage, stockData?.quote?.currency) : 'N/A'}
+                          <div className="mt-1 text-sm text-gray-400">
+                            Last 6 months of price action with 12-month analyst targets projected forward.
                           </div>
-                          {analystMeanUpsidePct != null && (
-                            <div className={`mt-3 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                              analystMeanUpsidePct >= 0
-                                ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-200'
-                                : 'border-rose-500/30 bg-rose-500/15 text-rose-200'
-                            }`}>
-                              <span>{analystMeanUpsidePct >= 0 ? '▲' : '▼'}</span>
-                              <span>{Math.abs(analystMeanUpsidePct).toFixed(2)}% vs current</span>
-                            </div>
-                          )}
                         </div>
-                        <div className="min-w-[104px] rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-right">
-                          <div className="text-[11px] uppercase tracking-[0.18em] text-gray-400">Analysts</div>
-                          <div className="mt-1 text-2xl font-semibold text-white">
-                            {analystRecommendations.total_analysts ?? 0}
-                          </div>
+                        <div className="rounded-full border border-gray-700 bg-gray-800/60 px-3 py-1.5 text-xs font-semibold text-white">
+                          {analystRecommendations.total_analysts ?? 0} analysts
                         </div>
                       </div>
 
-                      <div className="mt-4 grid grid-cols-2 gap-2">
-                        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-                          <div className="text-[11px] uppercase tracking-[0.16em] text-gray-400">Current</div>
-                          <div className="mt-1 text-sm font-semibold text-white">
-                            {analystHasPriceCurrent ? formatPrice(analystPriceCurrent, stockData?.quote?.currency) : 'N/A'}
+                      <div className="mt-4 rounded-xl border border-gray-700 bg-gray-800/40 p-3">
+                        {isLoadingAnalystPriceHistory ? (
+                          <div className="animate-pulse">
+                            <div className="h-48 rounded-lg bg-gray-800/80" />
                           </div>
-                        </div>
-                        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-                          <div className="text-[11px] uppercase tracking-[0.16em] text-gray-400">Target Range</div>
-                          <div className="mt-1 text-sm font-semibold text-white">
-                            {analystHasPriceLow && analystHasPriceHigh
-                              ? `${formatPrice(analystPriceLow, stockData?.quote?.currency)} - ${formatPrice(analystPriceHigh, stockData?.quote?.currency)}`
-                              : 'N/A'}
-                          </div>
-                        </div>
-                      </div>
+                        ) : analystHasTrendChart ? (
+                          <div>
+                            <svg
+                              viewBox={`0 0 ${analystChartWidth} ${analystChartHeight}`}
+                              className="h-[220px] w-full overflow-visible"
+                              role="img"
+                              aria-label="Six month price trend with analyst low, mean, and high price targets"
+                            >
+                              {analystGridLines.map((line) => (
+                                <g key={line.key}>
+                                  <line
+                                    x1={analystChartPadding.left}
+                                    y1={line.y}
+                                    x2={analystChartForecastX}
+                                    y2={line.y}
+                                    stroke="rgba(148, 163, 184, 0.14)"
+                                    strokeDasharray="3 6"
+                                  />
+                                  <text
+                                    x={analystChartPadding.left}
+                                    y={line.y - 4}
+                                    fill="rgba(148, 163, 184, 0.78)"
+                                    fontSize="10"
+                                  >
+                                    {formatPrice(line.value, stockData?.quote?.currency, 0)}
+                                  </text>
+                                </g>
+                              ))}
 
-                      {analystHasAnyTargets ? (
-                        <div className="mt-5 rounded-xl border border-white/10 bg-black/20 p-4">
-                          <div className="flex items-center justify-between gap-3 text-xs">
-                            <span className="font-semibold uppercase tracking-[0.18em] text-gray-400">12M Price Range</span>
-                            <span className="text-gray-300">
-                              {analystTargetRangeMin != null && analystTargetRangeMax != null
-                                ? `${formatPrice(analystTargetRangeMin, stockData?.quote?.currency)} to ${formatPrice(analystTargetRangeMax, stockData?.quote?.currency)}`
-                                : 'N/A'}
-                            </span>
-                          </div>
-                          <div className="relative mt-10 mb-12 px-1">
-                            <div className="h-3 rounded-full bg-gradient-to-r from-fuchsia-500 via-slate-500 to-emerald-400 shadow-[0_0_24px_rgba(16,185,129,0.18)]" />
-                            {analystTargetMarkers.map((marker) => (
-                              <div
-                                key={marker.key}
-                                className="absolute top-1/2 -translate-y-1/2"
-                                style={{ left: `${getAnalystTargetPosition(marker.value)}%` }}
+                              {analystAnchorPoint && (
+                                <>
+                                  <line
+                                    x1={analystAnchorPoint.x}
+                                    y1={analystChartPadding.top}
+                                    x2={analystAnchorPoint.x}
+                                    y2={analystChartHeight - analystChartPadding.bottom}
+                                    stroke="rgba(255,255,255,0.18)"
+                                    strokeDasharray="4 6"
+                                  />
+                                  <text
+                                    x={analystAnchorPoint.x + 6}
+                                    y={analystChartPadding.top + 12}
+                                    fill="rgba(255,255,255,0.75)"
+                                    fontSize="10"
+                                  >
+                                    Now
+                                  </text>
+                                </>
+                              )}
+
+                              {analystRenderedActualPoints.length > 1 && (
+                                <path
+                                  d={analystActualPath}
+                                  fill="none"
+                                  stroke="#f8fafc"
+                                  strokeWidth="2.25"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              )}
+
+                              {analystAnchorPoint && analystRenderedForecastPoints.map((point) => (
+                                <line
+                                  key={`forecast-line-${point.key}`}
+                                  x1={analystAnchorPoint.x}
+                                  y1={analystAnchorPoint.y}
+                                  x2={point.x}
+                                  y2={point.y}
+                                  stroke={point.color}
+                                  strokeWidth="2"
+                                  strokeDasharray="6 6"
+                                  strokeLinecap="round"
+                                />
+                              ))}
+
+                              {analystRenderedActualPoints.map((point, index) => (
+                                <g key={`actual-point-${point.date}-${index}`}>
+                                  <circle cx={point.x} cy={point.y} r="4" fill="#f8fafc" />
+                                  <circle cx={point.x} cy={point.y} r="7" fill="rgba(248,250,252,0.12)" />
+                                  <text
+                                    x={point.x}
+                                    y={analystChartHeight - 8}
+                                    textAnchor="middle"
+                                    fill={index === analystRenderedActualPoints.length - 1 ? 'rgba(255,255,255,0.88)' : 'rgba(148,163,184,0.82)'}
+                                    fontSize="10"
+                                  >
+                                    {point.label}
+                                  </text>
+                                </g>
+                              ))}
+
+                              {analystRenderedForecastPoints.map((point) => {
+                                const layout = getForecastValueLayout(point);
+                                return (
+                                <g key={`forecast-point-${point.key}`}>
+                                  <circle cx={point.x} cy={point.y} r="4.5" fill={point.color} />
+                                  <circle cx={point.x} cy={point.y} r="8" fill={point.color} opacity="0.12" />
+                                  <text
+                                    x={layout.valueX}
+                                    y={layout.valueY}
+                                    textAnchor={layout.textAnchor}
+                                    fill="rgba(226,232,240,0.82)"
+                                    fontSize="11.5"
+                                    fontWeight="600"
+                                  >
+                                    {formatPrice(point.value, stockData?.quote?.currency)}
+                                  </text>
+                                </g>
+                                );
+                              })}
+
+                              <text
+                                x={analystChartForecastX}
+                                y={analystChartHeight - 8}
+                                textAnchor="middle"
+                                fill="rgba(148,163,184,0.82)"
+                                fontSize="10"
                               >
-                                <div className="relative -translate-x-1/2">
-                                  <div className={`h-4 w-0.5 ${marker.accentClass} shadow-[0_0_10px_rgba(255,255,255,0.3)]`} />
-                                  <div className={`absolute left-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-slate-950 ${marker.accentClass}`} />
-                                  <div className={`absolute left-1/2 -translate-x-1/2 whitespace-nowrap ${marker.placementClass}`}>
-                                    <div className={`text-[11px] font-semibold ${marker.textClass}`}>{marker.label}</div>
-                                    <div className="text-[11px] text-gray-300">
-                                      {formatPrice(marker.value, stockData?.quote?.currency)}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                            <div className="rounded-lg border border-fuchsia-500/20 bg-fuchsia-500/10 p-2.5">
-                              <div className="text-[11px] uppercase tracking-[0.16em] text-fuchsia-200/80">Bear Case</div>
-                              <div className="mt-1 text-sm font-semibold text-white">
-                                {analystLowDownsidePct != null ? `${analystLowDownsidePct >= 0 ? '+' : ''}${analystLowDownsidePct.toFixed(2)}%` : 'N/A'}
-                              </div>
-                            </div>
-                            <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 p-2.5">
-                              <div className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/80">Base Case</div>
-                              <div className="mt-1 text-sm font-semibold text-white">
-                                {analystMeanUpsidePct != null ? `${analystMeanUpsidePct >= 0 ? '+' : ''}${analystMeanUpsidePct.toFixed(2)}%` : 'N/A'}
-                              </div>
-                            </div>
-                            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-2.5 col-span-2 sm:col-span-1">
-                              <div className="text-[11px] uppercase tracking-[0.16em] text-emerald-200/80">Bull Case</div>
-                              <div className="mt-1 text-sm font-semibold text-white">
-                                {analystHighUpsidePct != null ? `${analystHighUpsidePct >= 0 ? '+' : ''}${analystHighUpsidePct.toFixed(2)}%` : 'N/A'}
-                              </div>
+                                12M
+                              </text>
+                            </svg>
+
+                            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-gray-400">
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="h-2.5 w-2.5 rounded-full bg-white" />
+                                Past 6M closes
+                              </span>
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="h-2.5 w-2.5 rounded-full bg-fuchsia-400" />
+                                Low target
+                              </span>
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="h-2.5 w-2.5 rounded-full bg-cyan-400" />
+                                Mean target
+                              </span>
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                                High target
+                              </span>
                             </div>
                           </div>
-                        </div>
-                      ) : (
-                        <p className="mt-4 text-xs text-gray-400">
-                          No analyst price targets returned in YahooQuery financial_data for this ticker.
-                        </p>
-                      )}
+                        ) : (
+                          <p className="text-xs text-gray-400">
+                            No price trend or analyst targets available for this ticker.
+                          </p>
+                        )}
+                      </div>
 
                       {analystRecommendations.latest_date && (
                         <div className="mt-3 text-xs text-gray-500">
