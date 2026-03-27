@@ -594,18 +594,30 @@ def get_mission_control_items(db: Session) -> list[dict]:
     def _calculate_priority(
         market_cap: Optional[float],
         subscription_count: int,
-        last_completed_at: Optional[datetime]
+        last_completed_at: Optional[datetime],
+        last_status: Optional[str]
     ) -> float:
         """
         Calculate priority score for rerunning analysis.
         Higher score = higher priority.
         
         Factors:
-        1. Market cap (normalized, 0-40 points)
-        2. Subscription count (0-30 points)
-        3. Days since last run (0-30 points, older = higher priority)
+        1. Status bonus (0-50 points) - failed executions get high priority
+        2. Market cap (normalized, 0-40 points)
+        3. Subscription count (0-30 points)
+        4. Days since last run (0-30 points, older = higher priority)
+        
+        Max score: 150 points
         """
         score = 0.0
+        
+        # Status bonus (0-50 points) - NEW
+        # Failed executions should be retried with high priority
+        if last_status == "failed":
+            score += 50.0  # High priority for failed runs
+        elif last_status is None:
+            score += 30.0  # Never run gets medium-high priority
+        # completed status gets 0 bonus (normal priority)
         
         # Market cap component (0-40 points)
         # Normalize market cap: $1B = 10 points, $100B = 20 points, $1T+ = 40 points
@@ -659,10 +671,12 @@ def get_mission_control_items(db: Session) -> list[dict]:
         running = by_ticker.get(ticker_upper)
         sub_count = subscription_counts.get(ticker_upper, 0)
         last_completed_at = last_completed.get(ticker_upper)
+        last_status = execution_statuses.get(ticker_upper)
         priority = _calculate_priority(
             entry.get("market_cap"),
             sub_count,
-            last_completed_at
+            last_completed_at,
+            last_status
         )
         items.append({
             "ticker": ticker_upper,
