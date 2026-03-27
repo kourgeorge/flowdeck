@@ -30,9 +30,10 @@ Portfolio
 Blog:
 ──────
 - Create an agent that knows how to write a current/relevant naarative on a specific company - like the naaratives in wall street
+- model ranking? instead of saying buy or sell, we compare the stock to the market and give a score - or to another stock and judge between them both.
+this gives a more nuanced view of the stock and its potential. Similar to the idea of using a judge against an anchor.
 
-
-
+-
 
 
 

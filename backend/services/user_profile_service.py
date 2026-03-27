@@ -45,6 +45,41 @@ CHAT_STYLE_GUIDANCE = {
     ),
 }
 
+EXPERIENCE_LEVEL_GUIDANCE = {
+    "beginner": {
+        "terminology": "Use simple, everyday language. Avoid jargon or explain it immediately when necessary.",
+        "structure": "Use direct statements with clear reasoning. Break down complex concepts into simple steps.",
+        "depth": "Focus on the 'what' and 'why' before the 'how'. Provide context and educational explanations.",
+        "examples": "Use concrete examples and analogies to illustrate concepts.",
+        "tone": "Be encouraging and educational. Assume no prior knowledge of financial markets.",
+        "recommendations": "Give clear, actionable guidance with explicit reasoning. Explain the rationale behind each suggestion.",
+    },
+    "intermediate": {
+        "terminology": "Use standard financial terms but explain less common concepts. Balance accessibility with precision.",
+        "structure": "Lead with key insights, then provide supporting details. Use moderate technical depth.",
+        "depth": "Explain the reasoning and key assumptions. Cover both opportunities and risks.",
+        "examples": "Reference real market scenarios and common investment situations.",
+        "tone": "Be informative and practical. Assume basic market knowledge but explain nuances.",
+        "recommendations": "Provide clear guidance with trade-offs. Explain why certain approaches work better in different scenarios.",
+    },
+    "advanced": {
+        "terminology": "Use financial terminology freely. Assume familiarity with market concepts, metrics, and analysis frameworks.",
+        "structure": "Lead with analysis and implications. Use dense, information-rich explanations.",
+        "depth": "Focus on nuanced analysis, edge cases, and second-order effects. Discuss multiple scenarios.",
+        "examples": "Reference sophisticated strategies and market dynamics.",
+        "tone": "Be analytical and precise. Assume strong market knowledge and analytical skills.",
+        "recommendations": "Present options with detailed trade-offs. Discuss risk-reward profiles and positioning strategies.",
+    },
+    "professional": {
+        "terminology": "Use professional-grade financial language. Assume institutional-level knowledge.",
+        "structure": "Deliver concise, high-density analysis. Skip basic explanations entirely.",
+        "depth": "Focus on actionable insights, market microstructure, and portfolio implications. Discuss positioning, timing, and risk management.",
+        "examples": "Reference institutional strategies, market regimes, and professional frameworks.",
+        "tone": "Be direct and efficient. Assume expert-level understanding of markets, instruments, and strategies.",
+        "recommendations": "Present sophisticated analysis with minimal hand-holding. Focus on execution considerations and portfolio construction.",
+    },
+}
+
 
 def _clean_optional_str(value: Any, *, max_len: int) -> Optional[str]:
     if value is None:
@@ -270,20 +305,16 @@ def build_chat_personalization_context(user_id: int, db: Session) -> str:
             )
 
     if profile.experience_level:
-        if profile.experience_level == "beginner":
-            instructions.append(
-                "- Experience behavior: explain jargon briefly, surface the key assumptions, "
-                "and keep the answer educational."
-            )
-        elif profile.experience_level in {"advanced", "professional"}:
-            instructions.append(
-                "- Experience behavior: skip basic education, use domain terms directly, "
-                "and keep the analysis dense."
-            )
-        else:
-            instructions.append(
-                "- Experience behavior: use moderate technical depth and explain only the less-obvious points."
-            )
+        exp_level = profile.experience_level
+        guidance = EXPERIENCE_LEVEL_GUIDANCE.get(exp_level)
+        if guidance:
+            instructions.append(f"- Experience Level: {exp_level}")
+            instructions.append(f"- Terminology: {guidance['terminology']}")
+            instructions.append(f"- Structure: {guidance['structure']}")
+            instructions.append(f"- Depth: {guidance['depth']}")
+            instructions.append(f"- Examples: {guidance['examples']}")
+            instructions.append(f"- Tone: {guidance['tone']}")
+            instructions.append(f"- Recommendations: {guidance['recommendations']}")
 
     if profile.risk_tolerance:
         instructions.append(f"- Default risk tolerance: {profile.risk_tolerance}")

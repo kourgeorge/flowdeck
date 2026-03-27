@@ -124,6 +124,8 @@ def run_report_agent(payload: Dict[str, Any]) -> Dict[str, Any]:
       - figure_explanations: str (explanation of each chart type and how to interpret)
       - per_ticker_highlights: list of { ticker, short_summary }
       - title: optional str
+    
+    The response style adapts to the user's experience level from their profile.
     """
     try:
         llm = _get_llm()
@@ -172,8 +174,48 @@ def run_report_agent(payload: Dict[str, Any]) -> Dict[str, Any]:
         title: Optional[str] = Field(default=None, description="Optional report title")
 
     from langchain_core.messages import HumanMessage
+    
+    # Extract user experience level from payload
+    user_info = payload.get("user") or {}
+    experience_level = user_info.get("experience_level", "intermediate")
+    
+    # Define experience-level style guidance
+    style_instructions = {
+        "beginner": (
+            "Use simple, everyday language. Avoid jargon or explain it immediately. "
+            "Use direct statements with clear reasoning. Break down complex concepts into simple steps. "
+            "Focus on the 'what' and 'why' before the 'how'. Provide context and educational explanations. "
+            "Use concrete examples. Be encouraging and educational. "
+            "Give clear, actionable guidance with explicit reasoning."
+        ),
+        "intermediate": (
+            "Use standard financial terms but explain less common concepts. Balance accessibility with precision. "
+            "Lead with key insights, then provide supporting details. Use moderate technical depth. "
+            "Explain the reasoning and key assumptions. Cover both opportunities and risks. "
+            "Reference real market scenarios. Be informative and practical. "
+            "Provide clear guidance with trade-offs."
+        ),
+        "advanced": (
+            "Use financial terminology freely. Assume familiarity with market concepts, metrics, and analysis frameworks. "
+            "Lead with analysis and implications. Use dense, information-rich explanations. "
+            "Focus on nuanced analysis, edge cases, and second-order effects. Discuss multiple scenarios. "
+            "Reference sophisticated strategies and market dynamics. Be analytical and precise. "
+            "Present options with detailed trade-offs and risk-reward profiles."
+        ),
+        "professional": (
+            "Use professional-grade financial language. Assume institutional-level knowledge. "
+            "Deliver concise, high-density analysis. Skip basic explanations entirely. "
+            "Focus on actionable insights, market microstructure, and portfolio implications. "
+            "Discuss positioning, timing, and risk management. Reference institutional strategies and market regimes. "
+            "Be direct and efficient. Present sophisticated analysis with minimal hand-holding."
+        ),
+    }
+    
+    style_guide = style_instructions.get(experience_level, style_instructions["intermediate"])
+    
     prompt_text = (
         "You are a financial report writer. Your report will be shown alongside several Vega-Lite charts.\n\n"
+        f"WRITING STYLE: Adapt your response to a {experience_level} investor. {style_guide}\n\n"
         "Requirements:\n"
         "1. Portfolio summary: Integrate insights from each stock's analysis (key takeaways, bull/bear cases, recommendations, return ranges) into a single, clearer big picture — themes, concentration, risk, consensus or divergence. Write 3-5 substantial paragraphs; weave in specific insights from the tickers, not generic statements.\n"
         "2. Narrative: Explain what the figures show and how they connect to that story. Write 2-4 paragraphs.\n"

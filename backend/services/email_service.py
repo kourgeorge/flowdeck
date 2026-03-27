@@ -669,6 +669,7 @@ def _format_brief_narrative_for_email(narrative: str) -> str:
     Format the digest narrative into HTML that roughly matches the Dashboard brief tab styling.
     - If the narrative uses structured sections (## headings + special tokens), render one block per section.
     - Otherwise, render a simple paragraph with preserved line breaks.
+    - Converts markdown tables to HTML tables.
     """
     if not narrative:
         return ""
@@ -753,12 +754,115 @@ def _format_brief_narrative_for_email(narrative: str) -> str:
             "text": "#0f172a",
         }
 
+    def _convert_markdown_table_to_html(text: str) -> str:
+        """Convert markdown tables to HTML tables."""
+        lines = text.split("\n")
+        result_lines = []
+        i = 0
+        
+        while i < len(lines):
+            line = lines[i].strip()
+            
+            # Check if this line looks like a table row (contains |)
+            if "|" in line and i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+                
+                # Check if next line is a separator (contains | and -)
+                if "|" in next_line and "-" in next_line:
+                    # This is a table header
+                    table_lines = [line]
+                    i += 2  # Skip separator line
+                    
+                    # Collect table body rows
+                    while i < len(lines) and "|" in lines[i]:
+                        table_lines.append(lines[i].strip())
+                        i += 1
+                    
+                    # Convert to HTML table
+                    if table_lines:
+                        table_html = _build_html_table(table_lines)
+                        result_lines.append(table_html)
+                    continue
+            
+            result_lines.append(line)
+            i += 1
+        
+        return "\n".join(result_lines)
+    
+    def _build_html_table(table_lines: list[str]) -> str:
+        """Build an HTML table from markdown table lines."""
+        if not table_lines:
+            return ""
+        
+        # Parse header
+        header_cells = [cell.strip() for cell in table_lines[0].split("|") if cell.strip()]
+        
+        # Parse body rows
+        body_rows = []
+        for line in table_lines[1:]:
+            cells = [cell.strip() for cell in line.split("|") if cell.strip()]
+            if cells:
+                body_rows.append(cells)
+        
+        # Build HTML
+        table_style = (
+            "width:100%;border-collapse:collapse;margin:8px 0;"
+            "font-size:12px;background:#ffffff;border:1px solid #e2e8f0;"
+        )
+        th_style = (
+            "padding:8px 10px;text-align:left;background:#f1f5f9;"
+            "border-bottom:2px solid #cbd5e1;font-weight:600;color:#334155;"
+        )
+        td_style = (
+            "padding:8px 10px;border-bottom:1px solid #e2e8f0;color:#0f172a;"
+        )
+        
+        html_parts = [f'<table style="{table_style}">']
+        
+        # Header
+        html_parts.append("<thead><tr>")
+        for cell in header_cells:
+            html_parts.append(f'<th style="{th_style}">{html.escape(cell)}</th>')
+        html_parts.append("</tr></thead>")
+        
+        # Body
+        html_parts.append("<tbody>")
+        for row in body_rows:
+            html_parts.append("<tr>")
+            for cell in row:
+                html_parts.append(f'<td style="{td_style}">{html.escape(cell)}</td>')
+            html_parts.append("</tr>")
+        html_parts.append("</tbody>")
+        
+        html_parts.append("</table>")
+        return "".join(html_parts)
+
     html_sections: list[str] = []
     for title, body in sections:
         styles = section_styles(title)
         escaped_title = html.escape(title)
-        escaped_body = html.escape(body)
-        body_html = "<br>".join(escaped_body.replace("\r", "").split("\n"))
+        
+        # Convert markdown tables to HTML before escaping
+        body_with_tables = _convert_markdown_table_to_html(body)
+        
+        # Process the body: escape non-table content, preserve table HTML
+        body_parts = []
+        for part in body_with_tables.split("\n"):
+            if part.strip().startswith("<table"):
+                # This is HTML table, keep as-is
+                body_parts.append(part)
+            elif "</table>" in part:
+                body_parts.append(part)
+            elif body_parts and body_parts[-1].strip().startswith("<table") and not "</table>" in body_parts[-1]:
+                # Inside a table, keep accumulating
+                body_parts[-1] += "\n" + part
+            else:
+                # Regular text, escape and convert line breaks
+                if part.strip():
+                    body_parts.append(html.escape(part))
+        
+        body_html = "<br>".join(body_parts)
+        
         html_sections.append(
             (
                 f"<div style=\"margin:0 0 12px;padding:12px 14px;border-radius:10px;"

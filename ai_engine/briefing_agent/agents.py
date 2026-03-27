@@ -541,12 +541,12 @@ def run_narrative_writer(
             key_signals = getattr(result, "key_signals", "") or ""
             what_to_watch = getattr(result, "what_to_watch", "") or ""
             risks_opportunities = getattr(result, "risks_opportunities", "") or ""
-            # Special tokens allow parsing/formatting by section (market_highlights, key_signals, risks_opportunities, what_to_watch).
+            # Special tokens allow parsing/formatting by section (market_highlights, key_signals, risks_opportunities).
+            # Note: what_to_watch is excluded from narrative as it's displayed separately in the email template.
             sections = [
                 ("Market Highlights", "market_highlights", market_highlights),
                 ("Key Signals", "key_signals", key_signals),
                 ("Risks & Opportunities", "risks_opportunities", risks_opportunities),
-                ("What to Watch", "what_to_watch", what_to_watch),
             ]
             narrative = "\n\n".join(
                 f"## {title}\n{token}\n{body.strip()}" for title, token, body in sections if body.strip()
