@@ -30,7 +30,7 @@ import {
 
 type AdminTab = 'overview' | 'mission-control' | 'users';
 const ADMIN_TAB_IDS: AdminTab[] = ['overview', 'mission-control', 'users'];
-type MissionSortKey = 'ticker' | 'company' | 'type' | 'market_cap' | 'sector' | 'industry' | 'last_completed' | 'status';
+type MissionSortKey = 'ticker' | 'company' | 'type' | 'market_cap' | 'sector' | 'industry' | 'last_completed' | 'reports' | 'status';
 type MissionSortDirection = 'asc' | 'desc';
 type ViewRunsSortKey = 'ticker' | 'analysis_run_id' | 'unique_views' | 'viewed';
 type ViewRunsSortDirection = 'asc' | 'desc';
@@ -385,6 +385,9 @@ export default function AdminDashboardPage() {
             cmp = compareNullableNumber(aTime, bTime);
             break;
           }
+          case 'reports':
+            cmp = compareNullableNumber(a.report_count, b.report_count);
+            break;
           case 'status':
             cmp = Number(a.is_running) - Number(b.is_running);
             break;
@@ -442,7 +445,7 @@ export default function AdminDashboardPage() {
         return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
       }
       const defaultDirection: MissionSortDirection =
-        key === 'market_cap' || key === 'last_completed' || key === 'status' ? 'desc' : 'asc';
+        key === 'market_cap' || key === 'last_completed' || key === 'reports' || key === 'status' ? 'desc' : 'asc';
       return { key, direction: defaultDirection };
     });
   };
@@ -1350,6 +1353,15 @@ export default function AdminDashboardPage() {
                       <button
                         type="button"
                         className="inline-flex items-center gap-1 hover:text-gray-200"
+                        onClick={() => toggleMissionSort('reports')}
+                      >
+                        Reports <span className="text-xs">{sortIndicator('reports')}</span>
+                      </button>
+                    </th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 hover:text-gray-200"
                         onClick={() => toggleMissionSort('status')}
                       >
                         Status <span className="text-xs">{sortIndicator('status')}</span>
@@ -1397,6 +1409,9 @@ export default function AdminDashboardPage() {
                         <td className="px-4 py-3 text-gray-300">{item.industry ?? '—'}</td>
                         <td className="px-4 py-3 text-gray-300">{formatDate(item.last_completed_at, true)}</td>
                         <td className="px-4 py-3 text-gray-300">
+                          {item.report_count != null ? item.report_count : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-gray-300">
                           {item.is_running ? (
                             <div>
                               <p className="text-blue-300 font-medium">Running</p>
@@ -1425,7 +1440,7 @@ export default function AdminDashboardPage() {
                   })}
                   {sortedMissionItems.length === 0 && (
                     <tr>
-                      <td colSpan={10} className="px-4 py-6 text-center text-gray-400">
+                      <td colSpan={11} className="px-4 py-6 text-center text-gray-400">
                         No mission-control rows found.
                       </td>
                     </tr>

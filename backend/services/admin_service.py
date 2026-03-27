@@ -530,18 +530,38 @@ def get_mission_control_items(db: Session) -> list[dict]:
         if current is None or candidate_updated_at >= current_updated_at:
             by_ticker[ticker_upper] = item
 
-    # Last completed per ticker from DB
-    last_completed = {
-        str(subject_id).upper(): created_at
-        for subject_id, created_at in db.query(
-            Execution.subject_id, func.max(Report.created_at)
+    # Last completed per ticker from DB with report counts
+    last_completed = {}
+    report_counts = {}
+    
+    # Get the latest execution_id per ticker
+    latest_executions = (
+        db.query(
+            Execution.subject_id,
+            func.max(Execution.id).label("latest_execution_id")
         )
-        .join(Report, Report.execution_id == Execution.id)
         .filter(Execution.execution_type == "ticker")
         .group_by(Execution.subject_id)
-        .all()
-        if subject_id and str(subject_id).upper() in ticker_set and created_at is not None
-    }
+        .subquery()
+    )
+    
+    # Get the created_at and report count for each latest execution
+    for subject_id, created_at, report_count in db.query(
+        Execution.subject_id,
+        func.max(Report.created_at),
+        func.count(Report.id)
+    ).join(
+        latest_executions,
+        Execution.id == latest_executions.c.latest_execution_id
+    ).join(
+        Report, Report.execution_id == Execution.id
+    ).group_by(
+        Execution.subject_id
+    ).all():
+        ticker_upper = str(subject_id).upper()
+        if ticker_upper in ticker_set and created_at is not None:
+            last_completed[ticker_upper] = created_at
+            report_counts[ticker_upper] = report_count
 
     def _quote_type_sort_rank(qt: Optional[str]) -> int:
         return 0 if str(qt or "").strip().upper() == "EQUITY" else 1
@@ -569,6 +589,7 @@ def get_mission_control_items(db: Session) -> list[dict]:
             "quote_type": entry.get("quote_type"),
             "market_cap": entry.get("market_cap"),
             "last_completed_at": last_completed.get(ticker_upper),
+            "report_count": report_counts.get(ticker_upper),
             "sector": entry.get("sector"),
             "industry": entry.get("industry"),
             "is_running": running is not None,

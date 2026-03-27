@@ -116,6 +116,7 @@ export interface MissionControlTickerItem {
   quote_type: string | null;
   market_cap: number | null;
   last_completed_at: string | null;
+  report_count: number | null;
   sector: string | null;
   industry: string | null;
   is_running: boolean;

@@ -175,6 +175,7 @@ class MissionControlTickerItem(BaseModel):
     quote_type: Optional[str]
     market_cap: Optional[float]
     last_completed_at: Optional[datetime]
+    report_count: Optional[int]  # Number of reports in latest execution
     sector: Optional[str]
     industry: Optional[str]
     is_running: bool
