@@ -1,6 +1,7 @@
 import { useEffect, useState, type ComponentProps } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import ReportTabs from '../components/ReportTabs';
 import ReportViewer, { type ReportResource } from '../components/ReportViewer';
 import AspectSpiderChart, { getAnalysisScoreEntries } from '../components/AspectSpiderChart';
@@ -201,6 +202,7 @@ export default function SharedReportPage() {
             )}
             <div className="prose prose-invert prose-sm max-w-none text-slate-300">
               <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
                 components={{
                   h2: ({ children, ...props }: ComponentProps<'h2'>) => (
                     <h2 className="text-sm font-semibold text-emerald-300 mb-1 mt-4 first:mt-0" {...props}>{children}</h2>
@@ -213,6 +215,38 @@ export default function SharedReportPage() {
                   ),
                   li: ({ children, ...props }: ComponentProps<'li'>) => (
                     <li className="leading-relaxed text-slate-300" {...props}>{children}</li>
+                  ),
+                  table: ({ children, ...props }: ComponentProps<'table'>) => (
+                    <div className="overflow-x-auto my-4">
+                      <table className="min-w-full text-sm border-collapse" {...props}>
+                        {children}
+                      </table>
+                    </div>
+                  ),
+                  thead: ({ children, ...props }: ComponentProps<'thead'>) => (
+                    <thead className="bg-slate-800/50" {...props}>
+                      {children}
+                    </thead>
+                  ),
+                  tbody: ({ children, ...props }: ComponentProps<'tbody'>) => (
+                    <tbody className="divide-y divide-slate-700/50" {...props}>
+                      {children}
+                    </tbody>
+                  ),
+                  tr: ({ children, ...props }: ComponentProps<'tr'>) => (
+                    <tr className="hover:bg-slate-800/30 transition-colors" {...props}>
+                      {children}
+                    </tr>
+                  ),
+                  th: ({ children, ...props }: ComponentProps<'th'>) => (
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-emerald-200 uppercase tracking-wider border-b border-slate-700" {...props}>
+                      {children}
+                    </th>
+                  ),
+                  td: ({ children, ...props }: ComponentProps<'td'>) => (
+                    <td className="px-3 py-2 text-sm text-slate-300 border-b border-slate-800/50" {...props}>
+                      {children}
+                    </td>
                   ),
                 }}
               >
@@ -232,6 +266,7 @@ export default function SharedReportPage() {
                 <h2 className="text-sm font-semibold text-white mb-2">What to watch</h2>
                 <div className="prose prose-invert prose-sm max-w-none text-slate-300">
                   <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
                     components={{
                       p: ({ children, ...props }: ComponentProps<'p'>) => (
                         <p className="text-sm whitespace-pre-wrap leading-relaxed my-0 text-slate-300" {...props}>{children}</p>
@@ -241,6 +276,38 @@ export default function SharedReportPage() {
                       ),
                       li: ({ children, ...props }: ComponentProps<'li'>) => (
                         <li className="leading-relaxed text-slate-300" {...props}>{children}</li>
+                      ),
+                      table: ({ children, ...props }: ComponentProps<'table'>) => (
+                        <div className="overflow-x-auto my-4">
+                          <table className="min-w-full text-sm border-collapse" {...props}>
+                            {children}
+                          </table>
+                        </div>
+                      ),
+                      thead: ({ children, ...props }: ComponentProps<'thead'>) => (
+                        <thead className="bg-slate-800/50" {...props}>
+                          {children}
+                        </thead>
+                      ),
+                      tbody: ({ children, ...props }: ComponentProps<'tbody'>) => (
+                        <tbody className="divide-y divide-slate-700/50" {...props}>
+                          {children}
+                        </tbody>
+                      ),
+                      tr: ({ children, ...props }: ComponentProps<'tr'>) => (
+                        <tr className="hover:bg-slate-800/30 transition-colors" {...props}>
+                          {children}
+                        </tr>
+                      ),
+                      th: ({ children, ...props }: ComponentProps<'th'>) => (
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-emerald-200 uppercase tracking-wider border-b border-slate-700" {...props}>
+                          {children}
+                        </th>
+                      ),
+                      td: ({ children, ...props }: ComponentProps<'td'>) => (
+                        <td className="px-3 py-2 text-sm text-slate-300 border-b border-slate-800/50" {...props}>
+                          {children}
+                        </td>
                       ),
                     }}
                   >

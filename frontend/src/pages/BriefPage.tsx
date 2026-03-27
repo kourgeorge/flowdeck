@@ -1,6 +1,7 @@
 import { useEffect, useState, type ComponentProps } from 'react';
 import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import DailyDigestRunPanel from '../components/DailyDigestRunPanel';
 import PageHeader from '../components/PageHeader';
 import TickerSearch from '../components/TickerSearch';
@@ -94,6 +95,48 @@ const briefMarkdownComponents = {
   ),
   li: ({ children, ...props }: ComponentProps<'li'>) => (
     <li className="leading-relaxed text-slate-300" {...props}>{children}</li>
+  ),
+  table: ({ children, ...props }: ComponentProps<'table'>) => (
+    <div className="overflow-x-auto my-4">
+      <table
+        className="min-w-full text-sm border-collapse"
+        style={{ fontFamily: 'Menlo, Monaco, "Courier New", monospace' }}
+        {...props}
+      >
+        {children}
+      </table>
+    </div>
+  ),
+  thead: ({ children, ...props }: ComponentProps<'thead'>) => (
+    <thead className="bg-slate-800/50" {...props}>
+      {children}
+    </thead>
+  ),
+  tbody: ({ children, ...props }: ComponentProps<'tbody'>) => (
+    <tbody className="divide-y divide-slate-700/50" {...props}>
+      {children}
+    </tbody>
+  ),
+  tr: ({ children, ...props }: ComponentProps<'tr'>) => (
+    <tr className="hover:bg-slate-800/30 transition-colors" {...props}>
+      {children}
+    </tr>
+  ),
+  th: ({ children, ...props }: ComponentProps<'th'>) => (
+    <th
+      className="px-3 py-2 text-left text-xs font-semibold text-emerald-200 uppercase tracking-wider border-b border-slate-700"
+      {...props}
+    >
+      {children}
+    </th>
+  ),
+  td: ({ children, ...props }: ComponentProps<'td'>) => (
+    <td
+      className="px-3 py-2 text-sm text-slate-300 border-b border-slate-800/50"
+      {...props}
+    >
+      {children}
+    </td>
   ),
 };
 
@@ -358,7 +401,7 @@ export default function BriefPage() {
             className="prose prose-invert prose-sm max-w-none text-slate-300 text-sm"
             style={{ fontFamily: 'Menlo, Monaco, "Courier New", monospace' }}
           >
-            <ReactMarkdown components={briefMarkdownComponents}>
+            <ReactMarkdown components={briefMarkdownComponents} remarkPlugins={[remarkGfm]}>
               {briefHasStructuredSections(brief.narrative) ? narrativeForDisplay(brief.narrative) : brief.narrative}
             </ReactMarkdown>
           </div>
@@ -371,7 +414,7 @@ export default function BriefPage() {
                 What to watch next
               </span>
             </div>
-            <ReactMarkdown components={briefMarkdownComponents}>
+            <ReactMarkdown components={briefMarkdownComponents} remarkPlugins={[remarkGfm]}>
               {brief.what_to_watch}
             </ReactMarkdown>
           </div>
