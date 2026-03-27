@@ -68,6 +68,9 @@ class Execution(Base):
     subject_id = Column(String(255), nullable=False, index=True)  # e.g. AAPL, 123:2025-03-13
     creator_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     earned_tokens = Column(Integer, nullable=False, default=0)
+    status = Column(String(32), nullable=False, default="running", index=True)  # running | completed | failed
+    error_message = Column(Text, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     __table_args__ = (

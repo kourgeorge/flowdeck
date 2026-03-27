@@ -12,6 +12,54 @@ from database import SessionLocal
 from models.db_models import Report, Execution
 
 
+def update_execution_status(
+    execution_id: int,
+    status: str,
+    error_message: Optional[str] = None,
+    completed_at: Optional[datetime] = None,
+) -> None:
+    """
+    Update execution status. Creates its own DB session.
+    
+    Args:
+        execution_id: The execution ID to update
+        status: One of 'running', 'completed', 'failed'
+        error_message: Optional error message for failed executions
+        completed_at: Optional completion timestamp (defaults to now if not provided and status is completed/failed)
+    """
+    db = SessionLocal()
+    try:
+        execution = db.query(Execution).filter(Execution.id == execution_id).first()
+        if execution:
+            execution.status = status  # type: ignore
+            if error_message is not None:
+                execution.error_message = error_message  # type: ignore
+            if completed_at is not None:
+                execution.completed_at = completed_at  # type: ignore
+            elif status in ("completed", "failed"):
+                # Auto-set completed_at if not provided
+                execution.completed_at = datetime.utcnow()  # type: ignore
+            db.commit()
+            logger.debug(
+                "Execution status updated execution_id=%s status=%s",
+                execution_id, status,
+            )
+        else:
+            logger.warning(
+                "Execution not found for status update execution_id=%s",
+                execution_id,
+            )
+    except Exception as e:
+        logger.exception(
+            "Failed to update execution status execution_id=%s status=%s error=%s",
+            execution_id, status, e,
+        )
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 def _date_part(run_id_or_date: Optional[str]) -> Optional[str]:
     """Extract YYYY-MM-DD from run id (YYYY-MM-DD_HH-MM-SS) or return as-is if already date-only."""
     if not run_id_or_date:

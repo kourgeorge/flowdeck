@@ -21,7 +21,7 @@ from services.data_cache import (
     set_analysis_status,
 )
 from services.key_takeaways import extract_key_takeaways
-from services.report_service import save_report
+from services.report_service import save_report, update_execution_status
 from services.email_service import notify_subscribers_new_report
 
 try:
@@ -688,6 +688,12 @@ class AnalysisService:
                 flush=True,
             )
             
+            # Update execution status to completed
+            try:
+                update_execution_status(analysis_run_id, "completed")
+            except Exception as e:
+                logger.warning("Failed to update execution status to completed: %s", e)
+            
             # Delete status file after completion (analysis is done)
             delete_analysis_status("ticker", analysis_run_id)
 
@@ -721,6 +727,14 @@ class AnalysisService:
                 "Analysis error analysis_run_id=%s ticker=%s error=%s",
                 ar_id_safe, ticker, e,
             )
+            
+            # Update execution status to failed
+            if isinstance(ar_id_safe, int):
+                try:
+                    update_execution_status(ar_id_safe, "failed", error_message=str(e))
+                except Exception as update_err:
+                    logger.warning("Failed to update execution status to failed: %s", update_err)
+            
             analysis_info = self.running_analyses.get(analysis_run_id)
             if analysis_info:
                 analysis_info["status"] = "error"

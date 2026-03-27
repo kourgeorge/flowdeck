@@ -68,6 +68,7 @@ export interface AdminAnalysisItem {
   creator_email: string;
   earned_tokens: number;
   created_at: string;
+  status: string;
   input_tokens?: number;
   output_tokens?: number;
   total_tokens?: number;
@@ -121,6 +122,9 @@ export interface MissionControlTickerItem {
   industry: string | null;
   is_running: boolean;
   running_analysis_id: number | null;
+  subscription_count: number;
+  priority_score: number;
+  last_status: string | null;
 }
 
 export interface MissionControlResponse {

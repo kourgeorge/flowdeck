@@ -30,7 +30,7 @@ import {
 
 type AdminTab = 'overview' | 'mission-control' | 'users';
 const ADMIN_TAB_IDS: AdminTab[] = ['overview', 'mission-control', 'users'];
-type MissionSortKey = 'ticker' | 'company' | 'type' | 'market_cap' | 'sector' | 'industry' | 'last_completed' | 'reports' | 'status';
+type MissionSortKey = 'ticker' | 'company' | 'type' | 'market_cap' | 'sector' | 'industry' | 'last_completed' | 'reports' | 'status' | 'priority' | 'subscriptions';
 type MissionSortDirection = 'asc' | 'desc';
 type ViewRunsSortKey = 'ticker' | 'analysis_run_id' | 'unique_views' | 'viewed';
 type ViewRunsSortDirection = 'asc' | 'desc';
@@ -391,6 +391,12 @@ export default function AdminDashboardPage() {
           case 'status':
             cmp = Number(a.is_running) - Number(b.is_running);
             break;
+          case 'priority':
+            cmp = (a.priority_score ?? 0) - (b.priority_score ?? 0);
+            break;
+          case 'subscriptions':
+            cmp = (a.subscription_count ?? 0) - (b.subscription_count ?? 0);
+            break;
           default:
             cmp = 0;
         }
@@ -445,7 +451,7 @@ export default function AdminDashboardPage() {
         return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
       }
       const defaultDirection: MissionSortDirection =
-        key === 'market_cap' || key === 'last_completed' || key === 'reports' || key === 'status' ? 'desc' : 'asc';
+        key === 'market_cap' || key === 'last_completed' || key === 'reports' || key === 'status' || key === 'priority' || key === 'subscriptions' ? 'desc' : 'asc';
       return { key, direction: defaultDirection };
     });
   };
@@ -1362,6 +1368,24 @@ export default function AdminDashboardPage() {
                       <button
                         type="button"
                         className="inline-flex items-center gap-1 hover:text-gray-200"
+                        onClick={() => toggleMissionSort('subscriptions')}
+                      >
+                        Subs <span className="text-xs">{sortIndicator('subscriptions')}</span>
+                      </button>
+                    </th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 hover:text-gray-200"
+                        onClick={() => toggleMissionSort('priority')}
+                      >
+                        Priority <span className="text-xs">{sortIndicator('priority')}</span>
+                      </button>
+                    </th>
+                    <th className="px-4 py-3 text-gray-400 font-medium">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 hover:text-gray-200"
                         onClick={() => toggleMissionSort('status')}
                       >
                         Status <span className="text-xs">{sortIndicator('status')}</span>
@@ -1412,12 +1436,33 @@ export default function AdminDashboardPage() {
                           {item.report_count != null ? item.report_count : '—'}
                         </td>
                         <td className="px-4 py-3 text-gray-300">
+                          {item.subscription_count ?? 0}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`font-medium ${
+                            (item.priority_score ?? 0) >= 70 ? 'text-red-400' :
+                            (item.priority_score ?? 0) >= 50 ? 'text-orange-400' :
+                            (item.priority_score ?? 0) >= 30 ? 'text-yellow-400' :
+                            'text-gray-400'
+                          }`}>
+                            {item.priority_score?.toFixed(1) ?? '0.0'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
                           {item.is_running ? (
-                            <div>
-                              <p className="text-blue-300 font-medium">Running</p>
-                            </div>
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-900/50 text-blue-300 border border-blue-700">
+                              Running
+                            </span>
+                          ) : item.last_status === 'completed' ? (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-900/50 text-green-300 border border-green-700">
+                              Completed
+                            </span>
+                          ) : item.last_status === 'failed' ? (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-900/50 text-red-300 border border-red-700">
+                              Failed
+                            </span>
                           ) : (
-                            <span className="text-gray-400">Idle</span>
+                            <span className="text-gray-500">—</span>
                           )}
                         </td>
                         <td className="px-4 py-3">
@@ -1440,7 +1485,7 @@ export default function AdminDashboardPage() {
                   })}
                   {sortedMissionItems.length === 0 && (
                     <tr>
-                      <td colSpan={11} className="px-4 py-6 text-center text-gray-400">
+                      <td colSpan={13} className="px-4 py-6 text-center text-gray-400">
                         No mission-control rows found.
                       </td>
                     </tr>
@@ -1572,6 +1617,7 @@ export default function AdminDashboardPage() {
                         <th className="px-4 py-3 text-gray-400 font-medium">Ticker</th>
                         <th className="px-4 py-3 text-gray-400 font-medium">Run ID</th>
                         <th className="px-4 py-3 text-gray-400 font-medium">Creator</th>
+                        <th className="px-4 py-3 text-gray-400 font-medium">Status</th>
                         <th className="px-4 py-3 text-gray-400 font-medium">Earned tokens</th>
                         <th className="px-4 py-3 text-gray-400 font-medium">In tokens</th>
                         <th className="px-4 py-3 text-gray-400 font-medium">Out tokens</th>
@@ -1593,6 +1639,23 @@ export default function AdminDashboardPage() {
                         </td>
                         <td className="px-4 py-3 text-gray-300 font-mono text-xs">{a.id}</td>
                         <td className="px-4 py-3 text-gray-300">{a.creator_email}</td>
+                        <td className="px-4 py-3">
+                          {a.status === 'completed' ? (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-900/50 text-green-300 border border-green-700">
+                              Completed
+                            </span>
+                          ) : a.status === 'failed' ? (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-900/50 text-red-300 border border-red-700">
+                              Failed
+                            </span>
+                          ) : a.status === 'running' ? (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-900/50 text-blue-300 border border-blue-700">
+                              Running
+                            </span>
+                          ) : (
+                            <span className="text-gray-500">{a.status}</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-white">{a.earned_tokens}</td>
                         <td className="px-4 py-3 text-gray-400 tabular-nums">
                           {a.input_tokens != null && a.input_tokens > 0

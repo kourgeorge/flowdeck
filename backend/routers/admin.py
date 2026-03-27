@@ -109,6 +109,7 @@ class AdminAnalysisItem(BaseModel):
     creator_email: str
     earned_tokens: int
     created_at: datetime
+    status: str = "running"
     input_tokens: Optional[int] = None
     output_tokens: Optional[int] = None
     total_tokens: Optional[int] = None
@@ -180,6 +181,9 @@ class MissionControlTickerItem(BaseModel):
     industry: Optional[str]
     is_running: bool
     running_analysis_id: Optional[int]  # AnalysisRun.id when running
+    subscription_count: int = 0  # Number of users subscribed to this ticker
+    priority_score: float = 0.0  # Calculated priority for rerunning analysis
+    last_status: Optional[str] = None  # Status of last execution: running | completed | failed
 
 
 class MissionControlResponse(BaseModel):

@@ -207,6 +207,7 @@ def list_analyses(db: Session, limit: int, offset: int) -> tuple[list[dict], int
             "creator_email": email or "",
             "earned_tokens": ex.earned_tokens,
             "created_at": ex.created_at,
+            "status": ex.status,
             "input_tokens": inp if inp else None,
             "output_tokens": out if out else None,
             "total_tokens": tot if tot else None,
@@ -530,38 +531,111 @@ def get_mission_control_items(db: Session) -> list[dict]:
         if current is None or candidate_updated_at >= current_updated_at:
             by_ticker[ticker_upper] = item
 
-    # Last completed per ticker from DB with report counts
+    # Last completed per ticker from DB with report counts and status
     last_completed = {}
     report_counts = {}
+    execution_statuses = {}
     
-    # Get the latest execution_id per ticker
-    latest_executions = (
+    # Get the latest execution per ticker (completed or failed) using status and completed_at fields
+    # We need to get the most recent execution for each ticker
+    from sqlalchemy import and_
+    
+    # Subquery to get the latest execution ID per ticker
+    latest_exec_subq = (
         db.query(
             Execution.subject_id,
-            func.max(Execution.id).label("latest_execution_id")
+            func.max(Execution.id).label("latest_id")
         )
-        .filter(Execution.execution_type == "ticker")
+        .filter(
+            Execution.execution_type == "ticker",
+            Execution.status.in_(["completed", "failed"])
+        )
         .group_by(Execution.subject_id)
         .subquery()
     )
     
-    # Get the created_at and report count for each latest execution
-    for subject_id, created_at, report_count in db.query(
+    # Get details of the latest executions
+    for subject_id, completed_at, report_count, status in db.query(
         Execution.subject_id,
-        func.max(Report.created_at),
-        func.count(Report.id)
+        Execution.completed_at,
+        func.count(Report.id),
+        Execution.status
     ).join(
-        latest_executions,
-        Execution.id == latest_executions.c.latest_execution_id
+        latest_exec_subq,
+        and_(
+            Execution.subject_id == latest_exec_subq.c.subject_id,
+            Execution.id == latest_exec_subq.c.latest_id
+        )
     ).join(
-        Report, Report.execution_id == Execution.id
+        Report, Report.execution_id == Execution.id, isouter=True
     ).group_by(
-        Execution.subject_id
+        Execution.subject_id, Execution.completed_at, Execution.status
     ).all():
         ticker_upper = str(subject_id).upper()
-        if ticker_upper in ticker_set and created_at is not None:
-            last_completed[ticker_upper] = created_at
+        if ticker_upper in ticker_set:
+            if completed_at is not None:
+                last_completed[ticker_upper] = completed_at
             report_counts[ticker_upper] = report_count
+            execution_statuses[ticker_upper] = status
+
+    # Get subscription counts per ticker
+    subscription_counts = {}
+    for ticker, count in db.query(
+        Subscription.ticker,
+        func.count(Subscription.id)
+    ).filter(
+        Subscription.ticker.in_(mission_tickers)
+    ).group_by(
+        Subscription.ticker
+    ).all():
+        ticker_upper = str(ticker).upper()
+        subscription_counts[ticker_upper] = count
+
+    def _calculate_priority(
+        market_cap: Optional[float],
+        subscription_count: int,
+        last_completed_at: Optional[datetime]
+    ) -> float:
+        """
+        Calculate priority score for rerunning analysis.
+        Higher score = higher priority.
+        
+        Factors:
+        1. Market cap (normalized, 0-40 points)
+        2. Subscription count (0-30 points)
+        3. Days since last run (0-30 points, older = higher priority)
+        """
+        score = 0.0
+        
+        # Market cap component (0-40 points)
+        # Normalize market cap: $1B = 10 points, $100B = 20 points, $1T+ = 40 points
+        if market_cap and market_cap > 0:
+            import math
+            # Log scale: log10(market_cap in billions)
+            market_cap_billions = market_cap / 1_000_000_000
+            if market_cap_billions > 0:
+                log_cap = math.log10(market_cap_billions)
+                # Scale: 0 (1B) to 3 (1T) -> 0 to 40 points
+                score += min(40.0, max(0.0, log_cap * 13.33))
+        
+        # Subscription count component (0-30 points)
+        # Linear scale: 1 sub = 3 points, 10+ subs = 30 points
+        score += min(30.0, subscription_count * 3.0)
+        
+        # Days since last run component (0-30 points)
+        # Linear scale: 1 day = 1 point, 30+ days = 30 points
+        if last_completed_at:
+            now = datetime.now(timezone.utc)
+            # Ensure last_completed_at is timezone-aware
+            if last_completed_at.tzinfo is None:
+                last_completed_at = last_completed_at.replace(tzinfo=timezone.utc)
+            days_since = (now - last_completed_at).total_seconds() / 86400
+            score += min(30.0, max(0.0, days_since))
+        else:
+            # Never run = maximum age priority
+            score += 30.0
+        
+        return round(score, 2)
 
     def _quote_type_sort_rank(qt: Optional[str]) -> int:
         return 0 if str(qt or "").strip().upper() == "EQUITY" else 1
@@ -583,16 +657,26 @@ def get_mission_control_items(db: Session) -> list[dict]:
         if not ticker_upper:
             continue
         running = by_ticker.get(ticker_upper)
+        sub_count = subscription_counts.get(ticker_upper, 0)
+        last_completed_at = last_completed.get(ticker_upper)
+        priority = _calculate_priority(
+            entry.get("market_cap"),
+            sub_count,
+            last_completed_at
+        )
         items.append({
             "ticker": ticker_upper,
             "name": entry.get("name"),
             "quote_type": entry.get("quote_type"),
             "market_cap": entry.get("market_cap"),
-            "last_completed_at": last_completed.get(ticker_upper),
+            "last_completed_at": last_completed_at,
             "report_count": report_counts.get(ticker_upper),
             "sector": entry.get("sector"),
             "industry": entry.get("industry"),
             "is_running": running is not None,
             "running_analysis_id": running.get("analysis_run_id") if running else None,
+            "subscription_count": sub_count,
+            "priority_score": priority,
+            "last_status": execution_statuses.get(ticker_upper),
         })
     return items

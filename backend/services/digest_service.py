@@ -213,7 +213,7 @@ async def run_and_store_digest(
         if value is not None:
             metadata[key] = value
 
-    from services.report_service import save_report
+    from services.report_service import save_report, update_execution_status
 
     save_report(
         execution_id,
@@ -221,6 +221,12 @@ async def run_and_store_digest(
         content=getattr(result, "narrative", ""),
         metadata=metadata,
     )
+    
+    # Update execution status to completed
+    try:
+        update_execution_status(execution_id, "completed")
+    except Exception as e:
+        logger.warning("Failed to update execution status to completed: %s", e)
 
     # Send email notification to user if email is provided (best-effort; do not fail digest)
     if user_email:
