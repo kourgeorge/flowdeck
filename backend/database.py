@@ -15,11 +15,22 @@ DATABASE_URL = os.environ.get(
 )
 
 # SQLite-specific: allow multiple threads (analysis runs in background thread)
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+# Also add timeout to reduce "database is locked" errors
+connect_args = {
+    "check_same_thread": False,
+    "timeout": 30.0,
+} if DATABASE_URL.startswith("sqlite") else {}
 
+# Connection pool configuration to handle concurrent requests
+# For SQLite: pool_size limits concurrent connections, reducing lock contention
+# For PostgreSQL/MySQL: standard pooling for performance
 engine = create_engine(
     DATABASE_URL,
     connect_args=connect_args,
+    pool_size=5,              # Number of connections to keep open
+    max_overflow=10,          # Additional connections when pool is exhausted
+    pool_pre_ping=True,       # Verify connections before using them
+    pool_recycle=3600,        # Recycle connections after 1 hour
     echo=os.environ.get("SQL_ECHO", "").lower() in ("true", "1", "yes"),
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
