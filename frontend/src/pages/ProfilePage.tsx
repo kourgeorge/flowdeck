@@ -1777,13 +1777,13 @@ export default function ProfilePage() {
       <div className="flex-1 px-4 py-6 sm:p-6 lg:p-8">
         <div className="max-w-layout mx-auto min-w-0 w-full">
           {/* Tab Navigation */}
-          <div className="flex gap-1 mb-8 border-b border-gray-700">
+          <div className="flex gap-1 mb-8 border-b border-gray-700 overflow-x-auto scrollbar-hide">
           <button
             onClick={() => {
               setActiveTab('overview');
               navigate('/profile#overview', { replace: true });
             }}
-            className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${
+            className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
               activeTab === 'overview'
                 ? 'text-blue-400 border-blue-400'
                 : 'text-gray-400 border-transparent hover:text-white hover:border-gray-600'
@@ -1796,7 +1796,7 @@ export default function ProfilePage() {
               setActiveTab('investor-profile');
               navigate('/profile#investor-profile', { replace: true });
             }}
-            className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${
+            className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
               activeTab === 'investor-profile'
                 ? 'text-blue-400 border-blue-400'
                 : 'text-gray-400 border-transparent hover:text-white hover:border-gray-600'
@@ -1809,7 +1809,7 @@ export default function ProfilePage() {
               setActiveTab('api-keys');
               navigate('/profile#api-keys', { replace: true });
             }}
-            className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${
+            className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
               activeTab === 'api-keys'
                 ? 'text-blue-400 border-blue-400'
                 : 'text-gray-400 border-transparent hover:text-white hover:border-gray-600'
@@ -1822,7 +1822,7 @@ export default function ProfilePage() {
               setActiveTab('account');
               navigate('/profile#account', { replace: true });
             }}
-            className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${
+            className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
               activeTab === 'account'
                 ? 'text-blue-400 border-blue-400'
                 : 'text-gray-400 border-transparent hover:text-white hover:border-gray-600'
@@ -1835,7 +1835,7 @@ export default function ProfilePage() {
               setActiveTab('brief-schedule');
               navigate('/profile#brief-schedule', { replace: true });
             }}
-            className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${
+            className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
               activeTab === 'brief-schedule'
                 ? 'text-blue-400 border-blue-400'
                 : 'text-gray-400 border-transparent hover:text-white hover:border-gray-600'
