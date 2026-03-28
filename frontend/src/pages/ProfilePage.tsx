@@ -629,7 +629,9 @@ export default function ProfilePage() {
       setInvestorProfileForm(buildInvestorProfileForm(data));
       setProfile((prev) => (prev ? { ...prev, has_completed_investor_profile: data.has_completed_investor_profile } : prev));
       setProfileCompletion(data.has_completed_investor_profile);
-      setInvestorProfileMessage('Investor profile saved.');
+      setInvestorProfileMessage('✓ Investor profile saved successfully!');
+      // Auto-dismiss success message after 3 seconds
+      setTimeout(() => setInvestorProfileMessage(null), 3000);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setInvestorProfileMessage(typeof msg === 'string' ? msg : 'Failed to save investor profile');
@@ -1065,23 +1067,28 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                {investorProfileMessage && (
-                  <p className={`text-sm ${investorProfileMessage.startsWith('Investor profile saved') ? 'text-green-400' : 'text-red-400'}`}>
-                    {investorProfileMessage}
-                  </p>
-                )}
-
                 <div className="flex items-center justify-between gap-3 border-t border-gray-700 pt-5">
                   <p className="text-xs text-gray-500">
                     {investorProfile?.updated_at ? `Last updated ${new Date(investorProfile.updated_at).toLocaleString()}` : 'Not saved yet'}
                   </p>
-                  <button
-                    type="submit"
-                    disabled={investorProfileSaving}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-default disabled:opacity-50"
-                  >
-                    {investorProfileSaving ? 'Saving…' : 'Save investor profile'}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {investorProfileMessage && (
+                      <div className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+                        investorProfileMessage.includes('successfully')
+                          ? 'border-green-500/30 bg-green-500/10 text-green-400'
+                          : 'border-red-500/30 bg-red-500/10 text-red-400'
+                      }`}>
+                        {investorProfileMessage}
+                      </div>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={investorProfileSaving}
+                      className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-default disabled:opacity-50"
+                    >
+                      {investorProfileSaving ? 'Saving…' : 'Save investor profile'}
+                    </button>
+                  </div>
                 </div>
               </form>
             )}
