@@ -24,7 +24,7 @@ export default function NewsroomPage() {
   const [publicWidgets, setPublicWidgets] = useState<TickerWidget[]>([]);
   const [publicError, setPublicError] = useState<string | null>(null);
   const [isLoadingPublicWidgets, setIsLoadingPublicWidgets] = useState(false);
-  const { widgets, isLoading } = useDashboardData({
+  const { widgets, isLoading, subscribedTickers } = useDashboardData({
     enableRecentAnalyzed: false,
   });
 
@@ -72,9 +72,13 @@ export default function NewsroomPage() {
 
   const displayWidgets = user ? widgets : publicWidgets;
   const displayTickers = displayWidgets.map((widget) => widget.ticker);
-  const pageIsLoading = user ? isLoading : isLoadingPublicWidgets;
   
-  // Build event counts map for smart news ranking
+  // For logged-in users, start loading news immediately with subscribed tickers
+  // Don't wait for all widget data (prices, event counts) to be ready
+  const newsLoadTickers = user ? subscribedTickers : displayTickers;
+  const pageIsLoading = user ? (isLoading && subscribedTickers.length === 0) : isLoadingPublicWidgets;
+  
+  // Build event counts map for smart news ranking (will be empty initially, populated as widgets load)
   const tickerEventCounts = displayWidgets.reduce<Record<string, number>>((acc, widget) => {
     if (widget.event_count != null) {
       acc[widget.ticker] = widget.event_count;
@@ -114,7 +118,7 @@ export default function NewsroomPage() {
               </div>
             )}
 
-            {pageIsLoading && displayTickers.length === 0 ? (
+            {pageIsLoading && newsLoadTickers.length === 0 ? (
               <>
                 {user && (
                   <div className="mb-6 rounded-xl border border-blue-700/40 bg-blue-950/40 px-4 py-3 text-sm text-blue-100">
@@ -123,15 +127,15 @@ export default function NewsroomPage() {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                       </svg>
-                      <span>Preparing your portfolio news and sorting according to your interests...</span>
+                      <span>Loading your subscriptions...</span>
                     </div>
                   </div>
                 )}
                 <NewsroomSkeleton />
               </>
-            ) : displayTickers.length > 0 ? (
+            ) : newsLoadTickers.length > 0 ? (
               <DashboardNewsSection
-                tickers={displayTickers}
+                tickers={newsLoadTickers}
                 refreshIntervalMs={120000}
                 searchQuery={searchQuery}
                 onSearchQueryChange={setSearchQuery}

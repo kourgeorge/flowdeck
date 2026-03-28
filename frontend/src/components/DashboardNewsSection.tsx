@@ -422,8 +422,10 @@ export default function DashboardNewsSection({
   const [selectedTickers, setSelectedTickers] = useState<string[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
+  const [loadedTickerCount, setLoadedTickerCount] = useState(0);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const requestIdRef = useRef(0);
@@ -441,33 +443,62 @@ export default function DashboardNewsSection({
       setLastUpdated(new Date());
       setError(null);
       setIsLoading(false);
+      setLoadedTickerCount(0);
       return;
     }
 
     setIsLoading(true);
     setError(null);
+    setLoadedTickerCount(0);
 
     try {
-      const response = await tickerApi.getNewsBatch(portfolioTickers);
-      if (requestId !== requestIdRef.current) return;
+      // Use streaming API for real-time progressive loading
+      let allArticles: NewsArticleWithTicker[] = [];
+      let firstChunk = true;
 
-      setArticles(
-        (response.articles ?? []).map((article) => ({
+      await tickerApi.getNewsBatchStream(portfolioTickers, (chunk) => {
+        // Check if this request is still current
+        if (requestId !== requestIdRef.current) return;
+
+        // Add new articles from this chunk
+        const newArticles = (chunk.articles ?? []).map((article) => ({
           ...article,
           publisher: article.publisher ?? '',
           type: article.type ?? '',
           thumbnail: article.thumbnail ?? null,
-        }))
-      );
-      setLastUpdated(new Date());
-      setDisplayCount(PAGE_SIZE);
+        }));
+
+        allArticles = [...allArticles, ...newArticles];
+
+        // Update UI immediately with new articles
+        setArticles(allArticles);
+        setLoadedTickerCount(chunk.completed_tickers);
+
+        // Show content immediately after first chunk
+        if (firstChunk && newArticles.length > 0) {
+          setIsLoading(false);
+          setIsLoadingMore(true);
+          firstChunk = false;
+        }
+
+        // Mark as complete when all tickers are done
+        if (chunk.completed) {
+          setIsLoadingMore(false);
+          setLastUpdated(new Date());
+          setDisplayCount(PAGE_SIZE);
+        }
+      });
+
+      // If no articles were received, still mark as complete
+      if (requestId === requestIdRef.current && firstChunk) {
+        setIsLoading(false);
+        setLastUpdated(new Date());
+      }
     } catch (fetchError) {
       if (requestId !== requestIdRef.current) return;
       setError(fetchError instanceof Error ? fetchError.message : 'Failed to load news');
-    } finally {
-      if (requestId === requestIdRef.current) {
-        setIsLoading(false);
-      }
+      setIsLoading(false);
+      setIsLoadingMore(false);
     }
   }, [tickersKey]);
 
@@ -684,6 +715,11 @@ export default function DashboardNewsSection({
                 >
                   {isLoading ? 'Refreshing...' : 'Refresh newsroom'}
                 </button>
+                {isLoadingMore && loadedTickerCount > 0 && (
+                  <div className="rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-[11px] font-medium text-blue-200">
+                    Loading more... ({loadedTickerCount}/{tickers.length} tickers)
+                  </div>
+                )}
               </div>
             </div>
 

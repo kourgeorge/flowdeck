@@ -15,6 +15,7 @@ export interface UseDashboardDataReturn {
   backgroundLoadingAll: boolean;
   tickerToName: Record<string, string>;
   isLoading: boolean;
+  subscribedTickers: string[];
   recentScrollRef: React.RefObject<HTMLDivElement>;
   handleRecentScroll: () => void;
   handleSubscriptionChange: () => void;
@@ -36,6 +37,7 @@ export function useDashboardData({
   const [tickerToName, setTickerToName] = useState<Record<string, string>>({});
   const [subscriptionsReady, setSubscriptionsReady] = useState(false);
   const [recentReady, setRecentReady] = useState(false);
+  const [subscribedTickers, setSubscribedTickers] = useState<string[]>([]);
 
   const recentScrollRef = useRef<HTMLDivElement>(null);
   const backgroundLoadStartedRef = useRef(false);
@@ -70,10 +72,19 @@ export function useDashboardData({
 
   // Load subscribed stocks
   const loadSubscriptions = useCallback(async () => {
-    if (!user) { setWidgets([]); setSubscriptionsReady(true); return; }
+    if (!user) {
+      setWidgets([]);
+      setSubscribedTickers([]);
+      setSubscriptionsReady(true);
+      return;
+    }
     try {
       const subs = await subscriptionApi.list();
       const tickers = subs.map((s) => s.ticker);
+      
+      // Set tickers immediately so newsroom can start loading
+      setSubscribedTickers(tickers);
+      
       if (tickers.length > 0) {
         const res = await tickerApi.getWidgets(tickers);
         setWidgets(res.widgets);
@@ -82,6 +93,7 @@ export function useDashboardData({
       }
     } catch {
       setWidgets([]);
+      setSubscribedTickers([]);
     } finally {
       setSubscriptionsReady(true);
     }
@@ -195,6 +207,7 @@ export function useDashboardData({
     backgroundLoadingAll,
     tickerToName,
     isLoading,
+    subscribedTickers,
     recentScrollRef,
     handleRecentScroll,
     handleSubscriptionChange,

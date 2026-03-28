@@ -11,10 +11,12 @@ Market overview uses single-flight coalescing: concurrent identical requests sha
 """
 
 import asyncio
+import json
 import logging
 from typing import Dict, Any, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 
@@ -196,6 +198,96 @@ async def data_news_batch(
     return await asyncio.to_thread(
         lambda: gw.get_news_batch(tickers_list, vendor=vendor, lookback_days=lookback_days)
     )
+
+
+@router.get("/news/batch/stream")
+async def data_news_batch_stream(
+    tickers: str = Query(..., description="Comma-separated ticker symbols (max 50)"),
+    vendor: Optional[str] = Query(None, description="News vendor"),
+    lookback_days: int = Query(7, ge=1, le=90, description="Days to look back"),
+):
+    """
+    Stream news for multiple tickers as they become available.
+    Returns newline-delimited JSON (NDJSON) with progressive updates.
+    Each line is a JSON object with articles from completed tickers.
+    """
+    raw = [s.strip().upper() for s in tickers.split(",") if s.strip()]
+    if not raw:
+        async def empty_stream():
+            yield json.dumps({"articles": [], "count": 0, "completed": True}) + "\n"
+        return StreamingResponse(empty_stream(), media_type="application/x-ndjson")
+    
+    tickers_list = raw[:50]
+    
+    async def news_stream():
+        """Stream news as each ticker completes."""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        gw = _gateway()
+        all_articles = []
+        seen_uuids = set()
+        completed_count = 0
+        
+        def fetch_one_ticker(ticker: str):
+            try:
+                return gw.get_news(ticker, vendor=vendor, lookback_days=lookback_days)
+            except Exception as e:
+                logger.warning(f"Failed to fetch news for {ticker}: {e}")
+                return {"ticker": ticker, "articles": [], "count": 0, "error": str(e)}
+        
+        # Use ThreadPoolExecutor to fetch in parallel (increased from 8 to 16 workers)
+        max_workers = min(16, len(tickers_list))
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_ticker = {
+                executor.submit(fetch_one_ticker, ticker): ticker
+                for ticker in tickers_list
+            }
+            
+            for future in as_completed(future_to_ticker):
+                ticker = future_to_ticker[future]
+                try:
+                    result = await asyncio.get_event_loop().run_in_executor(None, future.result)
+                    completed_count += 1
+                    
+                    # Add new articles (dedupe by UUID)
+                    new_articles = []
+                    for article in result.get("articles", []):
+                        uuid = article.get("uuid")
+                        if uuid and uuid not in seen_uuids:
+                            seen_uuids.add(uuid)
+                            # Add ticker to article
+                            article_with_ticker = {**article, "tickers": [ticker]}
+                            new_articles.append(article_with_ticker)
+                            all_articles.append(article_with_ticker)
+                    
+                    # Stream this batch immediately
+                    if new_articles:
+                        chunk = {
+                            "articles": new_articles,
+                            "count": len(new_articles),
+                            "total_articles": len(all_articles),
+                            "completed_tickers": completed_count,
+                            "total_tickers": len(tickers_list),
+                            "completed": completed_count == len(tickers_list)
+                        }
+                        yield json.dumps(chunk) + "\n"
+                
+                except Exception as e:
+                    logger.error(f"Error processing news for {ticker}: {e}", exc_info=True)
+        
+        # Send final summary if no articles were streamed
+        if completed_count == len(tickers_list) and not all_articles:
+            yield json.dumps({
+                "articles": [],
+                "count": 0,
+                "total_articles": 0,
+                "completed_tickers": completed_count,
+                "total_tickers": len(tickers_list),
+                "completed": True
+            }) + "\n"
+    
+    return StreamingResponse(news_stream(), media_type="application/x-ndjson")
 
 
 @router.get("/insider-transactions/{ticker}")

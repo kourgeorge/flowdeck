@@ -578,6 +578,79 @@ export const tickerApi = {
     return response.data;
   },
 
+  // Stream news for multiple tickers as they become available (NDJSON)
+  getNewsBatchStream: async (
+    tickers: string[],
+    onChunk: (chunk: {
+      articles: Array<{
+        uuid: string;
+        title: string;
+        summary?: string | null;
+        publisher?: string;
+        link: string;
+        published_time: string | null;
+        published_timestamp: number;
+        type?: string;
+        thumbnail?: string | null;
+        tickers: string[];
+      }>;
+      count: number;
+      total_articles: number;
+      completed_tickers: number;
+      total_tickers: number;
+      completed: boolean;
+    }) => void
+  ): Promise<void> => {
+    if (tickers.length === 0) {
+      onChunk({ articles: [], count: 0, total_articles: 0, completed_tickers: 0, total_tickers: 0, completed: true });
+      return;
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/api/data/news/batch/stream?tickers=${tickers.slice(0, 50).join(',')}`,
+      {
+        method: 'GET',
+        headers: { 'Accept': 'application/x-ndjson' },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('Response body is not readable');
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.trim()) {
+            try {
+              const chunk = JSON.parse(line);
+              onChunk(chunk);
+            } catch (e) {
+              console.error('Failed to parse NDJSON line:', e, line);
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  },
+
   // Get latest insider transactions (raw market data via /api/data)
   getInsiderTransactions: async (
     ticker: string,
