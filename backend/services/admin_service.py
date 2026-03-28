@@ -208,6 +208,7 @@ def list_analyses(db: Session, limit: int, offset: int) -> tuple[list[dict], int
             "earned_tokens": ex.earned_tokens,
             "created_at": ex.created_at,
             "status": ex.status,
+            "error_message": ex.error_message,
             "input_tokens": inp if inp else None,
             "output_tokens": out if out else None,
             "total_tokens": tot if tot else None,

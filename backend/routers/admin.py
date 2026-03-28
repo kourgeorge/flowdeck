@@ -110,6 +110,7 @@ class AdminAnalysisItem(BaseModel):
     earned_tokens: int
     created_at: datetime
     status: str = "running"
+    error_message: Optional[str] = None
     input_tokens: Optional[int] = None
     output_tokens: Optional[int] = None
     total_tokens: Optional[int] = None

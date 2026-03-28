@@ -1628,74 +1628,86 @@ export default function AdminDashboardPage() {
                     </thead>
                     <tbody>
                     {filteredAnalyses.map((a) => (
-                      <tr key={a.id} className="border-b border-gray-700/50">
-                        <td className="px-4 py-3">
-                          <Link
-                            to={`/tickers/${a.ticker}`}
-                            className="text-blue-400 hover:text-blue-300 font-medium"
-                          >
-                            {a.ticker}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-3 text-gray-300 font-mono text-xs">{a.id}</td>
-                        <td className="px-4 py-3 text-gray-300">{a.creator_email}</td>
-                        <td className="px-4 py-3">
-                          {a.status === 'completed' ? (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-900/50 text-green-300 border border-green-700">
-                              Completed
-                            </span>
-                          ) : a.status === 'failed' ? (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-900/50 text-red-300 border border-red-700">
-                              Failed
-                            </span>
-                          ) : a.status === 'running' ? (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-900/50 text-blue-300 border border-blue-700">
-                              Running
-                            </span>
-                          ) : (
-                            <span className="text-gray-500">{a.status}</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-white">{a.earned_tokens}</td>
-                        <td className="px-4 py-3 text-gray-400 tabular-nums">
-                          {a.input_tokens != null && a.input_tokens > 0
-                            ? a.input_tokens.toLocaleString()
-                            : '—'}
-                        </td>
-                        <td className="px-4 py-3 text-gray-400 tabular-nums">
-                          {a.output_tokens != null && a.output_tokens > 0
-                            ? a.output_tokens.toLocaleString()
-                            : '—'}
-                        </td>
-                        <td className="px-4 py-3 text-gray-400 tabular-nums">
-                          {a.cost_usd != null && a.cost_usd > 0
-                            ? `$${a.cost_usd.toFixed(4)}`
-                            : '—'}
-                        </td>
-                        <td className="px-4 py-3 text-gray-400">{formatDate(a.created_at)}</td>
-                        <td className="px-4 py-3">
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              if (!window.confirm(`Delete analysis run ${a.id} (${a.ticker})? This cannot be undone.`)) return;
-                              await adminApi.deleteAnalysis(a.id);
-                              const [s, aRes, rRes] = await Promise.all([
-                                adminApi.getStats(),
-                                adminApi.getAnalyses(50),
-                                adminApi.getReports(200),
-                              ]);
-                              setStats(s);
-                              setAnalyses(aRes.analyses);
-                              setAnalysesTotal(aRes.total);
-                              setReports(rRes.reports);
-                              setReportsTotal(rRes.total);
-                            }}
-                            className="text-red-400 hover:text-red-300 hover:underline text-sm font-medium"
-                          >
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
+                      <Fragment key={a.id}>
+                        <tr className="border-b border-gray-700/50">
+                          <td className="px-4 py-3">
+                            <Link
+                              to={`/tickers/${a.ticker}`}
+                              className="text-blue-400 hover:text-blue-300 font-medium"
+                            >
+                              {a.ticker}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-3 text-gray-300 font-mono text-xs">{a.id}</td>
+                          <td className="px-4 py-3 text-gray-300">{a.creator_email}</td>
+                          <td className="px-4 py-3">
+                            {a.status === 'completed' ? (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-900/50 text-green-300 border border-green-700">
+                                Completed
+                              </span>
+                            ) : a.status === 'failed' ? (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-900/50 text-red-300 border border-red-700">
+                                Failed
+                              </span>
+                            ) : a.status === 'running' ? (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-900/50 text-blue-300 border border-blue-700">
+                                Running
+                              </span>
+                            ) : (
+                              <span className="text-gray-500">{a.status}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-white">{a.earned_tokens}</td>
+                          <td className="px-4 py-3 text-gray-400 tabular-nums">
+                            {a.input_tokens != null && a.input_tokens > 0
+                              ? a.input_tokens.toLocaleString()
+                              : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-gray-400 tabular-nums">
+                            {a.output_tokens != null && a.output_tokens > 0
+                              ? a.output_tokens.toLocaleString()
+                              : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-gray-400 tabular-nums">
+                            {a.cost_usd != null && a.cost_usd > 0
+                              ? `$${a.cost_usd.toFixed(4)}`
+                              : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-gray-400">{formatDate(a.created_at)}</td>
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!window.confirm(`Delete analysis run ${a.id} (${a.ticker})? This cannot be undone.`)) return;
+                                await adminApi.deleteAnalysis(a.id);
+                                const [s, aRes, rRes] = await Promise.all([
+                                  adminApi.getStats(),
+                                  adminApi.getAnalyses(50),
+                                  adminApi.getReports(200),
+                                ]);
+                                setStats(s);
+                                setAnalyses(aRes.analyses);
+                                setAnalysesTotal(aRes.total);
+                                setReports(rRes.reports);
+                                setReportsTotal(rRes.total);
+                              }}
+                              className="text-red-400 hover:text-red-300 hover:underline text-sm font-medium"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                        {a.status === 'failed' && a.error_message && (
+                          <tr className="border-b border-gray-700/50 bg-red-900/10">
+                            <td colSpan={10} className="px-4 py-2">
+                              <div className="flex items-start gap-2">
+                                <span className="text-red-400 font-medium text-xs">Error:</span>
+                                <span className="text-red-300 text-xs break-all">{a.error_message}</span>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     ))}
                     {loadingMoreAnalyses && (
                       <tr>
