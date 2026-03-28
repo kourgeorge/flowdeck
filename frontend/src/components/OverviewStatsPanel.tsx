@@ -10,8 +10,6 @@ import {
   Bar,
   XAxis,
   YAxis,
-  CartesianGrid,
-  ReferenceLine,
 } from 'recharts';
 import { tickerApi } from '../services/api';
 import type { TickerWidget as StockWidgetType } from '../services/types';
@@ -143,17 +141,6 @@ function pieColor(i: number) {
   return PIE_COLORS[i % PIE_COLORS.length];
 }
 
-function signedPercent(value: number): string {
-  const sign = value >= 0 ? '+' : '';
-  return `${sign}${value.toFixed(2)}%`;
-}
-
-function changeBarColor(value: number): string {
-  if (value > 0) return '#4ade80';
-  if (value < 0) return '#f87171';
-  return '#94a3b8';
-}
-
 function getNiceTickStep(range: number, targetTickCount: number): number {
   if (!Number.isFinite(range) || range <= 0) return 1;
   const rawStep = range / Math.max(1, targetTickCount - 1);
@@ -220,20 +207,8 @@ function PieTooltip({ active, payload }: { active?: boolean; payload?: Array<{ n
   );
 }
 
-function ChangeBarsTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: { ticker: string; changePct: number } }> }) {
-  if (!active || !payload?.length) return null;
-  const point = payload[0].payload;
-  return (
-    <div className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm shadow-lg">
-      <div className="text-white font-semibold">{point.ticker}</div>
-      <div className={point.changePct >= 0 ? 'text-green-400' : 'text-red-400'}>
-        {signedPercent(point.changePct)}
-      </div>
-    </div>
-  );
-}
 
-export function SubscribedChangeColumnsChart({ widgets, height = 340 }: SubscribedChangeColumnsChartProps) {
+export function SubscribedChangeColumnsChart({ widgets }: SubscribedChangeColumnsChartProps) {
   const [selectedPeriod, setSelectedPeriod] = useState('1d');
   const [periodChangeMap, setPeriodChangeMap] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
@@ -335,24 +310,23 @@ export function SubscribedChangeColumnsChart({ widgets, height = 340 }: Subscrib
     return { yAxisMax: axisMax, yAxisTicks: ticks };
   }, [maxAbsChange]);
 
-  const chartHeight = Math.max(220, height);
 
   if (changeBarsData.length === 0) {
     return (
-      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 h-full">
-        <h3 className="text-lg font-semibold text-white mb-2">% change by ticker</h3>
-        <p className="text-gray-400 text-sm">Subscribe to stocks to see % change columns.</p>
+      <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3 h-full">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400 mb-3">% change by ticker</p>
+        <p className="text-slate-500 text-sm">Subscribe to stocks to see % change columns.</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 sm:p-6 h-full flex flex-col">
-      <div className="mb-2 shrink-0">
-        <h3 className="text-lg font-semibold text-white">% change by ticker</h3>
-        <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
-          All subscribed tickers, sorted by {selectedPeriodLabel} % change.
-        </p>
+    <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3 h-full flex flex-col">
+      <div className="mb-2 shrink-0 flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">% change by ticker</p>
+        <span className="text-[11px] text-slate-400">
+          {changeBarsData.length} {changeBarsData.length === 1 ? 'ticker' : 'tickers'}
+        </span>
       </div>
       <div className="mb-2 shrink-0 flex flex-wrap gap-1.5 justify-end">
         {CHANGE_PERIODS.map((p) => (
@@ -363,7 +337,7 @@ export function SubscribedChangeColumnsChart({ widgets, height = 340 }: Subscrib
             className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
               selectedPeriod === p.value
                 ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
             }`}
           >
             {p.label}
@@ -371,37 +345,44 @@ export function SubscribedChangeColumnsChart({ widgets, height = 340 }: Subscrib
         ))}
       </div>
       {loading && selectedPeriod !== '1d' && (
-        <div className="text-gray-400 text-xs mb-2">Loading {selectedPeriodLabel} changes…</div>
+        <div className="text-slate-400 text-xs mb-2">Loading {selectedPeriodLabel} changes…</div>
       )}
       {error && (
         <div className="text-amber-400 text-xs mb-2">{error}</div>
       )}
-      <div className="overflow-x-auto pb-1">
-        <div className="min-w-full" style={{ width: Math.max(620, changeBarsData.length * 56), height: chartHeight }}>
+      <div className="overflow-x-auto pb-1 flex-1">
+        <div className="min-w-full h-full">
           <ResponsiveContainer width="100%" height="100%">
-            {/* Extra left spacing prevents Y-axis percent labels from clipping (especially negatives). */}
-            <BarChart data={changeBarsData} margin={{ top: 8, right: 12, left: 16, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+            <BarChart data={changeBarsData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
               <XAxis
                 dataKey="ticker"
-                tick={{ fill: '#9ca3af', fontSize: 11 }}
+                tick={{ fill: '#94a3b8', fontSize: 10 }}
                 interval={0}
                 height={changeBarsData.length > 12 ? 48 : 24}
                 angle={changeBarsData.length > 12 ? -30 : 0}
                 textAnchor={changeBarsData.length > 12 ? 'end' : 'middle'}
               />
               <YAxis
-                width={56}
-                tick={{ fill: '#9ca3af', fontSize: 11 }}
+                tick={{ fill: '#64748b', fontSize: 10 }}
+                tickFormatter={(v: number) => `${v.toFixed(1)}%`}
                 ticks={yAxisTicks}
-                tickFormatter={(v: number) => `${v.toFixed(2)}%`}
                 domain={[-yAxisMax, yAxisMax]}
               />
-              <ReferenceLine y={0} stroke="rgba(148, 163, 184, 0.45)" strokeDasharray="4 4" />
-              <Tooltip content={<ChangeBarsTooltip />} />
-              <Bar dataKey="changePct" isAnimationActive={false}>
+              <Tooltip
+                contentStyle={{
+                  background: '#0f172a',
+                  border: '1px solid rgba(71, 85, 105, 0.9)',
+                  borderRadius: '0.75rem',
+                  color: '#e2e8f0',
+                }}
+                formatter={(value) => [
+                  typeof value === 'number' ? `${value >= 0 ? '+' : ''}${value.toFixed(2)}%` : value,
+                  'Change'
+                ]}
+              />
+              <Bar dataKey="changePct" radius={[8, 8, 0, 0]}>
                 {changeBarsData.map((row) => (
-                  <Cell key={row.ticker} fill={changeBarColor(row.changePct)} />
+                  <Cell key={row.ticker} fill={row.changePct >= 0 ? '#34d399' : '#f87171'} />
                 ))}
               </Bar>
             </BarChart>
