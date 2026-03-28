@@ -858,7 +858,7 @@ export default function ProfilePage() {
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="max-w-3xl">
                 <span className="inline-flex items-center rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-cyan-100">
-                  AI personalization
+                  Personalization
                 </span>
                 <h2 className="mt-4 text-xl font-semibold text-white">Investor profile and memory</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-300">
