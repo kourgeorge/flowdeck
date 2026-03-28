@@ -8,6 +8,7 @@ import PageHeader from '../components/PageHeader';
 import TokenPurchase from '../components/TokenPurchase';
 import UserStatsSection from '../components/UserStatsSection';
 import ApiKeyManagement from '../components/ApiKeyManagement';
+import CustomSelect, { type SelectOption, type SelectOptionGroup } from '../components/CustomSelect';
 import { digestScheduleApi, type DigestSchedule, type DigestScheduleType } from '../services/api';
 
 const DELETE_CONFIRM_TEXT = 'DELETE';
@@ -49,6 +50,48 @@ const NARRATIVE_STYLE_LABELS: Record<DigestNarrativeStyle, string> = {
   professional: 'Professional',
   technical: 'Technical',
 };
+
+// Common IANA timezones grouped by region
+const COMMON_TIMEZONES = [
+  { value: '', label: 'Use browser timezone', group: '' },
+  { value: 'America/New_York', label: 'Eastern Time (US & Canada)', group: 'Americas' },
+  { value: 'America/Chicago', label: 'Central Time (US & Canada)', group: 'Americas' },
+  { value: 'America/Denver', label: 'Mountain Time (US & Canada)', group: 'Americas' },
+  { value: 'America/Los_Angeles', label: 'Pacific Time (US & Canada)', group: 'Americas' },
+  { value: 'America/Anchorage', label: 'Alaska', group: 'Americas' },
+  { value: 'Pacific/Honolulu', label: 'Hawaii', group: 'Americas' },
+  { value: 'America/Toronto', label: 'Toronto', group: 'Americas' },
+  { value: 'America/Mexico_City', label: 'Mexico City', group: 'Americas' },
+  { value: 'America/Sao_Paulo', label: 'São Paulo', group: 'Americas' },
+  { value: 'America/Buenos_Aires', label: 'Buenos Aires', group: 'Americas' },
+  { value: 'Europe/London', label: 'London', group: 'Europe' },
+  { value: 'Europe/Paris', label: 'Paris', group: 'Europe' },
+  { value: 'Europe/Berlin', label: 'Berlin', group: 'Europe' },
+  { value: 'Europe/Rome', label: 'Rome', group: 'Europe' },
+  { value: 'Europe/Madrid', label: 'Madrid', group: 'Europe' },
+  { value: 'Europe/Amsterdam', label: 'Amsterdam', group: 'Europe' },
+  { value: 'Europe/Brussels', label: 'Brussels', group: 'Europe' },
+  { value: 'Europe/Vienna', label: 'Vienna', group: 'Europe' },
+  { value: 'Europe/Stockholm', label: 'Stockholm', group: 'Europe' },
+  { value: 'Europe/Warsaw', label: 'Warsaw', group: 'Europe' },
+  { value: 'Europe/Athens', label: 'Athens', group: 'Europe' },
+  { value: 'Europe/Istanbul', label: 'Istanbul', group: 'Europe' },
+  { value: 'Europe/Moscow', label: 'Moscow', group: 'Europe' },
+  { value: 'Asia/Jerusalem', label: 'Jerusalem', group: 'Asia' },
+  { value: 'Asia/Dubai', label: 'Dubai', group: 'Asia' },
+  { value: 'Asia/Kolkata', label: 'Mumbai/Kolkata', group: 'Asia' },
+  { value: 'Asia/Bangkok', label: 'Bangkok', group: 'Asia' },
+  { value: 'Asia/Singapore', label: 'Singapore', group: 'Asia' },
+  { value: 'Asia/Hong_Kong', label: 'Hong Kong', group: 'Asia' },
+  { value: 'Asia/Shanghai', label: 'Beijing/Shanghai', group: 'Asia' },
+  { value: 'Asia/Tokyo', label: 'Tokyo', group: 'Asia' },
+  { value: 'Asia/Seoul', label: 'Seoul', group: 'Asia' },
+  { value: 'Australia/Sydney', label: 'Sydney', group: 'Pacific' },
+  { value: 'Australia/Melbourne', label: 'Melbourne', group: 'Pacific' },
+  { value: 'Australia/Brisbane', label: 'Brisbane', group: 'Pacific' },
+  { value: 'Australia/Perth', label: 'Perth', group: 'Pacific' },
+  { value: 'Pacific/Auckland', label: 'Auckland', group: 'Pacific' },
+];
 const INVESTOR_GOAL_OPTIONS = [
   { value: 'dividend_income', label: 'Dividend income' },
   { value: 'long_term_compounding', label: 'Long-term compounding' },
@@ -227,6 +270,32 @@ function InvestorProfileSelect({
     </div>
   );
 }
+
+// Helper function to convert timezone list to grouped options
+function getTimezoneOptions(browserTimezone: string): SelectOptionGroup[] {
+  const grouped = COMMON_TIMEZONES.reduce((acc, tz) => {
+    const group = tz.group || 'Default';
+    if (!acc[group]) acc[group] = [];
+    acc[group].push({
+      value: tz.value,
+      label: tz.value === '' ? `Use browser timezone (${browserTimezone})` : tz.label,
+    });
+    return acc;
+  }, {} as Record<string, SelectOption[]>);
+
+  return Object.entries(grouped).map(([group, options]) => ({
+    group: group === 'Default' ? '' : group,
+    options,
+  }));
+}
+
+// Brief style options
+const BRIEF_STYLE_OPTIONS: SelectOption[] = [
+  { value: 'default', label: 'Balanced', description: 'Well-rounded analysis with key insights' },
+  { value: 'concise', label: 'Concise', description: 'Brief summaries, quick to read' },
+  { value: 'professional', label: 'Professional', description: 'Formal tone with detailed context' },
+  { value: 'technical', label: 'Technical', description: 'In-depth analysis with more detail' },
+];
 
 export default function ProfilePage() {
   const { user, deleteAccount, setProfileCompletion } = useAuth();
@@ -1500,31 +1569,21 @@ export default function ProfilePage() {
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-medium text-gray-300">Timezone</label>
-                          <input
-                            type="text"
+                          <CustomSelect
                             value={dailyTimezone}
-                            onChange={(e: ChangeEvent<HTMLInputElement>) => setDailyTimezone(e.target.value)}
-                            placeholder="e.g. America/New_York"
-                            className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onChange={setDailyTimezone}
+                            groupedOptions={getTimezoneOptions(browserTimezone)}
                           />
-                          <p className="mt-1 text-[11px] text-gray-500">
-                            Uses IANA timezone names. Leave blank to use {browserTimezone}.
-                          </p>
                         </div>
                       </div>
 
                       <div>
                         <label className="mb-1 block text-xs font-medium text-gray-300">Brief style</label>
-                        <select
+                        <CustomSelect
                           value={dailyNarrativeStyle}
-                          onChange={(e: ChangeEvent<HTMLSelectElement>) => setDailyNarrativeStyle(e.target.value as DigestNarrativeStyle)}
-                          className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="default">Balanced (default)</option>
-                          <option value="concise">Concise</option>
-                          <option value="professional">Professional</option>
-                          <option value="technical">Technical (more detail)</option>
-                        </select>
+                          onChange={(val) => setDailyNarrativeStyle(val as DigestNarrativeStyle)}
+                          options={BRIEF_STYLE_OPTIONS}
+                        />
                       </div>
 
                       <div>
@@ -1651,31 +1710,21 @@ export default function ProfilePage() {
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-medium text-gray-300">Timezone</label>
-                          <input
-                            type="text"
+                          <CustomSelect
                             value={weeklyTimezone}
-                            onChange={(e: ChangeEvent<HTMLInputElement>) => setWeeklyTimezone(e.target.value)}
-                            placeholder="e.g. America/New_York"
-                            className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onChange={setWeeklyTimezone}
+                            groupedOptions={getTimezoneOptions(browserTimezone)}
                           />
-                          <p className="mt-1 text-[11px] text-gray-500">
-                            Uses IANA timezone names. Leave blank to use {browserTimezone}.
-                          </p>
                         </div>
                       </div>
 
                       <div>
                         <label className="mb-1 block text-xs font-medium text-gray-300">Brief style</label>
-                        <select
+                        <CustomSelect
                           value={weeklyNarrativeStyle}
-                          onChange={(e: ChangeEvent<HTMLSelectElement>) => setWeeklyNarrativeStyle(e.target.value as DigestNarrativeStyle)}
-                          className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="default">Balanced (default)</option>
-                          <option value="concise">Concise</option>
-                          <option value="professional">Professional</option>
-                          <option value="technical">Technical (more detail)</option>
-                        </select>
+                          onChange={(val) => setWeeklyNarrativeStyle(val as DigestNarrativeStyle)}
+                          options={BRIEF_STYLE_OPTIONS}
+                        />
                       </div>
 
                       <div>
