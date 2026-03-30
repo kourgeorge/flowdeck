@@ -179,6 +179,13 @@ async def run_and_store_digest(
         )
     except Exception as e:  # pragma: no cover - surface to caller
         logger.exception("Digest generation failed for user_id=%s: %s", user_id, e)
+        # Mark execution as failed with error message
+        from services.report_service import update_execution_status
+        try:
+            error_msg = f"{type(e).__name__}: {str(e)}"
+            update_execution_status(execution_id, "failed", error_message=error_msg)
+        except Exception as update_err:
+            logger.error("Failed to update execution status after error: %s", update_err)
         raise
 
     metadata: dict = {

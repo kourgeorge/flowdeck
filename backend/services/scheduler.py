@@ -211,6 +211,12 @@ async def run_scheduled_jobs() -> None:
                 if not _should_run_now(now_utc, schedule, default_tz):
                     continue
 
+                # Mark as executed IMMEDIATELY to prevent duplicate runs on the same tick
+                # or if the process crashes/fails. We update this timestamp before attempting
+                # the digest generation to ensure we don't retry on every scheduler tick.
+                schedule.last_executed_at = now_utc
+                db.commit()
+
                 tz_name = schedule.timezone or _get_default_timezone()
                 try:
                     tz = ZoneInfo(tz_name)
@@ -221,6 +227,10 @@ async def run_scheduled_jobs() -> None:
 
                 user = db.query(User).filter(User.id == schedule.user_id).first()
                 if not user or not user.email:
+                    logger.warning(
+                        "Skipping schedule_id=%s: user not found or no email",
+                        schedule.id,
+                    )
                     continue
 
                 now_local = now_utc.astimezone(tz)
@@ -242,6 +252,14 @@ async def run_scheduled_jobs() -> None:
                 if user_focus_tickers is not None and not isinstance(user_focus_tickers, list):
                     user_focus_tickers = None
 
+                logger.info(
+                    "Starting scheduled digest: user_id=%s schedule_id=%s span=%s date=%s",
+                    user.id,
+                    schedule.id,
+                    span_type,
+                    digest_date,
+                )
+
                 result, _meta, execution_id, _slot = await run_and_store_digest(
                     db,
                     user.id,
@@ -255,11 +273,9 @@ async def run_scheduled_jobs() -> None:
                 if execution_id:
                     ok = send_daily_digest_email_to_user(execution_id, user.email)
                     if ok:
-                        schedule.last_executed_at = now_utc
-                        db.commit()
                         processed_count += 1
                         logger.info(
-                            "Scheduled digest sent: user_id=%s execution_id=%s span=%s",
+                            "Scheduled digest sent successfully: user_id=%s execution_id=%s span=%s",
                             user.id,
                             execution_id,
                             span_type,
@@ -270,6 +286,11 @@ async def run_scheduled_jobs() -> None:
                             user.id,
                             execution_id,
                         )
+                else:
+                    logger.warning(
+                        "Scheduled digest generation returned no execution_id: user_id=%s",
+                        user.id,
+                    )
             except Exception:
                 logger.exception("Scheduled digest run failed for schedule_id=%s", schedule.id)
                 db.rollback()
