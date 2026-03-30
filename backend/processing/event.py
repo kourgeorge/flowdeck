@@ -378,12 +378,17 @@ def _detect_rsi_divergence(
     window = min(5, len(normalized) // 10)
 
     for i in range(window, len(normalized) - window):
-        if highs[i] == max(highs[i - window : i + window + 1]):
+        # Filter out None values before finding max/min
+        high_window = [h for h in highs[i - window : i + window + 1] if h is not None]
+        low_window = [l for l in lows[i - window : i + window + 1] if l is not None]
+        
+        # Only process if we have valid values and the current value is not None
+        if high_window and highs[i] is not None and highs[i] == max(high_window):
             date_str = dates[i]
             if date_str in rsi_data:
                 price_peaks.append((i, date_str, highs[i], rsi_data[date_str]))
 
-        if lows[i] == min(lows[i - window : i + window + 1]):
+        if low_window and lows[i] is not None and lows[i] == min(low_window):
             date_str = dates[i]
             if date_str in rsi_data:
                 price_troughs.append((i, date_str, lows[i], rsi_data[date_str]))
