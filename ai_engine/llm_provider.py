@@ -85,8 +85,11 @@ def get_config_from_env(overrides: Optional[Dict[str, Any]] = None) -> Dict[str,
             or os.environ.get("QUICK_THINK_MODEL")
             or "gpt-4o-mini"
         )
+    # Set backend_url from overrides or LLM_BACKEND_URL environment variable
     if overrides.get("backend_url"):
         cfg["backend_url"] = overrides["backend_url"]
+    elif os.environ.get("LLM_BACKEND_URL"):
+        cfg["backend_url"] = os.environ.get("LLM_BACKEND_URL").strip()
     return cfg
 
 
