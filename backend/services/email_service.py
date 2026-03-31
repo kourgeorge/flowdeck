@@ -86,6 +86,41 @@ _EMAIL_LOGO_PNG_BYTES = _get_email_logo_png_bytes()
 
 _jinja_env.globals["email_logo_src"] = _EMAIL_LOGO_DATA_URI
 
+
+def _detect_text_direction(text: str) -> str:
+    """
+    Detect if text contains RTL (right-to-left) characters.
+    Returns 'rtl' for Hebrew, Arabic, Persian, etc., otherwise 'ltr'.
+    """
+    if not text:
+        return "ltr"
+    
+    # RTL Unicode ranges:
+    # Hebrew: 0x0590-0x05FF
+    # Arabic: 0x0600-0x06FF, 0x0750-0x077F, 0xFB50-0xFDFF, 0xFE70-0xFEFF
+    # Persian/Urdu additions are within Arabic range
+    rtl_chars = 0
+    total_chars = 0
+    
+    for char in text:
+        code = ord(char)
+        # Skip whitespace and punctuation
+        if char.isspace() or not char.isalnum():
+            continue
+        total_chars += 1
+        # Check if character is in RTL range
+        if (0x0590 <= code <= 0x05FF or  # Hebrew
+            0x0600 <= code <= 0x06FF or  # Arabic
+            0x0750 <= code <= 0x077F or  # Arabic Supplement
+            0xFB50 <= code <= 0xFDFF or  # Arabic Presentation Forms-A
+            0xFE70 <= code <= 0xFEFF):   # Arabic Presentation Forms-B
+            rtl_chars += 1
+    
+    # If more than 30% of characters are RTL, consider the text RTL
+    if total_chars > 0 and (rtl_chars / total_chars) > 0.3:
+        return "rtl"
+    return "ltr"
+
 def _html_email_wrapper(
     title: str,
     inner_body: str,
@@ -334,6 +369,13 @@ def _build_report_email_bodies(
     # Render HTML from template
     try:
         template = _jinja_env.get_template("report_notification_email.html")
+        # Detect text direction from key insights and viewpoints
+        text_to_check = " ".join([
+            " ".join(key_insights) if key_insights else "",
+            " ".join(bull_view) if bull_view else "",
+            " ".join(bear_view) if bear_view else "",
+        ])
+        text_direction = _detect_text_direction(text_to_check)
         html_body = template.render(
             ticker=ticker_upper,
             recommendation=recommendation,
@@ -344,7 +386,8 @@ def _build_report_email_bodies(
             bear_view=bear_view,
             report_url=report_url,
             profile_url=f"{_get_frontend_url()}/profile",
-            preheader=f"New analysis for {ticker_upper}. " + (f"Recommendation: {recommendation}." if recommendation else "View your report.")
+            preheader=f"New analysis for {ticker_upper}. " + (f"Recommendation: {recommendation}." if recommendation else "View your report."),
+            text_direction=text_direction,
         )
     except Exception:
         # Fallback to simple wrapper if template fails
@@ -482,7 +525,8 @@ def notify_admin_new_subscription(user_email: str, ticker: str) -> None:
         html_body = template.render(
             user_email=user_email,
             ticker=ticker_upper,
-            dashboard_url=_get_frontend_url()
+            dashboard_url=_get_frontend_url(),
+            text_direction="ltr"  # Admin emails are in English
         )
     except Exception:
         # Fallback to simple wrapper if template fails
@@ -523,11 +567,14 @@ def send_contact_form_email(name: str, email: str, message: str) -> bool:
     dashboard_url = _get_frontend_url()
     try:
         template = _jinja_env.get_template("contact_form_email.html")
+        # Detect text direction from the message content
+        text_direction = _detect_text_direction(message or "")
         html_body = template.render(
             name=name or "(not provided)",
             email=email or "",
             message=message or "(empty)",
             dashboard_url=dashboard_url,
+            text_direction=text_direction,
         )
     except Exception:
         inner = f"""
@@ -565,7 +612,10 @@ def send_welcome_email(user_email: str) -> bool:
     
     try:
         template = _jinja_env.get_template("welcome_email.html")
-        html_body = template.render(dashboard_url=dashboard_url)
+        html_body = template.render(
+            dashboard_url=dashboard_url,
+            text_direction="ltr"  # Welcome emails are in English
+        )
     except Exception:
         # Fallback to simple wrapper if template fails
         html_body = _html_email_wrapper(
@@ -606,7 +656,11 @@ def send_subscription_confirmation(user_email: str, ticker: str) -> bool:
     
     try:
         template = _jinja_env.get_template("subscription_confirmation_email.html")
-        html_body = template.render(ticker=ticker_upper, stock_url=stock_url)
+        html_body = template.render(
+            ticker=ticker_upper,
+            stock_url=stock_url,
+            text_direction="ltr"  # Subscription emails are in English
+        )
     except Exception:
         # Fallback to simple wrapper if template fails
         html_body = _html_email_wrapper(
@@ -957,6 +1011,8 @@ def send_daily_digest_email_to_user(execution_id: int, user_email: str) -> bool:
             template = _jinja_env.get_template("daily_digest_email.html")
             # Format narrative so section headings and colors roughly match the dashboard Brief card.
             narrative_html = _format_brief_narrative_for_email(narrative)
+            # Detect text direction from narrative content
+            text_direction = _detect_text_direction(narrative)
             html_body = template.render(
                 digest_date=digest_date,
                 span_label=span_label,
@@ -965,6 +1021,7 @@ def send_daily_digest_email_to_user(execution_id: int, user_email: str) -> bool:
                 what_to_watch=what_to_watch,
                 brief_url=brief_url,
                 preheader=f"Your User Daily Brief for {digest_date} is ready." if digest_date else "Your User Daily Brief is ready.",
+                text_direction=text_direction,
             )
         except Exception:
             # Fallback to simple wrapper if template fails

@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html>
+<html{% if text_direction == 'rtl' %} dir="rtl"{% endif %}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
 </head>
-<body style="margin:0;padding:0;background:#dbe4ee;font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;color:#0f172a;">
+<body style="margin:0;padding:0;background:#dbe4ee;font-family:{% if text_direction == 'rtl' %}'Arial', 'Segoe UI', Tahoma, sans-serif{% else %}'Segoe UI', Tahoma, Geneva, Verdana, sans-serif{% endif %};color:#0f172a;direction:{% if text_direction == 'rtl' %}rtl{% else %}ltr{% endif %};">
   <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
     {% block preheader %}{% endblock %}
   </div>

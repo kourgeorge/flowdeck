@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { digestApi, type DigestBriefItem, type DigestResponse } from '../services/api';
 import { getErrorMessage } from '../utils/errorHandling';
+import { getTextDirection } from '../utils/rtl';
 
 const BRIEF_SECTION_TOKENS = ['market_highlights', 'key_signals', 'what_to_watch', 'risks_opportunities'];
 const IMPORTANT_EVENT_LABELS: Record<string, string> = {
@@ -391,6 +392,9 @@ export default function BriefPage() {
       | Record<string, { name?: string | null; price?: number | null; change_pct?: number | null; span_type?: string }>
       | undefined;
 
+    // Detect text direction from narrative content
+    const textDirection = getTextDirection(brief.narrative);
+
     return (
       <div className="mt-3 pt-3 border-t border-slate-800 space-y-4 text-base">
         <div>
@@ -400,6 +404,7 @@ export default function BriefPage() {
           <div
             className="prose prose-invert prose-sm max-w-none text-slate-300 text-sm"
             style={{ fontFamily: 'Menlo, Monaco, "Courier New", monospace' }}
+            dir={textDirection}
           >
             <ReactMarkdown components={briefMarkdownComponents} remarkPlugins={[remarkGfm]}>
               {briefHasStructuredSections(brief.narrative) ? narrativeForDisplay(brief.narrative) : brief.narrative}
@@ -414,9 +419,11 @@ export default function BriefPage() {
                 What to watch next
               </span>
             </div>
-            <ReactMarkdown components={briefMarkdownComponents} remarkPlugins={[remarkGfm]}>
-              {brief.what_to_watch}
-            </ReactMarkdown>
+            <div dir={textDirection}>
+              <ReactMarkdown components={briefMarkdownComponents} remarkPlugins={[remarkGfm]}>
+                {brief.what_to_watch}
+              </ReactMarkdown>
+            </div>
           </div>
         )}
 

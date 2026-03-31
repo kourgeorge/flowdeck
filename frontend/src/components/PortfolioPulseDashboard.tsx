@@ -19,6 +19,7 @@ import DashboardPriceTrendsChart from './DashboardPriceTrendsChart';
 import { SubscribedChangeColumnsChart } from './OverviewStatsPanel';
 import { formatPrice } from '../utils/currency';
 import { getErrorMessage } from '../utils/errorHandling';
+import { getTextDirection } from '../utils/rtl';
 
 type CompanyInfo = {
   name: string;
@@ -1161,7 +1162,7 @@ export default function PortfolioPulseDashboard({
             <span>{activeBrief.digest_date}</span>
           </div>
           <div className="min-h-[240px] rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
-            <div className="prose prose-invert prose-sm max-w-none">
+            <div className="prose prose-invert prose-sm max-w-none" dir={getTextDirection(briefNarrativePreview)}>
               <ReactMarkdown components={latestBriefMarkdownComponents}>
                 {briefNarrativePreview}
               </ReactMarkdown>
@@ -1195,6 +1196,7 @@ export default function PortfolioPulseDashboard({
             <p
               className="mt-1.5 text-sm leading-6 text-emerald-50"
               style={{ fontFamily: BRIEF_FONT_FAMILY }}
+              dir={getTextDirection(briefWatchPreview)}
             >
               {briefWatchPreview}
             </p>
