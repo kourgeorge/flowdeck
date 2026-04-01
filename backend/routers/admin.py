@@ -1,6 +1,7 @@
 """Admin-only API: stats, users, reports, analyses, subscriptions."""
 
 import json
+import os
 from datetime import datetime, timedelta, timezone, date
 from typing import Any, Optional
 
@@ -481,6 +482,9 @@ def run_mission_control(
     requested, invalid_tickers = _normalize_requested_tickers(body.tickers, mission_tickers)
     running_by_ticker = admin_service.get_running_statuses_by_ticker(mission_tickers)
     has_report_today = admin_service.get_tickers_with_report_on_date(db, date_str)
+    
+    # Read LLM provider from environment (same as regular analysis endpoint)
+    llm_provider = os.environ.get("LLM_PROVIDER", "azure").strip().lower()
 
     triggered: list[MissionControlRunItem] = []
     already_running: list[MissionControlRunItem] = []
@@ -506,7 +510,7 @@ def run_mission_control(
                 analysis_date=date_str,
                 analysts=["market", "social", "news", "fundamentals", "technical", "sec"],
                 research_depth=5,
-                llm_provider="azure",
+                llm_provider=llm_provider,
                 progress_callback=None,
                 analysis_run_id=analysis_run_id,
             )
