@@ -24,6 +24,8 @@ config["data_vendors"] = {
 ta = TradingAgentsGraph(debug=True, config=config)
 
 # forward propagate
+# Optional: pass a session_id to maintain context across multiple invocations
+# session_id = "nvda-analysis-session-1"
 _, decision = ta.propagate("NVDA", "2024-05-10")
 print(decision)
 

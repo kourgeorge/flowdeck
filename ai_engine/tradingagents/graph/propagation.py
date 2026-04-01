@@ -51,9 +51,17 @@ class Propagator:
             "report_resources": [],
         }
 
-    def get_graph_args(self) -> Dict[str, Any]:
-        """Get arguments for the graph invocation."""
+    def get_graph_args(self, session_id: str = None) -> Dict[str, Any]:
+        """Get arguments for the graph invocation.
+        
+        Args:
+            session_id: Optional session ID to maintain context across invocations
+        """
+        config = {"recursion_limit": self.max_recur_limit}
+        if session_id:
+            config["configurable"] = {"thread_id": session_id}
+        
         return {
             "stream_mode": "values",
-            "config": {"recursion_limit": self.max_recur_limit},
+            "config": config,
         }

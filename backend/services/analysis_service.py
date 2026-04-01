@@ -322,7 +322,9 @@ class AnalysisService:
 
             # Initialize state
             init_agent_state = graph.propagator.create_initial_state(ticker, analysis_date)
-            args = graph.propagator.get_graph_args()
+            # Use analysis_run_id as session_id to maintain context across all requests in this execution
+            session_id = f"analysis-{analysis_run_id}"
+            args = graph.propagator.get_graph_args(session_id=session_id)
             generated_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
             models_used = {
                 "provider": graph.config.get("llm_provider"),

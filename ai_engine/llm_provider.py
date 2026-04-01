@@ -126,7 +126,7 @@ def get_llm(
     *,
     model_name: Optional[str] = None,
     temperature: Optional[float] = None,
-    request_timeout: Optional[int] = 120,
+    request_timeout: Optional[int] = 300,
 ) -> BaseChatModel:
     """
     Return a chat model for the given role (or explicit model name) using config.
@@ -236,7 +236,7 @@ class LLMProvider:
         *,
         model_name: Optional[str] = None,
         temperature: Optional[float] = None,
-        request_timeout: Optional[int] = 120,
+        request_timeout: Optional[int] = 300,
     ) -> BaseChatModel:
         """Return the chat model for the given role."""
         return get_llm(
@@ -252,7 +252,7 @@ class LLMProvider:
         *,
         model_name: Optional[str] = None,
         temperature: Optional[float] = None,
-        request_timeout: Optional[int] = 120,
+        request_timeout: Optional[int] = 300,
     ) -> BaseChatModel:
         """Return the deep-thinking model (reasoning, judge, complex tasks)."""
         return self.get_llm(
@@ -267,7 +267,7 @@ class LLMProvider:
         *,
         model_name: Optional[str] = None,
         temperature: Optional[float] = None,
-        request_timeout: Optional[int] = 120,
+        request_timeout: Optional[int] = 300,
     ) -> BaseChatModel:
         """Return the quick-thinking model (analysts, tools, routing)."""
         return self.get_llm(
