@@ -1,6 +1,5 @@
 import logging
 
-from langchain_core.messages import AIMessage
 from pydantic import BaseModel, Field
 from ..utils.agent_utils import get_ticker_data, get_ticker_quote, get_indicators
 from ..utils.advanced_technical_tools import (
@@ -8,7 +7,7 @@ from ..utils.advanced_technical_tools import (
     detect_regime,
     detect_support_resistance
 )
-from .helpers import _capture_usage, is_tool_result_message, try_structured_response
+from .isolated_context import run_analyst_with_isolated_context
 from .prompts import build_technical_analyst_prompt
 
 logger = logging.getLogger(__name__)
@@ -28,9 +27,6 @@ class TechnicalAnalysisOutput(BaseModel):
 def create_technical_analyst(llm):
 
     def technical_analyst_node(state):
-        current_date = state["trade_date"]
-        ticker = state["company_of_interest"]
-
         tools = [
             get_ticker_data,
             get_ticker_quote,
@@ -39,93 +35,17 @@ def create_technical_analyst(llm):
             detect_regime,
             detect_support_resistance,
         ]
-
-        prompt = build_technical_analyst_prompt(
-            tool_names=[tool.name for tool in tools],
-            current_date=current_date,
-            ticker=ticker,
-        )
-        state_messages = state["messages"]
-        structured_chain = prompt | llm.with_structured_output(TechnicalAnalysisOutput)
-
-        # Check if last message is a tool result (indicating we're ready for final response)
-        last_message = state_messages[-1] if state_messages else None
-        if is_tool_result_message(last_message):
-            report, technical_score, usage_meta = try_structured_response(
-                structured_chain,
-                state_messages,
-                score_field="technical_score",
-                logger=logger,
-                agent_name="Technical analyst",
-                llm=llm,
-            )
-            if report is not None:
-                out = {
-                    "messages": [AIMessage(content=report)],
-                    "technical_report": report,
-                    "technical_score": technical_score,
-                }
-                if usage_meta:
-                    out["report_usage"] = {"technical_report": usage_meta}
-                return out
-
-            fallback_result = (prompt | llm).invoke(state_messages)
-            fallback_report = (
-                fallback_result.content
-                if hasattr(fallback_result, "content")
-                else str(fallback_result)
-            )
-            usage_meta = _capture_usage(fallback_result, llm)
-            out = {
-                "messages": [fallback_result],
-                "technical_report": fallback_report,
-                "technical_score": None,
-            }
-            if usage_meta:
-                out["report_usage"] = {"technical_report": usage_meta}
-            return out
         
-        # Default: use tools (for initial calls or if structured output failed)
-        chain_with_tools = prompt | llm.bind_tools(tools)
-        result = chain_with_tools.invoke(state_messages)
-
-        # If no tool calls in result, we might be at final response
-        # Try structured output parsing
-        if not getattr(result, "tool_calls", []):
-            messages_with_result = [*state_messages, result]
-            report, technical_score, usage_meta = try_structured_response(
-                structured_chain,
-                messages_with_result,
-                score_field="technical_score",
-                logger=logger,
-                agent_name="Technical analyst",
-                llm=llm,
-            )
-            if report is not None:
-                out = {
-                    "messages": [AIMessage(content=report)],
-                    "technical_report": report,
-                    "technical_score": technical_score,
-                }
-                if usage_meta:
-                    out["report_usage"] = {"technical_report": usage_meta}
-                return out
-
-            report = result.content if hasattr(result, "content") else str(result)
-            usage_meta = _capture_usage(result, llm)
-            out = {
-                "messages": [result],
-                "technical_report": report,
-                "technical_score": None,
-            }
-            if usage_meta:
-                out["report_usage"] = {"technical_report": usage_meta}
-            return out
-
-        return {
-            "messages": [result],
-            "technical_report": "",
-            "technical_score": None,
-        }
+        return run_analyst_with_isolated_context(
+            state=state,
+            llm=llm,
+            tools=tools,
+            prompt_builder=build_technical_analyst_prompt,
+            structured_output_class=TechnicalAnalysisOutput,
+            score_field="technical_score",
+            report_field="technical_report",
+            agent_name="Technical Analyst",
+            temp_state_key="_technical_context",
+        )
 
     return technical_analyst_node

@@ -13,51 +13,41 @@ class ConditionalLogic:
 
     def should_continue_market(self, state: AgentState):
         """Determine if market analysis should continue."""
-        messages = state["messages"]
-        last_message = messages[-1]
-        if last_message.tool_calls:
+        # Check if analyst needs tools (indicated by temp state key)
+        if state.get("_market_context"):
             return "tools_market"
-        return "Msg Clear Market"
+        # Report is complete, move to next step (determined by graph edges)
+        return "complete"
 
     def should_continue_social(self, state: AgentState):
         """Determine if social media analysis should continue."""
-        messages = state["messages"]
-        last_message = messages[-1]
-        if last_message.tool_calls:
+        if state.get("_social_context"):
             return "tools_social"
-        return "Msg Clear Social"
+        return "complete"
 
     def should_continue_news(self, state: AgentState):
         """Determine if news analysis should continue."""
-        messages = state["messages"]
-        last_message = messages[-1]
-        if last_message.tool_calls:
+        if state.get("_news_context"):
             return "tools_news"
-        return "Msg Clear News"
+        return "complete"
 
     def should_continue_fundamentals(self, state: AgentState):
         """Determine if fundamentals analysis should continue."""
-        messages = state["messages"]
-        last_message = messages[-1]
-        if last_message.tool_calls:
+        if state.get("_fundamentals_context"):
             return "tools_fundamentals"
-        return "Msg Clear Fundamentals"
+        return "complete"
 
     def should_continue_technical(self, state: AgentState):
         """Determine if technical analysis should continue."""
-        messages = state["messages"]
-        last_message = messages[-1]
-        if last_message.tool_calls:
+        if state.get("_technical_context"):
             return "tools_technical"
-        return "Msg Clear Technical"
+        return "complete"
 
     def should_continue_sec(self, state: AgentState):
         """Determine if SEC analysis should continue."""
-        messages = state["messages"]
-        last_message = messages[-1]
-        if last_message.tool_calls:
+        if state.get("_sec_context"):
             return "tools_sec"
-        return "Msg Clear Sec"
+        return "complete"
 
     def should_continue_debate(self, state: AgentState) -> str:
         """Determine if debate should continue."""

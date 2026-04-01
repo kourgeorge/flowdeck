@@ -76,11 +76,19 @@ class RiskDebateState(TypedDict):
     count: Annotated[int, "Length of the current conversation"]  # Conversation length
 
 
-class AgentState(MessagesState):
+class AgentState(TypedDict):
     company_of_interest: Annotated[str, "Company that we are interested in trading"]
     trade_date: Annotated[str, "What date we are trading at"]
 
     sender: Annotated[str, "Agent that sent this message"]
+
+    # Temporary isolated message contexts for analysts (not shared between analysts)
+    _market_context: Annotated[Optional[List[Any]], "Isolated message context for market analyst"]
+    _social_context: Annotated[Optional[List[Any]], "Isolated message context for social media analyst"]
+    _news_context: Annotated[Optional[List[Any]], "Isolated message context for news analyst"]
+    _fundamentals_context: Annotated[Optional[List[Any]], "Isolated message context for fundamentals analyst"]
+    _technical_context: Annotated[Optional[List[Any]], "Isolated message context for technical analyst"]
+    _sec_context: Annotated[Optional[List[Any]], "Isolated message context for SEC analyst"]
 
     # research step
     market_report: Annotated[str, "Report from the Market Analyst"]

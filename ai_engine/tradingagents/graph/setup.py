@@ -4,13 +4,13 @@ from typing import Any, Dict
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langgraph.graph import END, StateGraph, START
-from langgraph.prebuilt import ToolNode
 
 from ..agents import *
 from ..agents.utils.agent_states import AgentState
 
 from .conditional_logic import ConditionalLogic
 from .tool_node_with_resources import make_extract_resources_node
+from .isolated_tool_node import make_isolated_tool_node
 
 
 class GraphSetup:
@@ -20,7 +20,7 @@ class GraphSetup:
         self,
         quick_thinking_llm: BaseChatModel,
         deep_thinking_llm: BaseChatModel,
-        tool_nodes: Dict[str, ToolNode],
+        tool_nodes: Dict[str, Any],
         bull_memory,
         bear_memory,
         trader_memory,
@@ -56,50 +56,65 @@ class GraphSetup:
         if len(selected_analysts) == 0:
             raise ValueError("Trading Agents Graph Setup Error: no analysts selected!")
 
-        # Create analyst nodes
+        # Create analyst nodes and isolated tool nodes
         analyst_nodes = {}
-        delete_nodes = {}
         tool_nodes = {}
 
         if "market" in selected_analysts:
-            analyst_nodes["market"] = create_market_analyst(
-                self.quick_thinking_llm
+            from ..agents.utils.agent_utils import (
+                get_ticker_data, get_ticker_quote, get_indicators, get_analysts_recommendation
             )
-            delete_nodes["market"] = create_msg_delete()
-            tool_nodes["market"] = self.tool_nodes["market"]
+            analyst_nodes["market"] = create_market_analyst(self.quick_thinking_llm)
+            tool_nodes["market"] = make_isolated_tool_node(
+                [get_ticker_data, get_ticker_quote, get_indicators, get_analysts_recommendation],
+                "_market_context"
+            )
 
         if "social" in selected_analysts:
-            analyst_nodes["social"] = create_social_media_analyst(
-                self.quick_thinking_llm
+            from ..agents.utils.agent_utils import get_ticker_quote, get_reddit_company_social
+            analyst_nodes["social"] = create_social_media_analyst(self.quick_thinking_llm)
+            tool_nodes["social"] = make_isolated_tool_node(
+                [get_ticker_quote, get_reddit_company_social],
+                "_social_context"
             )
-            delete_nodes["social"] = create_msg_delete()
-            tool_nodes["social"] = self.tool_nodes["social"]
 
         if "news" in selected_analysts:
-            analyst_nodes["news"] = create_news_analyst(
-                self.quick_thinking_llm
+            from ..agents.utils.agent_utils import get_news, get_global_news, get_insider_transactions
+            analyst_nodes["news"] = create_news_analyst(self.quick_thinking_llm)
+            tool_nodes["news"] = make_isolated_tool_node(
+                [get_news, get_global_news, get_insider_transactions],
+                "_news_context"
             )
-            delete_nodes["news"] = create_msg_delete()
-            tool_nodes["news"] = self.tool_nodes["news"]
 
         if "fundamentals" in selected_analysts:
-            analyst_nodes["fundamentals"] = create_fundamentals_analyst(
-                self.quick_thinking_llm
+            from ..agents.utils.agent_utils import (
+                get_fundamentals, get_balance_sheet, get_cashflow, get_income_statement
             )
-            delete_nodes["fundamentals"] = create_msg_delete()
-            tool_nodes["fundamentals"] = self.tool_nodes["fundamentals"]
+            analyst_nodes["fundamentals"] = create_fundamentals_analyst(self.quick_thinking_llm)
+            tool_nodes["fundamentals"] = make_isolated_tool_node(
+                [get_fundamentals, get_balance_sheet, get_cashflow, get_income_statement],
+                "_fundamentals_context"
+            )
 
         if "technical" in selected_analysts:
-            analyst_nodes["technical"] = create_technical_analyst(
-                self.quick_thinking_llm
+            from ..agents.utils.agent_utils import get_ticker_data, get_ticker_quote, get_indicators
+            from ..agents.utils.advanced_technical_tools import (
+                detect_divergence, detect_regime, detect_support_resistance
             )
-            delete_nodes["technical"] = create_msg_delete()
-            tool_nodes["technical"] = self.tool_nodes["technical"]
+            analyst_nodes["technical"] = create_technical_analyst(self.quick_thinking_llm)
+            tool_nodes["technical"] = make_isolated_tool_node(
+                [get_ticker_data, get_ticker_quote, get_indicators,
+                 detect_divergence, detect_regime, detect_support_resistance],
+                "_technical_context"
+            )
 
         if "sec" in selected_analysts:
+            from ..agents.utils.edgar_tools import get_edgar_filing_content
             analyst_nodes["sec"] = create_sec_analyst(self.quick_thinking_llm)
-            delete_nodes["sec"] = create_msg_delete()
-            tool_nodes["sec"] = self.tool_nodes["sec"]
+            tool_nodes["sec"] = make_isolated_tool_node(
+                [get_edgar_filing_content],
+                "_sec_context"
+            )
 
         # Create researcher and manager nodes
         bull_researcher_node = create_bull_researcher(
@@ -128,9 +143,6 @@ class GraphSetup:
         # Add analyst nodes to the graph
         for analyst_type, node in analyst_nodes.items():
             workflow.add_node(f"{analyst_type.capitalize()} Analyst", node)
-            workflow.add_node(
-                f"Msg Clear {analyst_type.capitalize()}", delete_nodes[analyst_type]
-            )
             workflow.add_node(f"tools_{analyst_type}", tool_nodes[analyst_type])
             workflow.add_node(f"extract_resources_{analyst_type}", extract_resources_node)
 
@@ -153,24 +165,25 @@ class GraphSetup:
         for i, analyst_type in enumerate(selected_analysts):
             current_analyst = f"{analyst_type.capitalize()} Analyst"
             current_tools = f"tools_{analyst_type}"
-            current_clear = f"Msg Clear {analyst_type.capitalize()}"
+            
+            # Determine next node
+            if i < len(selected_analysts) - 1:
+                next_node = f"{selected_analysts[i+1].capitalize()} Analyst"
+            else:
+                next_node = "Bull Researcher"
 
             # Add conditional edges for current analyst
             workflow.add_conditional_edges(
                 current_analyst,
                 getattr(self.conditional_logic, f"should_continue_{analyst_type}"),
-                [current_tools, current_clear],
+                {
+                    current_tools: current_tools,
+                    "complete": next_node,
+                },
             )
             # After tools run, extract resources then loop back to analyst
             workflow.add_edge(current_tools, f"extract_resources_{analyst_type}")
             workflow.add_edge(f"extract_resources_{analyst_type}", current_analyst)
-
-            # Connect to next analyst or to Bull Researcher if this is the last analyst
-            if i < len(selected_analysts) - 1:
-                next_analyst = f"{selected_analysts[i+1].capitalize()} Analyst"
-                workflow.add_edge(current_clear, next_analyst)
-            else:
-                workflow.add_edge(current_clear, "Bull Researcher")
 
         # Add remaining edges
         workflow.add_conditional_edges(

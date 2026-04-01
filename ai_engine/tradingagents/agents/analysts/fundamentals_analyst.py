@@ -1,9 +1,8 @@
 import logging
 
-from langchain_core.messages import AIMessage
 from pydantic import BaseModel, Field
 from ..utils.agent_utils import get_fundamentals, get_balance_sheet, get_cashflow, get_income_statement
-from .helpers import _capture_usage, is_tool_result_message, try_structured_response
+from .isolated_context import run_analyst_with_isolated_context
 from .prompts import build_fundamentals_analyst_prompt
 
 logger = logging.getLogger(__name__)
@@ -22,104 +21,23 @@ class FundamentalsAnalysisOutput(BaseModel):
 
 def create_fundamentals_analyst(llm):
     def fundamentals_analyst_node(state):
-        current_date = state["trade_date"]
-        ticker = state["company_of_interest"]
-
         tools = [
             get_fundamentals,
             get_balance_sheet,
             get_cashflow,
             get_income_statement,
         ]
-
-        prompt = build_fundamentals_analyst_prompt(
-            tool_names=[tool.name for tool in tools],
-            current_date=current_date,
-            ticker=ticker,
-        )
-        state_messages = state["messages"]
-        structured_chain = prompt | llm.with_structured_output(
-            FundamentalsAnalysisOutput
-        )
-
-        # Check if last message is a tool result (indicating we're ready for final response)
-        last_message = state_messages[-1] if state_messages else None
-        if is_tool_result_message(last_message):
-            report, fundamentals_score, usage_meta = try_structured_response(
-                structured_chain,
-                state_messages,
-                score_field="fundamentals_score",
-                logger=logger,
-                agent_name="Fundamentals analyst",
-                llm=llm,
-            )
-            if report is not None:
-                out = {
-                    "messages": [AIMessage(content=report)],
-                    "fundamentals_report": report,
-                    "fundamentals_score": fundamentals_score,
-                }
-                if usage_meta:
-                    out["report_usage"] = {"fundamentals_report": usage_meta}
-                return out
-
-            fallback_result = (prompt | llm).invoke(state_messages)
-            fallback_report = (
-                fallback_result.content
-                if hasattr(fallback_result, "content")
-                else str(fallback_result)
-            )
-            usage_meta = _capture_usage(fallback_result, llm)
-            out = {
-                "messages": [fallback_result],
-                "fundamentals_report": fallback_report,
-                "fundamentals_score": None,
-            }
-            if usage_meta:
-                out["report_usage"] = {"fundamentals_report": usage_meta}
-            return out
         
-        # Default: use tools (for initial calls or if structured output failed)
-        chain_with_tools = prompt | llm.bind_tools(tools)
-        result = chain_with_tools.invoke(state_messages)
-
-        # If no tool calls in result, we might be at final response
-        # Try structured output parsing
-        if not getattr(result, "tool_calls", []):
-            messages_with_result = [*state_messages, result]
-            report, fundamentals_score, usage_meta = try_structured_response(
-                structured_chain,
-                messages_with_result,
-                score_field="fundamentals_score",
-                logger=logger,
-                agent_name="Fundamentals analyst",
-                llm=llm,
-            )
-            if report is not None:
-                out = {
-                    "messages": [AIMessage(content=report)],
-                    "fundamentals_report": report,
-                    "fundamentals_score": fundamentals_score,
-                }
-                if usage_meta:
-                    out["report_usage"] = {"fundamentals_report": usage_meta}
-                return out
-
-            report = result.content if hasattr(result, "content") else str(result)
-            usage_meta = _capture_usage(result, llm)
-            out = {
-                "messages": [result],
-                "fundamentals_report": report,
-                "fundamentals_score": None,
-            }
-            if usage_meta:
-                out["report_usage"] = {"fundamentals_report": usage_meta}
-            return out
-
-        return {
-            "messages": [result],
-            "fundamentals_report": "",
-            "fundamentals_score": None,
-        }
+        return run_analyst_with_isolated_context(
+            state=state,
+            llm=llm,
+            tools=tools,
+            prompt_builder=build_fundamentals_analyst_prompt,
+            structured_output_class=FundamentalsAnalysisOutput,
+            score_field="fundamentals_score",
+            report_field="fundamentals_report",
+            agent_name="Fundamentals Analyst",
+            temp_state_key="_fundamentals_context",
+        )
 
     return fundamentals_analyst_node

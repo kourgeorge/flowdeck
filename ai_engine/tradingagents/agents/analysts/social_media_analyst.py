@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from langchain_core.messages import AIMessage, ToolMessage
 from pydantic import BaseModel, Field
 
-from ..utils.agent_utils import get_reddit_company_social
+from ..utils.agent_utils import get_reddit_company_social, get_ticker_quote
 from .helpers import _capture_usage
 from .prompts import build_social_media_analyst_prompt
 
@@ -23,12 +23,13 @@ def create_social_media_analyst(llm):
     def social_media_analyst_node(state):
         current_date = state["trade_date"]
         ticker = state["company_of_interest"]
-        messages = state.get("messages") or []
+        # Use isolated local context
+        local_messages = state.get("_social_context", [])
 
-        # Last message is a tool result → we have quote + Reddit data.
-        last_message = messages[-1] if messages else None
+        # Check if we have tool results in local context
+        last_message = local_messages[-1] if local_messages else None
         is_after_tool_call = isinstance(last_message, ToolMessage)
-        tool_message_count = sum(1 for m in messages if isinstance(m, ToolMessage))
+        tool_message_count = sum(1 for m in local_messages if isinstance(m, ToolMessage))
 
         if is_after_tool_call:
             prompt = build_social_media_analyst_prompt(
@@ -40,15 +41,16 @@ def create_social_media_analyst(llm):
             can_retry_reddit = tool_message_count == 2
             if can_retry_reddit:
                 chain = prompt | llm.bind_tools([get_reddit_company_social])
-                result = chain.invoke(messages)
+                result = chain.invoke(local_messages)
                 if getattr(result, "tool_calls", None):
                     usage_meta = _capture_usage(result, llm)
-                    out = {"messages": [result], "sentiment_report": "", "sentiment_score": None}
+                    local_messages.append(result)
+                    out = {"_social_context": local_messages, "sentiment_report": "", "sentiment_score": None}
                     if usage_meta:
                         out["report_usage"] = {"sentiment_report": usage_meta}
                     return out
                 # No tool_calls → LLM is done; get structured report from current messages (include this response for context).
-                messages_plus = list(messages) + [result]
+                messages_plus = list(local_messages) + [result]
                 try:
                     chain_structured = prompt | llm.with_structured_output(SocialMediaAnalysisOutput)
                     structured_result = chain_structured.invoke(messages_plus)
@@ -61,7 +63,7 @@ def create_social_media_analyst(llm):
             else:
                 try:
                     chain = prompt | llm.with_structured_output(SocialMediaAnalysisOutput)
-                    structured_result = chain.invoke(messages)
+                    structured_result = chain.invoke(local_messages)
                     report = structured_result.report
                     sentiment_score = structured_result.sentiment_score
                 except Exception:
@@ -70,7 +72,7 @@ def create_social_media_analyst(llm):
                 result = AIMessage(content=report)
             usage_meta = _capture_usage(result, llm)
             out = {
-                "messages": [result],
+                "_social_context": None,  # Clear temp state
                 "sentiment_report": report,
                 "sentiment_score": sentiment_score,
             }
@@ -97,6 +99,7 @@ def create_social_media_analyst(llm):
                 },
             ],
         )
-        return {"messages": [result], "sentiment_report": "", "sentiment_score": None}
+        local_messages.append(result)
+        return {"_social_context": local_messages, "sentiment_report": "", "sentiment_score": None}
 
     return social_media_analyst_node

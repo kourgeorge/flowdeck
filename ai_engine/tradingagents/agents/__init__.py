@@ -1,4 +1,3 @@
-from .utils.agent_utils import create_msg_delete
 from .utils.agent_states import AgentState, InvestDebateState, RiskDebateState
 from .utils.memory import FinancialSituationMemory
 
@@ -24,7 +23,6 @@ from .trader.trader import create_trader
 __all__ = [
     "FinancialSituationMemory",
     "AgentState",
-    "create_msg_delete",
     "InvestDebateState",
     "RiskDebateState",
     "create_bear_researcher",

@@ -19,14 +19,27 @@ _TOOL_OUTPUT_PREVIEW_MAX = 500
 
 def make_extract_resources_node():
     """
-    Return a node function that reads state["messages"], finds the last
+    Return a node function that reads isolated context keys, finds the last
     AIMessage with tool_calls and the following ToolMessages, extracts
     resources, and returns {"report_resources": new_entries} (reducer merges).
-    Run this node after the ToolNode so state already has the new messages.
+    Run this node after the tool node so state already has the new messages.
     """
     def node(state: Dict[str, Any]) -> Dict[str, Any]:
         new_resources: List[Dict[str, Any]] = []
-        messages = state.get("messages") or []
+        
+        # Check all possible isolated context keys
+        context_keys = [
+            "_market_context", "_social_context", "_news_context",
+            "_fundamentals_context", "_technical_context", "_sec_context"
+        ]
+        
+        messages = []
+        for key in context_keys:
+            ctx = state.get(key)
+            if ctx:
+                messages = ctx
+                break
+        
         if not messages:
             return {}
         # Find the last AIMessage with tool_calls and collect following ToolMessages
