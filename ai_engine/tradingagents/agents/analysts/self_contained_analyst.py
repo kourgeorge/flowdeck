@@ -46,14 +46,22 @@ def run_self_contained_analyst(
         tools: List of tools available to the analyst
         prompt_builder: Function to build the analyst prompt
         structured_output_class: Pydantic model for structured output
-        score_field: Name of the score field in structured output
-        report_field: Name of the report field in state
+        score_field: Name of the score field in structured output (e.g., "technical_score")
+        report_field: Name of the report field in state (e.g., "technical_report")
         agent_name: Name of the analyst (for logging)
         max_iterations: Maximum number of tool-calling iterations
     
     Returns:
         Dictionary with report, score, usage metadata, and resources
     """
+    # Validate that score_field exists in the structured output class
+    # Use model_fields for Pydantic V2 compatibility
+    model_fields = getattr(structured_output_class, 'model_fields', None) or getattr(structured_output_class, '__fields__', {})
+    if score_field not in model_fields:
+        raise ValueError(
+            f"{agent_name}: score_field '{score_field}' not found in {structured_output_class.__name__}. "
+            f"Available fields: {list(model_fields.keys())}"
+        )
     current_date = state["trade_date"]
     ticker = state["company_of_interest"]
     
@@ -148,7 +156,12 @@ def run_self_contained_analyst(
         agent_name=agent_name,
         llm=llm,
     )
+    
+    # Derive state keys from report_field
+    # e.g., "technical_report" -> "technical_key_takeaways"
     takeaways_state_key = report_field.replace("_report", "_key_takeaways")
+    # Use the explicit score_field instead of deriving it
+    score_state_key = score_field
     
     # Track final usage
     if final_usage:
@@ -159,7 +172,7 @@ def run_self_contained_analyst(
         logger.info(f"{agent_name} completed successfully with score {score}")
         return {
             report_field: report,
-            f"{report_field.replace('_report', '_score')}": score,
+            score_state_key: score,
             takeaways_state_key: key_takeaways,
             "report_usage": {report_field: total_usage},
             "report_resources": resources_used,
@@ -178,9 +191,12 @@ def run_self_contained_analyst(
         for key in ["input_tokens", "output_tokens", "total_tokens", "cost_usd"]:
             total_usage[key] += fallback_usage.get(key, 0)
     
+    # Use explicit score_field instead of string manipulation
+    score_state_key = score_field
+    
     return {
         report_field: fallback_report,
-        f"{report_field.replace('_report', '_score')}": None,
+        score_state_key: None,
         takeaways_state_key: [],
         "report_usage": {report_field: total_usage},
         "report_resources": resources_used,
