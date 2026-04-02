@@ -4,13 +4,15 @@ from typing import Any, Dict
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langgraph.graph import END, StateGraph, START
+from langgraph.types import Send
 
 from ..agents import *
 from ..agents.utils.agent_states import AgentState
 
-from .conditional_logic import ConditionalLogic
-from .tool_node_with_resources import make_extract_resources_node
-from .isolated_tool_node import make_isolated_tool_node
+# Conditional logic no longer needed - analysts are self-contained
+# from .conditional_logic import ConditionalLogic
+# from .tool_node_with_resources import make_extract_resources_node
+# from .isolated_tool_node import make_isolated_tool_node
 
 
 class GraphSetup:
@@ -20,18 +22,16 @@ class GraphSetup:
         self,
         quick_thinking_llm: BaseChatModel,
         deep_thinking_llm: BaseChatModel,
-        tool_nodes: Dict[str, Any],
         bull_memory,
         bear_memory,
         trader_memory,
         invest_judge_memory,
         risk_manager_memory,
-        conditional_logic: ConditionalLogic,
+        conditional_logic: Any,
     ):
         """Initialize with required components."""
         self.quick_thinking_llm = quick_thinking_llm
         self.deep_thinking_llm = deep_thinking_llm
-        self.tool_nodes = tool_nodes
         self.bull_memory = bull_memory
         self.bear_memory = bear_memory
         self.trader_memory = trader_memory
@@ -40,7 +40,10 @@ class GraphSetup:
         self.conditional_logic = conditional_logic
 
     def setup_graph(
-        self, selected_analysts=["market", "social", "news", "fundamentals"]
+        self,
+        selected_analysts=["market", "social", "news", "fundamentals"],
+        *,
+        parallel_analysts: bool = True,
     ):
         """Set up and compile the agent workflow graph.
 
@@ -52,69 +55,32 @@ class GraphSetup:
                 - "fundamentals": Fundamentals analyst
                 - "technical": Technical analyst (advanced pattern recognition)
                 - "sec": SEC/Regulatory analyst (EDGAR risk factors, MD&A, competition)
+            parallel_analysts: If True and more than one analyst is selected, run analyst
+                nodes in parallel (fan-out from START, then barrier before Bull Researcher).
+                If False, preserve the previous sequential ordering of selected_analysts.
         """
         if len(selected_analysts) == 0:
             raise ValueError("Trading Agents Graph Setup Error: no analysts selected!")
 
-        # Create analyst nodes and isolated tool nodes
+        # Create self-contained analyst nodes
         analyst_nodes = {}
-        tool_nodes = {}
-
         if "market" in selected_analysts:
-            from ..agents.utils.agent_utils import (
-                get_ticker_data, get_ticker_quote, get_indicators, get_analysts_recommendation
-            )
             analyst_nodes["market"] = create_market_analyst(self.quick_thinking_llm)
-            tool_nodes["market"] = make_isolated_tool_node(
-                [get_ticker_data, get_ticker_quote, get_indicators, get_analysts_recommendation],
-                "_market_context"
-            )
 
         if "social" in selected_analysts:
-            from ..agents.utils.agent_utils import get_ticker_quote, get_reddit_company_social
             analyst_nodes["social"] = create_social_media_analyst(self.quick_thinking_llm)
-            tool_nodes["social"] = make_isolated_tool_node(
-                [get_ticker_quote, get_reddit_company_social],
-                "_social_context"
-            )
 
         if "news" in selected_analysts:
-            from ..agents.utils.agent_utils import get_news, get_global_news, get_insider_transactions
             analyst_nodes["news"] = create_news_analyst(self.quick_thinking_llm)
-            tool_nodes["news"] = make_isolated_tool_node(
-                [get_news, get_global_news, get_insider_transactions],
-                "_news_context"
-            )
 
         if "fundamentals" in selected_analysts:
-            from ..agents.utils.agent_utils import (
-                get_fundamentals, get_balance_sheet, get_cashflow, get_income_statement
-            )
             analyst_nodes["fundamentals"] = create_fundamentals_analyst(self.quick_thinking_llm)
-            tool_nodes["fundamentals"] = make_isolated_tool_node(
-                [get_fundamentals, get_balance_sheet, get_cashflow, get_income_statement],
-                "_fundamentals_context"
-            )
 
         if "technical" in selected_analysts:
-            from ..agents.utils.agent_utils import get_ticker_data, get_ticker_quote, get_indicators
-            from ..agents.utils.advanced_technical_tools import (
-                detect_divergence, detect_regime, detect_support_resistance
-            )
             analyst_nodes["technical"] = create_technical_analyst(self.quick_thinking_llm)
-            tool_nodes["technical"] = make_isolated_tool_node(
-                [get_ticker_data, get_ticker_quote, get_indicators,
-                 detect_divergence, detect_regime, detect_support_resistance],
-                "_technical_context"
-            )
 
         if "sec" in selected_analysts:
-            from ..agents.utils.edgar_tools import get_edgar_filing_content
             analyst_nodes["sec"] = create_sec_analyst(self.quick_thinking_llm)
-            tool_nodes["sec"] = make_isolated_tool_node(
-                [get_edgar_filing_content],
-                "_sec_context"
-            )
 
         # Create researcher and manager nodes
         bull_researcher_node = create_bull_researcher(
@@ -138,13 +104,10 @@ class GraphSetup:
 
         # Create workflow
         workflow = StateGraph(AgentState)
-        extract_resources_node = make_extract_resources_node()
 
-        # Add analyst nodes to the graph
+        # Add analyst nodes to the graph (self-contained, no tool nodes needed)
         for analyst_type, node in analyst_nodes.items():
             workflow.add_node(f"{analyst_type.capitalize()} Analyst", node)
-            workflow.add_node(f"tools_{analyst_type}", tool_nodes[analyst_type])
-            workflow.add_node(f"extract_resources_{analyst_type}", extract_resources_node)
 
         # Add other nodes
         workflow.add_node("Bull Researcher", bull_researcher_node)
@@ -156,34 +119,28 @@ class GraphSetup:
         workflow.add_node("Safe Analyst", safe_analyst)
         workflow.add_node("Risk Judge", risk_manager_node)
 
-        # Define edges
-        # Start with the first analyst
-        first_analyst = selected_analysts[0]
-        workflow.add_edge(START, f"{first_analyst.capitalize()} Analyst")
+        analyst_node_names = [
+            f"{analyst_type.capitalize()} Analyst" for analyst_type in selected_analysts
+        ]
 
-        # Connect analysts in sequence
-        for i, analyst_type in enumerate(selected_analysts):
-            current_analyst = f"{analyst_type.capitalize()} Analyst"
-            current_tools = f"tools_{analyst_type}"
-            
-            # Determine next node
-            if i < len(selected_analysts) - 1:
-                next_node = f"{selected_analysts[i+1].capitalize()} Analyst"
-            else:
-                next_node = "Bull Researcher"
+        # Analyst phase: parallel (Send) or sequential chain; then join to Bull Researcher.
+        if parallel_analysts and len(selected_analysts) > 1:
 
-            # Add conditional edges for current analyst
-            workflow.add_conditional_edges(
-                current_analyst,
-                getattr(self.conditional_logic, f"should_continue_{analyst_type}"),
-                {
-                    current_tools: current_tools,
-                    "complete": next_node,
-                },
-            )
-            # After tools run, extract resources then loop back to analyst
-            workflow.add_edge(current_tools, f"extract_resources_{analyst_type}")
-            workflow.add_edge(f"extract_resources_{analyst_type}", current_analyst)
+            def fan_out_analysts(state) -> list[Send]:
+                return [Send(name, state) for name in analyst_node_names]
+
+            workflow.add_conditional_edges(START, fan_out_analysts)
+            workflow.add_edge(analyst_node_names, "Bull Researcher")
+        else:
+            first_analyst = selected_analysts[0]
+            workflow.add_edge(START, f"{first_analyst.capitalize()} Analyst")
+            for i, analyst_type in enumerate(selected_analysts):
+                current_analyst = f"{analyst_type.capitalize()} Analyst"
+                if i < len(selected_analysts) - 1:
+                    next_node = f"{selected_analysts[i + 1].capitalize()} Analyst"
+                else:
+                    next_node = "Bull Researcher"
+                workflow.add_edge(current_analyst, next_node)
 
         # Add remaining edges
         workflow.add_conditional_edges(

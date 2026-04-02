@@ -20,14 +20,8 @@ from services.data_cache import (
     get_stop_requested,
     set_analysis_status,
 )
-from services.key_takeaways import extract_key_takeaways
 from services.report_service import save_report, update_execution_status
 from services.email_service import notify_subscribers_new_report
-
-try:
-    from ai_engine.tradingagents.agents.utils.insight_extraction import extract_key_takeaways_structured
-except ImportError:
-    extract_key_takeaways_structured = None
 
 # Load environment variables from .env file (backend or repo root)
 env_path = Path(__file__).parent.parent / '.env'
@@ -77,6 +71,29 @@ def _progress_log(msg: str) -> None:
     """Print a progress line to stderr with timestamp."""
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[Progress]:\t {ts} - {msg}", file=sys.stderr, flush=True)
+
+
+def _normalize_takeaway_list(val) -> list:
+    """Non-empty strings only, max 5 (from graph structured fields or similar)."""
+    if not val:
+        return []
+    if not isinstance(val, (list, tuple)):
+        return []
+    return [str(x).strip() for x in val if x and str(x).strip()][:5]
+
+
+# Saved report type -> AgentState key produced by the graph (avoid a second LLM for takeaways).
+_REPORT_TO_STATE_TAKEAWAYS_KEY = {
+    "market_report": "market_key_takeaways",
+    "sentiment_report": "sentiment_key_takeaways",
+    "news_report": "news_key_takeaways",
+    "fundamentals_report": "fundamentals_key_takeaways",
+    "technical_report": "technical_key_takeaways",
+    "sec_report": "sec_key_takeaways",
+    "investment_plan": "investment_plan_key_takeaways",
+    "trader_investment_plan": "trader_key_takeaways",
+    "final_trade_decision": "final_report_key_takeaways",
+}
 
 
 def extract_content_string(content):
@@ -376,9 +393,32 @@ class AnalysisService:
                         analysis_run_id, key, e,
                     )
 
-            def _write_report(key, content, score, label, llm_usage=None, resources=None, **extra):
+            def _get_or_extract_takeaways(report_key, content, chunk=None):
+                """Use structured takeaways from graph state only; no content scraping or extra LLM."""
+                if report_key in _report_takeaways:
+                    logger.info(
+                        "Key takeaways extraction skipped (cached) analysis_run_id=%s report_type=%s",
+                        analysis_run_id, report_key,
+                    )
+                    return _report_takeaways[report_key]
+                state_key = _REPORT_TO_STATE_TAKEAWAYS_KEY.get(report_key)
+                if chunk is not None and state_key:
+                    preferred = _normalize_takeaway_list(chunk.get(state_key))
+                    if preferred:
+                        _report_takeaways[report_key] = preferred
+                        logger.info(
+                            "Key takeaways from graph state analysis_run_id=%s report_type=%s items=%s",
+                            analysis_run_id, report_key, len(preferred),
+                        )
+                        return preferred
+                takeaways: list = []
+                _report_takeaways[report_key] = takeaways
+                return takeaways
+
+            def _write_report(key, content, score, label, llm_usage=None, resources=None, chunk=None, **extra):
                 try:
-                    data = _build_report_json(content, score, label, _takeaways(content), **extra)
+                    takeaways = _get_or_extract_takeaways(key, content, chunk)
+                    data = _build_report_json(content, score, label, takeaways, **extra)
                     meta = data.get("metadata", {})
                     meta.update({k: v for k, v in data.items() if k not in ("metadata", "content")})
                     if llm_usage:
@@ -439,6 +479,12 @@ class AnalysisService:
                     last_analyst_report_key = report_key
                     break
 
+            # Track which reports have been written to avoid duplicate processing across chunks
+            _written_reports = set()
+
+            # Store extracted takeaways to avoid re-extraction across chunks
+            _report_takeaways = {}
+
             # Stream the analysis
             _progress_log(f"Analysis started analysis_run_id={ar_id} ticker={ticker}")
             last_chunk = None
@@ -476,14 +522,6 @@ class AnalysisService:
                     # Log to file
                     with open(log_file, "a", encoding='utf-8') as f:
                         f.write(f"{timestamp} [{msg_type}] {content.replace(chr(10), ' ')}\n")
-                
-                def _takeaways(content):
-                    if extract_key_takeaways_structured and analysis_info.get("graph"):
-                        try:
-                            return extract_key_takeaways_structured(analysis_info["graph"].deep_thinking_llm, content)
-                        except Exception:
-                            pass
-                    return extract_key_takeaways(content)
 
                 # Update reports and agent status
                 _reports = [
@@ -497,26 +535,37 @@ class AnalysisService:
                 for key, chunk_key, score_key, label, agent in _reports:
                     if chunk_key in chunk and chunk[chunk_key]:
                         c = chunk[chunk_key]
-                        analysis_info["reports"][key] = c
-                        analysis_info["agent_statuses"][agent] = "completed"
-                        analyst_key = report_key_to_analyst.get(key)
-                        if analyst_key is not None and analysts:
-                            try:
-                                idx = analysts.index(analyst_key)
-                                if idx + 1 < len(analysts):
-                                    next_key = analysts[idx + 1]
-                                    next_agent = analyst_status_map_run.get(next_key)
-                                    if next_agent:
-                                        analysis_info["agent_statuses"][next_agent] = "in_progress"
-                                        analysis_info["current_agent"] = next_agent
-                                elif last_analyst_report_key and key == last_analyst_report_key:
-                                    analysis_info["current_agent"] = "Research Manager"
-                            except ValueError:
-                                pass
-                        self._persist_analysis_status(analysis_run_id)
-                        report_usage = chunk.get("report_usage") or {}
-                        _write_report(key, c, chunk.get(score_key), label, llm_usage=report_usage.get(key), resources=chunk.get("report_resources"))
-                        _progress_log(f"{agent} completed → {key} saved")
+                        # Only process if not already written
+                        if key not in _written_reports:
+                            analysis_info["reports"][key] = c
+                            analysis_info["agent_statuses"][agent] = "completed"
+                            analyst_key = report_key_to_analyst.get(key)
+                            if analyst_key is not None and analysts:
+                                try:
+                                    idx = analysts.index(analyst_key)
+                                    if idx + 1 < len(analysts):
+                                        next_key = analysts[idx + 1]
+                                        next_agent = analyst_status_map_run.get(next_key)
+                                        if next_agent:
+                                            analysis_info["agent_statuses"][next_agent] = "in_progress"
+                                            analysis_info["current_agent"] = next_agent
+                                    elif last_analyst_report_key and key == last_analyst_report_key:
+                                        analysis_info["current_agent"] = "Research Manager"
+                                except ValueError:
+                                    pass
+                            self._persist_analysis_status(analysis_run_id)
+                            report_usage = chunk.get("report_usage") or {}
+                            _write_report(
+                                key,
+                                c,
+                                chunk.get(score_key),
+                                label,
+                                llm_usage=report_usage.get(key),
+                                resources=chunk.get("report_resources"),
+                                chunk=chunk,
+                            )
+                            _written_reports.add(key)
+                            _progress_log(f"{agent} completed → {key} saved")
                         if last_analyst_report_key and key == last_analyst_report_key:
                             analysis_info["agent_statuses"]["Bull Researcher"] = "in_progress"
                             analysis_info["agent_statuses"]["Bear Researcher"] = "in_progress"
@@ -538,12 +587,13 @@ class AnalysisService:
                         self._persist_analysis_status(analysis_run_id)
                         _progress_log("Bull/Bear/Research Manager completed → Trader started")
                 
-                if "investment_plan" in chunk and chunk["investment_plan"]:
+                if "investment_plan" in chunk and chunk["investment_plan"] and "investment_plan" not in _written_reports:
                     bull = chunk.get("bull_summary") or []
                     bear = chunk.get("bear_summary") or []
                     content = chunk["investment_plan"]
                     analysis_info["reports"]["investment_plan"] = content
-                    meta = _build_report_json(content, chunk.get("recommendation_score"), "Conviction Score", _takeaways(content),
+                    inv_takeaways = _get_or_extract_takeaways("investment_plan", content, chunk)
+                    meta = _build_report_json(content, chunk.get("recommendation_score"), "Conviction Score", inv_takeaways,
                         expected_return_pct=chunk.get("expected_return_pct"),
                         bear_case_return_pct=chunk.get("bear_case_return_pct"),
                         bull_case_return_pct=chunk.get("bull_case_return_pct"),
@@ -558,6 +608,7 @@ class AnalysisService:
                         inner["total_tokens"] = usage.get("total_tokens")
                         inner["cost_usd"] = usage.get("cost_usd")
                     inner["resources"] = chunk.get("report_resources") or []
+                    _written_reports.add("investment_plan")
                     save_report(
                         analysis_info["analysis_run_id"],
                         "investment_plan",
@@ -585,6 +636,7 @@ class AnalysisService:
                         recommendation=chunk.get("trader_recommendation"),
                         tps_plan=tps or None,
                         resources=chunk.get("report_resources"),
+                        chunk=chunk,
                     )
                     analysis_info["agent_statuses"]["Risky Analyst"] = "in_progress"
                     analysis_info["agent_statuses"]["Safe Analyst"] = "in_progress"
@@ -619,7 +671,7 @@ class AnalysisService:
                     analysis_info["reports"]["final_trade_decision"] = content
                     analysis_info["recommendation"] = final_rec
                     rscore = chunk.get("risk_score")
-                    kt = (chunk.get("final_report_key_takeaways") or [])[:5] or extract_key_takeaways(content)
+                    kt = _get_or_extract_takeaways("final_trade_decision", content, chunk)
                     meta = _build_report_json(content, rscore, "Confidence", kt,
                         recommendation=final_rec,
                         confidence=(rscore / 10.0) if rscore is not None else None)
@@ -670,7 +722,15 @@ class AnalysisService:
                         continue
                     try:
                         report_usage = last_chunk.get("report_usage") or {}
-                        _write_report(report_key, content, last_chunk.get(score_key), label, llm_usage=report_usage.get(report_key), resources=last_chunk.get("report_resources"))
+                        _write_report(
+                            report_key,
+                            content,
+                            last_chunk.get(score_key),
+                            label,
+                            llm_usage=report_usage.get(report_key),
+                            resources=last_chunk.get("report_resources"),
+                            chunk=last_chunk,
+                        )
                         analysis_info["reports"][report_key] = content
                         analysis_info["agent_statuses"][agent] = "completed"
                         _progress_log(f"{agent} report saved (from final state)")

@@ -15,6 +15,8 @@ DEFAULT_CONFIG = {
     "deep_think_llm": "o4-mini",
     "quick_think_llm": "gpt-4o-mini",
     "backend_url": "https://api.openai.com/v1",
+    # Run selected analysts concurrently (LangGraph Send + join) when more than one is selected
+    "parallel_analysts": True,
     # Debate and discussion settings
     "max_debate_rounds": 2,
     "max_risk_discuss_rounds": 2,

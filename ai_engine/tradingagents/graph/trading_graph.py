@@ -41,8 +41,8 @@ from .conditional_logic import ConditionalLogic
 from .setup import GraphSetup
 from .propagation import Propagator
 from .reflection import Reflector
-from .signal_processing import SignalProcessor
-from .tool_node_with_resources import make_extract_resources_node
+from .signal_processing import resolve_trade_signal_from_state
+# tool_node_with_resources no longer needed - analysts are self-contained
 
 
 class TradingAgentsGraph:
@@ -87,17 +87,16 @@ class TradingAgentsGraph:
         self.risk_manager_memory = FinancialSituationMemory("risk_manager_memory", self.config)
 
         # Create tool nodes
-        self.tool_nodes = self._create_tool_nodes()
-
-        # Initialize components (pass config so research_depth / max_debate_rounds / max_risk_discuss_rounds apply)
+        # Initialize conditional logic for debate and risk analysis loops
         self.conditional_logic = ConditionalLogic(
             max_debate_rounds=self.config.get("max_debate_rounds", 1),
             max_risk_discuss_rounds=self.config.get("max_risk_discuss_rounds", 1),
         )
+        
+        # Initialize graph setup (analysts are now self-contained, no tool nodes needed)
         self.graph_setup = GraphSetup(
             self.quick_thinking_llm,
             self.deep_thinking_llm,
-            self.tool_nodes,
             self.bull_memory,
             self.bear_memory,
             self.trader_memory,
@@ -108,57 +107,18 @@ class TradingAgentsGraph:
 
         self.propagator = Propagator()
         self.reflector = Reflector(self.quick_thinking_llm)
-        self.signal_processor = SignalProcessor(self.quick_thinking_llm)
-
         # State tracking
         self.curr_state = None
         self.ticker = None
         self.log_states_dict = {}  # date to full state dict
 
         # Set up the graph
-        self.graph = self.graph_setup.setup_graph(selected_analysts)
-
-    def _create_tool_nodes(self) -> Dict[str, ToolNode]:
-        """Create tool nodes for different data sources."""
-        from ..agents.utils.advanced_technical_tools import (
-            detect_divergence,
-            detect_regime,
-            detect_support_resistance
+        self.graph = self.graph_setup.setup_graph(
+            selected_analysts,
+            parallel_analysts=self.config.get("parallel_analysts", True),
         )
 
-        return {
-            "market": ToolNode([
-                get_ticker_data,
-                get_ticker_quote,
-                get_indicators,
-                get_analysts_recommendation,
-            ]),
-            "social": ToolNode([
-                get_ticker_quote,
-                get_reddit_company_social,
-            ]),
-            "news": ToolNode([
-                get_news,
-                get_global_news,
-                get_insider_sentiment,
-                get_insider_transactions,
-            ]),
-            "fundamentals": ToolNode([
-                get_fundamentals,
-                get_balance_sheet,
-                get_cashflow,
-                get_income_statement,
-            ]),
-            "sec": ToolNode([get_edgar_filing_content]),
-            "technical": ToolNode([
-                get_ticker_data,
-                get_ticker_quote,
-                get_indicators,
-                detect_divergence,
-                detect_regime,
-                detect_support_resistance,
-            ]),
-        }
+    # _create_tool_nodes removed - analysts are now self-contained and handle tools internally
 
     def propagate(self, company_name, trade_date, session_id: str = None):
         """Run the trading agents graph for a company on a specific date.
@@ -198,8 +158,8 @@ class TradingAgentsGraph:
         # Log state
         self._log_state(trade_date, final_state)
 
-        # Return decision and processed signal
-        return final_state, self.process_signal(final_state["final_trade_decision"])
+        # Return decision and BUY/SELL/HOLD from structured fields (no extra LLM on narrative)
+        return final_state, resolve_trade_signal_from_state(final_state)
 
     def _log_state(self, trade_date, final_state):
         """Log the final state to a JSON file."""
@@ -275,6 +235,3 @@ class TradingAgentsGraph:
             self.curr_state, returns_losses, self.risk_manager_memory
         )
 
-    def process_signal(self, full_signal):
-        """Process a signal to extract the core decision."""
-        return self.signal_processor.process_signal(full_signal)

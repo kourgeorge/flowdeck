@@ -104,6 +104,10 @@ class TraderOutput(BaseModel):
             "Omit optional sub-fields you cannot reasonably infer. Never fabricate prices."
         )
     )
+    key_takeaways: List[str] = Field(
+        default_factory=list,
+        description="3-5 one-sentence takeaways for traders from this decision and plan.",
+    )
 
 
 def _tps_to_json(plan: TpsPlan) -> str:
@@ -186,7 +190,8 @@ def create_trader(llm, memory):
                     f"entry.near (entry price as a number, or price-band string like '123.45 ±1%'), "
                     f"risk.stop (hard stop price as a number), risk.max_loss (default '1%'). "
                     f"Add optional fields only when you can infer them from the analysis. "
-                    f"Never fabricate prices.\n\n"
+                    f"Never fabricate prices.\n"
+                    f"4) key_takeaways: 3-5 one-sentence trader takeaways.\n\n"
                     f"Do not forget to utilize lessons from past decisions to learn from your mistakes. "
                     f"Here are some reflections from similar situations you traded in and the lessons learned: "
                     f"{past_memory_str}"
@@ -211,6 +216,12 @@ def create_trader(llm, memory):
             tps_obj = getattr(structured_response, "tps_plan", None)
             if tps_obj is not None:
                 tps_plan_yaml = _tps_to_json(tps_obj)
+            trader_key_takeaways = list(
+                getattr(structured_response, "key_takeaways", None) or []
+            )[:5]
+            trader_key_takeaways = [
+                str(t).strip() for t in trader_key_takeaways if str(t).strip()
+            ]
             result_message = AIMessage(content=trader_investment_plan)
         except Exception:
             raw_result = llm.invoke(messages)
@@ -225,9 +236,11 @@ def create_trader(llm, memory):
                 if isinstance(raw_result, BaseMessage)
                 else AIMessage(content=trader_investment_plan)
             )
+            trader_key_takeaways = []
         out = {
             "messages": [result_message],
             "trader_investment_plan": trader_investment_plan,
+            "trader_key_takeaways": trader_key_takeaways,
             "trader_recommendation": recommendation,
             "trader_tps_plan": tps_plan_yaml,
             "sender": name,

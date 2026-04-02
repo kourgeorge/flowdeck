@@ -32,16 +32,30 @@ from ai_engine.llm_provider import get_config_from_env
 from ai_engine.tradingagents.graph.trading_graph import TradingAgentsGraph
 from ai_engine.tradingagents.default_config import DEFAULT_CONFIG
 
-# Backend services for key_takeaways, report saving, and email notifications
-from services.key_takeaways import extract_key_takeaways
+# Backend services for report saving, and email notifications
 from services.report_service import save_report
 from services.email_service import notify_subscribers_new_report
 from database import init_db
 
-try:
-    from ai_engine.tradingagents.agents.utils.insight_extraction import extract_key_takeaways_structured
-except ImportError:
-    extract_key_takeaways_structured = None
+def _normalize_takeaway_list(val) -> list:
+    if not val:
+        return []
+    if not isinstance(val, (list, tuple)):
+        return []
+    return [str(x).strip() for x in val if x and str(x).strip()][:5]
+
+
+_REPORT_TO_STATE_TAKEAWAYS_KEY = {
+    "market_report": "market_key_takeaways",
+    "sentiment_report": "sentiment_key_takeaways",
+    "news_report": "news_key_takeaways",
+    "fundamentals_report": "fundamentals_key_takeaways",
+    "technical_report": "technical_key_takeaways",
+    "sec_report": "sec_key_takeaways",
+    "investment_plan": "investment_plan_key_takeaways",
+    "trader_investment_plan": "trader_key_takeaways",
+    "final_trade_decision": "final_report_key_takeaways",
+}
 
 
 def _progress_log(msg: str) -> None:
@@ -177,13 +191,26 @@ def main() -> None:
     final_confidence = None
     initiator_email = (args.initiator_email or "").strip() or None
 
-    def _takeaways(content):
-        if extract_key_takeaways_structured and graph:
-            try:
-                return extract_key_takeaways_structured(graph.deep_thinking_llm, content)
-            except Exception:
-                pass
-        return extract_key_takeaways(content)
+    # Store extracted takeaways to avoid re-extraction
+    _report_takeaways = {}
+
+    def _get_or_extract_takeaways(report_key, content, chunk=None):
+        """Use graph structured takeaways only."""
+        if report_key in _report_takeaways:
+            logger.info(
+                "Key takeaways skipped (cached) analysis_run_id=%s report_type=%s",
+                analysis_run_id, report_key,
+            )
+            return _report_takeaways[report_key]
+        state_key = _REPORT_TO_STATE_TAKEAWAYS_KEY.get(report_key)
+        if chunk is not None and state_key:
+            preferred = _normalize_takeaway_list(chunk.get(state_key))
+            if preferred:
+                _report_takeaways[report_key] = preferred
+                return preferred
+        takeaways: list = []
+        _report_takeaways[report_key] = takeaways
+        return takeaways
 
     def _build_report_json(content, score, score_label, key_takeaways_list, **extra):
         meta = {"score_label": score_label or "Score", "analysis_date": analysis_date, "generated_at": generated_at, "models_used": models_used}
@@ -213,9 +240,10 @@ def main() -> None:
 
     analysis_quote_meta = _get_analysis_quote_meta()
 
-    def _write_report(key, content, score, label, llm_usage=None, resources=None, **extra):
+    def _write_report(key, content, score, label, llm_usage=None, resources=None, chunk=None, **extra):
         try:
-            data = _build_report_json(content, score, label, _takeaways(content), **extra)
+            takeaways = _get_or_extract_takeaways(key, content, chunk)
+            data = _build_report_json(content, score, label, takeaways, **extra)
             meta = data.get("metadata", {})
             meta.update({k: v for k, v in data.items() if k not in ("metadata", "content")})
             if llm_usage:
@@ -275,6 +303,9 @@ def main() -> None:
             heartbeat_thread = threading.Thread(target=heartbeat_loop, daemon=True)
             heartbeat_thread.start()
 
+            # Track which reports have been written to avoid duplicate processing
+            _written_reports = set()
+
             for chunk in graph.graph.stream(init_agent_state, **graph_args):
                 if chunk.get("messages"):
                     last_message = chunk["messages"][-1]
@@ -293,12 +324,21 @@ def main() -> None:
                     ("sec_report", "sec_report", "sec_score", "SEC Score", "SEC Analyst"),
                 ]
                 for key, chunk_key, score_key, label, agent in _reports:
-                    if chunk_key in chunk and chunk[chunk_key]:
+                    if chunk_key in chunk and chunk[chunk_key] and key not in _written_reports:
                         c = chunk[chunk_key]
                         reports[key] = c
                         agent_statuses[agent] = "completed"
                         report_usage = chunk.get("report_usage") or {}
-                        _write_report(key, c, chunk.get(score_key), label, llm_usage=report_usage.get(key), resources=chunk.get("report_resources"))
+                        _write_report(
+                            key,
+                            c,
+                            chunk.get(score_key),
+                            label,
+                            llm_usage=report_usage.get(key),
+                            resources=chunk.get("report_resources"),
+                            chunk=chunk,
+                        )
+                        _written_reports.add(key)
                         _progress_log(f"{agent} completed → {key} saved")
                         if last_analyst_report_key and key == last_analyst_report_key:
                             agent_statuses["Bull Researcher"] = "in_progress"
@@ -313,13 +353,14 @@ def main() -> None:
                     agent_statuses["Trader"] = "in_progress"
                     _progress_log("Bull/Bear/Research Manager completed → Trader started")
 
-                if chunk.get("investment_plan"):
+                if chunk.get("investment_plan") and "investment_plan" not in _written_reports:
                     bull = chunk.get("bull_summary") or []
                     bear = chunk.get("bear_summary") or []
                     content = chunk["investment_plan"]
                     reports["investment_plan"] = content
+                    inv_takeaways = _get_or_extract_takeaways("investment_plan", content, chunk)
                     meta = _build_report_json(
-                        content, chunk.get("recommendation_score"), "Conviction Score", _takeaways(content),
+                        content, chunk.get("recommendation_score"), "Conviction Score", inv_takeaways,
                         expected_return_pct=chunk.get("expected_return_pct"),
                         bear_case_return_pct=chunk.get("bear_case_return_pct"),
                         bull_case_return_pct=chunk.get("bull_case_return_pct"),
@@ -332,6 +373,7 @@ def main() -> None:
                         meta["output_tokens"] = usage.get("output_tokens")
                         meta["total_tokens"] = usage.get("total_tokens")
                         meta["cost_usd"] = usage.get("cost_usd")
+                    _written_reports.add("investment_plan")
                     save_report(
                         analysis_run_id,
                         "investment_plan",
@@ -353,6 +395,7 @@ def main() -> None:
                         llm_usage=report_usage.get("trader_investment_plan"),
                         recommendation=chunk.get("trader_recommendation"),
                         resources=chunk.get("report_resources"),
+                        chunk=chunk,
                     )
                     agent_statuses["Risky Analyst"] = "in_progress"
                     agent_statuses["Safe Analyst"] = "in_progress"
@@ -376,7 +419,7 @@ def main() -> None:
                     rscore = chunk.get("risk_score")
                     final_recommendation = chunk.get("recommendation") or chunk.get("trader_recommendation")
                     final_confidence = (rscore / 10.0) if rscore is not None else None
-                    kt = (chunk.get("final_report_key_takeaways") or [])[:5] or extract_key_takeaways(content)
+                    kt = _get_or_extract_takeaways("final_trade_decision", content, chunk)
                     meta = _build_report_json(
                         content, rscore, "Confidence", kt,
                         recommendation=chunk.get("recommendation"),

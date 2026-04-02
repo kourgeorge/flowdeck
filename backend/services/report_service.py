@@ -7,7 +7,6 @@ from typing import Optional, List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-from services.key_takeaways import extract_key_takeaways
 from database import SessionLocal
 from models.db_models import Report, Execution
 
@@ -100,14 +99,12 @@ def _report_row_to_dict(row: Report, date: str) -> Dict[str, Any]:
             pass
     content = row.content or ""
     analysis_date = meta.get("analysis_date") or date
-    key_takeaways = meta.get("key_takeaways")
-    if not key_takeaways and content:
-        key_takeaways = extract_key_takeaways(content)
+    key_takeaways = meta.get("key_takeaways") or []
     out = {
         "content": content,
         "score": meta.get("score"),
         "score_label": meta.get("score_label"),
-        "key_takeaways": key_takeaways or [],
+        "key_takeaways": key_takeaways,
         "analysis_date": analysis_date,
         "generated_at": meta.get("generated_at"),
         "days_ago": _days_ago(analysis_date, meta.get("generated_at")) or _days_ago(analysis_date, None),

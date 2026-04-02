@@ -33,6 +33,10 @@ class ResearchManagerOutput(BaseModel):
         default=None,
         description="Bull-case percentage return from current price (e.g. 9.41 for +9.41%). Upside scenario."
     )
+    key_takeaways: List[str] = Field(
+        default_factory=list,
+        description="3-5 one-sentence takeaways for traders from this investment plan and debate resolution.",
+    )
 
 
 def create_research_manager(llm, memory):
@@ -89,6 +93,8 @@ Take into account your past mistakes on similar situations. Use these insights t
 - bull_case_return_pct: Upside scenario percentage return (e.g. 9.41 for +9.41%).
 Use the debate and your view to estimate these three numbers. They must be numeric (can be negative for bear).
 
+**CRITICAL: You MUST provide key_takeaways as a list of 3-5 one-sentence trader-facing takeaways summarizing the plan and thesis.**
+
 Here are your past reflections on mistakes:
 \"{past_memory_str}\"
 
@@ -116,6 +122,10 @@ Debate History:
             expected_return_pct = getattr(structured_response, "expected_return_pct", None)
             bear_case_return_pct = getattr(structured_response, "bear_case_return_pct", None)
             bull_case_return_pct = getattr(structured_response, "bull_case_return_pct", None)
+            plan_key_takeaways = list(
+                getattr(structured_response, "key_takeaways", None) or []
+            )[:5]
+            plan_key_takeaways = [str(t).strip() for t in plan_key_takeaways if str(t).strip()]
 
             # Create a regular response object for compatibility
             class Response:
@@ -129,6 +139,7 @@ Debate History:
             recommendation_score = None
             bull_summary = []
             bear_summary = []
+            plan_key_takeaways = []
 
         new_investment_debate_state = {
             "judge_decision": investment_plan,
@@ -142,6 +153,7 @@ Debate History:
         out = {
             "investment_debate_state": new_investment_debate_state,
             "investment_plan": investment_plan,
+            "investment_plan_key_takeaways": plan_key_takeaways,
             "recommendation_score": recommendation_score,
             "bull_summary": bull_summary,
             "bear_summary": bear_summary,

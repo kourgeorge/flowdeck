@@ -1,32 +1,20 @@
 # TradingAgents/graph/signal_processing.py
 
-from langchain_core.language_models.chat_models import BaseChatModel
+from typing import Any, Mapping
+
+_VALID_SIGNALS = frozenset({"BUY", "SELL", "HOLD"})
 
 
-class SignalProcessor:
-    """Processes trading signals to extract actionable decisions."""
+def resolve_trade_signal_from_state(state: Mapping[str, Any]) -> str:
+    """Return BUY/SELL/HOLD from structured graph fields (Risk Manager, then Trader).
 
-    def __init__(self, quick_thinking_llm: BaseChatModel):
-        """Initialize with an LLM for processing."""
-        self.quick_thinking_llm = quick_thinking_llm
-
-    def process_signal(self, full_signal: str) -> str:
-        """
-        Process a full trading signal to extract the core decision.
-
-        Args:
-            full_signal: Complete trading signal text
-
-        Returns:
-            Extracted decision (BUY, SELL, or HOLD)
-        """
-        messages = [
-            (
-                "system",
-                "Never make up data. All claims must be clearly based on the data provided. "
-                "You are an efficient assistant designed to analyze paragraphs or financial reports provided by a group of analysts. Your task is to extract the investment decision: SELL, BUY, or HOLD. Provide only the extracted decision (SELL, BUY, or HOLD) as your output, without adding any additional text or information.",
-            ),
-            ("human", full_signal),
-        ]
-
-        return self.quick_thinking_llm.invoke(messages).content
+    Avoids a second LLM pass over the final narrative; matches streaming/analysis_service logic.
+    """
+    for key in ("recommendation", "trader_recommendation"):
+        raw = state.get(key)
+        if raw is None:
+            continue
+        normalized = str(raw).strip().upper()
+        if normalized in _VALID_SIGNALS:
+            return normalized
+    return "HOLD"

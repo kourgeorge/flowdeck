@@ -1,8 +1,10 @@
 import logging
+from typing import List
 
 from pydantic import BaseModel, Field
 from ..utils.agent_utils import get_fundamentals, get_balance_sheet, get_cashflow, get_income_statement
-from .isolated_context import run_analyst_with_isolated_context
+from .self_contained_analyst import create_self_contained_analyst
+from .output_schema import analyst_key_takeaways_field
 from .prompts import build_fundamentals_analyst_prompt
 
 logger = logging.getLogger(__name__)
@@ -17,27 +19,23 @@ class FundamentalsAnalysisOutput(BaseModel):
         ge=1, le=10,
         description="Fundamentals score from 1-10 indicating company financial health and fundamental strength. 1-3: Very weak fundamentals, 4-5: Neutral/mixed fundamentals, 6-7: Moderately strong fundamentals, 8-10: Very strong fundamentals"
     )
+    key_takeaways: List[str] = analyst_key_takeaways_field()
 
 
 def create_fundamentals_analyst(llm):
-    def fundamentals_analyst_node(state):
-        tools = [
+    """Create a self-contained fundamentals analyst that handles all tool calling internally."""
+    return create_self_contained_analyst(
+        llm=llm,
+        tools=[
             get_fundamentals,
             get_balance_sheet,
             get_cashflow,
             get_income_statement,
-        ]
-        
-        return run_analyst_with_isolated_context(
-            state=state,
-            llm=llm,
-            tools=tools,
-            prompt_builder=build_fundamentals_analyst_prompt,
-            structured_output_class=FundamentalsAnalysisOutput,
-            score_field="fundamentals_score",
-            report_field="fundamentals_report",
-            agent_name="Fundamentals Analyst",
-            temp_state_key="_fundamentals_context",
-        )
-
-    return fundamentals_analyst_node
+        ],
+        prompt_builder=build_fundamentals_analyst_prompt,
+        structured_output_class=FundamentalsAnalysisOutput,
+        score_field="fundamentals_score",
+        report_field="fundamentals_report",
+        agent_name="Fundamentals Analyst",
+        max_iterations=5,
+    )

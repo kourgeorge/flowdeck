@@ -5,7 +5,7 @@ from .conditional_logic import ConditionalLogic
 from .setup import GraphSetup
 from .propagation import Propagator
 from .reflection import Reflector
-from .signal_processing import SignalProcessor
+from .signal_processing import resolve_trade_signal_from_state
 
 __all__ = [
     "TradingAgentsGraph",
@@ -13,5 +13,5 @@ __all__ = [
     "GraphSetup",
     "Propagator",
     "Reflector",
-    "SignalProcessor",
+    "resolve_trade_signal_from_state",
 ]
