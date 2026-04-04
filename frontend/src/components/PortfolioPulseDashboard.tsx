@@ -1,4 +1,4 @@
-import { type ComponentProps, type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ComponentProps, type ReactNode, Suspense, useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Link, useNavigate } from 'react-router-dom';
 import {
@@ -17,6 +17,7 @@ import type { TickerWidget } from '../services/types';
 import AspectSpiderChart, { formatReportKey, getAnalysisScoreEntries, getScoreColor } from './AspectSpiderChart';
 import DashboardPriceTrendsChart from './DashboardPriceTrendsChart';
 import { SubscribedChangeColumnsChart } from './OverviewStatsPanel';
+import { DashboardPanelSkeleton, StatTileSkeleton } from './PortfolioPulseSkeleton';
 import { formatPrice } from '../utils/currency';
 import { getErrorMessage } from '../utils/errorHandling';
 import { getTextDirection } from '../utils/rtl';
@@ -1507,9 +1508,9 @@ export default function PortfolioPulseDashboard({
   );
 
   return (
-    <div className="space-y-4 animate-fade-in">
+    <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <section className="relative overflow-hidden rounded-[1.25rem] border border-cyan-400/25 bg-slate-900 px-5 py-5 shadow-[0_20px_60px_rgba(8,47,73,0.12)] xl:col-span-2">
+        <section className="relative overflow-hidden rounded-[1.25rem] border border-cyan-400/25 bg-slate-900 px-5 py-5 shadow-[0_20px_60px_rgba(8,47,73,0.12)] xl:col-span-2 animate-fade-in">
           <div className="pointer-events-none absolute -right-16 top-0 h-40 w-40 rounded-full bg-cyan-400/10 blur-3xl" />
           <div className="pointer-events-none absolute bottom-0 left-1/3 h-32 w-32 rounded-full bg-emerald-400/10 blur-3xl" />
           <div className="relative space-y-4">
@@ -1527,30 +1528,41 @@ export default function PortfolioPulseDashboard({
             </div>
 
             <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-              <StatTile
-                label="Tracked"
-                value={`${widgets.length}`}
-                hint={portfolioSummary.sectorExposure[0] ? portfolioSummary.sectorExposure[0].label : 'Add names'}
-                accentClass="bg-cyan-950/20"
-              />
-              <StatTile
-                label="AI Coverage"
-                value={widgets.length > 0 ? `${Math.round((portfolioSummary.reportCoverage / widgets.length) * 100)}%` : '0%'}
-                hint={`${portfolioSummary.reportCoverage} reports`}
-                accentClass="bg-emerald-950/20"
-              />
-              <StatTile
-                label="Avg Move"
-                value={formatPercent(portfolioSummary.avgMove)}
-                hint={`${portfolioSummary.advancers} up / ${portfolioSummary.decliners} down`}
-                accentClass="bg-sky-950/20"
-              />
-              <StatTile
-                label="Breadth"
-                value={overview ? `${marketSummary.sectorsUp}/${overview.sectors.length}` : '—'}
-                hint="sectors green"
-                accentClass="bg-indigo-950/20"
-              />
+              {isLoadingCompanyInfo && widgets.length === 0 ? (
+                <>
+                  <StatTileSkeleton />
+                  <StatTileSkeleton />
+                  <StatTileSkeleton />
+                  <StatTileSkeleton />
+                </>
+              ) : (
+                <>
+                  <StatTile
+                    label="Tracked"
+                    value={`${widgets.length}`}
+                    hint={portfolioSummary.sectorExposure[0] ? portfolioSummary.sectorExposure[0].label : 'Add names'}
+                    accentClass="bg-cyan-950/20"
+                  />
+                  <StatTile
+                    label="AI Coverage"
+                    value={widgets.length > 0 ? `${Math.round((portfolioSummary.reportCoverage / widgets.length) * 100)}%` : '0%'}
+                    hint={`${portfolioSummary.reportCoverage} reports`}
+                    accentClass="bg-emerald-950/20"
+                  />
+                  <StatTile
+                    label="Avg Move"
+                    value={formatPercent(portfolioSummary.avgMove)}
+                    hint={`${portfolioSummary.advancers} up / ${portfolioSummary.decliners} down`}
+                    accentClass="bg-sky-950/20"
+                  />
+                  <StatTile
+                    label="Breadth"
+                    value={overview ? `${marketSummary.sectorsUp}/${overview.sectors.length}` : '—'}
+                    hint="sectors green"
+                    accentClass="bg-indigo-950/20"
+                  />
+                </>
+              )}
             </div>
 
             <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_0.95fr_1.05fr]">
@@ -1649,23 +1661,32 @@ export default function PortfolioPulseDashboard({
           </div>
         </section>
 
-        {signalsPanel}
+        <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
+          {signalsPanel}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <div className="flex min-h-[360px] flex-col gap-4">
-          <DashboardPriceTrendsChart tickers={tickers} period="6mo" height={360} />
+        <div className="flex min-h-[360px] flex-col gap-4 animate-fade-in" style={{ animationDelay: '200ms' }}>
+          <Suspense fallback={<DashboardPanelSkeleton title="Price Trends" />}>
+            <DashboardPriceTrendsChart tickers={tickers} period="6mo" height={360} />
+          </Suspense>
           <div className="min-h-[320px]">
-            <SubscribedChangeColumnsChart widgets={widgets} height={320} />
+            <Suspense fallback={<DashboardPanelSkeleton title="Change Distribution" />}>
+              <SubscribedChangeColumnsChart widgets={widgets} height={320} />
+            </Suspense>
           </div>
         </div>
 
-        {latestBriefPanel}
+        <div className="animate-fade-in" style={{ animationDelay: '250ms' }}>
+          {latestBriefPanel}
+        </div>
 
-        <DashboardPanel
-          title="Portfolio Extremes & News"
-          subtitle="Best and worst performers, sector concentration, and the latest portfolio headlines."
-        >
+        <div className="animate-fade-in" style={{ animationDelay: '300ms' }}>
+          <DashboardPanel
+            title="Portfolio Extremes & News"
+            subtitle="Best and worst performers, sector concentration, and the latest portfolio headlines."
+          >
           <div className="space-y-3">
             {portfolioExtremesPanel}
             {sectorExposurePanel}
@@ -1784,7 +1805,8 @@ export default function PortfolioPulseDashboard({
               )}
             </div>
           </div>
-        </DashboardPanel>
+          </DashboardPanel>
+        </div>
       </div>
 
     </div>
