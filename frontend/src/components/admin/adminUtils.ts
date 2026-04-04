@@ -43,6 +43,37 @@ export function summarizeMissionRunResult(result: unknown): string {
   if (result && typeof result === 'object' && 'message' in result) {
     return String((result as { message: unknown }).message);
   }
+  
+  // Handle MissionControlRunResponse
+  if (result && typeof result === 'object') {
+    const r = result as {
+      triggered?: Array<{ ticker: string }>;
+      already_running?: Array<{ ticker: string }>;
+      skipped_existing?: string[];
+      invalid_tickers?: string[];
+      failed?: Array<{ ticker: string }>;
+    };
+    
+    const parts: string[] = [];
+    
+    if (r.triggered && r.triggered.length > 0) {
+      parts.push(`✓ Triggered: ${r.triggered.map(t => t.ticker).join(', ')}`);
+    }
+    if (r.already_running && r.already_running.length > 0) {
+      parts.push(`⟳ Already running: ${r.already_running.map(t => t.ticker).join(', ')}`);
+    }
+    if (r.skipped_existing && r.skipped_existing.length > 0) {
+      parts.push(`⊘ Skipped (recent): ${r.skipped_existing.join(', ')}`);
+    }
+    if (r.invalid_tickers && r.invalid_tickers.length > 0) {
+      parts.push(`✗ Invalid: ${r.invalid_tickers.join(', ')}`);
+    }
+    
+    if (parts.length > 0) {
+      return parts.join(' • ');
+    }
+  }
+  
   return JSON.stringify(result);
 }
 

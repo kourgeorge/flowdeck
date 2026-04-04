@@ -102,7 +102,9 @@ export default function MissionControlTab({
                         {r.ticker}
                       </Link>
                     </td>
-                    <td className="px-3 py-2 text-gray-300">{r.date ?? '—'}</td>
+                    <td className="px-3 py-2 text-gray-300">
+                      {r.date ? formatDate(r.date, true) : '—'}
+                    </td>
                     <td className="px-3 py-2 text-gray-300">
                       {r.current_agents && r.current_agents.length > 0
                         ? r.current_agents.length === 1
