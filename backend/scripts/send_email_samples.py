@@ -111,27 +111,60 @@ Near-term upside depends on earnings resilience and rate expectations staying st
 def _sample_scores() -> dict:
     return {
         "market_report": {
-            "score": 7.8,
-            "score_label": "Bullish",
-            "key_takeaways": ["Momentum is improving", "Market breadth remains supportive"],
+            "score": 8.0,
+            "score_label": "Market Score",
+            "key_takeaways": ["Strong market momentum with broad participation", "Sector rotation favoring growth stocks"],
         },
-        "fundamental_report": {
-            "score": 8.2,
-            "score_label": "Strong",
-            "key_takeaways": ["Revenue growth remains healthy"],
+        "sentiment_report": {
+            "score": 5.0,
+            "score_label": "Sentiment Score",
+            "key_takeaways": ["Mixed social sentiment with cautious optimism"],
+        },
+        "news_report": {
+            "score": 7.0,
+            "score_label": "News Score",
+            "key_takeaways": ["Positive earnings surprise exceeded expectations", "New product launch receiving favorable coverage"],
+        },
+        "fundamentals_report": {
+            "score": 3.0,
+            "score_label": "Fundamentals Score",
+            "key_takeaways": ["Revenue growth remains healthy but margins under pressure"],
+        },
+        "technical_report": {
+            "score": 7.0,
+            "score_label": "Technical Score",
+            "key_takeaways": ["Price action showing bullish momentum"],
+        },
+        "sec_report": {
+            "score": 5.0,
+            "score_label": "SEC Score",
+            "key_takeaways": ["Recent filings show standard corporate activity"],
         },
         "investment_plan": {
-            "score": 7.4,
-            "score_label": "Constructive",
+            "score": 6.0,
+            "score_label": "Conviction Score",
             "bull_viewpoint": [
-                "Earnings revisions are positive",
-                "Margins are resilient",
+                "Strong earnings growth trajectory",
+                "Market leadership in key segments",
+                "Expanding margins and operational efficiency",
             ],
             "bear_viewpoint": [
-                "Valuation is above sector median",
-                "Macro uncertainty could compress multiples",
+                "Valuation premium to sector peers",
+                "Macro headwinds could impact demand",
+                "Competitive pressure intensifying",
             ],
-            "key_takeaways": ["Risk/reward remains favorable with disciplined sizing"],
+            "key_takeaways": ["Risk/reward remains favorable with disciplined position sizing"],
+        },
+        "trader_investment_plan": {
+            "score_label": "Trader Plan",
+            "bull_viewpoint": ["Technical setup looks favorable"],
+            "bear_viewpoint": ["Watch for resistance at key levels"],
+        },
+        "final_trade_decision": {
+            "score": 6.0,
+            "score_label": "Confidence",
+            "bull_viewpoint": ["Multiple factors align for upside"],
+            "bear_viewpoint": ["Monitor risk factors closely"],
         },
     }
 

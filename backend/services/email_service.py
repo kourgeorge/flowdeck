@@ -320,21 +320,26 @@ def _build_report_email_bodies(
         for report_type, report_data in scores.items():
             score = report_data.get("score")
             score_label = report_data.get("score_label")
-            if score is not None or score_label:
+            # Only include items that have a score, exclude final_trade_decision
+            if score is not None and report_type != "final_trade_decision":
                 display_name = report_type.replace("_", " ").title()
+                # Remove " Report" suffix from display name
+                display_name = display_name.replace(" Report", "")
+                # Use consistent terminology with frontend
+                if display_name == "Investment Plan":
+                    display_name = "Research"
                 # Color code based on score
                 score_color = "#64748b"  # default gray
-                if score is not None:
-                    if score >= 7:
-                        score_color = "#1e40af"  # website dark-blue
-                    elif score >= 5:
-                        score_color = "#1e40af"  # website dark-blue
-                    else:
-                        score_color = "#dc2626"  # red-600
+                if score >= 7:
+                    score_color = "#1e40af"  # website dark-blue
+                elif score >= 5:
+                    score_color = "#1e40af"  # website dark-blue
+                else:
+                    score_color = "#dc2626"  # red-600
                 
                 scores_list.append({
                     "name": display_name,
-                    "score": f"{score:.1f}" if score is not None else None,
+                    "score": f"{score:.1f}",
                     "label": score_label,
                     "color": score_color
                 })
@@ -355,16 +360,17 @@ def _build_report_email_bodies(
                     elif isinstance(bv, str) and bv:
                         bear_view = [bv]
             
-            # Extract key takeaways/insights
-            if report_data.get("key_takeaways"):
-                takeaways = report_data.get("key_takeaways")
-                if isinstance(takeaways, list):
-                    key_insights.extend(takeaways[:3])  # Limit to first 3
-                elif isinstance(takeaways, str):
-                    key_insights.append(takeaways)
+            # Extract key takeaways/insights only from Market, News, and Fundamentals reports
+            if report_type in ("market_report", "news_report", "fundamentals_report"):
+                if report_data.get("key_takeaways"):
+                    takeaways = report_data.get("key_takeaways")
+                    if isinstance(takeaways, list):
+                        key_insights.extend(takeaways[:2])  # Limit to first 2 per report
+                    elif isinstance(takeaways, str):
+                        key_insights.append(takeaways)
     
-    # Limit key insights to 5 total
-    key_insights = key_insights[:5] if key_insights else None
+    # Limit key insights to 4 total (to keep email concise)
+    key_insights = key_insights[:4] if key_insights else None
     
     # Render HTML from template
     try:
