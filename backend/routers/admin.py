@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone, date
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 from sqlalchemy.orm import Session
 
 from auth import get_current_admin_user
@@ -17,6 +17,21 @@ from services import admin_service, token_service
 from services.data_cache import delete_analysis_status, list_running_analyses, set_stop_requested
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+# Base model with timezone-aware datetime serialization
+class TZAwareBaseModel(BaseModel):
+    """Base model that ensures datetime fields are serialized with timezone info."""
+    
+    @field_serializer('*', when_used='json')
+    def serialize_datetime(self, value: Any, _info) -> Any:
+        """Ensure datetime values are timezone-aware when serialized to JSON."""
+        if isinstance(value, datetime):
+            # If datetime is naive (no timezone), assume it's UTC
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=timezone.utc)
+            return value.isoformat()
+        return value
 
 
 def _normalize_requested_tickers(
@@ -45,7 +60,7 @@ def _normalize_requested_tickers(
 
 # --- Response schemas ---
 
-class AdminStatsResponse(BaseModel):
+class AdminStatsResponse(TZAwareBaseModel):
     total_users: int
     total_reports: int
     total_analysis_runs: int
@@ -57,7 +72,7 @@ class AdminStatsResponse(BaseModel):
     reports_last_7d: int
 
 
-class AdminUserItem(BaseModel):
+class AdminUserItem(TZAwareBaseModel):
     id: int
     email: str
     name: Optional[str]
@@ -66,12 +81,12 @@ class AdminUserItem(BaseModel):
     subscription_count: int
 
 
-class AdminUsersResponse(BaseModel):
+class AdminUsersResponse(TZAwareBaseModel):
     users: list[AdminUserItem]
     total: int
 
 
-class AdminReportItem(BaseModel):
+class AdminReportItem(TZAwareBaseModel):
     id: int
     ticker: str
     analysis_run_id: int
@@ -83,12 +98,12 @@ class AdminReportItem(BaseModel):
     cost_usd: Optional[float] = None
 
 
-class AdminReportsResponse(BaseModel):
+class AdminReportsResponse(TZAwareBaseModel):
     reports: list[AdminReportItem]
     total: int
 
 
-class AdminReportDetailResponse(BaseModel):
+class AdminReportDetailResponse(TZAwareBaseModel):
     id: int
     ticker: str
     analysis_run_id: int
@@ -103,7 +118,7 @@ class AdminReportDetailResponse(BaseModel):
     cost_usd: Optional[float] = None
 
 
-class AdminAnalysisItem(BaseModel):
+class AdminAnalysisItem(TZAwareBaseModel):
     id: int
     ticker: str
     creator_id: int
@@ -118,12 +133,12 @@ class AdminAnalysisItem(BaseModel):
     cost_usd: Optional[float] = None
 
 
-class AdminAnalysesResponse(BaseModel):
+class AdminAnalysesResponse(TZAwareBaseModel):
     analyses: list[AdminAnalysisItem]
     total: int
 
 
-class AdminSubscriptionItem(BaseModel):
+class AdminSubscriptionItem(TZAwareBaseModel):
     id: int
     user_id: int
     user_email: str
@@ -132,24 +147,24 @@ class AdminSubscriptionItem(BaseModel):
     created_at: datetime
 
 
-class AdminSubscriptionsResponse(BaseModel):
+class AdminSubscriptionsResponse(TZAwareBaseModel):
     subscriptions: list[AdminSubscriptionItem]
     total: int
 
 
-class AdminReportViewRunItem(BaseModel):
+class AdminReportViewRunItem(TZAwareBaseModel):
     ticker: str
     analysis_run_id: int
     unique_views: int
     last_viewed_at: datetime
 
 
-class AdminReportViewRunsResponse(BaseModel):
+class AdminReportViewRunsResponse(TZAwareBaseModel):
     runs: list[AdminReportViewRunItem]
     total_runs_with_views: int
 
 
-class AdminReportViewItem(BaseModel):
+class AdminReportViewItem(TZAwareBaseModel):
     id: int
     ticker: str
     analysis_run_id: int
@@ -159,7 +174,7 @@ class AdminReportViewItem(BaseModel):
     viewed_at: datetime
 
 
-class AdminReportViewsResponse(BaseModel):
+class AdminReportViewsResponse(TZAwareBaseModel):
     views: list[AdminReportViewItem]
     total: int
 
@@ -172,7 +187,7 @@ class AdminAddTokensResponse(BaseModel):
     token_balance: int
 
 
-class MissionControlTickerItem(BaseModel):
+class MissionControlTickerItem(TZAwareBaseModel):
     ticker: str
     name: Optional[str]
     quote_type: Optional[str]
@@ -188,7 +203,7 @@ class MissionControlTickerItem(BaseModel):
     last_status: Optional[str] = None  # Status of last execution: running | completed | failed
 
 
-class MissionControlResponse(BaseModel):
+class MissionControlResponse(TZAwareBaseModel):
     items: list[MissionControlTickerItem]
 
 
