@@ -925,12 +925,11 @@ def _format_brief_narrative_for_email(narrative: str) -> str:
         
         html_sections.append(
             (
-                f"<div style=\"margin:0 0 12px;padding:12px 14px;border-radius:10px;"
-                f"background:{styles['bg']};border:1px solid {styles['border']};\">"
-                f"<p style=\"margin:0 0 4px;font-size:13px;font-weight:600;"
-                f"letter-spacing:0.14em;text-transform:uppercase;color:{styles['title']};\">"
+                f"<div style=\"margin:0 0 20px;\">"
+                f"<p style=\"margin:0 0 8px;font-size:13px;font-weight:700;"
+                f"letter-spacing:0.08em;text-transform:uppercase;color:#64748b;\">"
                 f"{escaped_title}</p>"
-                f"<div style=\"font-size:13px;line-height:1.7;color:{styles['text']};\">"
+                f"<div style=\"font-size:14px;line-height:1.8;color:#0f172a;\">"
                 f"{body_html}</div></div>"
             )
         )
@@ -991,17 +990,15 @@ def send_daily_digest_email_to_user(execution_id: int, user_email: str) -> bool:
         share_url = get_share_url(execution_id)
         brief_url = share_url or f"{_get_frontend_url()}/dashboard?tab=digest"
 
-        subject_parts = ["Your User Daily Brief"]
-        if span_label:
-            subject_parts.append(f"({span_label})")
+        subject_parts = ["Your Flowdeck Daily Brief"]
         if digest_date:
-            subject_parts.append(f"– {digest_date}")
+            subject_parts.append(f"- {digest_date}")
         subject = " ".join(part for part in subject_parts if part)
 
         lines = []
-        header_line = "Your latest User Daily Brief is ready."
+        header_line = "Your latest Daily Brief is ready."
         if digest_date:
-            header_line = f"Your User Daily Brief for {digest_date} is ready."
+            header_line = f"Your Daily Brief for {digest_date} is ready."
         lines.append(header_line)
         if priority_tickers:
             lines.append("")
@@ -1026,15 +1023,15 @@ def send_daily_digest_email_to_user(execution_id: int, user_email: str) -> bool:
                 narrative_html=narrative_html,
                 what_to_watch=what_to_watch,
                 brief_url=brief_url,
-                preheader=f"Your User Daily Brief for {digest_date} is ready." if digest_date else "Your User Daily Brief is ready.",
+                preheader=f"Your Daily Brief for {digest_date} is ready." if digest_date else "Your Daily Brief is ready.",
                 text_direction=text_direction,
             )
         except Exception:
             # Fallback to simple wrapper if template fails
             html_body = _html_email_wrapper(
-                title="User Daily Brief",
-                inner_body=f"<p>Your User Daily Brief is ready. <a href='{brief_url}'>Open brief</a></p>",
-                preheader=f"Your User Daily Brief for {digest_date} is ready." if digest_date else "Your User Daily Brief is ready.",
+                title="Daily Brief",
+                inner_body=f"<p>Your Daily Brief is ready. <a href='{brief_url}'>Open brief</a></p>",
+                preheader=f"Your Daily Brief for {digest_date} is ready." if digest_date else "Your Daily Brief is ready.",
             )
 
         to_emails = [user_email]

@@ -7,13 +7,14 @@
 <p style="margin:0;">We will email you when a new analysis report is available for <strong style="color:#f8fafc;">{{ ticker }}</strong>.</p>
 {% endblock %}
 {% block content %}
-{% call ui.panel(title='Included with this subscription') %}
+<div style="margin:0 0 20px;">
+  <p style="margin:0 0 12px;font-size:13px;line-height:1.4;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">Included with this subscription</p>
   <ul style="margin:0;padding:0 0 0 20px;font-size:14px;line-height:1.8;color:#334155;">
-    <li>Open the latest report and key takeaways from the stock page.</li>
-    <li>Run a fresh deep-dive analysis whenever you want.</li>
-    <li>Manage or remove the subscription from your account at any time.</li>
+    <li style="margin-bottom:6px;">Open the latest report and key takeaways from the stock page.</li>
+    <li style="margin-bottom:6px;">Run a fresh deep-dive analysis whenever you want.</li>
+    <li style="margin-bottom:6px;">Manage or remove the subscription from your account at any time.</li>
   </ul>
-{% endcall %}
+</div>
 {% endblock %}
 {% block actions %}
 {{ ui.button(stock_url, 'View ' ~ ticker ~ ' on Flowdeck') }}

@@ -61,7 +61,7 @@ def _send_admin_sample(to_email: str, ticker: str) -> bool:
 def _send_daily_digest_sample(to_email: str, ticker: str) -> bool:
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     brief_url = f"{es._get_frontend_url()}/dashboard?tab=digest"
-    subject = f"Your User Daily Brief (Daily) – {today}"
+    subject = f"Your Flowdeck Daily Brief - {today}"
     narrative = """## Market Highlights
 The market opened with a constructive tone as large-cap technology continued to lead.
 
@@ -75,7 +75,7 @@ Near-term upside depends on earnings resilience and rate expectations staying st
         "macro headlines that could shift sentiment."
     )
     text_body = (
-        f"Your User Daily Brief for {today} is ready.\n\n"
+        f"Your Daily Brief for {today} is ready.\n\n"
         f"Focus: {ticker}, SPY, QQQ\n\n"
         f"{narrative}\n\n"
         f"What to watch\n{what_to_watch}\n\n"
@@ -91,13 +91,13 @@ Near-term upside depends on earnings resilience and rate expectations staying st
             narrative_html=es._format_brief_narrative_for_email(narrative),
             what_to_watch=what_to_watch,
             brief_url=brief_url,
-            preheader=f"Your User Daily Brief for {today} is ready.",
+            preheader=f"Your Daily Brief for {today} is ready.",
         )
     except Exception:
         html_body = es._html_email_wrapper(
-            title="User Daily Brief",
-            inner_body=f"<p>Your User Daily Brief is ready. <a href='{brief_url}'>Open brief</a></p>",
-            preheader=f"Your User Daily Brief for {today} is ready.",
+            title="Daily Brief",
+            inner_body=f"<p>Your Daily Brief is ready. <a href='{brief_url}'>Open brief</a></p>",
+            preheader=f"Your Daily Brief for {today} is ready.",
         )
 
     to_emails = [to_email]

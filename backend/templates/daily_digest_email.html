@@ -7,7 +7,7 @@
 <p style="margin:0 0 10px;font-size:13px;line-height:1.5;color:#93c5fd;font-weight:600;">{{ span_label }}</p>
 {% endif %}
 {% endblock %}
-{% block title %}User Daily Brief{% endblock %}
+{% block title %}Flowdeck Daily Brief{% endblock %}
 {% block intro %}
 {% if digest_date %}
 <p style="margin:0 0 8px;">{{ digest_date }}</p>
@@ -19,18 +19,21 @@
 {% endif %}
 {% endblock %}
 {% block content %}
-{% call ui.panel(title='Market overview') %}
+<div style="margin:0 0 24px;">
   <div style="font-size:14px;line-height:1.8;color:#0f172a;">
     {{ narrative_html|safe }}
   </div>
-{% endcall %}
+</div>
 {% if what_to_watch %}
-{% call ui.panel(title='What to watch', tone='soft') %}
+<div style="margin:0 0 24px;">
+  <p style="margin:0 0 12px;font-size:13px;line-height:1.4;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">What to watch</p>
   <div style="font-size:14px;line-height:1.8;color:#334155;white-space:pre-wrap;">{{ what_to_watch }}</div>
-{% endcall %}
+</div>
 {% endif %}
 {% endblock %}
 {% block actions %}
 {{ ui.button(brief_url, 'Open this brief in Flowdeck') }}
-{{ ui.link_block(brief_url, 'Open in browser', 'If the button above does not work, open the brief with', 'this browser link') }}
+<p style="margin:16px 0 0;font-size:13px;line-height:1.7;color:#64748b;text-align:center;">
+  Or <a href="{{ brief_url }}" style="color:#2563eb;text-decoration:none;font-weight:600;">open in your browser</a>
+</p>
 {% endblock %}

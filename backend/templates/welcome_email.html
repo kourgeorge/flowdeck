@@ -7,13 +7,14 @@
 <p style="margin:0;">Thanks for signing up. Your account is ready, and you can start using AI-powered stock analysis right away.</p>
 {% endblock %}
 {% block content %}
-{% call ui.panel(title='What you can do next', tone='accent') %}
+<div style="margin:0 0 20px;">
+  <p style="margin:0 0 12px;font-size:13px;line-height:1.4;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">What you can do next</p>
   <ul style="margin:0;padding:0 0 0 20px;font-size:14px;line-height:1.8;color:#334155;">
-    <li>Search any ticker and run deep-dive analyses.</li>
-    <li>Subscribe to tickers and get new reports by email.</li>
-    <li>Review market, news, and fundamentals insights in one place.</li>
+    <li style="margin-bottom:6px;">Search any ticker and run deep-dive analyses.</li>
+    <li style="margin-bottom:6px;">Subscribe to tickers and get new reports by email.</li>
+    <li style="margin-bottom:6px;">Review market, news, and fundamentals insights in one place.</li>
   </ul>
-{% endcall %}
+</div>
 <p style="margin:0;font-size:14px;line-height:1.7;color:#64748b;">If you did not create an account, you can safely ignore this email.</p>
 {% endblock %}
 {% block actions %}
