@@ -18,13 +18,14 @@ try:
 except ImportError:
     BaseChatModel = Any  # type: ignore[misc, assignment]
 
-# Supported roles: deep = heavier model for reasoning; quick = faster model for tools/routing
-LLMRole = Literal["deep", "quick"]
+# Supported roles: deep = heavier model for reasoning; quick = faster model for tools/routing; chat = conversational model
+LLMRole = Literal["deep", "quick", "chat"]
 
 # Config keys used by the provider
 CONFIG_LLM_PROVIDER = "llm_provider"
 CONFIG_DEEP_THINK_LLM = "deep_think_llm"
 CONFIG_QUICK_THINK_LLM = "quick_think_llm"
+CONFIG_CHAT_MODEL = "chat_model"
 CONFIG_BACKEND_URL = "backend_url"
 
 
@@ -85,6 +86,11 @@ def get_config_from_env(overrides: Optional[Dict[str, Any]] = None) -> Dict[str,
             or os.environ.get("QUICK_THINK_MODEL")
             or "gpt-4o-mini"
         )
+        cfg["chat_model"] = (
+            overrides.get("chat_model")
+            or os.environ.get("CHAT_MODEL")
+            or cfg["deep_think_llm"]  # fallback to deep_think_llm if CHAT_MODEL not set
+        )
     # Set backend_url from overrides or LLM_BACKEND_URL environment variable
     if overrides.get("backend_url"):
         cfg["backend_url"] = overrides["backend_url"]
@@ -97,6 +103,8 @@ def _model_for_role(role: LLMRole, config: Dict[str, Any]) -> str:
     """Resolve model name from config for the given role."""
     if role == "deep":
         return config.get(CONFIG_DEEP_THINK_LLM) or config.get("deep_think_llm") or "gpt-4o"
+    elif role == "chat":
+        return config.get(CONFIG_CHAT_MODEL) or config.get("chat_model") or config.get(CONFIG_DEEP_THINK_LLM) or config.get("deep_think_llm") or "gpt-4o"
     return config.get(CONFIG_QUICK_THINK_LLM) or config.get("quick_think_llm") or "gpt-4o-mini"
 
 

@@ -100,7 +100,7 @@ def _build_llm():
     """Build and return the LLM for chat using the centralized llm_provider."""
     from ai_engine.llm_provider import get_llm, get_config_from_env
     config = get_config_from_env()
-    return get_llm("deep", config, request_timeout=180)
+    return get_llm("chat", config, request_timeout=180)
 
 
 # ---------------------------------------------------------------------------
