@@ -200,7 +200,7 @@ export default function FundamentalCharts({ ticker, apiBase = '' }: FundamentalC
               <Tooltip
                 contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: '1px solid #374151' }}
                 labelStyle={{ color: '#fff' }}
-                formatter={(value: string | number | undefined, name?: string | number) => [typeof value === 'number' && value > 1e6 ? formatB(value) : value, String(name ?? '')]}
+                formatter={(value, name) => [typeof value === 'number' && value > 1e6 ? formatB(value) : value, String(name ?? '')]}
               />
               <Legend />
               <Bar yAxisId="left" dataKey="revenue" name="Revenue" fill="#3b82f6" radius={[2, 2, 0, 0]} />
@@ -226,7 +226,7 @@ export default function FundamentalCharts({ ticker, apiBase = '' }: FundamentalC
               <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
               <XAxis dataKey="period" tick={{ fill: chartTheme.text }} />
               <YAxis tick={{ fill: chartTheme.text }} tickFormatter={formatPct} domain={[0, 'auto']} />
-              <Tooltip contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: '1px solid #374151' }} formatter={(v: string | number | undefined, name?: string | number) => [formatPct(typeof v === 'number' ? v : undefined), String(name ?? '')]} />
+              <Tooltip contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: '1px solid #374151' }} formatter={(v, name) => [formatPct(typeof v === 'number' ? v : undefined), String(name ?? '')]} />
               <Legend />
               <Line type="monotone" dataKey="gross_margin_pct" name="Gross Margin %" stroke="#a855f7" dot={{ r: 3 }} />
               <Line type="monotone" dataKey="pretax_margin_pct" name="Pretax Margin %" stroke="#06b6d4" dot={{ r: 3 }} />
@@ -247,7 +247,7 @@ export default function FundamentalCharts({ ticker, apiBase = '' }: FundamentalC
               <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
               <XAxis dataKey="period" tick={{ fill: chartTheme.text }} />
               <YAxis tick={{ fill: chartTheme.text }} tickFormatter={formatB} />
-              <Tooltip contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: '1px solid #374151' }} formatter={(v: string | number | undefined, name?: string | number) => [formatB(typeof v === 'number' ? v : undefined), String(name ?? 'Shares')]} />
+              <Tooltip contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: '1px solid #374151' }} formatter={(v, name) => [formatB(typeof v === 'number' ? v : undefined), String(name ?? 'Shares')]} />
               <Line type="monotone" dataKey="values" name="Shares" stroke="#8b5cf6" dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
@@ -268,7 +268,7 @@ export default function FundamentalCharts({ ticker, apiBase = '' }: FundamentalC
               <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
               <XAxis dataKey="period" tick={{ fill: chartTheme.text }} />
               <YAxis tick={{ fill: chartTheme.text }} tickFormatter={formatB} />
-              <Tooltip contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: '1px solid #374151' }} formatter={(v: string | number | undefined, name?: string | number) => [formatB(typeof v === 'number' ? v : undefined), String(name ?? '')]} />
+              <Tooltip contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: '1px solid #374151' }} formatter={(v, name) => [formatB(typeof v === 'number' ? v : undefined), String(name ?? '')]} />
               <Legend />
               <Bar dataKey="long_term_debt" name="Long Term Debt" fill="#ef4444" radius={[2, 2, 0, 0]} />
               <Bar dataKey="free_cash_flow" name="Free Cash Flow" fill="#22c55e" radius={[2, 2, 0, 0]} />
@@ -288,7 +288,7 @@ export default function FundamentalCharts({ ticker, apiBase = '' }: FundamentalC
               <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
               <XAxis dataKey="period" tick={{ fill: chartTheme.text }} />
               <YAxis tick={{ fill: chartTheme.text }} tickFormatter={formatB} />
-              <Tooltip contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: '1px solid #374151' }} formatter={(v: string | number | undefined, name?: string | number) => [formatB(typeof v === 'number' ? v : undefined), String(name ?? '')]} />
+              <Tooltip contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: '1px solid #374151' }} formatter={(v, name) => [formatB(typeof v === 'number' ? v : undefined), String(name ?? '')]} />
               <Area type="monotone" dataKey="values" name="Retained Earnings" stroke="#a855f7" fill="#a855f7" fillOpacity={0.4} />
             </AreaChart>
           </ResponsiveContainer>
@@ -309,7 +309,7 @@ export default function FundamentalCharts({ ticker, apiBase = '' }: FundamentalC
               <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
               <XAxis dataKey="period" tick={{ fill: chartTheme.text }} />
               <YAxis tick={{ fill: chartTheme.text }} tickFormatter={formatB} />
-              <Tooltip contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: '1px solid #374151' }} formatter={(v: string | number | undefined, name?: string | number) => [formatB(typeof v === 'number' ? v : undefined), String(name ?? '')]} />
+              <Tooltip contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: '1px solid #374151' }} formatter={(v, name) => [formatB(typeof v === 'number' ? v : undefined), String(name ?? '')]} />
               <Legend />
               <Bar dataKey="total_cash" name="Total Cash" fill="#22c55e" radius={[2, 2, 0, 0]} />
               <Bar dataKey="long_term_debt" name="Long Term Debt" fill="#ef4444" radius={[2, 2, 0, 0]} />
@@ -333,7 +333,7 @@ export default function FundamentalCharts({ ticker, apiBase = '' }: FundamentalC
               <XAxis dataKey="period" tick={{ fill: chartTheme.text }} />
               <YAxis yAxisId="left" tick={{ fill: chartTheme.text }} tickFormatter={formatB} />
               <YAxis yAxisId="right" orientation="right" tick={{ fill: chartTheme.text }} tickFormatter={formatB} />
-              <Tooltip contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: '1px solid #374151' }} formatter={(v: string | number | undefined, name?: string | number) => [formatB(typeof v === 'number' ? v : undefined), String(name ?? '')]} />
+              <Tooltip contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: '1px solid #374151' }} formatter={(v, name) => [formatB(typeof v === 'number' ? v : undefined), String(name ?? '')]} />
               <Legend />
               <Bar yAxisId="left" dataKey="accounts_receivable" name="A/R" fill="#f97316" radius={[2, 2, 0, 0]} />
               <Line yAxisId="right" type="monotone" dataKey="revenue" name="Revenue" stroke="#a855f7" dot={{ r: 3 }} />
@@ -356,7 +356,7 @@ export default function FundamentalCharts({ ticker, apiBase = '' }: FundamentalC
               <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
               <XAxis dataKey="period" tick={{ fill: chartTheme.text }} />
               <YAxis tick={{ fill: chartTheme.text }} tickFormatter={formatB} />
-              <Tooltip contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: '1px solid #374151' }} formatter={(v: string | number | undefined, name?: string | number) => [formatB(typeof v === 'number' ? v : undefined), String(name ?? '')]} />
+              <Tooltip contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: '1px solid #374151' }} formatter={(v, name) => [formatB(typeof v === 'number' ? v : undefined), String(name ?? '')]} />
               <Legend />
               <Bar dataKey="dividends_paid" name="Dividends Paid" fill="#eab308" radius={[2, 2, 0, 0]} />
               <Bar dataKey="free_cash_flow" name="Free Cash Flow" fill="#22c55e" radius={[2, 2, 0, 0]} />
