@@ -651,6 +651,7 @@ export default function AdminDashboardPage() {
         status: 'running',
         agent_statuses: {},
         current_agent: null,
+        current_agents: [],
         updated_at: new Date().toISOString(),
       }));
       setRunningAnalyses((prev) => {
@@ -1182,7 +1183,13 @@ export default function AdminDashboardPage() {
                             </Link>
                           </td>
                           <td className="px-3 py-2 text-gray-300">{r.date ?? '—'}</td>
-                          <td className="px-3 py-2 text-gray-300">{r.current_agent ?? '—'}</td>
+                          <td className="px-3 py-2 text-gray-300">
+                            {r.current_agents && r.current_agents.length > 0
+                              ? r.current_agents.length === 1
+                                ? r.current_agents[0]
+                                : `${r.current_agents[0]} +${r.current_agents.length - 1}`
+                              : r.current_agent ?? '—'}
+                          </td>
                           <td className="px-3 py-2 text-gray-500">{formatDate(r.updated_at, true)}</td>
                           <td className="px-3 py-2">
                             <button

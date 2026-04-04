@@ -204,7 +204,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const [loadError, setLoadError] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [isStartingAnalysis, setIsStartingAnalysis] = useState(false);
-  const [analysisProgress, setAnalysisProgress] = useState<{ agent_statuses: Record<string,string>; current_agent?: string | null } | null>(null);
+  const [analysisProgress, setAnalysisProgress] = useState<{ agent_statuses: Record<string,string>; current_agent?: string | null; current_agents?: string[] | null } | null>(null);
   const [edgarFilings, setEdgarFilings] = useState<any>(null);
   const [edgarFilingsError, setEdgarFilingsError] = useState<string | null>(null);
   const [isLoadingEdgar, setIsLoadingEdgar] = useState(false);
@@ -447,11 +447,37 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     if (data.is_generating && data.generation_analysis_run_id != null) {
       setAnalysisProgress(null);
       const client = new WebSocketClient(data.generation_analysis_run_id);
-      client.on('status', (msg: any) => { const s = msg?.data?.agent_statuses; if (s) setAnalysisProgress({ agent_statuses: s, current_agent: msg?.data?.current_agent ?? null }); });
+      client.on('status', (msg: any) => {
+        const s = msg?.data?.agent_statuses;
+        if (s) {
+          console.log('[WebSocket Status]', {
+            agent_statuses: s,
+            current_agent: msg?.data?.current_agent,
+            current_agents: msg?.data?.current_agents
+          });
+          setAnalysisProgress({
+            agent_statuses: { ...s },
+            current_agent: msg?.data?.current_agent ?? null,
+            current_agents: msg?.data?.current_agents ? [...msg.data.current_agents] : null
+          });
+        }
+      });
       client.on('progress', (msg: any) => {
         const s = msg?.data?.agent_statuses;
         const c = msg?.data?.current_agent;
-        if (s) setAnalysisProgress({ agent_statuses: s, current_agent: c ?? null });
+        const ca = msg?.data?.current_agents;
+        if (s) {
+          console.log('[WebSocket Progress]', {
+            agent_statuses: s,
+            current_agent: c,
+            current_agents: ca
+          });
+          setAnalysisProgress({
+            agent_statuses: { ...s },
+            current_agent: c ?? null,
+            current_agents: ca ? [...ca] : null
+          });
+        }
         // Update stock data to get new reports, but keep the existing data structure
         tickerApi.getTickerPage(ticker).then((freshData) => {
           setStockData(freshData);
@@ -2244,7 +2270,12 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                       </div>
                     )}
                     {stockData.is_generating && !(selectedRunId && historicalReportsData) && (
-                      <AIAnalysisLoadingView existingReportKeys={Object.keys(stockData.reports || {})} agentStatuses={analysisProgress?.agent_statuses ?? null} currentAgent={analysisProgress?.current_agent ?? null} />
+                      <AIAnalysisLoadingView
+                        existingReportKeys={Object.keys(stockData.reports || {})}
+                        agentStatuses={analysisProgress?.agent_statuses ?? null}
+                        currentAgent={analysisProgress?.current_agent ?? null}
+                        currentAgents={analysisProgress?.current_agents ?? null}
+                      />
                     )}
                   </div>
                 </>

@@ -1,109 +1,134 @@
-import { useState, useEffect, useRef } from 'react';
-
-/** Report keys in pipeline order (for stage count). */
-const REPORT_ORDER = [
-  'market_report',
-  'sentiment_report',
-  'news_report',
-  'fundamentals_report',
-  'technical_report',
-  'sec_report',
-  'investment_plan',
-  'trader_investment_plan',
-  'final_trade_decision',
+/** All agents in pipeline order */
+const ALL_AGENTS = [
+  'Market Analyst',
+  'Social Analyst',
+  'News Analyst',
+  'Fundamentals Analyst',
+  'Technical Analyst',
+  'SEC Analyst',
+  'Bull Researcher',
+  'Bear Researcher',
+  'Research Manager',
+  'Trader',
+  'Risky Analyst',
+  'Safe Analyst',
+  'Neutral Analyst',
+  'Portfolio Manager',
 ] as const;
-
-const TOTAL_STAGES = REPORT_ORDER.length;
-
-/** Backend agent name → 1-based pipeline stage. Used so "Market Analyst" shows 1/9, not 9/9 when re-running. */
-const AGENT_TO_STAGE: Record<string, number> = {
-  'Market Analyst': 1,
-  'Social Analyst': 2,
-  'News Analyst': 3,
-  'Fundamentals Analyst': 4,
-  'Technical Analyst': 5,
-  'SEC Analyst': 6,
-  'Research Manager': 7,
-  'Trader': 8,
-  'Risky Analyst': 9,
-  'Safe Analyst': 9,
-  'Neutral Analyst': 9,
-  'Risk Analyst': 9,
-  'Portfolio Manager': 9,
-};
 
 interface AIAnalysisLoadingViewProps {
   /** Report keys that already exist on the server (from stockData.reports). */
   existingReportKeys?: string[];
   agentStatuses?: Record<string, string> | null;
-  /** Current agent name from backend (e.g. "Market Analyst"). Shown as-is when analysis is running. */
+  /** Current agent name from backend (e.g. "Market Analyst"). Shown as-is when analysis is running.
+   * @deprecated Use currentAgents array instead for concurrent execution support */
   currentAgent?: string | null;
+  /** Current agents array from backend (e.g. ["Market Analyst", "News Analyst"]). Shows multiple concurrent agents. */
+  currentAgents?: string[] | null;
 }
 
 export default function AIAnalysisLoadingView({
-  existingReportKeys = [],
-  agentStatuses: _agentStatuses = null,
+  agentStatuses = null,
   currentAgent = null,
+  currentAgents = null,
 }: AIAnalysisLoadingViewProps) {
-  // When we have live progress from the backend, derive stage from current agent so we show 1/9 for Market Analyst, not 9/9 from stale existingReportKeys.
-  const stageFromAgent =
-    currentAgent != null && currentAgent !== ''
-      ? AGENT_TO_STAGE[currentAgent]
-      : undefined;
-  const currentStage =
-    stageFromAgent != null
-      ? Math.min(stageFromAgent, TOTAL_STAGES)
-      : Math.min(
-          REPORT_ORDER.filter((k) => existingReportKeys.includes(k)).length + 1,
-          TOTAL_STAGES,
-        );
-  const stageLabel = `${currentStage}/${TOTAL_STAGES}`;
+  // Support both old (currentAgent) and new (currentAgents) formats for backward compatibility
+  const activeAgents = currentAgents && currentAgents.length > 0
+    ? currentAgents
+    : currentAgent
+    ? [currentAgent]
+    : [];
 
-  const agentMessage =
-    currentAgent != null && currentAgent !== ''
-      ? currentAgent
-      : 'Running analysis…';
-  const displayMessage = `${agentMessage} · ${stageLabel}`;
+  const activeAgentSet = new Set(activeAgents);
 
-  const [opacity, setOpacity] = useState(1);
-  const [shownMessage, setShownMessage] = useState(displayMessage);
-  const prevMessageRef = useRef(displayMessage);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (displayMessage === prevMessageRef.current) return;
-    setOpacity(0);
-    timeoutRef.current = window.setTimeout(() => {
-      prevMessageRef.current = displayMessage;
-      setShownMessage(displayMessage);
-      setOpacity(1);
-      timeoutRef.current = null;
-    }, 280);
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-  }, [displayMessage]);
+  // Debug logging
+  console.log('[AIAnalysisLoadingView] Render:', {
+    currentAgent,
+    currentAgents,
+    activeAgents,
+    agentStatuses,
+    completedCount: Object.values(agentStatuses || {}).filter(s => s === 'completed').length,
+    pendingCount: Object.values(agentStatuses || {}).filter(s => s === 'pending').length
+  });
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-blue-500/30 bg-blue-500/5 px-5 py-4">
-      <div className="flex shrink-0 items-center gap-1">
-        <span className="h-2 w-2 animate-[analysis-dot_1.4s_ease-in-out_infinite] rounded-full bg-blue-400" />
-        <span className="h-2 w-2 animate-[analysis-dot_1.4s_ease-in-out_0.2s_infinite] rounded-full bg-blue-400" />
-        <span className="h-2 w-2 animate-[analysis-dot_1.4s_ease-in-out_0.4s_infinite] rounded-full bg-blue-400" />
+    <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-5 py-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {ALL_AGENTS.map((agent, index) => {
+          const status = agentStatuses?.[agent] || 'pending';
+          const isActive = activeAgentSet.has(agent);
+          const isCompleted = status === 'completed';
+          
+          return (
+            <div key={agent} className="flex items-center gap-2">
+              {/* Agent badge */}
+              <div
+                className={`
+                  relative rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-300
+                  ${isActive
+                    ? 'bg-blue-500/20 text-blue-300 ring-1 ring-blue-400/50 animate-pulse'
+                    : isCompleted
+                    ? 'bg-green-500/20 text-green-300 ring-1 ring-green-400/30'
+                    : 'bg-gray-700/30 text-gray-500'
+                  }
+                `}
+              >
+                {/* Status indicator dot */}
+                <span className={`
+                  absolute -left-1 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full
+                  ${isActive
+                    ? 'bg-blue-400 animate-ping'
+                    : isCompleted
+                    ? 'bg-green-400'
+                    : 'bg-gray-600'
+                  }
+                `} />
+                <span className={`
+                  absolute -left-1 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full
+                  ${isActive
+                    ? 'bg-blue-400'
+                    : isCompleted
+                    ? 'bg-green-400'
+                    : 'bg-gray-600'
+                  }
+                `} />
+                {agent}
+              </div>
+              
+              {/* Arrow connector (except for last item) */}
+              {index < ALL_AGENTS.length - 1 && (
+                <svg
+                  className={`h-4 w-4 shrink-0 transition-colors duration-300 ${
+                    isCompleted ? 'text-green-400/50' : 'text-gray-600'
+                  }`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              )}
+            </div>
+          );
+        })}
       </div>
-      <style>{`
-        @keyframes analysis-dot {
-          0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
-          40% { opacity: 1; transform: scale(1); }
-        }
-      `}</style>
-      <div className="min-w-0 flex-1">
-        <p
-          className="text-sm text-gray-300 transition-opacity duration-300"
-          style={{ opacity }}
-        >
-          {shownMessage}
-        </p>
+      
+      {/* Progress summary */}
+      <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
+        <div className="flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
+          <span>Running: {activeAgents.length}</span>
+        </div>
+        <span className="text-gray-600">•</span>
+        <div className="flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
+          <span>Completed: {Object.values(agentStatuses || {}).filter(s => s === 'completed').length}</span>
+        </div>
+        <span className="text-gray-600">•</span>
+        <div className="flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-gray-600" />
+          <span>Pending: {Object.values(agentStatuses || {}).filter(s => s === 'pending').length}</span>
+        </div>
       </div>
     </div>
   );

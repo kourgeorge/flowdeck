@@ -139,7 +139,7 @@ class AnalysisService:
             "date": analysis_info["date"],
             "status": analysis_info["status"],
             "agent_statuses": analysis_info.get("agent_statuses", {}),
-            "current_agent": analysis_info.get("current_agent"),
+            "current_agents": analysis_info.get("current_agents", []),  # Changed to list
             "updated_at": datetime.datetime.utcnow().isoformat(),
         }
         set_analysis_status("ticker", analysis_run_id, status_data)
@@ -252,7 +252,7 @@ class AnalysisService:
                 "Portfolio Manager": "pending",
             }
             
-            # Set first selected analyst to in_progress
+            # Set analyst statuses based on parallel execution mode
             analyst_status_map = {
                 "market": "Market Analyst",
                 "social": "Social Analyst",
@@ -261,10 +261,25 @@ class AnalysisService:
                 "technical": "Technical Analyst",
                 "sec": "SEC Analyst",
             }
-            first_selected = next((a for a in analysts if a in analyst_status_map), None)
-            current_agent = analyst_status_map[first_selected] if first_selected else None
-            if first_selected:
-                agent_statuses[analyst_status_map[first_selected]] = "in_progress"
+            
+            # Check if parallel execution is enabled (default: True)
+            parallel_analysts = config.get("parallel_analysts", True)
+            
+            # Set initial analyst statuses
+            if parallel_analysts and len(analysts) > 1:
+                # All selected analysts start in parallel
+                current_agents = []
+                for analyst_key in analysts:
+                    if analyst_key in analyst_status_map:
+                        agent_name = analyst_status_map[analyst_key]
+                        agent_statuses[agent_name] = "in_progress"
+                        current_agents.append(agent_name)
+            else:
+                # Sequential mode: only first analyst is in progress
+                first_selected = next((a for a in analysts if a in analyst_status_map), None)
+                current_agents = [analyst_status_map[first_selected]] if first_selected else []
+                if first_selected:
+                    agent_statuses[analyst_status_map[first_selected]] = "in_progress"
 
             # Store analysis info immediately to prevent race condition
             # This must be done within the lock before starting the background thread
@@ -279,12 +294,13 @@ class AnalysisService:
                 "log_file": log_file,
                 "progress_callback": progress_callback,
                 "agent_statuses": agent_statuses,
-                "current_agent": current_agent,
+                "current_agents": current_agents,  # Changed from current_agent to current_agents (list)
                 "reports": {},
                 "analysts": analysts,
                 "messages": [],
                 "tool_calls": [],
                 "initiator_email": initiator_email,
+                "parallel_analysts": parallel_analysts,  # Store mode for later reference
             }
             
             # Write initial status to file
@@ -332,7 +348,10 @@ class AnalysisService:
             {"deep": graph.config.get("deep_think_llm"), "quick": graph.config.get("quick_think_llm")},
         )
 
+        # Open log file once and keep it open throughout the analysis to prevent file descriptor leaks
+        log_file_handle = None
         try:
+            log_file_handle = open(log_file, "a", encoding='utf-8')
             # Check if AI reports should be written to the results folder
             from config import WRITE_AI_REPORTS_TO_RESULTS
             write_reports_to_results = WRITE_AI_REPORTS_TO_RESULTS
@@ -519,9 +538,13 @@ class AnalysisService:
                         "content": content
                     })
                     
-                    # Log to file
-                    with open(log_file, "a", encoding='utf-8') as f:
-                        f.write(f"{timestamp} [{msg_type}] {content.replace(chr(10), ' ')}\n")
+                    # Log to file (using persistent file handle to prevent file descriptor leaks)
+                    if log_file_handle:
+                        try:
+                            log_file_handle.write(f"{timestamp} [{msg_type}] {content.replace(chr(10), ' ')}\n")
+                            log_file_handle.flush()  # Ensure data is written immediately
+                        except Exception as log_err:
+                            logger.warning("Failed to write to log file: %s", log_err)
 
                 # Update reports and agent status
                 _reports = [
@@ -539,8 +562,18 @@ class AnalysisService:
                         if key not in _written_reports:
                             analysis_info["reports"][key] = c
                             analysis_info["agent_statuses"][agent] = "completed"
+                            
+                            # Update current_agents list
+                            current_agents = analysis_info.get("current_agents", [])
+                            if agent in current_agents:
+                                current_agents.remove(agent)
+                            
+                            # Handle next agent based on execution mode
+                            parallel_analysts = analysis_info.get("parallel_analysts", True)
                             analyst_key = report_key_to_analyst.get(key)
-                            if analyst_key is not None and analysts:
+                            
+                            if not parallel_analysts and analyst_key is not None and analysts:
+                                # Sequential mode: start next analyst
                                 try:
                                     idx = analysts.index(analyst_key)
                                     if idx + 1 < len(analysts):
@@ -548,11 +581,16 @@ class AnalysisService:
                                         next_agent = analyst_status_map_run.get(next_key)
                                         if next_agent:
                                             analysis_info["agent_statuses"][next_agent] = "in_progress"
-                                            analysis_info["current_agent"] = next_agent
+                                            current_agents.append(next_agent)
                                     elif last_analyst_report_key and key == last_analyst_report_key:
-                                        analysis_info["current_agent"] = "Research Manager"
+                                        current_agents.append("Research Manager")
                                 except ValueError:
                                     pass
+                            elif last_analyst_report_key and key == last_analyst_report_key:
+                                # Last analyst completed (parallel or sequential)
+                                current_agents.append("Research Manager")
+                            
+                            analysis_info["current_agents"] = current_agents
                             self._persist_analysis_status(analysis_run_id)
                             report_usage = chunk.get("report_usage") or {}
                             _write_report(
@@ -570,7 +608,7 @@ class AnalysisService:
                             analysis_info["agent_statuses"]["Bull Researcher"] = "in_progress"
                             analysis_info["agent_statuses"]["Bear Researcher"] = "in_progress"
                             analysis_info["agent_statuses"]["Research Manager"] = "in_progress"
-                            analysis_info["current_agent"] = "Research Manager"
+                            analysis_info["current_agents"] = ["Bull Researcher", "Bear Researcher", "Research Manager"]
                             self._persist_analysis_status(analysis_run_id)
                             _progress_log("Bull/Bear researchers & Research Manager started")
 
@@ -583,7 +621,7 @@ class AnalysisService:
                         analysis_info["agent_statuses"]["Bear Researcher"] = "completed"
                         analysis_info["agent_statuses"]["Research Manager"] = "completed"
                         analysis_info["agent_statuses"]["Trader"] = "in_progress"
-                        analysis_info["current_agent"] = "Trader"
+                        analysis_info["current_agents"] = ["Trader"]
                         self._persist_analysis_status(analysis_run_id)
                         _progress_log("Bull/Bear/Research Manager completed → Trader started")
                 
@@ -641,7 +679,7 @@ class AnalysisService:
                     analysis_info["agent_statuses"]["Risky Analyst"] = "in_progress"
                     analysis_info["agent_statuses"]["Safe Analyst"] = "in_progress"
                     analysis_info["agent_statuses"]["Neutral Analyst"] = "in_progress"
-                    analysis_info["current_agent"] = "Risk Analyst"
+                    analysis_info["current_agents"] = ["Risky Analyst", "Safe Analyst", "Neutral Analyst"]
                     self._persist_analysis_status(analysis_run_id)
                     _progress_log("Trader completed → Risk debate (Risky/Safe/Neutral) started")
                 
@@ -654,13 +692,13 @@ class AnalysisService:
                         analysis_info["agent_statuses"]["Safe Analyst"] = "completed"
                         analysis_info["agent_statuses"]["Neutral Analyst"] = "completed"
                         analysis_info["agent_statuses"]["Portfolio Manager"] = "in_progress"
-                        analysis_info["current_agent"] = "Portfolio Manager"
+                        analysis_info["current_agents"] = ["Portfolio Manager"]
                         self._persist_analysis_status(analysis_run_id)
                         _progress_log("Risk analysts completed → Portfolio Manager started")
                 
                 if "final_trade_decision" in chunk and chunk["final_trade_decision"]:
                     analysis_info["agent_statuses"]["Portfolio Manager"] = "completed"
-                    analysis_info["current_agent"] = None
+                    analysis_info["current_agents"] = []
                     self._persist_analysis_status(analysis_run_id)
                     content = chunk["final_trade_decision"]
                     risky = chunk.get("risky_summary") or []
@@ -809,6 +847,13 @@ class AnalysisService:
                         pass
                 # Delete status file after error (analysis is done)
                 delete_analysis_status("ticker", analysis_run_id)
+        finally:
+            # Always close the log file handle to prevent file descriptor leaks
+            if log_file_handle:
+                try:
+                    log_file_handle.close()
+                except Exception as close_err:
+                    logger.warning("Failed to close log file: %s", close_err)
     
     # Fixed pipeline order for deriving current_agent when missing (deterministic on refresh).
     _AGENT_PIPELINE_ORDER = (

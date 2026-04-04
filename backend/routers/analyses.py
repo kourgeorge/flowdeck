@@ -104,6 +104,7 @@ async def start_analysis(
                             "chunk": str(chunk),
                             "agent_statuses": analysis_info.get("agent_statuses", {}),
                             "current_agent": analysis_info.get("current_agent"),
+                            "current_agents": analysis_info.get("current_agents", []),
                             "reports": analysis_info.get("reports", {}),
                             "status": analysis_info.get("status", "running"),
                         }
@@ -201,6 +202,7 @@ async def websocket_endpoint(websocket: WebSocket, analysis_run_id: str, token: 
                     "date": status["date"],
                     "agent_statuses": status.get("agent_statuses", {}),
                     "current_agent": status.get("current_agent"),
+                    "current_agents": status.get("current_agents", []),
                 }
             })
 
@@ -220,6 +222,7 @@ async def websocket_endpoint(websocket: WebSocket, analysis_run_id: str, token: 
                                 "date": status.get("date"),
                                 "agent_statuses": status.get("agent_statuses", {}),
                                 "current_agent": status.get("current_agent"),
+                                "current_agents": status.get("current_agents", []),
                             }
                         })
                     else:
