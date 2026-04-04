@@ -1357,8 +1357,8 @@ export default function PortfolioPulseDashboard({
   );
   const marketMoversPanel = (
     <div className="rounded-[1rem] border border-slate-700/70 bg-slate-950/40 p-3">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Broader Market Movers</p>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 min-w-0">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400 truncate">Broader Market Movers</p>
         {moversControls}
       </div>
       <MoversList
@@ -1377,14 +1377,14 @@ export default function PortfolioPulseDashboard({
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-[0.9fr_1.1fr]">
           <div className="space-y-3">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <div className="rounded-[0.95rem] border border-emerald-400/20 bg-emerald-500/10 p-3">
+              <div className="rounded-[0.95rem] border border-emerald-400/20 bg-emerald-500/10 p-3 min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-100/80">Leader</p>
-                <p className="mt-1.5 text-sm font-semibold text-white">{marketSummary.leader?.name || '—'}</p>
+                <p className="mt-1.5 text-sm font-semibold text-white truncate" title={marketSummary.leader?.name || '—'}>{marketSummary.leader?.name || '—'}</p>
                 <p className="mt-1 text-xs text-emerald-100/80">{formatPercent(marketSummary.leader?.changePercent)}</p>
               </div>
-              <div className="rounded-[0.95rem] border border-rose-400/20 bg-rose-500/10 p-3">
+              <div className="rounded-[0.95rem] border border-rose-400/20 bg-rose-500/10 p-3 min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-100/80">Laggard</p>
-                <p className="mt-1.5 text-sm font-semibold text-white">{marketSummary.laggard?.name || '—'}</p>
+                <p className="mt-1.5 text-sm font-semibold text-white truncate" title={marketSummary.laggard?.name || '—'}>{marketSummary.laggard?.name || '—'}</p>
                 <p className="mt-1 text-xs text-rose-100/80">{formatPercent(marketSummary.laggard?.changePercent)}</p>
               </div>
             </div>
