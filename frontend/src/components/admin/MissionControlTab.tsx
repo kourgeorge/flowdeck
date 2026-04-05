@@ -103,7 +103,7 @@ export default function MissionControlTab({
                       </Link>
                     </td>
                     <td className="px-3 py-2 text-gray-300">
-                      {r.date ? formatDate(r.date, true) : '—'}
+                      {r.created_at ? formatDate(r.created_at, true) : '—'}
                     </td>
                     <td className="px-3 py-2 text-gray-300">
                       {r.current_agents && r.current_agents.length > 0

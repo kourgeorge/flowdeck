@@ -239,6 +239,7 @@ class RunningAnalysisItem(BaseModel):
     status: str
     agent_statuses: dict[str, str] = Field(default_factory=dict)
     current_agent: Optional[str] = None
+    created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
 
@@ -268,6 +269,7 @@ def get_running_analyses_list(
             status=str(it.get("status") or "running"),
             agent_statuses=it.get("agent_statuses") or {},
             current_agent=it.get("current_agent"),
+            created_at=it.get("created_at"),
             updated_at=it.get("updated_at"),
         )
         for it in items

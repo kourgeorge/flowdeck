@@ -1,14 +1,26 @@
 export function formatDate(dateStr: string | null | undefined, includeTime = false): string {
   if (!dateStr) return '—';
-  const date = new Date(dateStr);
+  const normalized = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(dateStr)
+    ? `${dateStr}Z`
+    : dateStr;
+  const date = new Date(normalized);
   if (isNaN(date.getTime())) return '—';
   
-  const options: Intl.DateTimeFormatOptions = {
-    dateStyle: 'medium',
-    ...(includeTime && { timeStyle: 'short' }),
-  };
+  if (includeTime) {
+    // Use toLocaleString() with 24-hour format
+    return date.toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+  }
   
-  return new Intl.DateTimeFormat('en-US', options).format(date);
+  // For date only, use toLocaleDateString()
+  return date.toLocaleDateString();
 }
 
 export function formatMarketCap(value: number | null | undefined): string {

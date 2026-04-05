@@ -140,7 +140,8 @@ class AnalysisService:
             "status": analysis_info["status"],
             "agent_statuses": analysis_info.get("agent_statuses", {}),
             "current_agents": analysis_info.get("current_agents", []),  # Changed to list
-            "updated_at": datetime.datetime.utcnow().isoformat(),
+            "created_at": analysis_info.get("created_at"),
+            "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
         set_analysis_status("ticker", analysis_run_id, status_data)
 
@@ -301,6 +302,7 @@ class AnalysisService:
                 "tool_calls": [],
                 "initiator_email": initiator_email,
                 "parallel_analysts": parallel_analysts,  # Store mode for later reference
+                "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             }
             
             # Write initial status to file
