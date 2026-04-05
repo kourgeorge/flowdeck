@@ -159,6 +159,7 @@ export interface RunningAnalysisItem {
   agent_statuses: Record<string, string>;
   current_agent: string | null;
   current_agents: string[] | null;
+  created_at: string | null;
   updated_at: string | null;
 }
 

@@ -457,6 +457,7 @@ export default function AdminDashboardPage() {
         agent_statuses: {},
         current_agent: null,
         current_agents: [],
+        created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }));
       setRunningAnalyses((prev) => {
