@@ -163,35 +163,24 @@ class EdgarService:
             return text  # Full text for exploration
 
     def _get_extraction_llm(self):
-        """Lazy-init LLM for section extraction (Azure or OpenAI from env)."""
+        """Lazy-init LLM for section extraction using centralized llm_provider."""
         if self._extraction_llm is not None:
             return self._extraction_llm
-        azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "").strip()
-        azure_key = os.environ.get("AZURE_OPENAI_API_KEY", "").strip()
-        if azure_endpoint and azure_key:
-            from langchain_openai import AzureChatOpenAI
-            model = os.environ.get("QUICK_THINK_MODEL", "gpt-4o-mini")
-            self._extraction_llm = AzureChatOpenAI(
-                azure_deployment=model,
-                model=model,
-                azure_endpoint=azure_endpoint,
-                api_key=azure_key,
-                api_version=os.environ.get("OPENAI_API_VERSION", "2024-08-01-preview"),
-                request_timeout=90,
-                temperature=0.0,
-            )
-        else:
-            from langchain_openai import ChatOpenAI
-            api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-            if not api_key:
-                raise ValueError(
-                    "EDGAR extraction requires OPENAI_API_KEY or (AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY)"
-                )
-            self._extraction_llm = ChatOpenAI(
-                model=os.environ.get("EDGAR_EXTRACTION_MODEL") or os.environ.get("QUICK_THINK_MODEL") or "gpt-4o-mini",
-                temperature=0.0,
-                request_timeout=90,
-            )
+        
+        # Import here to avoid circular dependencies
+        import sys
+        from pathlib import Path
+        
+        # Add ai_engine to path if not already there
+        ai_engine_path = str(Path(__file__).parent.parent.parent / "ai_engine")
+        if ai_engine_path not in sys.path:
+            sys.path.insert(0, ai_engine_path)
+        
+        from ai_engine.llm_provider import get_config_from_env, get_llm
+        
+        # Use centralized LLM provider (supports LiteLLM, Azure, OpenAI, etc.)
+        config = get_config_from_env()
+        self._extraction_llm = get_llm("quick", config)
         return self._extraction_llm
 
     def _extract_sections(self, full_text: str) -> Dict[str, Any]:
