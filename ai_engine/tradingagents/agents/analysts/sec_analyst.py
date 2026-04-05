@@ -34,12 +34,12 @@ def create_sec_analyst(llm):
     return create_self_contained_analyst(
         llm=llm,
         tools=[
-            get_sec_toc,              # Start: see structure (like ls)
-            get_sec_stats,            # Overview (like wc)
-            grep_sec_filing,          # Search (like grep)
-            read_sec_section,         # Read section (like cat function)
-            read_sec_lines,           # Read lines (like sed -n 'X,Yp')
-            get_edgar_filing_content, # Fallback: LLM extraction (original tool)
+            get_edgar_filing_content, # Primary: LLM extraction (original tool)
+            get_sec_toc,              # Optional: see structure (like ls)
+            get_sec_stats,            # Optional: overview (like wc)
+            grep_sec_filing,          # Optional: search (like grep)
+            read_sec_section,         # Optional: read section (like cat function)
+            read_sec_lines,           # Optional: read lines (like sed -n 'X,Yp')
         ],
         prompt_builder=build_sec_analyst_prompt,
         structured_output_class=SecAnalysisOutput,
