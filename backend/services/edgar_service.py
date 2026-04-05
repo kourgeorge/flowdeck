@@ -128,8 +128,19 @@ class EdgarService:
     def _get_headers_html(self) -> Dict[str, str]:
         return {"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml"}
 
-    def _fetch_document_text(self, url: str) -> str:
-        """Fetch document at URL, strip XBRL markup, extract text with BeautifulSoup, skip to narrative, truncate. Returns empty string on failure."""
+    def _fetch_document_text(self, url: str, truncate: bool = True) -> str:
+        """
+        Fetch document at URL, strip XBRL markup, extract text with BeautifulSoup,
+        skip to narrative, optionally truncate.
+        
+        Args:
+            url: SEC document URL
+            truncate: If True, truncate to MAX_DOCUMENT_TEXT_CHARS (100K chars).
+                     If False, return full text for agent exploration.
+        
+        Returns:
+            Cleaned document text (empty string on failure)
+        """
         if not url:
             return ""
         self._throttle()
@@ -140,11 +151,16 @@ class EdgarService:
         except Exception as e:
             logger.warning("Failed to fetch SEC document %s: %s", url[:80], e)
             return ""
+        # All formatting and parsing steps maintained
         raw = _strip_xbrl_markup(raw)
         soup = BeautifulSoup(raw, "html.parser")
         text = soup.get_text(separator="\n", strip=True)
         text = _skip_to_narrative(text)
-        return _truncate(text, MAX_DOCUMENT_TEXT_CHARS)
+        # Truncation depends on parameter
+        if truncate:
+            return _truncate(text, MAX_DOCUMENT_TEXT_CHARS)
+        else:
+            return text  # Full text for exploration
 
     def _get_extraction_llm(self):
         """Lazy-init LLM for section extraction (Azure or OpenAI from env)."""
@@ -342,13 +358,30 @@ Filing text:
         ticker: str,
         form: Optional[str] = None,
         limit: int = 1,
+        raw: bool = False,
     ) -> Dict[str, Any]:
         """
-        Get extracted sections (risk factors, MD&A, competition, etc.) for recent filings.
+        Get filing content - either extracted sections (via LLM) or raw text (for exploration).
+        
+        Args:
+            ticker: Stock ticker
+            form: Optional '10-K' or '10-Q' filter
+            limit: Number of filings to return
+            raw: If True, return raw text without LLM extraction (for agent exploration).
+                 If False, return LLM-extracted sections (current behavior, default).
 
         Returns:
             {
-                "filings": [{"form", "filing_date", "accession_number", "sections": {...}}],
+                "filings": [
+                    {
+                        "form": str,
+                        "filing_date": str,
+                        "accession_number": str,
+                        "sections": {...}  # if raw=False (LLM extracted)
+                        "text": str,       # if raw=True (full text)
+                        "char_count": int  # if raw=True
+                    }
+                ],
                 "error": str | None
             }
         """
@@ -363,34 +396,60 @@ Filing text:
             filings_list = [f for f in filings_list if f.get("form") == form]
         filings_list = filings_list[:limit]
         now = time.monotonic()
+        
         for f in filings_list:
             acc = f.get("accession_number") or ""
             form_type = f.get("form") or ""
-            key = (ticker_upper, form_type, acc)
-            if key in self._extraction_cache:
-                ts, sections = self._extraction_cache[key]
-                if now - ts < EXTRACTION_CACHE_TTL:
-                    out["filings"].append({
-                        "form": form_type,
-                        "filing_date": f.get("filing_date", ""),
-                        "accession_number": acc,
-                        "sections": sections,
-                    })
-                    continue
-                else:
-                    del self._extraction_cache[key]
             url = f.get("url") or ""
-            text = self._fetch_document_text(url)
-            if not text:
-                continue
-            sections = self._extract_sections(text)
-            self._extraction_cache[key] = (now, sections)
-            out["filings"].append({
-                "form": form_type,
-                "filing_date": f.get("filing_date", ""),
-                "accession_number": acc,
-                "sections": sections,
-            })
+            
+            if raw:
+                # RAW MODE: Return full text without LLM extraction (for agent exploration)
+                logger.info(f"Fetching raw text for {ticker_upper} {form_type} (exploration mode)")
+                text = self._fetch_document_text(url, truncate=False)
+                if not text:
+                    continue
+                
+                out["filings"].append({
+                    "form": form_type,
+                    "filing_date": f.get("filing_date", ""),
+                    "accession_number": acc,
+                    "text": text,
+                    "char_count": len(text),
+                })
+            else:
+                # EXTRACTION MODE: Current behavior with LLM extraction (default)
+                key = (ticker_upper, form_type, acc)
+                
+                # Check cache
+                if key in self._extraction_cache:
+                    ts, sections = self._extraction_cache[key]
+                    if now - ts < EXTRACTION_CACHE_TTL:
+                        out["filings"].append({
+                            "form": form_type,
+                            "filing_date": f.get("filing_date", ""),
+                            "accession_number": acc,
+                            "sections": sections,
+                        })
+                        continue
+                    else:
+                        del self._extraction_cache[key]
+                
+                # Fetch with truncate=True (current behavior)
+                text = self._fetch_document_text(url, truncate=True)
+                if not text:
+                    continue
+                
+                # LLM extraction
+                sections = self._extract_sections(text)
+                self._extraction_cache[key] = (now, sections)
+                
+                out["filings"].append({
+                    "form": form_type,
+                    "filing_date": f.get("filing_date", ""),
+                    "accession_number": acc,
+                    "sections": sections,
+                })
+        
         return out
 
 

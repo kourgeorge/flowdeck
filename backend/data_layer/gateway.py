@@ -270,8 +270,9 @@ class DataGateway:
         ticker: str,
         form: Optional[str] = None,
         limit: int = 1,
+        raw: bool = False,
     ) -> Dict[str, Any]:
-        return self._edgar.get_filing_content(ticker, form, limit)
+        return self._edgar.get_filing_content(ticker, form=form, limit=limit, raw=raw)
 
 
 def get_data_gateway() -> DataGateway:

@@ -264,6 +264,71 @@ def get_edgar_filing_content(
             parts.append("\n### Market Risk Disclosures\n" + sections["market_risk_disclosures"])
     return "\n".join(parts)
 
+def get_edgar_full_text(
+    ticker: str,
+    form: Optional[str] = None,
+    base_url: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Get complete SEC filing text for exploration (calls existing endpoint with raw=true).
+    
+    Returns:
+        {
+            "ticker": str,
+            "filing": {"form": str, "filing_date": str, "accession_number": str},
+            "text": str,
+            "char_count": int,
+            "error": str | None
+        }
+    """
+    base_url = base_url or _get_info_service_base_url()
+    if not base_url:
+        raise ValueError("Info service URL not configured (set INFO_SERVICE_URL or config info_service_url)")
+    
+    params: Dict[str, Any] = {"limit": 1, "raw": "true"}  # Use existing endpoint with raw=true
+    if form:
+        params["form"] = form
+    
+    try:
+        data = _get(
+            None,
+            base_url,
+            f"/api/data/edgar-filing-content/{ticker.upper()}",
+            params=params,
+            timeout=60,
+        )
+    except Exception as e:
+        return {
+            "ticker": ticker,
+            "filing": None,
+            "text": "",
+            "char_count": 0,
+            "error": str(e),
+        }
+    
+    if isinstance(data, dict) and data.get("filings"):
+        filing = data["filings"][0]
+        return {
+            "ticker": ticker,
+            "filing": {
+                "form": filing.get("form"),
+                "filing_date": filing.get("filing_date"),
+                "accession_number": filing.get("accession_number"),
+            },
+            "text": filing.get("text", ""),
+            "char_count": filing.get("char_count", 0),
+            "error": None,
+        }
+    
+    return {
+        "ticker": ticker,
+        "filing": None,
+        "text": "",
+        "char_count": 0,
+        "error": data.get("error", "No filing available"),
+    }
+
+
 
 def get_market_movers(count: int = 8, base_url: Optional[str] = None) -> Dict[str, Any]:
     """Fetch daily top gainers and losers (US market) from info service.
