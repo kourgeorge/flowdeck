@@ -836,6 +836,31 @@ class AnalysisService:
                     update_execution_status(ar_id_safe, "failed", error_message=str(e))
                 except Exception as update_err:
                     logger.warning("Failed to update execution status to failed: %s", update_err)
+                
+                # Refund tokens for failed execution
+                try:
+                    from database import SessionLocal
+                    from services.token_service import refund_for_failed_execution
+                    db = SessionLocal()
+                    try:
+                        refunded = refund_for_failed_execution(ar_id_safe, db)
+                        if refunded:
+                            logger.info(
+                                "Tokens refunded for failed analysis analysis_run_id=%s ticker=%s",
+                                ar_id_safe, ticker,
+                            )
+                        else:
+                            logger.warning(
+                                "Token refund failed or already processed analysis_run_id=%s ticker=%s",
+                                ar_id_safe, ticker,
+                            )
+                    finally:
+                        db.close()
+                except Exception as refund_err:
+                    logger.exception(
+                        "Failed to refund tokens for failed analysis analysis_run_id=%s error=%s",
+                        ar_id_safe, refund_err,
+                    )
             
             analysis_info = self.running_analyses.get(analysis_run_id)
             if analysis_info:

@@ -18,6 +18,20 @@ MAX_REWARD_PER_REPORT = 400
 REWARD_WINDOW_DAYS = 14  # 0 = no window
 
 
+def get_balance_from_ledger(user_id: int, db: Session) -> int:
+    """
+    Calculate user's token balance from TokenTransaction ledger (single source of truth).
+    This is the authoritative balance calculation.
+    """
+    from sqlalchemy import func
+    result = (
+        db.query(func.coalesce(func.sum(TokenTransaction.amount), 0))
+        .filter(TokenTransaction.user_id == user_id)
+        .scalar()
+    )
+    return int(result) if result is not None else 0
+
+
 def record_transaction(
     user_id: int,
     amount: int,  # Platform tokens (what affects balance)
@@ -32,7 +46,8 @@ def record_transaction(
     commit: bool = True,
 ) -> Optional[TokenTransaction]:
     """
-    Record a token transaction and update user balance atomically.
+    Record a token transaction in the ledger (single source of truth).
+    User.token_balance is NO LONGER UPDATED - it's computed from the ledger.
     
     Args:
         amount: Platform tokens to add (positive) or deduct (negative)
@@ -44,27 +59,29 @@ def record_transaction(
     Returns:
         TokenTransaction record or None on failure
     """
+    # Lock user row to prevent concurrent transactions
     user = db.query(User).filter(User.id == user_id).with_for_update().first()
     if not user:
         return None
     
+    # Get current balance from ledger (single source of truth)
+    current_balance = get_balance_from_ledger(user_id, db)
+    
     # Check sufficient balance for debits (negative amounts)
-    if amount < 0 and user.token_balance < abs(amount):
+    if amount < 0 and current_balance < abs(amount):
         return None  # Insufficient balance
     
-    # Update balance (platform tokens)
-    new_balance = user.token_balance + amount
+    # Calculate new balance
+    new_balance = current_balance + amount
     if new_balance < 0:
         return None  # Safety check - should not happen after above check
     
-    user.token_balance = new_balance
-    
-    # Create transaction record
+    # Create transaction record (this IS the balance update - no separate User.token_balance update)
     tx = TokenTransaction(
         user_id=user_id,
         amount=amount,  # Platform tokens
         llm_tokens=llm_tokens,  # Raw LLM tokens (null for non-chat operations)
-        balance_after=new_balance,
+        balance_after=new_balance,  # Snapshot for verification
         transaction_type=transaction_type,
         related_entity_type=related_entity_type,
         related_entity_id=related_entity_id,
@@ -101,26 +118,47 @@ def get_system_user_id(db: Session) -> int:
 
 
 def ensure_user_balance(user_id: int, db: Session) -> None:
-    """Set token_balance to INITIAL_BALANCE for legacy users missing the column (idempotent)."""
+    """
+    Ensure user has initial balance transaction if they have no transactions yet.
+    This is for backward compatibility with users created before the ledger system.
+    """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         return
-    if getattr(user, "token_balance", None) is None:
-        user.token_balance = INITIAL_BALANCE
-        db.commit()
+    
+    # Check if user has any transactions
+    has_transactions = (
+        db.query(TokenTransaction)
+        .filter(TokenTransaction.user_id == user_id)
+        .first()
+    ) is not None
+    
+    if not has_transactions:
+        # Create initial balance transaction
+        record_transaction(
+            user_id=user_id,
+            amount=INITIAL_BALANCE,
+            transaction_type="initial_balance",
+            description="Initial token balance",
+            db=db,
+            commit=True,
+        )
 
 
 def get_balance(user_id: int, db: Session) -> int:
-    """Return current token balance for the user."""
+    """
+    Return current token balance for the user (computed from TokenTransaction ledger).
+    This is the single source of truth for token balances.
+    """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         return 0
-    balance = getattr(user, "token_balance", None)
-    if balance is None:
-        ensure_user_balance(user_id, db)
-        db.refresh(user)
-        return getattr(user, "token_balance", 0)
-    return balance
+    
+    # Ensure user has initial balance if no transactions exist
+    ensure_user_balance(user_id, db)
+    
+    # Calculate balance from ledger (single source of truth)
+    return get_balance_from_ledger(user_id, db)
 
 
 def record_execution(
@@ -164,22 +202,25 @@ def deduct_for_analysis(user_id: int, ticker: str, db: Session) -> Tuple[bool, O
     """
     Deduct COST_PER_ANALYSIS from user via transaction ledger and create Execution (ticker run).
     Returns (True, execution_id) on success, (False, None) if insufficient balance.
+    Balance is computed from TokenTransaction ledger (single source of truth).
     """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         return (False, None)
-    balance = getattr(user, "token_balance", None)
-    if balance is None:
-        user.token_balance = INITIAL_BALANCE
-        db.flush()
-        balance = user.token_balance
+    
+    # Ensure user has initial balance
+    ensure_user_balance(user_id, db)
+    
+    # Check balance from ledger
+    balance = get_balance_from_ledger(user_id, db)
     if balance < COST_PER_ANALYSIS:
         return (False, None)
+    
     try:
         # Create execution first
         ex_id = record_execution(user_id, "ticker", "ticker", ticker.upper(), db, commit=False)
         
-        # Record transaction
+        # Record transaction (this updates the ledger)
         metadata = {"ticker": ticker.upper(), "execution_id": ex_id}
         tx = record_transaction(
             user_id=user_id,
@@ -209,17 +250,20 @@ def deduct_for_digest(user_id: int, subject_id: str, db: Session) -> Tuple[bool,
     Deduct COST_PER_DIGEST from user via transaction ledger and create Execution (daily/weekly digest run).
     subject_id: slot key, e.g. "user_id:YYYY-MM-DD" or "user_id:w:YYYY-MM-DD".
     Returns (True, execution_id) on success, (False, None) if insufficient balance or error.
+    Balance is computed from TokenTransaction ledger (single source of truth).
     """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         return (False, None)
-    balance = getattr(user, "token_balance", None)
-    if balance is None:
-        user.token_balance = INITIAL_BALANCE
-        db.flush()
-        balance = user.token_balance
+    
+    # Ensure user has initial balance
+    ensure_user_balance(user_id, db)
+    
+    # Check balance from ledger
+    balance = get_balance_from_ledger(user_id, db)
     if balance < COST_PER_DIGEST:
         return (False, None)
+    
     try:
         # Create execution first
         ex_id = record_execution(
@@ -231,7 +275,7 @@ def deduct_for_digest(user_id: int, subject_id: str, db: Session) -> Tuple[bool,
             commit=False,
         )
         
-        # Record transaction
+        # Record transaction (this updates the ledger)
         metadata = {"subject_id": subject_id, "execution_id": ex_id}
         tx = record_transaction(
             user_id=user_id,
@@ -258,7 +302,7 @@ def deduct_for_digest(user_id: int, subject_id: str, db: Session) -> Tuple[bool,
 
 def record_view(execution_id: int, viewer_id: int, db: Session) -> bool:
     """
-    Record a unique view. If new and eligible, credit creator 1 token.
+    Record a unique view. If new and eligible, credit creator 1 token via transaction ledger.
     Returns True if a new view was recorded (and possibly credited).
     Rules: no self-views, earned_tokens < MAX_REWARD_PER_REPORT, optional 14-day window.
     """
@@ -302,9 +346,20 @@ def record_view(execution_id: int, viewer_id: int, db: Session) -> bool:
             db.commit()
             return True
 
+    # Credit creator via transaction ledger
     creator = db.query(User).filter(User.id == ex.creator_id).first()
     if creator is not None:
-        creator.token_balance = getattr(creator, "token_balance", 0) + EARNINGS_PER_UNIQUE_VIEW
+        record_transaction(
+            user_id=ex.creator_id,
+            amount=EARNINGS_PER_UNIQUE_VIEW,
+            transaction_type="view_reward",
+            related_entity_type="execution",
+            related_entity_id=execution_id,
+            metadata={"viewer_id": viewer_id},
+            description=f"View reward for execution {execution_id}",
+            db=db,
+            commit=False,
+        )
         ex.earned_tokens += 1
     db.commit()
     return True
@@ -319,7 +374,10 @@ def delete_execution(execution_id: int, db: Session) -> None:
 
 
 def refund_for_execution(user_id: int, execution_id: int, db: Session) -> None:
-    """Refund COST_PER_ANALYSIS and remove Execution (e.g. when analysis was already running)."""
+    """
+    Refund COST_PER_ANALYSIS via transaction ledger and remove Execution
+    (e.g. when analysis was already running - race condition).
+    """
     ex = (
         db.query(Execution)
         .filter(
@@ -331,9 +389,151 @@ def refund_for_execution(user_id: int, execution_id: int, db: Session) -> None:
     if ex:
         user = db.query(User).filter(User.id == user_id).first()
         if user:
-            user.token_balance = getattr(user, "token_balance", 0) + COST_PER_ANALYSIS
+            # Refund via transaction ledger
+            record_transaction(
+                user_id=user_id,
+                amount=COST_PER_ANALYSIS,
+                transaction_type="refund",
+                related_entity_type="execution",
+                related_entity_id=execution_id,
+                metadata={"reason": "duplicate_execution"},
+                description=f"Refund for duplicate execution {execution_id}",
+                db=db,
+                commit=False,
+            )
         db.delete(ex)
         db.commit()
+
+
+def refund_for_failed_execution(execution_id: int, db: Session) -> bool:
+    """
+    Refund COST_PER_ANALYSIS for a failed execution via transaction ledger.
+    Does NOT delete the execution (keeps it for audit trail with status='failed').
+    Returns True if refund was successful, False otherwise.
+    """
+    ex = db.query(Execution).filter(Execution.id == execution_id).first()
+    if not ex:
+        return False
+    
+    # Only refund if execution is marked as failed
+    if ex.status != "failed":
+        return False
+    
+    # Check if already refunded (look for existing refund transaction)
+    from models.db_models import TokenTransaction
+    existing_refund = (
+        db.query(TokenTransaction)
+        .filter(
+            TokenTransaction.related_entity_type == "execution",
+            TokenTransaction.related_entity_id == execution_id,
+            TokenTransaction.transaction_type == "refund",
+        )
+        .first()
+    )
+    if existing_refund:
+        return False  # Already refunded
+    
+    # Get the original deduction transaction to extract metadata
+    original_tx = (
+        db.query(TokenTransaction)
+        .filter(
+            TokenTransaction.related_entity_type == "execution",
+            TokenTransaction.related_entity_id == execution_id,
+            TokenTransaction.transaction_type == "analysis_cost",
+        )
+        .first()
+    )
+    
+    # Build refund metadata
+    import json
+    metadata = {"execution_id": execution_id, "reason": "analysis_failed"}
+    if original_tx and original_tx.metadata_json:
+        try:
+            original_meta = json.loads(original_tx.metadata_json)
+            if "ticker" in original_meta:
+                metadata["ticker"] = original_meta["ticker"]
+        except Exception:
+            pass
+    
+    # Record refund transaction
+    ticker_info = f" for {metadata.get('ticker', 'unknown')}" if "ticker" in metadata else ""
+    tx = record_transaction(
+        user_id=ex.creator_id,
+        amount=COST_PER_ANALYSIS,  # Positive amount = credit
+        transaction_type="refund",
+        related_entity_type="execution",
+        related_entity_id=execution_id,
+        metadata=metadata,
+        description=f"Refund for failed analysis{ticker_info}",
+        db=db,
+        commit=True,
+    )
+    
+    return tx is not None
+
+
+def refund_for_failed_chat(chat_message_id: int, db: Session) -> bool:
+    """
+    Refund tokens for a failed chat message via transaction ledger.
+    Returns True if refund was successful, False otherwise.
+    
+    Note: Currently chat tokens are only deducted on successful completion,
+    so this function is mainly for future use or manual corrections.
+    """
+    from models.db_models import TokenTransaction
+    
+    # Check if already refunded
+    existing_refund = (
+        db.query(TokenTransaction)
+        .filter(
+            TokenTransaction.related_entity_type == "chat_message",
+            TokenTransaction.related_entity_id == chat_message_id,
+            TokenTransaction.transaction_type == "refund",
+        )
+        .first()
+    )
+    if existing_refund:
+        return False  # Already refunded
+    
+    # Get the original deduction transaction
+    original_tx = (
+        db.query(TokenTransaction)
+        .filter(
+            TokenTransaction.related_entity_type == "chat_message",
+            TokenTransaction.related_entity_id == chat_message_id,
+            TokenTransaction.transaction_type == "chat_cost",
+        )
+        .first()
+    )
+    
+    if not original_tx:
+        return False  # No original transaction found
+    
+    # Build refund metadata
+    import json
+    metadata = {"chat_message_id": chat_message_id, "reason": "chat_failed"}
+    if original_tx.metadata_json:
+        try:
+            original_meta = json.loads(original_tx.metadata_json)
+            metadata["original_metadata"] = original_meta
+        except Exception:
+            pass
+    
+    # Record refund transaction (refund the platform tokens that were deducted)
+    tx = record_transaction(
+        user_id=original_tx.user_id,
+        amount=abs(original_tx.amount),  # Positive amount = credit (original was negative)
+        llm_tokens=original_tx.llm_tokens,  # Keep track of LLM tokens for reference
+        transaction_type="refund",
+        related_entity_type="chat_message",
+        related_entity_id=chat_message_id,
+        metadata=metadata,
+        description=f"Refund for failed chat message",
+        db=db,
+        commit=True,
+    )
+    
+    return tx is not None
 
 
 def llm_tokens_to_platform_tokens(llm_tokens: int) -> int:
@@ -361,16 +561,18 @@ def deduct_for_chat(
     for the exchange; it is converted to platform tokens using LLM_TOKENS_PER_PLATFORM_TOKEN
     (e.g. 10000 LLM tokens = 1 platform token). Returns False if insufficient balance.
     Tracks both LLM tokens (actual usage) and platform tokens (what user pays).
+    Balance is computed from TokenTransaction ledger (single source of truth).
     """
     platform_tokens = llm_tokens_to_platform_tokens(llm_tokens)
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         return False
-    balance = getattr(user, "token_balance", None)
-    if balance is None:
-        user.token_balance = INITIAL_BALANCE
-        db.flush()
-        balance = user.token_balance
+    
+    # Ensure user has initial balance
+    ensure_user_balance(user_id, db)
+    
+    # Check balance from ledger
+    balance = get_balance_from_ledger(user_id, db)
     if balance < 1:
         return False
     
