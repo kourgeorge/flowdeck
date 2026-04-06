@@ -13,6 +13,16 @@ function authHeaders(): { Authorization: string } | object {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+function getFilenameFromDisposition(disposition?: string): string | null {
+  if (!disposition) return null;
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1]);
+  }
+  const simpleMatch = disposition.match(/filename="?([^"]+)"?/i);
+  return simpleMatch?.[1] ?? null;
+}
+
 export interface AdminStats {
   total_users: number;
   total_reports: number;
@@ -299,6 +309,22 @@ export const adminApi = {
       { params: { limit, offset }, headers: authHeaders() },
     );
     return res.data;
+  },
+
+  downloadAnalysisReportsZip: async (
+    analysisRunId: number,
+  ): Promise<{ blob: Blob; filename: string }> => {
+    const res = await api.get<Blob>(
+      `/api/admin/analyses/${analysisRunId}/download`,
+      {
+        headers: authHeaders(),
+        responseType: 'blob',
+      },
+    );
+    const filename =
+      getFilenameFromDisposition(res.headers['content-disposition']) ??
+      `analysis_${analysisRunId}_reports.zip`;
+    return { blob: res.data, filename };
   },
 
   deleteAnalysis: async (analysisRunId: number): Promise<{ ok: boolean; id: number }> => {

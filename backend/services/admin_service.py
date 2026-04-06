@@ -1,6 +1,8 @@
 """Admin read/write: stats, users, reports, analyses, subscriptions, views, mission control data."""
 
+import io
 import json
+import zipfile
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -154,6 +156,87 @@ def get_report_detail(db: Session, report_id: int) -> Optional[dict[str, Any]]:
         "total_tokens": meta_for_costs.get("total_tokens"),
         "cost_usd": meta_for_costs.get("cost_usd"),
     }
+
+
+def build_analysis_reports_zip(
+    db: Session,
+    analysis_run_id: int,
+) -> Optional[tuple[bytes, str]]:
+    """Return an in-memory zip of all reports for one analysis run."""
+    execution = db.query(Execution).filter(Execution.id == analysis_run_id).first()
+    if not execution:
+        return None
+
+    reports = (
+        db.query(Report)
+        .filter(Report.execution_id == analysis_run_id)
+        .order_by(Report.created_at.asc(), Report.report_type.asc())
+        .all()
+    )
+    if not reports:
+        return None
+
+    ticker = (execution.subject_id or "analysis").upper()
+    filename = f"{ticker}_analysis_{analysis_run_id}_reports.zip"
+
+    results_report_dir = _results_root() / ticker / str(analysis_run_id) / "reports"
+    zip_buffer = io.BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        manifest = {
+            "analysis_run_id": analysis_run_id,
+            "ticker": ticker,
+            "status": execution.status,
+            "created_at": execution.created_at.isoformat() if execution.created_at else None,
+            "completed_at": (
+                execution.completed_at.isoformat()
+                if getattr(execution, "completed_at", None)
+                else None
+            ),
+            "report_count": len(reports),
+            "reports": [],
+        }
+
+        for report in reports:
+            safe_report_type = "".join(
+                ch if ch.isalnum() or ch in ("-", "_") else "_"
+                for ch in (report.report_type or "report")
+            )
+            arcname = f"reports/{safe_report_type}.md"
+            filesystem_path = results_report_dir / f"{safe_report_type}.md"
+
+            content = report.content or ""
+            if filesystem_path.exists() and filesystem_path.is_file():
+                content = filesystem_path.read_text(encoding="utf-8")
+            zf.writestr(arcname, content)
+
+            metadata: dict[str, Any] | None = None
+            if report.metadata_json:
+                try:
+                    metadata = json.loads(report.metadata_json)
+                except Exception:
+                    metadata = None
+            if metadata is not None:
+                zf.writestr(
+                    f"reports/{safe_report_type}.metadata.json",
+                    json.dumps(metadata, indent=2, sort_keys=True),
+                )
+
+            manifest["reports"].append(
+                {
+                    "id": report.id,
+                    "report_type": report.report_type,
+                    "created_at": report.created_at.isoformat() if report.created_at else None,
+                    "has_metadata": metadata is not None,
+                }
+            )
+
+        zf.writestr(
+            "analysis.json",
+            json.dumps(manifest, indent=2, sort_keys=True),
+        )
+
+    return zip_buffer.getvalue(), filename
 
 
 def list_analyses(db: Session, limit: int, offset: int) -> tuple[list[dict], int]:

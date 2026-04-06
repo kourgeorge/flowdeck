@@ -50,6 +50,7 @@ export default function AdminDashboardPage() {
   const [selectedReportDetail, setSelectedReportDetail] = useState<AdminReportDetail | null>(null);
   const [loadingReportDetail, setLoadingReportDetail] = useState(false);
   const [reportDetailError, setReportDetailError] = useState<string | null>(null);
+  const [downloadingAnalysisIds, setDownloadingAnalysisIds] = useState<Set<number>>(new Set());
   const [analyses, setAnalyses] = useState<AdminAnalysisItem[]>([]);
   const [analysesTotal, setAnalysesTotal] = useState(0);
   const [analysisTickerFilter, setAnalysisTickerFilter] = useState('');
@@ -416,6 +417,34 @@ export default function AdminDashboardPage() {
     }
   }, []);
 
+  const downloadAnalysis = useCallback(async (analysisRunId: number) => {
+    setDownloadingAnalysisIds((prev) => {
+      const next = new Set(prev);
+      next.add(analysisRunId);
+      return next;
+    });
+    try {
+      const { blob, filename } = await adminApi.downloadAnalysisReportsZip(analysisRunId);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { detail?: string } } };
+      window.alert(ax.response?.data?.detail ?? 'Failed to download analysis reports');
+    } finally {
+      setDownloadingAnalysisIds((prev) => {
+        const next = new Set(prev);
+        next.delete(analysisRunId);
+        return next;
+      });
+    }
+  }, []);
+
   const selectedReportPayload = useMemo(() => {
     if (!selectedReportDetail) return null;
     return {
@@ -686,6 +715,8 @@ export default function AdminDashboardPage() {
               latestReportsCollapsed={latestReportsCollapsed}
               setLatestReportsCollapsed={setLatestReportsCollapsed}
               openReportDetail={openReportDetail}
+              onDownloadAnalysis={downloadAnalysis}
+              downloadingAnalysisIds={downloadingAnalysisIds}
               setStats={setStats}
               setAnalyses={setAnalyses}
               setAnalysesTotal={setAnalysesTotal}
@@ -788,13 +819,25 @@ export default function AdminDashboardPage() {
                   {selectedReport.ticker} • {selectedReport.report_type} • run {selectedReport.analysis_run_id}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={closeReportDetail}
-                className="rounded-lg border border-gray-700 px-3 py-1.5 text-sm text-gray-300 transition hover:border-gray-600 hover:text-white"
-              >
-                Close
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void downloadAnalysis(selectedReport.analysis_run_id)}
+                  disabled={downloadingAnalysisIds.has(selectedReport.analysis_run_id)}
+                  className="rounded-lg border border-blue-700/60 px-3 py-1.5 text-sm text-blue-300 transition hover:border-blue-600 hover:text-blue-200 disabled:cursor-not-allowed disabled:border-gray-700 disabled:text-gray-500"
+                >
+                  {downloadingAnalysisIds.has(selectedReport.analysis_run_id)
+                    ? 'Downloading…'
+                    : 'Download zip'}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeReportDetail}
+                  className="rounded-lg border border-gray-700 px-3 py-1.5 text-sm text-gray-300 transition hover:border-gray-600 hover:text-white"
+                >
+                  Close
+                </button>
+              </div>
             </div>
 
             <div className="space-y-4 overflow-y-auto px-5 py-4">

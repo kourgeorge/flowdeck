@@ -28,6 +28,8 @@ interface OverviewTabProps {
   latestReportsCollapsed: boolean;
   setLatestReportsCollapsed: (value: boolean | ((prev: boolean) => boolean)) => void;
   openReportDetail: (report: AdminReportItem) => void;
+  onDownloadAnalysis: (analysisRunId: number) => Promise<void>;
+  downloadingAnalysisIds: Set<number>;
   setStats: (stats: AdminStats) => void;
   setAnalyses: (analyses: AdminAnalysisItem[]) => void;
   setAnalysesTotal: (total: number) => void;
@@ -53,6 +55,8 @@ export default function OverviewTab({
   latestReportsCollapsed,
   setLatestReportsCollapsed,
   openReportDetail,
+  onDownloadAnalysis,
+  downloadingAnalysisIds,
   setStats,
   setAnalyses,
   setAnalysesTotal,
@@ -241,26 +245,36 @@ export default function OverviewTab({
                     </td>
                     <td className="px-4 py-3 text-gray-400">{formatDate(a.created_at)}</td>
                     <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (!window.confirm(`Delete analysis run ${a.id} (${a.ticker})? This cannot be undone.`)) return;
-                          await adminApi.deleteAnalysis(a.id);
-                          const [s, aRes, rRes] = await Promise.all([
-                            adminApi.getStats(),
-                            adminApi.getAnalyses(50),
-                            adminApi.getReports(200),
-                          ]);
-                          setStats(s);
-                          setAnalyses(aRes.analyses);
-                          setAnalysesTotal(aRes.total);
-                          setReports(rRes.reports);
-                          setReportsTotal(rRes.total);
-                        }}
-                        className="text-red-400 hover:text-red-300 hover:underline text-sm font-medium"
-                      >
-                        Delete
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => void onDownloadAnalysis(a.id)}
+                          disabled={downloadingAnalysisIds.has(a.id)}
+                          className="text-blue-400 hover:text-blue-300 hover:underline text-sm font-medium disabled:cursor-not-allowed disabled:text-gray-500"
+                        >
+                          {downloadingAnalysisIds.has(a.id) ? 'Downloading…' : 'Download'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!window.confirm(`Delete analysis run ${a.id} (${a.ticker})? This cannot be undone.`)) return;
+                            await adminApi.deleteAnalysis(a.id);
+                            const [s, aRes, rRes] = await Promise.all([
+                              adminApi.getStats(),
+                              adminApi.getAnalyses(50),
+                              adminApi.getReports(200),
+                            ]);
+                            setStats(s);
+                            setAnalyses(aRes.analyses);
+                            setAnalysesTotal(aRes.total);
+                            setReports(rRes.reports);
+                            setReportsTotal(rRes.total);
+                          }}
+                          className="text-red-400 hover:text-red-300 hover:underline text-sm font-medium"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                   {a.status === 'failed' && a.error_message && (

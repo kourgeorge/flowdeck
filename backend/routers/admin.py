@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone, date
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_serializer
 from sqlalchemy.orm import Session
 
@@ -357,6 +358,27 @@ def get_admin_analyses(
     return AdminAnalysesResponse(
         analyses=[AdminAnalysisItem(**it) for it in items],
         total=total,
+    )
+
+
+@router.get("/analyses/{analysis_run_id}/download")
+def download_analysis_reports_zip(
+    analysis_run_id: int,
+    _user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Download all reports for one analysis run as a zip archive."""
+    payload = admin_service.build_analysis_reports_zip(db, analysis_run_id)
+    if not payload:
+        raise HTTPException(status_code=404, detail="Analysis reports not found")
+
+    zip_bytes, filename = payload
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
     )
 
 
