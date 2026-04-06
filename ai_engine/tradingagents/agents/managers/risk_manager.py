@@ -51,6 +51,7 @@ def create_risk_manager(llm, memory):
         fundamentals_report = state["fundamentals_report"]
         sentiment_report = state["sentiment_report"]
         sec_report = state.get("sec_report") or ""
+        events_report = state.get("events_report") or ""
         trader_plan = state["investment_plan"]
         trader_recommendation = state.get("trader_recommendation", "HOLD")
         score_candidates = {
@@ -83,6 +84,8 @@ def create_risk_manager(llm, memory):
         curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
         if sec_report:
             curr_situation += f"\n\n{sec_report}"
+        if events_report:
+            curr_situation += f"\n\n{events_report}"
         past_memories = memory.get_memories(curr_situation, n_matches=2)
 
         past_memory_str = ""
@@ -138,6 +141,9 @@ Deliverables:
 {score_context_lines}
 - score_average: {avg_score if avg_score is not None else "N/A"}
 - score_std_dev: {score_std if score_std is not None else "N/A"}
+
+**Deterministic Event Context:**
+{events_report if events_report else "No deterministic event summary available."}
 
 ---
 

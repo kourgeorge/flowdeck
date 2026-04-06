@@ -45,6 +45,9 @@ def extract_resources_from_tool(
     elif tool_name == "get_indicators":
         if ticker:
             resources = [{"type": "technical_indicators", "ticker": ticker, "description": f"Technical indicator snapshot for {ticker}"}]
+    elif tool_name == "get_events":
+        if ticker:
+            resources = [{"type": "deterministic_events", "ticker": ticker, "description": f"Deterministic event summary for {ticker}"}]
     elif tool_name == "get_analysts_recommendation":
         if ticker:
             resources = [{"type": "analyst_recommendation", "ticker": ticker}]

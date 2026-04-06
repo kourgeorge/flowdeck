@@ -20,6 +20,7 @@ def create_risky_debator(llm):
         fundamentals_report = state["fundamentals_report"]
         sec_report = state.get("sec_report", "")
         technical_report = state.get("technical_report", "")
+        events_report = state.get("events_report", "")
 
         trader_decision = state["trader_investment_plan"]
 
@@ -41,6 +42,7 @@ Latest World Affairs Report: {news_report}
 Company Fundamentals Report: {fundamentals_report}
 SEC / Regulatory Report: {sec_report if sec_report else "Not available"}
 Advanced Technical Report: {technical_report if technical_report else "Not available"}
+Deterministic Event Summary: {events_report if events_report else "Not available"}
 Here is the current conversation history: {history}. Here are the last arguments from the conservative analyst: {current_safe_response} Here are the last arguments from the neutral analyst: {current_neutral_response}. If there are no responses from the other viewpoints, do not halluncinate and just present your point.
 
 Engage actively by addressing any specific concerns raised, refuting the weaknesses in their logic, and asserting the benefits of risk-taking to outpace market norms. Maintain a focus on debating and persuading, not just presenting data. Challenge each counterpoint to underscore why a high-risk approach is optimal. Output conversationally as if you are speaking without any special formatting."""

@@ -2,7 +2,13 @@ import logging
 from typing import List
 
 from pydantic import BaseModel, Field
-from ..utils.agent_utils import get_fundamentals, get_balance_sheet, get_cashflow, get_income_statement
+from ..utils.agent_utils import (
+    get_events,
+    get_fundamentals,
+    get_balance_sheet,
+    get_cashflow,
+    get_income_statement,
+)
 from .self_contained_analyst import create_self_contained_analyst
 from .output_schema import analyst_key_takeaways_field
 from .prompts import build_fundamentals_analyst_prompt
@@ -27,6 +33,7 @@ def create_fundamentals_analyst(llm):
     return create_self_contained_analyst(
         llm=llm,
         tools=[
+            get_events,
             get_fundamentals,
             get_balance_sheet,
             get_cashflow,

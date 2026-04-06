@@ -22,6 +22,7 @@ from ..datasources.info_service_client import require_info_service, set_info_ser
 
 # Import the new abstract tool methods from agent_utils
 from ..agents.utils.agent_utils import (
+    fetch_events_report,
     get_ticker_data,
     get_ticker_quote,
     get_indicators,
@@ -173,6 +174,7 @@ class TradingAgentsGraph:
         init_agent_state = self.propagator.create_initial_state(
             company_name, trade_date
         )
+        init_agent_state["events_report"] = fetch_events_report(company_name)
         args = self.propagator.get_graph_args(session_id=session_id)
 
         if self.debug:
@@ -210,6 +212,7 @@ class TradingAgentsGraph:
         self.log_states_dict[str(trade_date)] = {
             "company_of_interest": final_state["company_of_interest"],
             "trade_date": final_state["trade_date"],
+            "events_report": final_state.get("events_report", ""),
             "market_report": final_state["market_report"],
             "market_score": final_state.get("market_score"),
             "sentiment_report": final_state["sentiment_report"],
@@ -278,4 +281,3 @@ class TradingAgentsGraph:
         self.reflector.reflect_risk_manager(
             self.curr_state, returns_losses, self.risk_manager_memory
         )
-

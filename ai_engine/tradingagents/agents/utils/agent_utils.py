@@ -3,6 +3,10 @@ from .core_stock_tools import (
     get_ticker_data,
     get_ticker_quote,
 )
+from .events_tools import (
+    get_events,
+    fetch_events_report,
+)
 from .technical_indicators_tools import (
     get_indicators
 )

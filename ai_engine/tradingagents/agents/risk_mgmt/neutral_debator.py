@@ -20,6 +20,7 @@ def create_neutral_debator(llm):
         fundamentals_report = state["fundamentals_report"]
         sec_report = state.get("sec_report", "")
         technical_report = state.get("technical_report", "")
+        events_report = state.get("events_report", "")
 
         trader_decision = state["trader_investment_plan"]
 
@@ -35,6 +36,7 @@ Latest World Affairs Report: {news_report}
 Company Fundamentals Report: {fundamentals_report}
 SEC / Regulatory Report: {sec_report if sec_report else "Not available"}
 Advanced Technical Report: {technical_report if technical_report else "Not available"}
+Deterministic Event Summary: {events_report if events_report else "Not available"}
 Here is the current conversation history: {history} Here is the last response from the risky analyst: {current_risky_response} Here is the last response from the safe analyst: {current_safe_response}. If there are no responses from the other viewpoints, do not halluncinate and just present your point.
 
 Engage actively by analyzing both sides critically, addressing weaknesses in the risky and conservative arguments to advocate for a more balanced approach. Challenge each of their points to illustrate why a moderate risk strategy might offer the best of both worlds, providing growth potential while safeguarding against extreme volatility. Focus on debating rather than simply presenting data, aiming to show that a balanced view can lead to the most reliable outcomes. Output conversationally as if you are speaking without any special formatting."""

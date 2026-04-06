@@ -153,6 +153,7 @@ def create_trader(llm, memory):
     def trader_node(state, name):
         company_name = state["company_of_interest"]
         investment_plan = state["investment_plan"]
+        events_report = state.get("events_report", "")
 
         # Build memory similarity key from all available reports (not re-fed to LLM — already synthesized in investment_plan)
         curr_situation = investment_plan
@@ -172,6 +173,7 @@ def create_trader(llm, memory):
                 f"tailored for {company_name}. This plan incorporates insights from current technical "
                 f"market trends, macroeconomic indicators, and social media sentiment. Use this plan as "
                 f"a foundation for evaluating your next trading decision.\n\n"
+                f"Deterministic event summary:\n{events_report or 'No deterministic event summary available.'}\n\n"
                 f"Proposed Investment Plan: {investment_plan}\n\n"
                 f"Leverage these insights to make an informed and strategic decision."
             ),
@@ -270,4 +272,3 @@ def create_trader(llm, memory):
         return out
 
     return functools.partial(trader_node, name="Trader")
-

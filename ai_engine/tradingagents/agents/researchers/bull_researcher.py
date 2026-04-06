@@ -18,10 +18,13 @@ def create_bull_researcher(llm, memory):
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
         technical_report = state.get("technical_report", "")
+        events_report = state.get("events_report", "")
 
         curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
         if technical_report:
             curr_situation += f"\n\n{technical_report}"
+        if events_report:
+            curr_situation += f"\n\n{events_report}"
         past_memories = memory.get_memories(curr_situation, n_matches=2)
 
         past_memory_str = ""
@@ -43,6 +46,7 @@ Social media sentiment report: {sentiment_report}
 Latest world affairs news: {news_report}
 Company fundamentals report: {fundamentals_report}
 {f"Advanced technical analysis report: {technical_report}" if technical_report else ""}
+{f"Deterministic event summary: {events_report}" if events_report else ""}
 Conversation history of the debate: {history}
 Last bear argument: {current_response}
 Reflections from similar situations and lessons learned: {past_memory_str}

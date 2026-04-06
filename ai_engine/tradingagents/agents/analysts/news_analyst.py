@@ -2,7 +2,12 @@ import logging
 from typing import List
 
 from pydantic import BaseModel, Field
-from ..utils.agent_utils import get_news, get_global_news, get_insider_transactions
+from ..utils.agent_utils import (
+    get_events,
+    get_news,
+    get_global_news,
+    get_insider_transactions,
+)
 from .self_contained_analyst import create_self_contained_analyst
 from .output_schema import analyst_key_takeaways_field
 from .prompts import build_news_analyst_prompt
@@ -27,6 +32,7 @@ def create_news_analyst(llm):
     return create_self_contained_analyst(
         llm=llm,
         tools=[
+            get_events,
             get_news,
             get_global_news,
             get_insider_transactions,

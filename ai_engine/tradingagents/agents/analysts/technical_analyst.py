@@ -2,7 +2,7 @@ import logging
 from typing import List
 
 from pydantic import BaseModel, Field
-from ..utils.agent_utils import get_ticker_data, get_ticker_quote, get_indicators
+from ..utils.agent_utils import get_events, get_ticker_data, get_ticker_quote, get_indicators
 from ..utils.advanced_technical_tools import (
     detect_divergence,
     detect_regime,
@@ -32,6 +32,7 @@ def create_technical_analyst(llm):
     return create_self_contained_analyst(
         llm=llm,
         tools=[
+            get_events,
             get_ticker_data,
             get_ticker_quote,
             get_indicators,

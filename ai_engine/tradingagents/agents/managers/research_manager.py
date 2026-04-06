@@ -49,6 +49,7 @@ def create_research_manager(llm, memory):
         fundamentals_report = state["fundamentals_report"]
         sec_report = state.get("sec_report", "")
         technical_report = state.get("technical_report", "")
+        events_report = state.get("events_report", "")
 
         investment_debate_state = state["investment_debate_state"]
 
@@ -57,6 +58,8 @@ def create_research_manager(llm, memory):
             curr_situation += f"\n\n{sec_report}"
         if technical_report:
             curr_situation += f"\n\n{technical_report}"
+        if events_report:
+            curr_situation += f"\n\n{events_report}"
         past_memories = memory.get_memories(curr_situation, n_matches=2)
 
         past_memory_str = ""
@@ -98,6 +101,9 @@ Use the debate and your view to estimate these three numbers. They must be numer
 
 Here are your past reflections on mistakes:
 \"{past_memory_str}\"
+
+Deterministic event context:
+{events_report if events_report else "No deterministic event summary available."}
 
 Here is the debate:
 Debate History:

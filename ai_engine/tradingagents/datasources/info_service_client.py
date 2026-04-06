@@ -209,6 +209,7 @@ def get_financial_charts(
 
 def get_events(
     ticker: str,
+    lookback_days: int = 10,
     base_url: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Fetch deterministic ticker events from /api/data/events/{ticker}."""
@@ -216,7 +217,12 @@ def get_events(
     if not base_url:
         return None
     try:
-        data = _get(None, base_url, f"/api/data/events/{ticker.upper()}")
+        data = _get(
+            None,
+            base_url,
+            f"/api/data/events/{ticker.upper()}",
+            params={"lookback_days": lookback_days},
+        )
         return data if isinstance(data, dict) else None
     except Exception:
         return None
