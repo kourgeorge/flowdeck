@@ -80,6 +80,7 @@ class UsageOperationItem(BaseModel):
     execution_id: Optional[int]
     chat_turn_id: Optional[int]
     chat_session_id: Optional[int]
+    chat_turn_count: Optional[int]
     tools_called: Optional[int]
 
 
@@ -99,8 +100,19 @@ class UsageSummary(BaseModel):
     digest_llm_tokens: int
 
 
+class UsageDailyTrendPoint(BaseModel):
+    date: str
+    total_platform_tokens: int
+    total_llm_tokens: int
+    analysis_platform_tokens: int
+    chat_platform_tokens: int
+    digest_platform_tokens: int
+    operation_count: int
+
+
 class UsageHistoryResponse(BaseModel):
     summary: UsageSummary
+    daily_trend: List[UsageDailyTrendPoint]
     items: List[UsageOperationItem]
     returned_operations: int
 

@@ -102,6 +102,52 @@ def _parse_digest_subject(subject_id: Optional[str]) -> tuple[str, str]:
     return ("Daily digest", slot or "Unknown date")
 
 
+def _date_key(value: Optional[datetime]) -> str:
+    return _as_utc(value).date().isoformat()
+
+
+def _init_daily_trend(days: int) -> dict[str, dict[str, Any]]:
+    today = datetime.now(timezone.utc).date()
+    start = today - timedelta(days=max(days - 1, 0))
+    trend: dict[str, dict[str, Any]] = {}
+    for offset in range(days):
+        key = (start + timedelta(days=offset)).isoformat()
+        trend[key] = {
+            "date": key,
+            "total_platform_tokens": 0,
+            "total_llm_tokens": 0,
+            "analysis_platform_tokens": 0,
+            "chat_platform_tokens": 0,
+            "digest_platform_tokens": 0,
+            "operation_count": 0,
+        }
+    return trend
+
+
+def _add_daily_trend_point(
+    trend: dict[str, dict[str, Any]],
+    *,
+    date_key: str,
+    kind: str,
+    platform_tokens: int,
+    llm_tokens: int,
+) -> None:
+    bucket = trend.get(date_key)
+    if bucket is None:
+        return
+
+    bucket["total_platform_tokens"] += int(platform_tokens or 0)
+    bucket["total_llm_tokens"] += int(llm_tokens or 0)
+    bucket["operation_count"] += 1
+
+    if kind == "analysis":
+        bucket["analysis_platform_tokens"] += int(platform_tokens or 0)
+    elif kind == "chat":
+        bucket["chat_platform_tokens"] += int(platform_tokens or 0)
+    elif kind == "digest":
+        bucket["digest_platform_tokens"] += int(platform_tokens or 0)
+
+
 def get_user_usage_history(
     db: Session,
     user_id: int,
@@ -161,6 +207,8 @@ def get_user_usage_history(
     )
 
     items: list[dict[str, Any]] = []
+    daily_trend = _init_daily_trend(days)
+    chat_sessions: dict[int, dict[str, Any]] = {}
     summary = {
         "period_days": days,
         "total_operations": 0,
@@ -219,9 +267,17 @@ def get_user_usage_history(
                 "execution_id": identifier,
                 "chat_turn_id": None,
                 "chat_session_id": None,
+                "chat_turn_count": None,
                 "tools_called": None,
                 "_sort_at": sort_at,
             }
+        )
+        _add_daily_trend_point(
+            daily_trend,
+            date_key=_date_key(tx.created_at),
+            kind=kind,
+            platform_tokens=platform_tokens,
+            llm_tokens=llm_total or 0,
         )
         summary["total_operations"] += 1
         summary["total_platform_tokens"] += platform_tokens
@@ -240,25 +296,69 @@ def get_user_usage_history(
         cost_usd = _as_float(model_metadata.get("cost_usd"))
         created_at = message.created_at if message and message.created_at else turn.created_at
         title = session.title.strip() if session and session.title else "Chat session"
-
-        items.append(
+        session_id = session.id if session else turn.session_id
+        session_usage = chat_sessions.setdefault(
+            session_id,
             {
                 "kind": "chat",
                 "title": title,
-                "subject_label": f"Turn #{turn.id}",
-                "status": turn.status,
-                "platform_tokens": platform_tokens,
-                "llm_tokens": llm_total,
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "cost_usd": round(cost_usd, 6) if cost_usd else None,
+                "subject_label": "1 turn in this conversation",
+                "status": "completed",
+                "platform_tokens": 0,
+                "llm_tokens": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cost_usd": 0.0,
                 "created_at": _to_iso(created_at),
                 "execution_id": None,
-                "chat_turn_id": turn.id,
-                "chat_session_id": session.id if session else turn.session_id,
-                "tools_called": message.tools_called if message else None,
+                "chat_turn_id": None,
+                "chat_session_id": session_id,
+                "chat_turn_count": 0,
+                "tools_called": 0,
                 "_sort_at": _as_utc(created_at),
-            }
+                "_has_llm_tokens": False,
+                "_has_input_tokens": False,
+                "_has_output_tokens": False,
+                "_has_cost": False,
+                "_has_tools_called": False,
+            },
+        )
+        if title != "Chat session" and session_usage["title"] == "Chat session":
+            session_usage["title"] = title
+
+        created_sort_at = _as_utc(created_at)
+        if created_sort_at >= session_usage["_sort_at"]:
+            session_usage["_sort_at"] = created_sort_at
+            session_usage["created_at"] = _to_iso(created_at)
+
+        session_usage["chat_turn_count"] += 1
+        session_usage["subject_label"] = (
+            f'{session_usage["chat_turn_count"]} turn'
+            f'{"s" if session_usage["chat_turn_count"] != 1 else ""} in this conversation'
+        )
+        session_usage["status"] = turn.status
+        session_usage["platform_tokens"] += int(platform_tokens or 0)
+        if llm_total is not None:
+            session_usage["llm_tokens"] += llm_total
+            session_usage["_has_llm_tokens"] = True
+        if input_tokens is not None:
+            session_usage["input_tokens"] += input_tokens
+            session_usage["_has_input_tokens"] = True
+        if output_tokens is not None:
+            session_usage["output_tokens"] += output_tokens
+            session_usage["_has_output_tokens"] = True
+        if cost_usd is not None:
+            session_usage["cost_usd"] += cost_usd
+            session_usage["_has_cost"] = True
+        if message and message.tools_called is not None:
+            session_usage["tools_called"] += int(message.tools_called or 0)
+            session_usage["_has_tools_called"] = True
+        _add_daily_trend_point(
+            daily_trend,
+            date_key=_date_key(created_at),
+            kind="chat",
+            platform_tokens=int(platform_tokens or 0),
+            llm_tokens=llm_total or 0,
         )
 
         summary["total_operations"] += 1
@@ -268,6 +368,29 @@ def get_user_usage_history(
         summary["total_platform_tokens"] += int(platform_tokens or 0)
         summary["total_llm_tokens"] += llm_total or 0
 
+    for session_usage in chat_sessions.values():
+        session_usage["llm_tokens"] = (
+            session_usage["llm_tokens"] if session_usage["_has_llm_tokens"] else None
+        )
+        session_usage["input_tokens"] = (
+            session_usage["input_tokens"] if session_usage["_has_input_tokens"] else None
+        )
+        session_usage["output_tokens"] = (
+            session_usage["output_tokens"] if session_usage["_has_output_tokens"] else None
+        )
+        session_usage["cost_usd"] = (
+            round(session_usage["cost_usd"], 6) if session_usage["_has_cost"] else None
+        )
+        session_usage["tools_called"] = (
+            session_usage["tools_called"] if session_usage["_has_tools_called"] else None
+        )
+        session_usage.pop("_has_llm_tokens", None)
+        session_usage.pop("_has_input_tokens", None)
+        session_usage.pop("_has_output_tokens", None)
+        session_usage.pop("_has_cost", None)
+        session_usage.pop("_has_tools_called", None)
+        items.append(session_usage)
+
     items.sort(key=lambda item: item["_sort_at"], reverse=True)
     trimmed_items = items[:safe_limit]
     for item in trimmed_items:
@@ -275,6 +398,7 @@ def get_user_usage_history(
 
     return {
         "summary": summary,
+        "daily_trend": list(daily_trend.values()),
         "items": trimmed_items,
         "returned_operations": len(trimmed_items),
     }
