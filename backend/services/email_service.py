@@ -724,12 +724,108 @@ def notify_subscribers_new_report(
 BRIEF_SECTION_TOKENS = {"market_highlights", "key_signals", "what_to_watch", "risks_opportunities"}
 
 
+def _convert_inline_markdown_to_html(text: str) -> str:
+    """
+    Convert inline Markdown formatting to HTML.
+    Handles: **bold**, *italic*, `code`
+    Returns HTML with proper tags, text is NOT escaped yet.
+    """
+    import re
+    
+    # Convert **bold** to <strong>bold</strong>
+    # Use non-greedy matching and handle multiple occurrences
+    text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+    
+    # Convert *italic* to <em>italic</em> (but not if it's part of **)
+    # This regex avoids matching * that are part of **
+    text = re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'<em>\1</em>', text)
+    
+    # Convert `code` to <code>code</code>
+    text = re.sub(r'`(.+?)`', r'<code style="background:#f1f5f9;padding:2px 4px;border-radius:3px;font-family:monospace;font-size:0.9em;">\1</code>', text)
+    
+    return text
+
+
+def _convert_markdown_lists_to_html(text: str) -> str:
+    """
+    Convert Markdown lists to HTML with proper indentation.
+    Handles nested lists with proper <ul> and <li> tags.
+    """
+    import re
+    
+    lines = text.split('\n')
+    result = []
+    list_stack = []  # Track nesting levels
+    
+    for line in lines:
+        # Check if line is a list item
+        match = re.match(r'^(\s*)[-*]\s+(.+)$', line)
+        
+        if match:
+            indent = len(match.group(1))
+            content = match.group(2)
+            
+            # Determine nesting level (every 2 spaces = 1 level)
+            level = indent // 2
+            
+            # Close lists if we're going back to a lower level
+            while len(list_stack) > level + 1:
+                result.append('</ul>')
+                list_stack.pop()
+            
+            # Open new list if needed
+            if len(list_stack) <= level:
+                result.append('<ul style="margin:8px 0;padding-left:20px;list-style-type:disc;">')
+                list_stack.append(level)
+            
+            # Add list item
+            result.append(f'<li style="margin:4px 0;line-height:1.6;">{content}</li>')
+        else:
+            # Close all open lists before non-list content
+            while list_stack:
+                result.append('</ul>')
+                list_stack.pop()
+            
+            # Add non-list line
+            if line.strip():
+                result.append(line)
+    
+    # Close any remaining open lists
+    while list_stack:
+        result.append('</ul>')
+        list_stack.pop()
+    
+    return '\n'.join(result)
+
+
+def _escape_text_preserve_html_tags(text: str) -> str:
+    """
+    Escape HTML special characters in text but preserve HTML tags.
+    Used after converting markdown to HTML to protect the HTML tags we created.
+    """
+    import re
+    tag_pattern = r'(<[^>]+>)'
+    segments = re.split(tag_pattern, text)
+    
+    escaped_segments = []
+    for segment in segments:
+        if segment.startswith('<') and segment.endswith('>'):
+            # This is an HTML tag, keep as-is
+            escaped_segments.append(segment)
+        else:
+            # This is text, escape it
+            escaped_segments.append(html.escape(segment))
+    
+    return ''.join(escaped_segments)
+
+
 def _format_brief_narrative_for_email(narrative: str) -> str:
     """
     Format the digest narrative into HTML that roughly matches the Dashboard brief tab styling.
     - If the narrative uses structured sections (## headings + special tokens), render one block per section.
     - Otherwise, render a simple paragraph with preserved line breaks.
     - Converts markdown tables to HTML tables.
+    - Converts inline markdown (**bold**, *italic*, `code`) to HTML.
     """
     if not narrative:
         return ""
@@ -745,10 +841,24 @@ def _format_brief_narrative_for_email(narrative: str) -> str:
     # Detect markdown-style sections (## Heading)
     has_headings = any(ln.lstrip().startswith("## ") for ln in filtered)
     if not has_headings:
-        escaped = html.escape(text)
+        # Convert markdown lists to HTML first
+        text_with_lists = _convert_markdown_lists_to_html(text)
+        # Then convert inline markdown
+        text_with_inline = _convert_inline_markdown_to_html(text_with_lists)
+        # Finally escape while preserving HTML tags
+        escaped = _escape_text_preserve_html_tags(text_with_inline)
+        
         # Preserve paragraphs and simple line breaks.
-        parts = [f"<p style=\"margin:0 0 8px;font-size:14px;line-height:1.7;color:#0f172a;\">{p}</p>"
-                 for p in (escaped.replace("\r", "").split("\n\n"))]
+        # Split by double newlines but preserve list HTML
+        parts = []
+        for p in escaped.replace("\r", "").split("\n\n"):
+            p = p.strip()
+            if p:
+                # If it's already HTML (starts with <ul> or <li>), keep as-is
+                if p.startswith('<ul') or p.startswith('<li') or '</ul>' in p:
+                    parts.append(p)
+                else:
+                    parts.append(f"<p style=\"margin:0 0 8px;font-size:14px;line-height:1.7;color:#0f172a;\">{p}</p>")
         return "".join(parts)
 
     sections = []
@@ -902,24 +1012,28 @@ def _format_brief_narrative_for_email(narrative: str) -> str:
         styles = section_styles(title)
         escaped_title = html.escape(title)
         
-        # Convert markdown tables to HTML before escaping
-        body_with_tables = _convert_markdown_table_to_html(body)
+        # Convert markdown lists to HTML first
+        body_with_lists = _convert_markdown_lists_to_html(body)
+        # Then convert markdown tables to HTML
+        body_with_tables = _convert_markdown_table_to_html(body_with_lists)
         
-        # Process the body: escape non-table content, preserve table HTML
+        # Process the body: convert inline markdown, escape non-table/list content, preserve HTML
         body_parts = []
         for part in body_with_tables.split("\n"):
-            if part.strip().startswith("<table"):
-                # This is HTML table, keep as-is
+            part_stripped = part.strip()
+            if part_stripped.startswith("<table") or part_stripped.startswith("<ul") or part_stripped.startswith("<li"):
+                # This is HTML (table or list), keep as-is
                 body_parts.append(part)
-            elif "</table>" in part:
+            elif "</table>" in part or "</ul>" in part or "</li>" in part:
                 body_parts.append(part)
-            elif body_parts and body_parts[-1].strip().startswith("<table") and not "</table>" in body_parts[-1]:
-                # Inside a table, keep accumulating
+            elif body_parts and (body_parts[-1].strip().startswith("<table") or body_parts[-1].strip().startswith("<ul")) and not ("</table>" in body_parts[-1] or "</ul>" in body_parts[-1]):
+                # Inside a table or list, keep accumulating
                 body_parts[-1] += "\n" + part
             else:
-                # Regular text, escape and convert line breaks
+                # Regular text: convert inline markdown first, then escape
                 if part.strip():
-                    body_parts.append(html.escape(part))
+                    part_with_inline = _convert_inline_markdown_to_html(part)
+                    body_parts.append(_escape_text_preserve_html_tags(part_with_inline))
         
         body_html = "<br>".join(body_parts)
         
