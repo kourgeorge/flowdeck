@@ -163,6 +163,96 @@ export interface RunningAnalysisItem {
   updated_at: string | null;
 }
 
+// Analytics types
+export interface AnalyticsOperationBreakdown {
+  operation_type: string;
+  count: number;
+  total_cost_usd: number;
+  total_llm_tokens: number;
+  avg_cost_usd: number;
+  avg_llm_tokens: number;
+}
+
+export interface AnalyticsCostBreakdown {
+  period_days: number;
+  total_cost_usd: number;
+  total_llm_tokens: number;
+  operations: AnalyticsOperationBreakdown[];
+}
+
+export interface AnalyticsUserCost {
+  user_id: number;
+  email: string;
+  total_cost_usd: number;
+  total_llm_tokens: number;
+  operation_count: number;
+  chat_count: number;
+  analysis_count: number;
+  digest_count: number;
+}
+
+export interface AnalyticsCostPerUser {
+  period_days: number;
+  users: AnalyticsUserCost[];
+}
+
+export interface AnalyticsExpensiveOperation {
+  operation_type: string;
+  operation_id: number;
+  user_id: number;
+  user_email: string;
+  subject: string;
+  cost_usd: number;
+  llm_tokens: number;
+  created_at: string;
+}
+
+export interface AnalyticsExpensiveOperations {
+  period_days: number;
+  operations: AnalyticsExpensiveOperation[];
+}
+
+export interface AnalyticsDailyData {
+  date: string;
+  total_cost_usd: number;
+  total_llm_tokens: number;
+  chat_cost: number;
+  analysis_cost: number;
+  digest_cost: number;
+  operation_count: number;
+}
+
+export interface AnalyticsUsageTrends {
+  period_days: number;
+  daily_data: AnalyticsDailyData[];
+}
+
+export interface AnalyticsModelUsage {
+  model: string;
+  provider: string;
+  count: number;
+  total_cost_usd: number;
+  total_tokens: number;
+}
+
+export interface AnalyticsModelDistribution {
+  period_days: number;
+  models: AnalyticsModelUsage[];
+}
+
+export interface AnalyticsRecommendation {
+  priority: string;
+  category: string;
+  title: string;
+  description: string;
+  potential_savings_usd: number;
+}
+
+export interface AnalyticsRecommendations {
+  period_days: number;
+  recommendations: AnalyticsRecommendation[];
+}
+
 export const adminApi = {
   getStats: async (): Promise<AdminStats> => {
     const res = await api.get<AdminStats>('/api/admin/stats', {
@@ -334,6 +424,58 @@ export const adminApi = {
       `/api/admin/running-analyses/${runId}/stop`,
       {},
       { headers: authHeaders() },
+    );
+    return res.data;
+  },
+
+  // Analytics endpoints
+  getAnalyticsCostBreakdown: async (days = 30): Promise<AnalyticsCostBreakdown> => {
+    const res = await api.get<AnalyticsCostBreakdown>(
+      '/api/admin/analytics/cost-breakdown',
+      { params: { days }, headers: authHeaders() },
+    );
+    return res.data;
+  },
+
+  getAnalyticsCostPerUser: async (days = 30, limit = 100): Promise<AnalyticsCostPerUser> => {
+    const res = await api.get<AnalyticsCostPerUser>(
+      '/api/admin/analytics/cost-per-user',
+      { params: { days, limit }, headers: authHeaders() },
+    );
+    return res.data;
+  },
+
+  getAnalyticsExpensiveOperations: async (
+    days = 30,
+    limit = 50,
+  ): Promise<AnalyticsExpensiveOperations> => {
+    const res = await api.get<AnalyticsExpensiveOperations>(
+      '/api/admin/analytics/expensive-operations',
+      { params: { days, limit }, headers: authHeaders() },
+    );
+    return res.data;
+  },
+
+  getAnalyticsUsageTrends: async (days = 30): Promise<AnalyticsUsageTrends> => {
+    const res = await api.get<AnalyticsUsageTrends>(
+      '/api/admin/analytics/usage-trends',
+      { params: { days }, headers: authHeaders() },
+    );
+    return res.data;
+  },
+
+  getAnalyticsModelDistribution: async (days = 30): Promise<AnalyticsModelDistribution> => {
+    const res = await api.get<AnalyticsModelDistribution>(
+      '/api/admin/analytics/model-distribution',
+      { params: { days }, headers: authHeaders() },
+    );
+    return res.data;
+  },
+
+  getAnalyticsRecommendations: async (days = 30): Promise<AnalyticsRecommendations> => {
+    const res = await api.get<AnalyticsRecommendations>(
+      '/api/admin/analytics/recommendations',
+      { params: { days }, headers: authHeaders() },
     );
     return res.data;
   },

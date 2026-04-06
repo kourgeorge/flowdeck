@@ -13,7 +13,7 @@ from auth import get_current_admin_user
 from database import get_db
 import app_services
 from models.db_models import User
-from services import admin_service, token_service
+from services import admin_service, analytics_service, token_service
 from services.data_cache import delete_analysis_status, list_running_analyses, set_stop_requested
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -548,3 +548,112 @@ def run_mission_control(
         invalid_tickers=invalid_tickers,
         failed=failed,
     )
+
+
+
+# --- Analytics Endpoints ---
+
+class AnalyticsCostBreakdownResponse(BaseModel):
+    """Cost breakdown by operation type."""
+    period_days: int
+    total_cost_usd: float
+    total_llm_tokens: int
+    operations: list[dict[str, Any]]
+
+
+class AnalyticsCostPerUserResponse(BaseModel):
+    """Cost per user."""
+    period_days: int
+    users: list[dict[str, Any]]
+
+
+class AnalyticsExpensiveOperationsResponse(BaseModel):
+    """Most expensive operations."""
+    period_days: int
+    operations: list[dict[str, Any]]
+
+
+class AnalyticsUsageTrendsResponse(BaseModel):
+    """Usage trends over time."""
+    period_days: int
+    daily_data: list[dict[str, Any]]
+
+
+class AnalyticsModelDistributionResponse(BaseModel):
+    """Model usage distribution."""
+    period_days: int
+    models: list[dict[str, Any]]
+
+
+class AnalyticsRecommendationsResponse(BaseModel):
+    """Cost optimization recommendations."""
+    period_days: int
+    recommendations: list[dict[str, Any]]
+
+
+@router.get("/analytics/cost-breakdown", response_model=AnalyticsCostBreakdownResponse)
+def get_analytics_cost_breakdown(
+    _user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+    days: int = Query(30, ge=1, le=365),
+):
+    """Get LLM cost breakdown by operation type (chat, analysis, digest)."""
+    result = analytics_service.get_cost_breakdown_by_operation(db, days)
+    return AnalyticsCostBreakdownResponse(**result)
+
+
+@router.get("/analytics/cost-per-user", response_model=AnalyticsCostPerUserResponse)
+def get_analytics_cost_per_user(
+    _user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+    days: int = Query(30, ge=1, le=365),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Get cost per user over time period."""
+    result = analytics_service.get_cost_per_user(db, days, limit)
+    return AnalyticsCostPerUserResponse(**result)
+
+
+@router.get("/analytics/expensive-operations", response_model=AnalyticsExpensiveOperationsResponse)
+def get_analytics_expensive_operations(
+    _user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+    days: int = Query(30, ge=1, le=365),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Identify most expensive individual operations."""
+    result = analytics_service.get_most_expensive_operations(db, days, limit)
+    return AnalyticsExpensiveOperationsResponse(**result)
+
+
+@router.get("/analytics/usage-trends", response_model=AnalyticsUsageTrendsResponse)
+def get_analytics_usage_trends(
+    _user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+    days: int = Query(30, ge=1, le=365),
+):
+    """Get token usage and cost trends over time (daily aggregation)."""
+    result = analytics_service.get_usage_trends(db, days)
+    return AnalyticsUsageTrendsResponse(**result)
+
+
+@router.get("/analytics/model-distribution", response_model=AnalyticsModelDistributionResponse)
+def get_analytics_model_distribution(
+    _user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+    days: int = Query(30, ge=1, le=365),
+):
+    """Get distribution of LLM model usage."""
+    result = analytics_service.get_model_usage_distribution(db, days)
+    return AnalyticsModelDistributionResponse(**result)
+
+
+@router.get("/analytics/recommendations", response_model=AnalyticsRecommendationsResponse)
+def get_analytics_recommendations(
+    _user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+    days: int = Query(30, ge=1, le=365),
+):
+    """Generate cost optimization recommendations based on usage patterns."""
+    result = analytics_service.get_cost_optimization_recommendations(db, days)
+    return AnalyticsRecommendationsResponse(**result)

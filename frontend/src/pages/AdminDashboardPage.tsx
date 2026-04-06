@@ -28,9 +28,10 @@ import JsonViewer from '../components/admin/JsonViewer';
 import OverviewTab from '../components/admin/OverviewTab';
 import MissionControlTab from '../components/admin/MissionControlTab';
 import UsersTab from '../components/admin/UsersTab';
+import AnalyticsTab from '../components/admin/AnalyticsTab';
 
-type AdminTab = 'overview' | 'mission-control' | 'users';
-const ADMIN_TAB_IDS: AdminTab[] = ['overview', 'mission-control', 'users'];
+type AdminTab = 'overview' | 'mission-control' | 'users' | 'analytics';
+const ADMIN_TAB_IDS: AdminTab[] = ['overview', 'mission-control', 'users', 'analytics'];
 type MissionSortKey = 'ticker' | 'company' | 'type' | 'market_cap' | 'sector' | 'industry' | 'last_completed' | 'reports' | 'status' | 'priority' | 'subscriptions';
 type MissionSortDirection = 'asc' | 'desc';
 type ViewRunsSortKey = 'ticker' | 'analysis_run_id' | 'unique_views' | 'viewed';
@@ -71,6 +72,7 @@ export default function AdminDashboardPage() {
   });
   const [dailyAnalyses, setDailyAnalyses] = useState<AnalysisDailyCount[]>([]);
   const [dailyViews, setDailyViews] = useState<ViewsDailyCount[]>([]);
+  const [analyticsDays, setAnalyticsDays] = useState(30);
 
   const [missionItems, setMissionItems] = useState<MissionControlTickerItem[]>([]);
   const [selectedMissionTickers, setSelectedMissionTickers] = useState<string[]>([]);
@@ -652,6 +654,17 @@ export default function AdminDashboardPage() {
               >
                 Users
               </button>
+              <button
+                type="button"
+                onClick={() => handleAdminTabChange('analytics')}
+                className={`px-2 py-1.5 text-sm font-medium transition-colors ${
+                  activeTab === 'analytics'
+                    ? 'border-b-2 border-blue-500 text-blue-400'
+                    : 'text-slate-400 hover:text-slate-300'
+                }`}
+              >
+                Analytics
+              </button>
             </div>
           </div>
 
@@ -742,6 +755,13 @@ export default function AdminDashboardPage() {
               subscriptionsTotal={subscriptionsTotal}
               expandedSubscriptionUserIds={expandedSubscriptionUserIds}
               setExpandedSubscriptionUserIds={setExpandedSubscriptionUserIds}
+            />
+          )}
+
+          {activeTab === 'analytics' && (
+            <AnalyticsTab
+              days={analyticsDays}
+              onDaysChange={setAnalyticsDays}
             />
           )}
         </div>

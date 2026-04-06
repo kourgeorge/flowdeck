@@ -365,9 +365,10 @@ class AnalysisService:
             args = graph.propagator.get_graph_args(session_id=session_id)
             generated_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
             models_used = {
-                "provider": graph.config.get("llm_provider"),
-                "deep_think": graph.config.get("deep_think_llm"),
-                "quick_think": graph.config.get("quick_think_llm"),
+                "provider": graph.config.get("llm_provider", "unknown"),
+                "model": graph.config.get("deep_think_llm", "unknown"),  # Primary model used
+                "deep_think": graph.config.get("deep_think_llm", "unknown"),
+                "quick_think": graph.config.get("quick_think_llm", "unknown"),
             }
 
             def _build_report_json(content, score, score_label, key_takeaways_list, **extra):
