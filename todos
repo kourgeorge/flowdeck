@@ -45,7 +45,8 @@ Copilot / chat
 - expose the api as an mcp
 - give rag capabilities over the report knowledge base - helping 
 - deep five into a sec filing  - allow add to the chnage from the sec filing tab.
-
+- enter the forum - a multiagent forum to discuss an idea.
+\-integrate code agent harness to read the files and explore thenm 
 
 Data layer
 ──────────
