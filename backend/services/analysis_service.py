@@ -796,6 +796,34 @@ class AnalysisService:
             except Exception as e:
                 logger.warning("Failed to update execution status to completed: %s", e)
             
+            # Update Usage entry with actual LLM usage from reports
+            try:
+                from database import SessionLocal
+                from services.token_service import update_usage_with_llm_data
+                from services.report_service import aggregate_llm_usage_from_reports
+                
+                db = SessionLocal()
+                try:
+                    llm_usage = aggregate_llm_usage_from_reports(analysis_run_id, db)
+                    if llm_usage["total_tokens"] > 0:
+                        update_usage_with_llm_data(
+                            execution_id=analysis_run_id,
+                            db=db,
+                            llm_tokens=llm_usage["total_tokens"],
+                            input_tokens=llm_usage["input_tokens"],
+                            output_tokens=llm_usage["output_tokens"],
+                            cost_usd=llm_usage["cost_usd"],
+                            models_used=llm_usage["models_used"],
+                        )
+                        logger.info(
+                            "Updated Usage entry with LLM data: analysis_run_id=%s tokens=%s cost=$%.4f",
+                            analysis_run_id, llm_usage["total_tokens"], llm_usage["cost_usd"]
+                        )
+                finally:
+                    db.close()
+            except Exception as e:
+                logger.warning("Failed to update Usage entry with LLM data: %s", e)
+            
             # Delete status file after completion (analysis is done)
             delete_analysis_status("ticker", analysis_run_id)
 

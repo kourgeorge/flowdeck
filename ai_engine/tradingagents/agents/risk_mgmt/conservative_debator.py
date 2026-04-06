@@ -2,6 +2,8 @@ from langchain_core.messages import AIMessage
 import time
 import json
 
+from ..analysts.helpers import _capture_usage
+
 
 def create_safe_debator(llm):
     def safe_node(state) -> dict:
@@ -40,6 +42,9 @@ Here is the current conversation history: {history} Here is the last response fr
 Engage by questioning their optimism and emphasizing the potential downsides they may have overlooked. Address each of their counterpoints to showcase why a conservative stance is ultimately the safest path for the firm's assets. Focus on debating and critiquing their arguments to demonstrate the strength of a low-risk strategy over their approaches. Output conversationally as if you are speaking without any special formatting."""
 
         response = llm.invoke(prompt)
+        
+        # Track LLM usage
+        usage_meta = _capture_usage(response, llm)
 
         argument = f"Safe Analyst: {response.content}"
 
@@ -59,6 +64,9 @@ Engage by questioning their optimism and emphasizing the potential downsides the
             "count": risk_debate_state["count"] + 1,
         }
 
-        return {"risk_debate_state": new_risk_debate_state}
+        out = {"risk_debate_state": new_risk_debate_state}
+        if usage_meta:
+            out["report_usage"] = {"safe_debator": usage_meta}
+        return out
 
     return safe_node

@@ -58,7 +58,6 @@ def migrate_usage():
                         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
                     )
                 """))
-                conn.commit()
                 print("   ✓ Created usage table")
             except Exception as e:
                 print(f"   ✗ Error creating table: {e}")
@@ -91,8 +90,6 @@ def migrate_usage():
                     ON usage(user_id, amount)
                 """))
                 print("   ✓ Created index: idx_usage_user_amount")
-
-                conn.commit()
             except Exception as e:
                 print(f"   ✗ Error creating indexes: {e}")
                 raise
@@ -112,7 +109,6 @@ def migrate_usage():
                         CREATE INDEX idx_usage_user_amount
                         ON usage(user_id, amount)
                     """))
-                    conn.commit()
                     print("   ✓ Created index: idx_usage_user_amount")
                 else:
                     print("   ✓ All indexes exist")
@@ -146,7 +142,6 @@ def migrate_usage():
                     WHERE id NOT IN (SELECT DISTINCT user_id FROM usage)
                     AND token_balance IS NOT NULL AND token_balance > 0
                 """))
-                conn.commit()
                 print(f"   ✓ Created {users_to_backfill} initial balance transactions")
             else:
                 print("   ✓ No users need backfilling")

@@ -11,6 +11,7 @@ from langgraph.prebuilt import ToolNode
 from ..agents import *
 from ..default_config import DEFAULT_CONFIG
 from ai_engine import LLMProvider
+from ai_engine.llm_usage import sum_usage, LLMUsageRecord
 from ..agents.utils.memory import FinancialSituationMemory
 from ..agents.utils.agent_states import (
     AgentState,
@@ -120,6 +121,43 @@ class TradingAgentsGraph:
 
     # _create_tool_nodes removed - analysts are now self-contained and handle tools internally
 
+    def _aggregate_usage_from_state(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Aggregate all LLM usage from report_usage entries in the state.
+        Returns a dictionary with total usage statistics.
+        """
+        usage_records = []
+        report_usage = state.get("report_usage", {})
+        
+        if isinstance(report_usage, dict):
+            for report_name, usage_meta in report_usage.items():
+                if isinstance(usage_meta, dict):
+                    input_tokens = usage_meta.get("input_tokens", 0)
+                    output_tokens = usage_meta.get("output_tokens", 0)
+                    cost_usd = usage_meta.get("cost_usd", 0.0)
+                    
+                    if input_tokens > 0 or output_tokens > 0:
+                        # Create a usage record for aggregation
+                        record = LLMUsageRecord(
+                            input_tokens=input_tokens,
+                            output_tokens=output_tokens,
+                            cost_usd=cost_usd,
+                            model=None  # Model info not always available in aggregated data
+                        )
+                        usage_records.append(record)
+        
+        if usage_records:
+            return sum_usage(usage_records)
+        
+        return {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "cost_usd": 0.0,
+            "calls": 0,
+            "per_call": []
+        }
+
     def propagate(self, company_name, trade_date, session_id: str = None):
         """Run the trading agents graph for a company on a specific date.
         
@@ -154,6 +192,12 @@ class TradingAgentsGraph:
 
         # Store current state for reflection
         self.curr_state = final_state
+
+        # Aggregate LLM usage from all agents
+        aggregated_usage = self._aggregate_usage_from_state(final_state)
+        
+        # Add aggregated usage to final state for reporting
+        final_state["aggregated_llm_usage"] = aggregated_usage
 
         # Log state
         self._log_state(trade_date, final_state)

@@ -186,6 +186,18 @@ async def run_and_store_digest(
             update_execution_status(execution_id, "failed", error_message=error_msg)
         except Exception as update_err:
             logger.error("Failed to update execution status after error: %s", update_err)
+        
+        # Automatically refund tokens for failed digest
+        try:
+            from services.token_service import refund_for_failed_digest
+            refund_success = refund_for_failed_digest(execution_id, db)
+            if refund_success:
+                logger.info("Refunded tokens for failed digest: execution_id=%s user_id=%s", execution_id, user_id)
+            else:
+                logger.warning("Failed to refund tokens for failed digest: execution_id=%s user_id=%s", execution_id, user_id)
+        except Exception as refund_err:
+            logger.error("Error during automatic refund for failed digest: %s", refund_err)
+        
         raise
 
     metadata: dict = {
@@ -234,6 +246,28 @@ async def run_and_store_digest(
         update_execution_status(execution_id, "completed")
     except Exception as e:
         logger.warning("Failed to update execution status to completed: %s", e)
+    
+    # Update Usage entry with actual LLM usage from report metadata
+    try:
+        from services.token_service import update_usage_with_llm_data
+        
+        llm_tokens = metadata.get("total_tokens")
+        if llm_tokens and llm_tokens > 0:
+            update_usage_with_llm_data(
+                execution_id=execution_id,
+                db=db,
+                llm_tokens=llm_tokens,
+                input_tokens=metadata.get("input_tokens"),
+                output_tokens=metadata.get("output_tokens"),
+                cost_usd=metadata.get("cost_usd"),
+                models_used=metadata.get("models_used"),
+            )
+            logger.info(
+                "Updated Usage entry with LLM data: execution_id=%s tokens=%s cost=$%.4f",
+                execution_id, llm_tokens, metadata.get("cost_usd", 0.0)
+            )
+    except Exception as e:
+        logger.warning("Failed to update Usage entry with LLM data: %s", e)
 
     # Send email notification to user if email is provided (best-effort; do not fail digest)
     if user_email:

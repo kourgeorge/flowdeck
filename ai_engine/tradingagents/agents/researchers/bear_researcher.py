@@ -2,6 +2,8 @@ from langchain_core.messages import AIMessage
 import time
 import json
 
+from ..analysts.helpers import _capture_usage
+
 
 def create_bear_researcher(llm, memory):
     def bear_node(state) -> dict:
@@ -49,6 +51,9 @@ Use this information to deliver a compelling bear argument, refute the bull's cl
 """
 
         response = llm.invoke(prompt)
+        
+        # Track LLM usage
+        usage_meta = _capture_usage(response, llm)
 
         argument = f"Bear Analyst: {response.content}"
 
@@ -60,6 +65,9 @@ Use this information to deliver a compelling bear argument, refute the bull's cl
             "count": investment_debate_state["count"] + 1,
         }
 
-        return {"investment_debate_state": new_investment_debate_state}
+        out = {"investment_debate_state": new_investment_debate_state}
+        if usage_meta:
+            out["report_usage"] = {"bear_researcher": usage_meta}
+        return out
 
     return bear_node

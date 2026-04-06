@@ -1,6 +1,8 @@
 import time
 import json
 
+from ..analysts.helpers import _capture_usage
+
 
 def create_risky_debator(llm):
     def risky_node(state) -> dict:
@@ -43,6 +45,9 @@ Here is the current conversation history: {history}. Here are the last arguments
 Engage actively by addressing any specific concerns raised, refuting the weaknesses in their logic, and asserting the benefits of risk-taking to outpace market norms. Maintain a focus on debating and persuading, not just presenting data. Challenge each counterpoint to underscore why a high-risk approach is optimal. Output conversationally as if you are speaking without any special formatting."""
 
         response = llm.invoke(prompt)
+        
+        # Track LLM usage
+        usage_meta = _capture_usage(response, llm)
 
         argument = f"Risky Analyst: {response.content}"
 
@@ -60,6 +65,9 @@ Engage actively by addressing any specific concerns raised, refuting the weaknes
             "count": risk_debate_state["count"] + 1,
         }
 
-        return {"risk_debate_state": new_risk_debate_state}
+        out = {"risk_debate_state": new_risk_debate_state}
+        if usage_meta:
+            out["report_usage"] = {"risky_debator": usage_meta}
+        return out
 
     return risky_node

@@ -1,13 +1,16 @@
 """Token economy: balance, cost per analysis, rewards per unique view, cap and window."""
 
 import json
+import logging
 from datetime import datetime, timezone, timedelta
-from typing import Optional, Tuple, Dict
+from typing import Any, Dict, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
 from config import LLM_TOKENS_PER_PLATFORM_TOKEN
 from models.db_models import User, Execution, ReportView, Usage
+
+logger = logging.getLogger(__name__)
 
 INITIAL_BALANCE = 1000
 COST_PER_ANALYSIS = 200
@@ -536,6 +539,73 @@ def refund_for_failed_chat(chat_message_id: int, db: Session) -> bool:
     return tx is not None
 
 
+def refund_for_failed_digest(execution_id: int, db: Session) -> bool:
+    """
+    Refund COST_PER_DIGEST for a failed digest execution via transaction ledger.
+    Does NOT delete the execution (keeps it for audit trail with status='failed').
+    Returns True if refund was successful, False otherwise.
+    """
+    ex = db.query(Execution).filter(Execution.id == execution_id).first()
+    if not ex:
+        return False
+    
+    # Only refund if execution is marked as failed
+    if ex.status != "failed":
+        return False
+    
+    # Check if already refunded (look for existing refund transaction)
+    from models.db_models import Usage
+    existing_refund = (
+        db.query(Usage)
+        .filter(
+            Usage.related_entity_type == "execution",
+            Usage.related_entity_id == execution_id,
+            Usage.transaction_type == "refund",
+        )
+        .first()
+    )
+    if existing_refund:
+        return False  # Already refunded
+    
+    # Get the original deduction transaction to extract metadata
+    original_tx = (
+        db.query(Usage)
+        .filter(
+            Usage.related_entity_type == "execution",
+            Usage.related_entity_id == execution_id,
+            Usage.transaction_type == "digest_cost",
+        )
+        .first()
+    )
+    
+    # Build refund metadata
+    import json
+    metadata = {"execution_id": execution_id, "reason": "digest_failed"}
+    if original_tx and original_tx.metadata_json:
+        try:
+            original_meta = json.loads(original_tx.metadata_json)
+            if "subject_id" in original_meta:
+                metadata["subject_id"] = original_meta["subject_id"]
+        except Exception:
+            pass
+    
+    # Record refund transaction
+    subject_info = f" for {metadata.get('subject_id', 'unknown')}" if "subject_id" in metadata else ""
+    tx = record_transaction(
+        user_id=ex.creator_id,
+        amount=COST_PER_DIGEST,  # Positive amount = credit
+        transaction_type="refund",
+        related_entity_type="execution",
+        related_entity_id=execution_id,
+        metadata=metadata,
+        description=f"Refund for failed digest{subject_info}",
+        db=db,
+        commit=True,
+    )
+    
+    return tx is not None
+
+
 def llm_tokens_to_platform_tokens(llm_tokens: int) -> int:
     """Convert LLM token count to platform tokens using configured ratio. Minimum 1."""
     if llm_tokens < 1:
@@ -639,3 +709,87 @@ def get_run_earned_tokens(execution_id: int, db: Session) -> int:
     """Return earned_tokens for this execution (0 if not found)."""
     ex = db.query(Execution).filter(Execution.id == execution_id).first()
     return ex.earned_tokens if ex else 0
+
+
+def update_usage_with_llm_data(
+    execution_id: int,
+    db: Session,
+    *,
+    llm_tokens: Optional[int] = None,
+    input_tokens: Optional[int] = None,
+    output_tokens: Optional[int] = None,
+    cost_usd: Optional[float] = None,
+    models_used: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """
+    Update the Usage entry for an analysis or digest execution with actual LLM usage data.
+    This should be called after the analysis/digest completes and LLM usage is aggregated.
+    
+    Args:
+        execution_id: The execution ID
+        llm_tokens: Total LLM tokens used (input + output)
+        input_tokens: Input tokens used
+        output_tokens: Output tokens used
+        cost_usd: Actual cost in USD
+        models_used: Dict with provider and model info
+    
+    Returns:
+        True if update was successful, False otherwise
+    """
+    # Find the Usage entry for this execution
+    usage_entry = (
+        db.query(Usage)
+        .filter(
+            Usage.related_entity_type == "execution",
+            Usage.related_entity_id == execution_id,
+            Usage.transaction_type.in_(("analysis_cost", "digest_cost")),
+        )
+        .first()
+    )
+    
+    if not usage_entry:
+        logger.warning(
+            "No Usage entry found for execution_id=%s, cannot update LLM data",
+            execution_id
+        )
+        return False
+    
+    # Update llm_tokens field
+    if llm_tokens is not None:
+        usage_entry.llm_tokens = llm_tokens
+    
+    # Update metadata with detailed breakdown
+    import json
+    metadata = {}
+    if usage_entry.metadata_json:
+        try:
+            metadata = json.loads(usage_entry.metadata_json) or {}
+        except Exception:
+            pass
+    
+    # Add LLM usage details to metadata
+    if input_tokens is not None:
+        metadata["input_tokens"] = input_tokens
+    if output_tokens is not None:
+        metadata["output_tokens"] = output_tokens
+    if cost_usd is not None:
+        metadata["cost_usd"] = round(cost_usd, 6)
+    if models_used is not None:
+        metadata["models_used"] = models_used
+    
+    usage_entry.metadata_json = json.dumps(metadata)
+    
+    try:
+        db.commit()
+        logger.info(
+            "Updated Usage entry with LLM data: execution_id=%s llm_tokens=%s cost_usd=%s",
+            execution_id, llm_tokens, cost_usd
+        )
+        return True
+    except Exception as e:
+        logger.exception(
+            "Failed to update Usage entry with LLM data: execution_id=%s error=%s",
+            execution_id, e
+        )
+        db.rollback()
+        return False
