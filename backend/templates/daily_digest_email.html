@@ -7,7 +7,7 @@
 <p style="margin:0 0 10px;font-size:13px;line-height:1.5;color:#93c5fd;font-weight:600;">{{ span_label }}</p>
 {% endif %}
 {% endblock %}
-{% block title %}Flowdeck Daily Brief{% endblock %}
+{% block title %}Flowdeck {{ span_label if span_label else 'Daily' }} Brief{% endblock %}
 {% block intro %}
 {% if digest_date %}
 <p style="margin:0 0 8px;">{{ digest_date }}</p>

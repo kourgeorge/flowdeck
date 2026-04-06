@@ -990,15 +990,18 @@ def send_daily_digest_email_to_user(execution_id: int, user_email: str) -> bool:
         share_url = get_share_url(execution_id)
         brief_url = share_url or f"{_get_frontend_url()}/dashboard?tab=digest"
 
-        subject_parts = ["Your Flowdeck Daily Brief"]
+        # Use span_label to determine if it's Daily or Weekly
+        brief_type = span_label if span_label in ["Daily", "Weekly"] else "Daily"
+        
+        subject_parts = [f"Your Flowdeck {brief_type} Brief"]
         if digest_date:
             subject_parts.append(f"- {digest_date}")
         subject = " ".join(part for part in subject_parts if part)
 
         lines = []
-        header_line = "Your latest Daily Brief is ready."
+        header_line = f"Your latest {brief_type} Brief is ready."
         if digest_date:
-            header_line = f"Your Daily Brief for {digest_date} is ready."
+            header_line = f"Your {brief_type} Brief for {digest_date} is ready."
         lines.append(header_line)
         if priority_tickers:
             lines.append("")
@@ -1023,15 +1026,15 @@ def send_daily_digest_email_to_user(execution_id: int, user_email: str) -> bool:
                 narrative_html=narrative_html,
                 what_to_watch=what_to_watch,
                 brief_url=brief_url,
-                preheader=f"Your Daily Brief for {digest_date} is ready." if digest_date else "Your Daily Brief is ready.",
+                preheader=f"Your {brief_type} Brief for {digest_date} is ready." if digest_date else f"Your {brief_type} Brief is ready.",
                 text_direction=text_direction,
             )
         except Exception:
             # Fallback to simple wrapper if template fails
             html_body = _html_email_wrapper(
-                title="Daily Brief",
-                inner_body=f"<p>Your Daily Brief is ready. <a href='{brief_url}'>Open brief</a></p>",
-                preheader=f"Your Daily Brief for {digest_date} is ready." if digest_date else "Your Daily Brief is ready.",
+                title=f"{brief_type} Brief",
+                inner_body=f"<p>Your {brief_type} Brief is ready. <a href='{brief_url}'>Open brief</a></p>",
+                preheader=f"Your {brief_type} Brief for {digest_date} is ready." if digest_date else f"Your {brief_type} Brief is ready.",
             )
 
         to_emails = [user_email]
