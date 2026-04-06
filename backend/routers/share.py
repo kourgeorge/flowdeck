@@ -72,6 +72,9 @@ def _resolve_daily_digest(db: Session, ex: Execution) -> Dict[str, Any]:
         "span_label": meta.get("span_label") or "Daily",
         "priority_tickers": meta.get("priority_tickers") or [],
         "references": meta.get("references"),
+        "resources": meta.get("resources"),
+        "agent_steps": meta.get("agent_steps"),
+        "important_events": meta.get("important_events") or [],
     }
 
 

@@ -134,6 +134,37 @@ class TestDigestService(unittest.TestCase):
         self.assertEqual(len(brief.important_events), 1)
         self.assertEqual(brief.important_events[0]["event"]["event_type"], "price_spike_up")
 
+    def test_report_to_brief_item_preserves_resources_and_agent_steps(self) -> None:
+        execution = _ExecutionStub(
+            execution_id=45,
+            created_at=datetime(2026, 3, 17, 15, 45, 30, tzinfo=timezone.utc),
+        )
+        report = _ReportStub(
+            content="Brief body",
+            metadata_json=json.dumps(
+                {
+                    "resources": [
+                        {
+                            "type": "digest_market_context",
+                            "title": "Market context snapshot",
+                        }
+                    ],
+                    "agent_steps": [
+                        {
+                            "agent": "Narrative Writer",
+                            "kind": "llm_call",
+                            "status": "completed",
+                        }
+                    ],
+                }
+            ),
+        )
+
+        brief = _report_to_brief_item(execution, report, "2026-03-17")
+
+        self.assertEqual(brief.resources, [{"type": "digest_market_context", "title": "Market context snapshot"}])
+        self.assertEqual(brief.agent_steps, [{"agent": "Narrative Writer", "kind": "llm_call", "status": "completed"}])
+
     def test_get_digest_dates_groups_daily_briefs_by_user_local_day(self) -> None:
         self._add_digest(
             execution_id=100,

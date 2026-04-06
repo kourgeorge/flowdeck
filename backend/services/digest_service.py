@@ -33,6 +33,8 @@ class DigestBriefItem:
         narrative_style: Optional[str] = None,
         user_focus_tickers: Optional[List[str]] = None,
         references: Optional[list] = None,
+        resources: Optional[list] = None,
+        agent_steps: Optional[list] = None,
         raw_metadata: Optional[dict] = None,
     ):
         self.execution_id = execution_id
@@ -48,6 +50,8 @@ class DigestBriefItem:
         self.narrative_style = narrative_style
         self.user_focus_tickers = user_focus_tickers
         self.references = references
+        self.resources = resources
+        self.agent_steps = agent_steps
         self.raw_metadata = raw_metadata
 
 
@@ -226,6 +230,10 @@ async def run_and_store_digest(
             r.model_dump() if hasattr(r, "model_dump") else r
             for r in (result.references or [])
         ]
+    if getattr(result, "resources", None):
+        metadata["resources"] = list(result.resources or [])
+    if getattr(result, "agent_steps", None):
+        metadata["agent_steps"] = list(result.agent_steps or [])
     # Optional LLM usage metadata
     for key in ("input_tokens", "output_tokens", "total_tokens", "cost_usd", "models_used"):
         value = getattr(result, key, None)
@@ -350,6 +358,12 @@ def _report_to_brief_item(ex: Execution, report: Report, slot: str) -> DigestBri
     refs = meta.get("references")
     if refs is not None and not isinstance(refs, list):
         refs = None
+    resources = meta.get("resources")
+    if resources is not None and not isinstance(resources, list):
+        resources = None
+    agent_steps = meta.get("agent_steps")
+    if agent_steps is not None and not isinstance(agent_steps, list):
+        agent_steps = None
     created_at = _to_utc_iso(ex.created_at)
     return DigestBriefItem(
         execution_id=ex.id,
@@ -365,6 +379,8 @@ def _report_to_brief_item(ex: Execution, report: Report, slot: str) -> DigestBri
         narrative_style=str(narrative_style) if narrative_style is not None else None,
         user_focus_tickers=[str(t) for t in (user_focus_tickers or [])] or None,
         references=refs,
+        resources=resources,
+        agent_steps=agent_steps,
         raw_metadata=meta or None,
     )
 

@@ -213,6 +213,14 @@ class DigestWorkflowState(BaseModel):
         default_factory=list,
         description="Structured list of sources used for this brief (news articles, feeds, web snippets, etc.).",
     )
+    resources: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Persisted resource snapshots available to the digest workflow at analysis time.",
+    )
+    agent_steps: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Normalized trajectory records for the digest workflow.",
+    )
     recent_digest_briefs: List[HistoricalDigestBrief] = Field(
         default_factory=list,
         description="Most recent stored briefs for this user, newest first.",
@@ -251,6 +259,14 @@ class DigestResult(BaseModel):
     references: List[ReferenceItem] = Field(
         default_factory=list,
         description="Structured list of sources used for this brief.",
+    )
+    resources: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Persisted resource snapshots available to the digest workflow at analysis time.",
+    )
+    agent_steps: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Normalized trajectory records for the digest workflow.",
     )
     # Optional LLM usage metadata (for token accounting / cost analysis)
     input_tokens: Optional[int] = Field(default=None, description="Prompt tokens used by the digest workflow.")

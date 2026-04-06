@@ -38,6 +38,8 @@ class DigestResponse(BaseModel):
     span_type: str = "daily"
     span_label: str = "Daily"
     references: Optional[list[dict]] = None
+    resources: Optional[list[dict]] = None
+    agent_steps: Optional[list[dict]] = None
     user_note: Optional[str] = None
     narrative_style: Optional[str] = None
     user_focus_tickers: Optional[list[str]] = None
@@ -65,6 +67,8 @@ class DigestBriefItem(BaseModel):
     narrative_style: Optional[str] = None
     user_focus_tickers: Optional[list[str]] = None
     references: Optional[list[dict]] = None
+    resources: Optional[list[dict]] = None
+    agent_steps: Optional[list[dict]] = None
     raw_metadata: Optional[dict] = None
     share_url: Optional[str] = None
     focus_snapshot: Optional[dict[str, dict]] = None
@@ -184,6 +188,8 @@ async def get_digest(
         span_type=getattr(result, "span_type", "daily"),
         span_label=getattr(result, "span_label", "Daily"),
         references=[r.model_dump() for r in (result.references or [])] if hasattr(result, "references") else None,
+        resources=getattr(result, "resources", None),
+        agent_steps=getattr(result, "agent_steps", None),
         user_note=user_note,
         narrative_style=narrative_style,
         user_focus_tickers=user_focus_tickers,
@@ -237,6 +243,8 @@ def _brief_item_to_response(b) -> DigestBriefItem:
         narrative_style=b.narrative_style,
         user_focus_tickers=b.user_focus_tickers,
         references=b.references,
+        resources=b.resources,
+        agent_steps=b.agent_steps,
         raw_metadata=b.raw_metadata,
         share_url=share_url,
         focus_snapshot=(b.raw_metadata or {}).get("focus_snapshot") if b.raw_metadata else None,

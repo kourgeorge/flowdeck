@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from ai_engine.llm_provider import get_config_from_env, get_llm
+from ai_engine.tradingagents.agents.utils.trace_utils import json_safe, make_agent_step, preview_text
 from backend.processing import build_important_events
 
 from .context_builder import build_digest_context
@@ -156,6 +157,115 @@ def _format_span_label(span_type: SpanType, start_date: Optional[str], end_date:
     return "Custom"
 
 
+def _append_workflow_step(state: DigestWorkflowState, **kwargs: Any) -> None:
+    state.agent_steps.append(make_agent_step(**kwargs))
+
+
+def _build_ticker_resource_snapshot(ctx: Any, ticker: str) -> Dict[str, Any]:
+    peer_rows = []
+    for peer in (getattr(ctx, "peer_tickers", {}) or {}).get(ticker) or []:
+        peer_rows.append(
+            {
+                "ticker": peer,
+                "quote": (getattr(ctx, "peer_quotes", {}) or {}).get(peer),
+            }
+        )
+    return {
+        "ticker": ticker,
+        "attention_score": (getattr(ctx, "attention_scores", {}) or {}).get(ticker),
+        "quote": (getattr(ctx, "quotes", {}) or {}).get(ticker),
+        "returns_1d": (getattr(ctx, "returns_1d", {}) or {}).get(ticker),
+        "returns_5d": (getattr(ctx, "returns_5d", {}) or {}).get(ticker),
+        "returns_span": (getattr(ctx, "returns_span", {}) or {}).get(ticker),
+        "abnormal_signal": (getattr(ctx, "abnormal_signal", {}) or {}).get(ticker),
+        "event_summary": (getattr(ctx, "event_summaries", {}) or {}).get(ticker),
+        "event_score": (getattr(ctx, "event_scores", {}) or {}).get(ticker),
+        "news": (getattr(ctx, "news", {}) or {}).get(ticker),
+        "fundamentals": (getattr(ctx, "fundamentals", {}) or {}).get(ticker),
+        "analyst_recommendation": (getattr(ctx, "analyst_rec", {}) or {}).get(ticker),
+        "insider_transactions": (getattr(ctx, "insider", {}) or {}).get(ticker),
+        "future_events": (getattr(ctx, "future_events", {}) or {}).get(ticker),
+        "indicators": (getattr(ctx, "indicators", {}) or {}).get(ticker),
+        "platform_reports": (getattr(ctx, "platform_reports", {}) or {}).get(ticker),
+        "share_url": (getattr(ctx, "share_urls", {}) or {}).get(ticker),
+        "sector_industry": (getattr(ctx, "sector_industry", {}) or {}).get(ticker),
+        "peer_context": peer_rows,
+    }
+
+
+def _build_digest_resources(
+    state: DigestWorkflowState,
+    *,
+    captured_at: str,
+) -> List[Dict[str, Any]]:
+    ctx = state.digest_context
+    if ctx is None:
+        return []
+
+    resources: List[Dict[str, Any]] = []
+    for ticker in ctx.priority_tickers or []:
+        snapshot = _build_ticker_resource_snapshot(ctx, ticker)
+        resources.append(
+            {
+                "type": "digest_ticker_context",
+                "title": f"{ticker} analysis snapshot",
+                "ticker": ticker,
+                "description": "Full ticker context available to the digest workflow at analysis time.",
+                "tool_name": "digest_ticker_context_snapshot",
+                "tool_input": {
+                    "ticker": ticker,
+                    "curr_date": state.digest_date,
+                    "start_date": state.start_date,
+                    "end_date": state.end_date,
+                },
+                "tool_output": json_safe(snapshot),
+                "tool_output_preview": preview_text(snapshot),
+                "captured_at": captured_at,
+            }
+        )
+
+    market_snapshot = {
+        "portfolio_tickers": ctx.tickers,
+        "priority_tickers": ctx.priority_tickers,
+        "market_movers": ctx.market_movers,
+        "global_news": ctx.global_news,
+        "web_search_snippet": ctx.web_search_snippet,
+    }
+    resources.append(
+        {
+            "type": "digest_market_context",
+            "title": "Market context snapshot",
+            "description": "Market-wide context available to the digest workflow at analysis time.",
+            "tool_name": "digest_market_context_snapshot",
+            "tool_input": {
+                "curr_date": state.digest_date,
+                "start_date": state.start_date,
+                "end_date": state.end_date,
+            },
+            "tool_output": json_safe(market_snapshot),
+            "tool_output_preview": preview_text(market_snapshot),
+            "captured_at": captured_at,
+        }
+    )
+
+    if state.recent_digest_briefs:
+        recent_briefs = [brief.model_dump() for brief in state.recent_digest_briefs]
+        resources.append(
+            {
+                "type": "recent_digest_briefs",
+                "title": "Recent digest history snapshot",
+                "description": "Prior stored briefs used for continuity and anti-repetition context.",
+                "tool_name": "digest_recent_briefs_snapshot",
+                "tool_input": {"limit": len(state.recent_digest_briefs)},
+                "tool_output": json_safe(recent_briefs),
+                "tool_output_preview": preview_text(recent_briefs),
+                "captured_at": captured_at,
+            }
+        )
+
+    return resources
+
+
 def run_digest(
     user_id: int,
     digest_date: str,
@@ -269,6 +379,20 @@ def run_digest(
         span_trading_days=span_trading_days,
     )
     state.digest_context = ctx
+    context_preview = {
+        "portfolio_tickers": ctx.tickers,
+        "priority_tickers": ctx.priority_tickers,
+        "attention_scores": ctx.attention_scores,
+    }
+    _append_workflow_step(
+        state,
+        agent="Digest Context Builder",
+        phase="data_collection",
+        kind="context",
+        status="completed",
+        summary="Built digest context",
+        output_preview=context_preview,
+    )
     if not state.narrative_style:
         state.narrative_style = prompts.extract_preferred_style_from_user_context(
             ctx.user_context_snapshot
@@ -294,6 +418,10 @@ def run_digest(
             focus_tickers = run_focus_selector(state, quick_llm)
             if focus_tickers:
                 ctx.priority_tickers = focus_tickers
+            state.resources = _build_digest_resources(
+                state,
+                captured_at=datetime.now(timezone.utc).isoformat(),
+            )
 
             logger.info("Digest: running ticker interpreter for %d tickers", len(ctx.priority_tickers))
             state.ticker_interpretations = run_ticker_interpreter(state, quick_llm)
@@ -316,6 +444,10 @@ def run_digest(
         focus_tickers = run_focus_selector(state, quick_llm)
         if focus_tickers:
             ctx.priority_tickers = focus_tickers
+        state.resources = _build_digest_resources(
+            state,
+            captured_at=datetime.now(timezone.utc).isoformat(),
+        )
 
         logger.info("Digest: running ticker interpreter for %d tickers", len(ctx.priority_tickers))
         state.ticker_interpretations = run_ticker_interpreter(state, quick_llm)
@@ -381,6 +513,8 @@ def run_digest(
         important_events=important_events,
         focus_snapshot=focus_snapshot,
         references=state.references,
+        resources=state.resources,
+        agent_steps=state.agent_steps,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         total_tokens=total_tokens,

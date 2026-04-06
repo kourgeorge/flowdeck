@@ -14,12 +14,17 @@ from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import HumanMessage
 
+from ai_engine.tradingagents.agents.utils.trace_utils import make_agent_step
 from backend.processing import build_important_events
 
 from .state import DigestContext, DigestWorkflowState, MarketInterpretation, TickerInterpretation, FocusSelection, ReferenceItem
 from . import prompts
 
 logger = logging.getLogger(__name__)
+
+
+def _append_agent_step(state: DigestWorkflowState, **kwargs: Any) -> None:
+    state.agent_steps.append(make_agent_step(**kwargs))
 
 
 def _invoke_with_timeout(chain: Any, messages: list, timeout_seconds: int = 180) -> Any:
@@ -180,6 +185,15 @@ def run_focus_selector(
     """Run the Focus Selector agent to determine which tickers to focus on."""
     ctx = state.digest_context
     if not ctx or not ctx.tickers:
+        _append_agent_step(
+            state,
+            agent="Focus Selector",
+            phase="selection",
+            kind="selection",
+            status="skipped",
+            summary="Focus selection skipped",
+            output_preview="No portfolio tickers were available for digest focus selection.",
+        )
         return None
 
     # If the user explicitly selected focus tickers, honor that (subject to basic validation).
@@ -198,11 +212,31 @@ def run_focus_selector(
                 break
         if cleaned:
             logger.info("Digest: using user-selected focus tickers: %s", cleaned)
+            _append_agent_step(
+                state,
+                agent="Focus Selector",
+                phase="selection",
+                kind="selection",
+                status="completed",
+                summary="Used user-selected focus tickers",
+                output_preview={"focus_tickers": cleaned},
+                extra={"reason": "user_focus_tickers"},
+            )
             return cleaned
 
     attention_scores = ctx.attention_scores or {}
     if not attention_scores:
         # Fallback: no scores, keep existing priority_tickers
+        _append_agent_step(
+            state,
+            agent="Focus Selector",
+            phase="selection",
+            kind="selection",
+            status="completed",
+            summary="Used default priority tickers",
+            output_preview={"focus_tickers": list(ctx.priority_tickers or [])},
+            extra={"reason": "missing_attention_scores"},
+        )
         return list(ctx.priority_tickers or [])
 
     default_priority = list(ctx.priority_tickers or [])
@@ -231,6 +265,17 @@ def run_focus_selector(
         tickers = list(getattr(result, "focus_tickers", []) or [])
     except Exception as e:
         logger.warning("Digest: focus_selector failed: %s", e)
+        _append_agent_step(
+            state,
+            agent="Focus Selector",
+            phase="selection",
+            kind="llm_call",
+            status="failed",
+            summary="Focus Selector failed; using default priority tickers",
+            message_preview=message.content,
+            output_preview={"focus_tickers": list(default_priority)},
+            extra={"error": str(e)},
+        )
         return list(default_priority)
 
     # Sanitize: keep only known portfolio tickers, uppercase, unique, respect max_priority_tickers
@@ -248,8 +293,30 @@ def run_focus_selector(
             break
 
     if not cleaned:
+        _append_agent_step(
+            state,
+            agent="Focus Selector",
+            phase="selection",
+            kind="llm_call",
+            status="completed",
+            summary="Focus Selector returned no valid tickers; using defaults",
+            message_preview=message.content,
+            output_preview={"focus_tickers": list(default_priority)},
+            extra={"raw_focus_tickers": tickers},
+        )
         return list(default_priority)
 
+    _append_agent_step(
+        state,
+        agent="Focus Selector",
+        phase="selection",
+        kind="llm_call",
+        status="completed",
+        summary="Focus Selector chose digest focus tickers",
+        message_preview=message.content,
+        output_preview={"focus_tickers": cleaned},
+        extra={"raw_focus_tickers": tickers},
+    )
     return cleaned
 
 
@@ -260,6 +327,15 @@ def run_ticker_interpreter(
     """Run the Ticker Interpreter for each priority ticker; return ticker -> TickerInterpretation."""
     ctx = state.digest_context
     if not ctx or not ctx.priority_tickers:
+        _append_agent_step(
+            state,
+            agent="Ticker Interpreter",
+            phase="analysis",
+            kind="llm_call",
+            status="skipped",
+            summary="Ticker interpretation skipped",
+            output_preview="No priority tickers were available for digest analysis.",
+        )
         return {}
 
     interpretations: Dict[str, TickerInterpretation] = {}
@@ -287,6 +363,17 @@ def run_ticker_interpreter(
                     thesis_comparison="",
                     recommendation="HOLD: recommendation unavailable because the interpretation timed out.",
                 )
+                _append_agent_step(
+                    state,
+                    agent="Ticker Interpreter",
+                    phase="analysis",
+                    kind="llm_call",
+                    status="failed",
+                    summary=f"Ticker Interpreter timed out for {ticker}",
+                    message_preview=message.content,
+                    output_preview=interpretations[ticker].model_dump(),
+                    extra={"ticker": ticker, "timeout_seconds": 180},
+                )
                 continue
             logger.info("Digest: LLM response received for ticker_interpreter %s", ticker)
             if isinstance(result, TickerInterpretation):
@@ -302,6 +389,17 @@ def run_ticker_interpreter(
                         "HOLD: recommendation unavailable in the model response.",
                     ),
                 )
+            _append_agent_step(
+                state,
+                agent="Ticker Interpreter",
+                phase="analysis",
+                kind="llm_call",
+                status="completed",
+                summary=f"Ticker Interpreter analyzed {ticker}",
+                message_preview=message.content,
+                output_preview=interpretations[ticker].model_dump(),
+                extra={"ticker": ticker},
+            )
             logger.info("Digest: ticker_interpreter done for %s", ticker)
         except Exception as e:
             logger.exception("Digest: ticker_interpreter failed for %s: %s", ticker, e)
@@ -310,6 +408,17 @@ def run_ticker_interpreter(
                 driver="unclear",
                 thesis_comparison="",
                 recommendation="HOLD: recommendation unavailable because the interpretation failed.",
+            )
+            _append_agent_step(
+                state,
+                agent="Ticker Interpreter",
+                phase="analysis",
+                kind="llm_call",
+                status="failed",
+                summary=f"Ticker Interpreter failed for {ticker}",
+                message_preview=message.content if "message" in locals() else None,
+                output_preview=interpretations[ticker].model_dump(),
+                extra={"ticker": ticker, "error": str(e)},
             )
     return interpretations
 
@@ -321,6 +430,15 @@ def run_market_interpreter(
     """Run the Market Interpreter; return MarketInterpretation."""
     ctx = state.digest_context
     if not ctx:
+        _append_agent_step(
+            state,
+            agent="Market Interpreter",
+            phase="analysis",
+            kind="llm_call",
+            status="skipped",
+            summary="Market interpretation skipped",
+            output_preview="No digest context was available.",
+        )
         return None
 
     market_movers_text = _format_market_movers(ctx.market_movers or {})
@@ -347,17 +465,41 @@ def run_market_interpreter(
         chain = llm.with_structured_output(MarketInterpretation)
         result = chain.invoke([message])
         if isinstance(result, MarketInterpretation):
-            return result
-        return MarketInterpretation(
-            summary=getattr(result, "summary", str(result)),
-            relevance_to_portfolio=getattr(result, "relevance_to_portfolio", ""),
+            interpretation = result
+        else:
+            interpretation = MarketInterpretation(
+                summary=getattr(result, "summary", str(result)),
+                relevance_to_portfolio=getattr(result, "relevance_to_portfolio", ""),
+            )
+        _append_agent_step(
+            state,
+            agent="Market Interpreter",
+            phase="analysis",
+            kind="llm_call",
+            status="completed",
+            summary="Market Interpreter summarized the market backdrop",
+            message_preview=message.content,
+            output_preview=interpretation.model_dump(),
         )
+        return interpretation
     except Exception as e:
         logger.warning("Digest: market_interpreter failed: %s", e)
-        return MarketInterpretation(
+        interpretation = MarketInterpretation(
             summary=f"(Market summary unavailable: {e})",
             relevance_to_portfolio="",
         )
+        _append_agent_step(
+            state,
+            agent="Market Interpreter",
+            phase="analysis",
+            kind="llm_call",
+            status="failed",
+            summary="Market Interpreter failed",
+            message_preview=message.content,
+            output_preview=interpretation.model_dump(),
+            extra={"error": str(e)},
+        )
+        return interpretation
 
 
 def run_recent_briefs_summarizer(
@@ -367,6 +509,15 @@ def run_recent_briefs_summarizer(
     """Summarize already-covered points from the last few stored briefs."""
     recent_briefs = state.recent_digest_briefs or []
     if not recent_briefs:
+        _append_agent_step(
+            state,
+            agent="Recent Briefs Summarizer",
+            phase="analysis",
+            kind="llm_call",
+            status="skipped",
+            summary="Recent briefs summarizer skipped",
+            output_preview="No prior briefs were available for continuity context.",
+        )
         return None
 
     briefs_lines: List[str] = []
@@ -405,9 +556,32 @@ def run_recent_briefs_summarizer(
         chain = llm.with_structured_output(_RecentBriefsSummaryOut)
         result = chain.invoke([message])
         summary = getattr(result, "summary", "") or ""
-        return summary.strip() or None
+        clean_summary = summary.strip() or None
+        _append_agent_step(
+            state,
+            agent="Recent Briefs Summarizer",
+            phase="analysis",
+            kind="llm_call",
+            status="completed",
+            summary="Summarized prior briefs for continuity",
+            message_preview=message.content,
+            output_preview=clean_summary,
+            extra={"brief_count": len(recent_briefs[:5])},
+        )
+        return clean_summary
     except Exception as e:
         logger.warning("Digest: recent_briefs_summarizer failed: %s", e)
+        _append_agent_step(
+            state,
+            agent="Recent Briefs Summarizer",
+            phase="analysis",
+            kind="llm_call",
+            status="failed",
+            summary="Recent briefs summarizer failed",
+            message_preview=message.content,
+            output_preview=None,
+            extra={"brief_count": len(recent_briefs[:5]), "error": str(e)},
+        )
         return None
 
 
@@ -589,10 +763,40 @@ def run_narrative_writer(
                 fallback_items.append(ReferenceItem(label=line))
             state.references = fallback_items
 
+        _append_agent_step(
+            state,
+            agent="Narrative Writer",
+            phase="synthesis",
+            kind="llm_call",
+            status="completed",
+            summary="Narrative Writer produced the final digest",
+            message_preview=message.content,
+            output_preview={
+                "narrative": narrative,
+                "what_to_watch": what_to_watch,
+                "references": [ref.model_dump() for ref in (state.references or [])],
+            },
+            extra={"structured_output": use_structured},
+        )
         return narrative, what_to_watch
     except Exception as e:
         logger.warning("Digest: narrative_writer failed: %s", e)
-        return (
+        fallback = (
             f"Digest unavailable: {e}. Ticker summaries: " + ticker_interpretations_text[:500],
             "Check back later for updates.",
         )
+        _append_agent_step(
+            state,
+            agent="Narrative Writer",
+            phase="synthesis",
+            kind="llm_call",
+            status="failed",
+            summary="Narrative Writer failed",
+            message_preview=message.content,
+            output_preview={
+                "narrative": fallback[0],
+                "what_to_watch": fallback[1],
+            },
+            extra={"structured_output": use_structured, "error": str(e)},
+        )
+        return fallback

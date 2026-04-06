@@ -78,6 +78,12 @@ def main() -> None:
                 "digest_date": result.digest_date,
                 "priority_tickers": result.priority_tickers,
                 "what_to_watch": result.what_to_watch,
+                "references": [
+                    r.model_dump() if hasattr(r, "model_dump") else r
+                    for r in (result.references or [])
+                ],
+                "resources": list(result.resources or []),
+                "agent_steps": list(result.agent_steps or []),
             }
             save_report(
                 execution_id,
