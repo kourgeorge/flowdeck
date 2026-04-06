@@ -45,7 +45,7 @@ def _parse_tool_output_snapshot(tool_result: Any) -> Any:
     return _json_safe(tool_result)
 
 
-def _format_tool_output_preview(snapshot: Any, max_chars: int = 1500) -> str:
+def _format_tool_output_preview(snapshot: Any, max_chars: int = 4500) -> str:
     """Create a compact preview for UI inspection while keeping the full snapshot separately."""
     try:
         if isinstance(snapshot, (dict, list)):

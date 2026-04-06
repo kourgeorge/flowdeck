@@ -2,6 +2,7 @@ import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import TpsPlanCard from './TpsPlanCard';
+import { useAuth } from '../contexts/AuthContext';
 
 export interface ReportResource {
   type?: string;
@@ -22,6 +23,31 @@ export interface ReportResource {
   captured_at?: string;
 }
 
+export interface AgentStep {
+  agent?: string;
+  phase?: string;
+  kind?: string;
+  report_key?: string;
+  iteration?: number;
+  round_number?: number;
+  status?: string;
+  summary?: string;
+  message_preview?: string;
+  output_preview?: string;
+  observation_preview?: string;
+  tool_name?: string;
+  tool_args?: unknown;
+  tool_calls?: Array<{ id?: string; name?: string; args?: unknown }>;
+  usage?: {
+    input_tokens?: number | null;
+    output_tokens?: number | null;
+    total_tokens?: number | null;
+    cost_usd?: number | null;
+  } | null;
+  extra?: Record<string, unknown> | null;
+  captured_at?: string;
+}
+
 interface ReportViewerProps {
   content: string | null;
   score?: number | null;
@@ -38,6 +64,8 @@ interface ReportViewerProps {
   tpsPlan?: string | null;
   /** Sources used for this report (news, SEC filings, Reddit, etc.) */
   resources?: ReportResource[] | null;
+  /** Persisted execution trace for this report */
+  agentSteps?: AgentStep[] | null;
 }
 
 const REPORT_METADATA: Record<string, { title: string; contains: string; aspects: string; methodology: string }> = {
@@ -319,14 +347,191 @@ function ReportResourcesSection({
   );
 }
 
-export default function ReportViewer({ content, score, scoreLabel, keyTakeaways, analysisDate, reportType, bullViewpoint, bearViewpoint, riskyViewpoint, safeViewpoint, neutralViewpoint, tpsPlan, resources }: ReportViewerProps) {
+function prettifyToken(value: string | undefined): string {
+  if (!value) return 'Unknown';
+  return value.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function AgentStepDetail({
+  label,
+  value,
+}: {
+  label: string;
+  value: unknown;
+}) {
+  const text = formatResourceValue(value);
+  if (!text) return null;
+  return (
+    <div>
+      <div className="mb-1 text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
+      <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-all rounded bg-slate-900/80 p-2 text-[11px] text-slate-300">{text}</pre>
+    </div>
+  );
+}
+
+interface TrajectoryItem {
+  primary: AgentStep;
+  result?: AgentStep;
+}
+
+function shouldCombineToolSteps(primary: AgentStep, next?: AgentStep): boolean {
+  if (!next) return false;
+  if (primary.kind !== 'tool_call' || next.kind !== 'tool_result') return false;
+  return (
+    primary.agent === next.agent &&
+    primary.phase === next.phase &&
+    primary.iteration === next.iteration &&
+    primary.tool_name === next.tool_name
+  );
+}
+
+function buildTrajectoryItems(agentSteps: AgentStep[]): TrajectoryItem[] {
+  const items: TrajectoryItem[] = [];
+  for (let index = 0; index < agentSteps.length; index += 1) {
+    const primary = agentSteps[index];
+    const next = agentSteps[index + 1];
+    if (shouldCombineToolSteps(primary, next)) {
+      items.push({ primary, result: next });
+      index += 1;
+      continue;
+    }
+    items.push({ primary });
+  }
+  return items;
+}
+
+function ReportAgentTrajectorySection({
+  agentSteps,
+}: {
+  agentSteps: AgentStep[];
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  if (agentSteps.length === 0) return null;
+  const trajectoryItems = buildTrajectoryItems(agentSteps);
+
+  return (
+    <div className="pt-3 border-t border-slate-700">
+      <button
+        type="button"
+        onClick={() => setIsOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-400 hover:text-white"
+      >
+        <svg
+          className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-90 text-sky-300' : 'text-slate-500'}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+        <span>Agent trajectory</span>
+        <span className="text-xs text-slate-500">({trajectoryItems.length})</span>
+      </button>
+      {isOpen && (
+        <ol className="mt-2 space-y-2">
+          {trajectoryItems.map((item, idx) => {
+            const step = item.primary;
+            const resultStep = item.result;
+            const title = step.summary || step.tool_name || prettifyToken(step.kind) || `Step ${idx + 1}`;
+            const badges = [
+              step.agent,
+              step.phase ? prettifyToken(step.phase) : null,
+              step.kind ? prettifyToken(step.kind) : null,
+              step.status ? prettifyToken(step.status) : null,
+            ].filter(Boolean) as string[];
+
+            return (
+              <li key={`${idx}-${step.agent ?? 'agent'}-${step.kind ?? 'step'}-${step.tool_name ?? ''}`}>
+                <details className="rounded-lg border border-slate-700 bg-slate-800/60">
+                  <summary className="cursor-pointer list-none px-3 py-2">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-700 text-[11px] font-semibold text-slate-200">
+                        {idx + 1}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-slate-200">{title}</div>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {badges.map((badge) => (
+                            <span
+                              key={`${idx}-${badge}`}
+                              className="rounded-full border border-slate-600 bg-slate-900/70 px-2 py-0.5 text-[11px] text-slate-400"
+                            >
+                              {badge}
+                            </span>
+                          ))}
+                          {step.iteration != null && (
+                            <span className="rounded-full border border-slate-600 bg-slate-900/70 px-2 py-0.5 text-[11px] text-slate-400">
+                              Iteration {step.iteration}
+                            </span>
+                          )}
+                          {step.round_number != null && (
+                            <span className="rounded-full border border-slate-600 bg-slate-900/70 px-2 py-0.5 text-[11px] text-slate-400">
+                              Round {step.round_number}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </summary>
+                  <div className="space-y-2 border-t border-slate-700 px-3 py-3 text-xs text-slate-400">
+                    {step.tool_name && (
+                      <div className="text-slate-300">
+                        Tool: <span className="font-mono text-sky-300">{step.tool_name}</span>
+                      </div>
+                    )}
+                    {resultStep && (
+                      <div className="flex flex-wrap gap-3 text-[11px] text-slate-500">
+                        <span>Result: {prettifyToken(resultStep.status)}</span>
+                        {resultStep.kind && <span>{prettifyToken(resultStep.kind)}</span>}
+                      </div>
+                    )}
+                    {step.tool_calls && step.tool_calls.length > 0 && (
+                      <div className="rounded border border-slate-700 bg-slate-900/50 p-2">
+                        <div className="mb-1 text-[11px] uppercase tracking-wide text-slate-500">Tool calls requested</div>
+                        <div className="space-y-1">
+                          {step.tool_calls.map((toolCall, toolIdx) => (
+                            <div key={`${idx}-tool-${toolIdx}`} className="text-slate-300">
+                              <span className="font-mono text-sky-300">{toolCall.name || 'tool'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <AgentStepDetail label="Tool Args" value={step.tool_args} />
+                    <AgentStepDetail label="Message Preview" value={step.message_preview} />
+                    <AgentStepDetail label="Observation" value={resultStep?.observation_preview ?? step.observation_preview} />
+                    <AgentStepDetail label="Output Preview" value={step.output_preview} />
+                    <AgentStepDetail label="Extra" value={resultStep?.extra ?? step.extra} />
+                    {(resultStep?.usage ?? step.usage) && (
+                      <div className="flex flex-wrap gap-3 text-[11px] text-slate-500">
+                        {(resultStep?.usage ?? step.usage)?.input_tokens != null && <span>In: {(resultStep?.usage ?? step.usage)?.input_tokens}</span>}
+                        {(resultStep?.usage ?? step.usage)?.output_tokens != null && <span>Out: {(resultStep?.usage ?? step.usage)?.output_tokens}</span>}
+                        {(resultStep?.usage ?? step.usage)?.total_tokens != null && <span>Total: {(resultStep?.usage ?? step.usage)?.total_tokens}</span>}
+                        {(resultStep?.usage ?? step.usage)?.cost_usd != null && <span>Cost: ${Number((resultStep?.usage ?? step.usage)?.cost_usd).toFixed(6)}</span>}
+                      </div>
+                    )}
+                  </div>
+                </details>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+export default function ReportViewer({ content, score, scoreLabel, keyTakeaways, analysisDate, reportType, bullViewpoint, bearViewpoint, riskyViewpoint, safeViewpoint, neutralViewpoint, tpsPlan, resources, agentSteps }: ReportViewerProps) {
+  const { user } = useAuth();
   const hasContent = content && content.trim().length > 0;
   const hasBullBear = (bullViewpoint && bullViewpoint.length > 0) || (bearViewpoint && bearViewpoint.length > 0);
   const hasRiskViewpoints = (riskyViewpoint && riskyViewpoint.length > 0) || (safeViewpoint && safeViewpoint.length > 0) || (neutralViewpoint && neutralViewpoint.length > 0);
   const hasViewpoints = hasBullBear || hasRiskViewpoints;
   const hasResources = resources?.some((resource) => isResourceRelevantForAnalysisDate(resource, analysisDate)) ?? false;
+  const hasAgentSteps = (agentSteps?.length ?? 0) > 0;
+  const canViewCost = user?.is_admin === true;
 
-  if (!hasContent && !hasViewpoints && !hasResources) {
+  if (!hasContent && !hasViewpoints && !hasResources && !hasAgentSteps) {
     return (
       <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 text-center text-gray-400">
         No report content available
@@ -502,6 +707,19 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
       </div>
       )}
       {hasResources && <ReportResourcesSection resources={resources!} analysisDate={analysisDate} />}
+      {hasAgentSteps && <ReportAgentTrajectorySection agentSteps={agentSteps!.map((step) => (
+        canViewCost
+          ? step
+          : {
+              ...step,
+              usage: step.usage
+                ? {
+                    ...step.usage,
+                    cost_usd: null,
+                  }
+                : step.usage,
+            }
+      ))} />}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import time
 import json
 
 from ..analysts.helpers import _capture_usage
+from ..utils.trace_utils import make_agent_step
 
 
 def create_bear_researcher(llm, memory):
@@ -68,6 +69,21 @@ Use this information to deliver a compelling bear argument, refute the bull's cl
         out = {"investment_debate_state": new_investment_debate_state}
         if usage_meta:
             out["report_usage"] = {"bear_researcher": usage_meta}
+        out["report_steps_by_report"] = {
+            "investment_plan": [
+                make_agent_step(
+                    agent="Bear Researcher",
+                    phase="investment_debate",
+                    kind="debate_turn",
+                    report_key="investment_plan",
+                    round_number=investment_debate_state["count"] + 1,
+                    status="completed",
+                    summary="Bear Researcher added a debate turn",
+                    output_preview=argument,
+                    usage=usage_meta,
+                )
+            ]
+        }
         return out
 
     return bear_node

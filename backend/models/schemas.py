@@ -163,6 +163,8 @@ class ReportData(BaseModel):
     tps_plan: Optional[str] = None
     # Sources used for this report (news, SEC, Reddit, etc.)
     resources: Optional[List[Dict[str, Any]]] = None
+    # Persisted agent execution trace for this report (tool calls, debate turns, synthesis steps).
+    agent_steps: Optional[List[Dict[str, Any]]] = None
     # Return scenarios (typically on investment_plan report; used for historical run header)
     expected_return_pct: Optional[float] = None
     bear_case_return_pct: Optional[float] = None

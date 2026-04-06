@@ -2,6 +2,7 @@ import time
 import json
 
 from ..analysts.helpers import _capture_usage
+from ..utils.trace_utils import make_agent_step
 
 
 def create_risky_debator(llm):
@@ -68,6 +69,21 @@ Engage actively by addressing any specific concerns raised, refuting the weaknes
         out = {"risk_debate_state": new_risk_debate_state}
         if usage_meta:
             out["report_usage"] = {"risky_debator": usage_meta}
+        out["report_steps_by_report"] = {
+            "final_trade_decision": [
+                make_agent_step(
+                    agent="Risky Analyst",
+                    phase="risk_debate",
+                    kind="debate_turn",
+                    report_key="final_trade_decision",
+                    round_number=risk_debate_state["count"] + 1,
+                    status="completed",
+                    summary="Risky Analyst added a debate turn",
+                    output_preview=argument,
+                    usage=usage_meta,
+                )
+            ]
+        }
         return out
 
     return risky_node

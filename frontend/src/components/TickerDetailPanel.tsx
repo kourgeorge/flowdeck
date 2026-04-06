@@ -2251,7 +2251,8 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                               riskyViewpoint={currentReportData?.risky_viewpoint} safeViewpoint={currentReportData?.safe_viewpoint}
                               neutralViewpoint={currentReportData?.neutral_viewpoint}
                               tpsPlan={currentReportData?.tps_plan}
-                              resources={currentReportData?.resources ?? null} />
+                              resources={currentReportData?.resources ?? null}
+                              agentSteps={currentReportData?.agent_steps ?? null} />
                           )}
                         </div>
                       </div>

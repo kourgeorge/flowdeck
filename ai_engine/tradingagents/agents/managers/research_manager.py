@@ -2,6 +2,7 @@ from typing import Optional, List
 from pydantic import BaseModel, Field
 
 from ..analysts.helpers import _UsageCaptureCallback, _capture_usage
+from ..utils.trace_utils import make_agent_step
 
 
 class ResearchManagerOutput(BaseModel):
@@ -160,6 +161,29 @@ Debate History:
             "expected_return_pct": expected_return_pct,
             "bear_case_return_pct": bear_case_return_pct,
             "bull_case_return_pct": bull_case_return_pct,
+            "report_steps_by_report": {
+                "investment_plan": [
+                    make_agent_step(
+                        agent="Research Manager",
+                        phase="investment_decision",
+                        kind="report_synthesis",
+                        report_key="investment_plan",
+                        status="completed" if recommendation_score is not None else "fallback",
+                        summary="Research Manager synthesized the analyst debate into the investment plan",
+                        output_preview=investment_plan,
+                        usage=usage_meta,
+                        extra={
+                            "recommendation_score": recommendation_score,
+                            "bull_summary": bull_summary,
+                            "bear_summary": bear_summary,
+                            "key_takeaways": plan_key_takeaways,
+                            "expected_return_pct": expected_return_pct,
+                            "bear_case_return_pct": bear_case_return_pct,
+                            "bull_case_return_pct": bull_case_return_pct,
+                        },
+                    )
+                ]
+            },
         }
         if usage_meta:
             out["report_usage"] = {"investment_plan": usage_meta}

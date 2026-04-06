@@ -6,6 +6,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 from pydantic import BaseModel, Field
 
 from ..analysts.helpers import _UsageCaptureCallback, _capture_usage
+from ..utils.trace_utils import make_agent_step
 
 
 # ---------------------------------------------------------------------------
@@ -243,6 +244,25 @@ def create_trader(llm, memory):
             "trader_key_takeaways": trader_key_takeaways,
             "trader_recommendation": recommendation,
             "trader_tps_plan": tps_plan_yaml,
+            "report_steps_by_report": {
+                "trader_investment_plan": [
+                    make_agent_step(
+                        agent="Trader",
+                        phase="trade_execution",
+                        kind="report_synthesis",
+                        report_key="trader_investment_plan",
+                        status="completed" if recommendation is not None else "fallback",
+                        summary="Trader converted the investment plan into an actionable trade plan",
+                        output_preview=trader_investment_plan,
+                        usage=usage_meta,
+                        extra={
+                            "recommendation": recommendation,
+                            "tps_plan": tps_plan_yaml or None,
+                            "key_takeaways": trader_key_takeaways,
+                        },
+                    )
+                ]
+            },
             "sender": name,
         }
         if usage_meta:
@@ -250,5 +270,4 @@ def create_trader(llm, memory):
         return out
 
     return functools.partial(trader_node, name="Trader")
-
 

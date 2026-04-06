@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ReportTabs from '../components/ReportTabs';
-import ReportViewer, { type ReportResource } from '../components/ReportViewer';
+import ReportViewer, { type AgentStep, type ReportResource } from '../components/ReportViewer';
 import AspectSpiderChart, { getAnalysisScoreEntries } from '../components/AspectSpiderChart';
 import ReturnScenarioBar from '../components/ReturnScenarioBar';
 import { API_BASE_URL } from '../services/api';
@@ -61,6 +61,7 @@ interface SharedTickerReport {
     neutral_viewpoint?: string[] | null;
     tps_plan?: string | null;
     resources?: ReportResource[] | null;
+    agent_steps?: AgentStep[] | null;
     [key: string]: unknown;
   }>;
 }
@@ -492,6 +493,7 @@ export default function SharedReportPage() {
               neutralViewpoint={current?.neutral_viewpoint ?? null}
               tpsPlan={current?.tps_plan ?? null}
               resources={current?.resources ?? undefined}
+              agentSteps={current?.agent_steps ?? undefined}
             />
           </div>
         </div>

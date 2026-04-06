@@ -2,6 +2,7 @@ import time
 import json
 
 from ..analysts.helpers import _capture_usage
+from ..utils.trace_utils import make_agent_step
 
 
 def create_neutral_debator(llm):
@@ -62,6 +63,21 @@ Engage actively by analyzing both sides critically, addressing weaknesses in the
         out = {"risk_debate_state": new_risk_debate_state}
         if usage_meta:
             out["report_usage"] = {"neutral_debator": usage_meta}
+        out["report_steps_by_report"] = {
+            "final_trade_decision": [
+                make_agent_step(
+                    agent="Neutral Analyst",
+                    phase="risk_debate",
+                    kind="debate_turn",
+                    report_key="final_trade_decision",
+                    round_number=risk_debate_state["count"] + 1,
+                    status="completed",
+                    summary="Neutral Analyst added a debate turn",
+                    output_preview=argument,
+                    usage=usage_meta,
+                )
+            ]
+        }
         return out
 
     return neutral_node

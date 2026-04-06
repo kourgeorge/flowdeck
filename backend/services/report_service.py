@@ -203,6 +203,7 @@ def _report_row_to_dict(row: Report, date: str) -> Dict[str, Any]:
     if meta.get("tps_plan") is not None:
         out["tps_plan"] = meta["tps_plan"]
     out["resources"] = meta.get("resources") or []
+    out["agent_steps"] = meta.get("agent_steps") or []
     return out
 
 

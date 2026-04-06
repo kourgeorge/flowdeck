@@ -3,6 +3,7 @@ from statistics import pstdev
 from pydantic import BaseModel, Field
 
 from ..analysts.helpers import _UsageCaptureCallback, _capture_usage
+from ..utils.trace_utils import make_agent_step
 
 
 class RiskManagerOutput(BaseModel):
@@ -202,6 +203,28 @@ Focus on actionable insights and continuous improvement. Build on past lessons, 
             "risky_summary": risky_summary,
             "safe_summary": safe_summary,
             "neutral_summary": neutral_summary,
+            "report_steps_by_report": {
+                "final_trade_decision": [
+                    make_agent_step(
+                        agent="Portfolio Manager",
+                        phase="risk_decision",
+                        kind="report_synthesis",
+                        report_key="final_trade_decision",
+                        status="completed" if recommendation is not None else "fallback",
+                        summary="Portfolio Manager synthesized the risk debate into the final trade decision",
+                        output_preview=final_trade_decision,
+                        usage=usage_meta,
+                        extra={
+                            "recommendation": recommendation,
+                            "risk_score": risk_score,
+                            "key_takeaways": key_takeaways,
+                            "risky_summary": risky_summary,
+                            "safe_summary": safe_summary,
+                            "neutral_summary": neutral_summary,
+                        },
+                    )
+                ]
+            },
         }
         if usage_meta:
             out["report_usage"] = {"final_trade_decision": usage_meta}
