@@ -277,7 +277,7 @@ function ResourceToolDetail({ resource }: { resource: ReportResource }) {
   );
 }
 
-function ReportResourcesSection({
+export function ReportResourcesSection({
   resources,
   analysisDate,
 }: {
@@ -400,10 +400,12 @@ function buildTrajectoryItems(agentSteps: AgentStep[]): TrajectoryItem[] {
   return items;
 }
 
-function ReportAgentTrajectorySection({
+export function ReportAgentTrajectorySection({
   agentSteps,
+  canViewCost = false,
 }: {
   agentSteps: AgentStep[];
+  canViewCost?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   if (agentSteps.length === 0) return null;
@@ -507,7 +509,7 @@ function ReportAgentTrajectorySection({
                         {(resultStep?.usage ?? step.usage)?.input_tokens != null && <span>In: {(resultStep?.usage ?? step.usage)?.input_tokens}</span>}
                         {(resultStep?.usage ?? step.usage)?.output_tokens != null && <span>Out: {(resultStep?.usage ?? step.usage)?.output_tokens}</span>}
                         {(resultStep?.usage ?? step.usage)?.total_tokens != null && <span>Total: {(resultStep?.usage ?? step.usage)?.total_tokens}</span>}
-                        {(resultStep?.usage ?? step.usage)?.cost_usd != null && <span>Cost: ${Number((resultStep?.usage ?? step.usage)?.cost_usd).toFixed(6)}</span>}
+                        {canViewCost && (resultStep?.usage ?? step.usage)?.cost_usd != null && <span>Cost: ${Number((resultStep?.usage ?? step.usage)?.cost_usd).toFixed(6)}</span>}
                       </div>
                     )}
                   </div>
@@ -707,19 +709,7 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
       </div>
       )}
       {hasResources && <ReportResourcesSection resources={resources!} analysisDate={analysisDate} />}
-      {hasAgentSteps && <ReportAgentTrajectorySection agentSteps={agentSteps!.map((step) => (
-        canViewCost
-          ? step
-          : {
-              ...step,
-              usage: step.usage
-                ? {
-                    ...step.usage,
-                    cost_usd: null,
-                  }
-                : step.usage,
-            }
-      ))} />}
+      {hasAgentSteps && <ReportAgentTrajectorySection agentSteps={agentSteps!} canViewCost={canViewCost} />}
     </div>
   );
 }

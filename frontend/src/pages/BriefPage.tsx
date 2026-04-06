@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import DailyDigestRunPanel from '../components/DailyDigestRunPanel';
 import PageHeader from '../components/PageHeader';
+import { ReportAgentTrajectorySection, ReportResourcesSection } from '../components/ReportViewer';
 import TickerSearch from '../components/TickerSearch';
 import { useAuth } from '../contexts/AuthContext';
 import { useDashboardData } from '../hooks/useDashboardData';
@@ -368,6 +369,8 @@ export default function BriefPage() {
       narrative_style: anyBrief?.narrative_style ?? null,
       user_focus_tickers: anyBrief?.user_focus_tickers ?? null,
       references: anyBrief?.references ?? null,
+      resources: anyBrief?.resources ?? null,
+      agent_steps: anyBrief?.agent_steps ?? null,
       metadata: anyBrief?.raw_metadata ?? null,
     };
     try {
@@ -1077,6 +1080,18 @@ export default function BriefPage() {
                           )}
                         </div>
                       )}
+                      {selectedBrief.resources && selectedBrief.resources.length > 0 && (
+                        <ReportResourcesSection
+                          resources={selectedBrief.resources}
+                          analysisDate={selectedBrief.digest_date}
+                        />
+                      )}
+                      {selectedBrief.agent_steps && selectedBrief.agent_steps.length > 0 && (
+                        <ReportAgentTrajectorySection
+                          agentSteps={selectedBrief.agent_steps}
+                          canViewCost={canViewRawDigest}
+                        />
+                      )}
                     </div>
                   )}
 
@@ -1260,6 +1275,18 @@ export default function BriefPage() {
                             </ul>
                           )}
                         </div>
+                      )}
+                      {digest.resources && digest.resources.length > 0 && (
+                        <ReportResourcesSection
+                          resources={digest.resources}
+                          analysisDate={digest.digest_date}
+                        />
+                      )}
+                      {digest.agent_steps && digest.agent_steps.length > 0 && (
+                        <ReportAgentTrajectorySection
+                          agentSteps={digest.agent_steps}
+                          canViewCost={canViewRawDigest}
+                        />
                       )}
                     </div>
                   )}

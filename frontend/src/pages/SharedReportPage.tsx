@@ -3,7 +3,12 @@ import { useParams, Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ReportTabs from '../components/ReportTabs';
-import ReportViewer, { type AgentStep, type ReportResource } from '../components/ReportViewer';
+import ReportViewer, {
+  ReportAgentTrajectorySection,
+  ReportResourcesSection,
+  type AgentStep,
+  type ReportResource,
+} from '../components/ReportViewer';
 import AspectSpiderChart, { getAnalysisScoreEntries } from '../components/AspectSpiderChart';
 import ReturnScenarioBar from '../components/ReturnScenarioBar';
 import { API_BASE_URL } from '../services/api';
@@ -88,6 +93,8 @@ interface SharedDigestReport {
     };
   }[];
   references?: unknown[] | null;
+  resources?: ReportResource[] | null;
+  agent_steps?: AgentStep[] | null;
 }
 
 function formatImportantEventLabel(eventType: string): string {
@@ -370,6 +377,12 @@ export default function SharedReportPage() {
                   })}
                 </ul>
               </div>
+            )}
+            {data.resources && data.resources.length > 0 && (
+              <ReportResourcesSection resources={data.resources} analysisDate={data.digest_date} />
+            )}
+            {data.agent_steps && data.agent_steps.length > 0 && (
+              <ReportAgentTrajectorySection agentSteps={data.agent_steps} canViewCost={false} />
             )}
           </div>
           <p className="text-xs text-gray-500 mt-4 text-center">

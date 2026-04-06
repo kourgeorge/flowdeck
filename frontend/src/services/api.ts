@@ -924,6 +924,44 @@ export interface DigestResponse {
     source?: string | null;
     tickers?: string[] | null;
   }[] | null;
+  resources?: {
+    type?: string;
+    url?: string;
+    title?: string;
+    ticker?: string;
+    description?: string;
+    tool?: string;
+    args?: unknown;
+    tool_name?: string;
+    tool_input?: unknown;
+    tool_output?: unknown;
+    tool_output_preview?: string;
+    captured_at?: string;
+  }[] | null;
+  agent_steps?: {
+    agent?: string;
+    phase?: string;
+    kind?: string;
+    report_key?: string;
+    iteration?: number;
+    round_number?: number;
+    status?: string;
+    summary?: string;
+    message_preview?: string;
+    output_preview?: string;
+    observation_preview?: string;
+    tool_name?: string;
+    tool_args?: unknown;
+    tool_calls?: Array<{ id?: string; name?: string; args?: unknown }>;
+    usage?: {
+      input_tokens?: number | null;
+      output_tokens?: number | null;
+      total_tokens?: number | null;
+      cost_usd?: number | null;
+    } | null;
+    extra?: Record<string, unknown> | null;
+    captured_at?: string;
+  }[] | null;
   share_url?: string | null;
   focus_snapshot?: Record<string, { name?: string | null; price?: number | null; change_pct?: number | null; span_type?: string }> | null;
 }
@@ -962,6 +1000,8 @@ export interface DigestBriefItem {
   narrative_style?: string | null;
   user_focus_tickers?: string[] | null;
   references?: { label: string; url?: string | null; source?: string | null; tickers?: string[] | null }[] | null;
+  resources?: DigestResponse['resources'];
+  agent_steps?: DigestResponse['agent_steps'];
   raw_metadata?: Record<string, unknown> | null;
   share_url?: string | null;
   focus_snapshot?: Record<string, { name?: string | null; price?: number | null; change_pct?: number | null; span_type?: string }> | null;
