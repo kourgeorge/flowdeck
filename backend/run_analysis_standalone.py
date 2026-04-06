@@ -32,6 +32,7 @@ for p in (str(REPO_ROOT), str(BACKEND_DIR)):
 from ai_engine.llm_provider import get_config_from_env
 from ai_engine.tradingagents.graph.trading_graph import TradingAgentsGraph
 from ai_engine.tradingagents.default_config import DEFAULT_CONFIG
+from ai_engine.tradingagents.agents.utils.trace_utils import sort_agent_steps
 
 # Backend services for report saving, and email notifications
 from services.report_service import save_report
@@ -287,7 +288,7 @@ def main() -> None:
         if isinstance(by_report, dict):
             specific = by_report.get(report_key)
             if isinstance(specific, list):
-                return specific
+                return sort_agent_steps(specific)
         return []
 
     async def run() -> None:

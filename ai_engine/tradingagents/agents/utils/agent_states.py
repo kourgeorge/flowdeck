@@ -7,6 +7,7 @@ from langchain_openai import ChatOpenAI
 from .. import *  # agents package
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import END, StateGraph, START, MessagesState, add_messages
+from .trace_utils import sort_agent_steps
 
 
 def _merge_report_usage(current: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
@@ -40,7 +41,7 @@ def _merge_report_steps_by_report(
         existing = list(base.get(report_key, []))
         new_steps = [step for step in (steps or []) if isinstance(step, dict)]
         existing.extend(new_steps)
-        base[report_key] = existing
+        base[report_key] = sort_agent_steps(existing)
     return base
 
 

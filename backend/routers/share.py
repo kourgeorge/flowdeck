@@ -11,6 +11,7 @@ from typing import Any, Callable, Dict
 from fastapi import APIRouter, HTTPException
 from sqlalchemy.orm import Session
 
+from ai_engine.tradingagents.agents.utils.trace_utils import sort_agent_steps
 from database import SessionLocal
 from data_layer import get_data_gateway
 from models.db_models import Execution, Report
@@ -73,7 +74,7 @@ def _resolve_daily_digest(db: Session, ex: Execution) -> Dict[str, Any]:
         "priority_tickers": meta.get("priority_tickers") or [],
         "references": meta.get("references"),
         "resources": meta.get("resources"),
-        "agent_steps": meta.get("agent_steps"),
+        "agent_steps": sort_agent_steps(meta.get("agent_steps") or []),
         "important_events": meta.get("important_events") or [],
     }
 

@@ -80,6 +80,7 @@ Engage by questioning their optimism and emphasizing the potential downsides the
                     round_number=risk_debate_state["count"] + 1,
                     status="completed",
                     summary="Safe Analyst added a debate turn",
+                    message_preview=prompt,
                     output_preview=argument,
                     usage=usage_meta,
                 )

@@ -20,6 +20,7 @@ from services.data_cache import (
     get_stop_requested,
     set_analysis_status,
 )
+from ai_engine.tradingagents.agents.utils.trace_utils import sort_agent_steps
 from services.report_service import save_report, update_execution_status
 from services.email_service import notify_subscribers_new_report
 
@@ -494,7 +495,7 @@ class AnalysisService:
                 if isinstance(by_report, dict):
                     specific = by_report.get(report_key)
                     if isinstance(specific, list):
-                        return specific
+                        return sort_agent_steps(specific)
                 return []
 
             # Determine when analyst phase is complete (last selected analyst report saved).

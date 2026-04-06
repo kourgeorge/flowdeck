@@ -5,6 +5,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 
+from ai_engine.tradingagents.agents.utils.trace_utils import sort_agent_steps
+
 logger = logging.getLogger(__name__)
 
 from database import SessionLocal
@@ -203,7 +205,7 @@ def _report_row_to_dict(row: Report, date: str) -> Dict[str, Any]:
     if meta.get("tps_plan") is not None:
         out["tps_plan"] = meta["tps_plan"]
     out["resources"] = meta.get("resources") or []
-    out["agent_steps"] = meta.get("agent_steps") or []
+    out["agent_steps"] = sort_agent_steps(meta.get("agent_steps") or [])
     return out
 
 

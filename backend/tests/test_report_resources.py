@@ -214,8 +214,8 @@ def test_merge_report_steps_by_report_appends_steps():
     from ai_engine.tradingagents.agents.utils.agent_states import _merge_report_steps_by_report
 
     merged = _merge_report_steps_by_report(
-        {"investment_plan": [{"agent": "Bull Researcher", "kind": "debate_turn"}]},
-        {"investment_plan": [{"agent": "Bear Researcher", "kind": "debate_turn"}]},
+        {"investment_plan": [{"agent": "Bull Researcher", "kind": "debate_turn", "captured_at": "2026-04-07T10:00:01+00:00"}]},
+        {"investment_plan": [{"agent": "Bear Researcher", "kind": "debate_turn", "captured_at": "2026-04-07T10:00:02+00:00"}]},
     )
 
     assert list(merged.keys()) == ["investment_plan"]
@@ -223,6 +223,30 @@ def test_merge_report_steps_by_report_appends_steps():
     assert [step["agent"] for step in merged["investment_plan"]] == [
         "Bull Researcher",
         "Bear Researcher",
+    ]
+
+
+def test_merge_report_steps_by_report_sorts_out_of_order_updates():
+    from ai_engine.tradingagents.agents.utils.agent_states import _merge_report_steps_by_report
+
+    merged = _merge_report_steps_by_report(
+        {
+            "investment_plan": [
+                {"agent": "Research Manager", "kind": "report_synthesis", "captured_at": "2026-04-07T10:00:03+00:00"},
+            ]
+        },
+        {
+            "investment_plan": [
+                {"agent": "Bull Researcher", "kind": "debate_turn", "round_number": 1, "captured_at": "2026-04-07T10:00:01+00:00"},
+                {"agent": "Bear Researcher", "kind": "debate_turn", "round_number": 2, "captured_at": "2026-04-07T10:00:02+00:00"},
+            ]
+        },
+    )
+
+    assert [step["agent"] for step in merged["investment_plan"]] == [
+        "Bull Researcher",
+        "Bear Researcher",
+        "Research Manager",
     ]
 
 
@@ -244,6 +268,82 @@ def test_report_row_to_dict_includes_agent_steps():
     assert isinstance(out["agent_steps"], list)
     assert len(out["agent_steps"]) == 1
     assert out["agent_steps"][0]["agent"] == "Market Analyst"
+
+
+def test_report_row_to_dict_sorts_agent_steps_by_captured_at():
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from services.report_service import _report_row_to_dict
+
+    class Row:
+        content = ""
+        metadata_json = json.dumps({
+            "agent_steps": [
+                {"agent": "Research Manager", "kind": "report_synthesis", "captured_at": "2026-04-07T10:00:03+00:00"},
+                {"agent": "Bull Researcher", "kind": "debate_turn", "captured_at": "2026-04-07T10:00:01+00:00"},
+                {"agent": "Bear Researcher", "kind": "debate_turn", "captured_at": "2026-04-07T10:00:02+00:00"},
+            ],
+        })
+
+    out = _report_row_to_dict(Row(), "2026-04-07")
+    assert [step["agent"] for step in out["agent_steps"]] == [
+        "Bull Researcher",
+        "Bear Researcher",
+        "Research Manager",
+    ]
+
+
+class _StubMemory:
+    def get_memories(self, curr_situation, n_matches=2):
+        return [{"recommendation": "Prior lesson"}]
+
+
+class _StubResponse:
+    def __init__(self, content: str):
+        self.content = content
+
+
+class _StubLLM:
+    def __init__(self, content: str):
+        self.content = content
+        self.last_prompt = None
+
+    def invoke(self, prompt):
+        self.last_prompt = prompt
+        return _StubResponse(self.content)
+
+
+def test_research_debate_turn_persists_prompt_in_message_preview():
+    from ai_engine.tradingagents.agents.researchers.bull_researcher import create_bull_researcher
+    from ai_engine.tradingagents.agents.researchers.bear_researcher import create_bear_researcher
+
+    state = {
+        "investment_debate_state": {
+            "history": "Prior debate history",
+            "bull_history": "",
+            "bear_history": "",
+            "current_response": "Opponent response",
+            "count": 0,
+        },
+        "market_report": "Market data",
+        "sentiment_report": "Sentiment data",
+        "news_report": "News data",
+        "fundamentals_report": "Fundamentals data",
+        "technical_report": "Technical data",
+        "events_report": "Events data",
+    }
+
+    bull_llm = _StubLLM("Bull thesis")
+    bull_out = create_bull_researcher(bull_llm, _StubMemory())(state)
+    bull_step = bull_out["report_steps_by_report"]["investment_plan"][0]
+    assert bull_step["message_preview"] == bull_llm.last_prompt.strip()
+    assert bull_step["output_preview"] == "Bull Analyst: Bull thesis"
+
+    bear_llm = _StubLLM("Bear thesis")
+    bear_out = create_bear_researcher(bear_llm, _StubMemory())(state)
+    bear_step = bear_out["report_steps_by_report"]["investment_plan"][0]
+    assert bear_step["message_preview"] == bear_llm.last_prompt.strip()
+    assert bear_step["output_preview"] == "Bear Analyst: Bear thesis"
 
 
 def test_extract_resources_node():

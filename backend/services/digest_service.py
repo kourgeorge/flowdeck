@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
+from ai_engine.tradingagents.agents.utils.trace_utils import sort_agent_steps
 from models.db_models import Execution, Report
 from services import token_service
 
@@ -364,6 +365,8 @@ def _report_to_brief_item(ex: Execution, report: Report, slot: str) -> DigestBri
     agent_steps = meta.get("agent_steps")
     if agent_steps is not None and not isinstance(agent_steps, list):
         agent_steps = None
+    elif isinstance(agent_steps, list):
+        agent_steps = sort_agent_steps(agent_steps)
     created_at = _to_utc_iso(ex.created_at)
     return DigestBriefItem(
         execution_id=ex.id,

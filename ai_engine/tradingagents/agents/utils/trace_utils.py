@@ -48,6 +48,71 @@ def usage_snapshot(usage: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     return out
 
 
+_PHASE_ORDER = {
+    "analysis": 10,
+    "investment_debate": 20,
+    "investment_decision": 30,
+    "trade_execution": 40,
+    "risk_debate": 50,
+    "risk_decision": 60,
+}
+
+
+_KIND_ORDER = {
+    "llm_decision": 10,
+    "tool_call": 20,
+    "tool_result": 30,
+    "debate_turn": 40,
+    "report_synthesis": 50,
+}
+
+
+def _parse_captured_at(value: Any) -> Optional[datetime]:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except Exception:
+        return None
+
+
+def sort_agent_steps(steps: Any) -> List[Dict[str, Any]]:
+    """Return agent steps in a deterministic chronological order."""
+    indexed_steps: List[tuple[int, Dict[str, Any]]] = [
+        (index, step) for index, step in enumerate(steps or []) if isinstance(step, dict)
+    ]
+
+    def _sort_key(item: tuple[int, Dict[str, Any]]) -> tuple[Any, ...]:
+        index, step = item
+        captured_at = _parse_captured_at(step.get("captured_at"))
+        phase_rank = _PHASE_ORDER.get(str(step.get("phase") or ""), 999)
+        round_number = step.get("round_number")
+        if not isinstance(round_number, int):
+            round_number = 10**9
+        iteration = step.get("iteration")
+        if not isinstance(iteration, int):
+            iteration = 10**9
+        kind_rank = _KIND_ORDER.get(str(step.get("kind") or ""), 999)
+        captured_missing = 1 if captured_at is None else 0
+        captured_sort = captured_at or datetime.max.replace(tzinfo=timezone.utc)
+        return (
+            captured_missing,
+            captured_sort,
+            phase_rank,
+            round_number,
+            iteration,
+            kind_rank,
+            str(step.get("agent") or ""),
+            str(step.get("tool_name") or ""),
+            index,
+        )
+
+    return [step for _, step in sorted(indexed_steps, key=_sort_key)]
+
+
 def tool_calls_snapshot(tool_calls: Any) -> List[Dict[str, Any]]:
     """Serialize tool call metadata without depending on LangChain internals."""
     out: List[Dict[str, Any]] = []

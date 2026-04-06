@@ -81,6 +81,7 @@ Use this information to deliver a compelling bull argument, refute the bear's co
                     round_number=investment_debate_state["count"] + 1,
                     status="completed",
                     summary="Bull Researcher added a debate turn",
+                    message_preview=prompt,
                     output_preview=argument,
                     usage=usage_meta,
                 )

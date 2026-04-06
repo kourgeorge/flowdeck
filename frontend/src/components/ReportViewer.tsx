@@ -374,6 +374,73 @@ interface TrajectoryItem {
   result?: AgentStep;
 }
 
+const PHASE_ORDER: Record<string, number> = {
+  analysis: 10,
+  investment_debate: 20,
+  investment_decision: 30,
+  trade_execution: 40,
+  risk_debate: 50,
+  risk_decision: 60,
+};
+
+const KIND_ORDER: Record<string, number> = {
+  llm_decision: 10,
+  tool_call: 20,
+  tool_result: 30,
+  debate_turn: 40,
+  report_synthesis: 50,
+};
+
+function getMessagePreviewLabel(step: AgentStep): string {
+  if (step.kind === 'debate_turn') return 'Input Preview';
+  return 'Message Preview';
+}
+
+function parseCapturedAt(value?: string): number | null {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function sortAgentSteps(agentSteps: AgentStep[]): AgentStep[] {
+  return agentSteps
+    .map((step, index) => ({ step, index }))
+    .sort((a, b) => {
+      const aTs = parseCapturedAt(a.step.captured_at);
+      const bTs = parseCapturedAt(b.step.captured_at);
+      if (aTs == null && bTs != null) return 1;
+      if (aTs != null && bTs == null) return -1;
+      if (aTs != null && bTs != null && aTs !== bTs) return aTs - bTs;
+
+      const aPhase = PHASE_ORDER[a.step.phase ?? ''] ?? 999;
+      const bPhase = PHASE_ORDER[b.step.phase ?? ''] ?? 999;
+      if (aPhase !== bPhase) return aPhase - bPhase;
+
+      const aRound = a.step.round_number ?? Number.MAX_SAFE_INTEGER;
+      const bRound = b.step.round_number ?? Number.MAX_SAFE_INTEGER;
+      if (aRound !== bRound) return aRound - bRound;
+
+      const aIteration = a.step.iteration ?? Number.MAX_SAFE_INTEGER;
+      const bIteration = b.step.iteration ?? Number.MAX_SAFE_INTEGER;
+      if (aIteration !== bIteration) return aIteration - bIteration;
+
+      const aKind = KIND_ORDER[a.step.kind ?? ''] ?? 999;
+      const bKind = KIND_ORDER[b.step.kind ?? ''] ?? 999;
+      if (aKind !== bKind) return aKind - bKind;
+
+      const aAgent = a.step.agent ?? '';
+      const bAgent = b.step.agent ?? '';
+      if (aAgent !== bAgent) return aAgent.localeCompare(bAgent);
+
+      const aTool = a.step.tool_name ?? '';
+      const bTool = b.step.tool_name ?? '';
+      if (aTool !== bTool) return aTool.localeCompare(bTool);
+
+      return a.index - b.index;
+    })
+    .map(({ step }) => step);
+}
+
 function shouldCombineToolSteps(primary: AgentStep, next?: AgentStep): boolean {
   if (!next) return false;
   if (primary.kind !== 'tool_call' || next.kind !== 'tool_result') return false;
@@ -387,9 +454,10 @@ function shouldCombineToolSteps(primary: AgentStep, next?: AgentStep): boolean {
 
 function buildTrajectoryItems(agentSteps: AgentStep[]): TrajectoryItem[] {
   const items: TrajectoryItem[] = [];
-  for (let index = 0; index < agentSteps.length; index += 1) {
-    const primary = agentSteps[index];
-    const next = agentSteps[index + 1];
+  const orderedSteps = sortAgentSteps(agentSteps);
+  for (let index = 0; index < orderedSteps.length; index += 1) {
+    const primary = orderedSteps[index];
+    const next = orderedSteps[index + 1];
     if (shouldCombineToolSteps(primary, next)) {
       items.push({ primary, result: next });
       index += 1;
@@ -500,7 +568,7 @@ export function ReportAgentTrajectorySection({
                       </div>
                     )}
                     <AgentStepDetail label="Tool Args" value={step.tool_args} />
-                    <AgentStepDetail label="Message Preview" value={step.message_preview} />
+                    <AgentStepDetail label={getMessagePreviewLabel(step)} value={step.message_preview} />
                     <AgentStepDetail label="Observation" value={resultStep?.observation_preview ?? step.observation_preview} />
                     <AgentStepDetail label="Output Preview" value={step.output_preview} />
                     <AgentStepDetail label="Extra" value={resultStep?.extra ?? step.extra} />

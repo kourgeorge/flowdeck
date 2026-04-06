@@ -81,6 +81,7 @@ Engage actively by addressing any specific concerns raised, refuting the weaknes
                     round_number=risk_debate_state["count"] + 1,
                     status="completed",
                     summary="Risky Analyst added a debate turn",
+                    message_preview=prompt,
                     output_preview=argument,
                     usage=usage_meta,
                 )
