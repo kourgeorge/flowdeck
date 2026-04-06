@@ -231,6 +231,45 @@ class ApiKey(Base):
         import hashlib
         return hashlib.sha256(key.encode()).hexdigest()
 
+class TokenTransaction(Base):
+    """
+    Transaction ledger for all token balance changes.
+    Tracks both platform tokens (user balance) and LLM tokens (actual usage for chat).
+    Uses polymorphic association to link to any related entity.
+    """
+    __tablename__ = "token_transactions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    # Platform tokens (what users see and spend)
+    amount = Column(Integer, nullable=False)  # Positive for credits, negative for debits
+    balance_after = Column(Integer, nullable=False)  # Snapshot for verification
+    
+    # LLM tokens (for chat operations - tracks actual LLM usage)
+    llm_tokens = Column(Integer, nullable=True)  # Raw LLM token count (input + output)
+    
+    transaction_type = Column(String(32), nullable=False, index=True)
+    # Types: "initial_balance", "purchase", "analysis_cost", "digest_cost",
+    #        "chat_cost", "view_reward", "refund", "admin_adjustment"
+    
+    # Generic reference to related entity (polymorphic association)
+    related_entity_type = Column(String(32), nullable=True)  # e.g., "execution", "chat_message", "report", "digest"
+    related_entity_id = Column(Integer, nullable=True)  # ID of the related entity
+    
+    # Metadata
+    metadata_json = Column(Text, nullable=True)  # Store context: ticker, conversion_rate, model, etc.
+    description = Column(String(255), nullable=True)  # Human-readable description
+    
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    
+    __table_args__ = (
+        Index("idx_token_tx_user_created", "user_id", "created_at"),
+        Index("idx_token_tx_type", "transaction_type"),
+        Index("idx_token_tx_related_entity", "related_entity_type", "related_entity_id"),
+    )
+
+
 
 class UserSchedule(Base):
     """
