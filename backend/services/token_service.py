@@ -7,7 +7,7 @@ from typing import Optional, Tuple, Dict
 from sqlalchemy.orm import Session
 
 from config import LLM_TOKENS_PER_PLATFORM_TOKEN
-from models.db_models import User, Execution, ReportView, TokenTransaction
+from models.db_models import User, Execution, ReportView, Usage
 
 INITIAL_BALANCE = 1000
 COST_PER_ANALYSIS = 200
@@ -20,13 +20,13 @@ REWARD_WINDOW_DAYS = 14  # 0 = no window
 
 def get_balance_from_ledger(user_id: int, db: Session) -> int:
     """
-    Calculate user's token balance from TokenTransaction ledger (single source of truth).
+    Calculate user's token balance from Usage ledger (single source of truth).
     This is the authoritative balance calculation.
     """
     from sqlalchemy import func
     result = (
-        db.query(func.coalesce(func.sum(TokenTransaction.amount), 0))
-        .filter(TokenTransaction.user_id == user_id)
+        db.query(func.coalesce(func.sum(Usage.amount), 0))
+        .filter(Usage.user_id == user_id)
         .scalar()
     )
     return int(result) if result is not None else 0
@@ -44,7 +44,7 @@ def record_transaction(
     metadata: Optional[Dict] = None,
     description: Optional[str] = None,
     commit: bool = True,
-) -> Optional[TokenTransaction]:
+) -> Optional[Usage]:
     """
     Record a token transaction in the ledger (single source of truth).
     User.token_balance is NO LONGER UPDATED - it's computed from the ledger.
@@ -57,7 +57,7 @@ def record_transaction(
         metadata: Additional context (conversion_rate, model, ticker, etc.)
     
     Returns:
-        TokenTransaction record or None on failure
+        Usage record or None on failure
     """
     # Lock user row to prevent concurrent transactions
     user = db.query(User).filter(User.id == user_id).with_for_update().first()
@@ -77,7 +77,7 @@ def record_transaction(
         return None  # Safety check - should not happen after above check
     
     # Create transaction record (this IS the balance update - no separate User.token_balance update)
-    tx = TokenTransaction(
+    tx = Usage(
         user_id=user_id,
         amount=amount,  # Platform tokens
         llm_tokens=llm_tokens,  # Raw LLM tokens (null for non-chat operations)
@@ -128,8 +128,8 @@ def ensure_user_balance(user_id: int, db: Session) -> None:
     
     # Check if user has any transactions
     has_transactions = (
-        db.query(TokenTransaction)
-        .filter(TokenTransaction.user_id == user_id)
+        db.query(Usage)
+        .filter(Usage.user_id == user_id)
         .first()
     ) is not None
     
@@ -147,7 +147,7 @@ def ensure_user_balance(user_id: int, db: Session) -> None:
 
 def get_balance(user_id: int, db: Session) -> int:
     """
-    Return current token balance for the user (computed from TokenTransaction ledger).
+    Return current token balance for the user (computed from Usage ledger).
     This is the single source of truth for token balances.
     """
     user = db.query(User).filter(User.id == user_id).first()
@@ -202,7 +202,7 @@ def deduct_for_analysis(user_id: int, ticker: str, db: Session) -> Tuple[bool, O
     """
     Deduct COST_PER_ANALYSIS from user via transaction ledger and create Execution (ticker run).
     Returns (True, execution_id) on success, (False, None) if insufficient balance.
-    Balance is computed from TokenTransaction ledger (single source of truth).
+    Balance is computed from Usage ledger (single source of truth).
     """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -250,7 +250,7 @@ def deduct_for_digest(user_id: int, subject_id: str, db: Session) -> Tuple[bool,
     Deduct COST_PER_DIGEST from user via transaction ledger and create Execution (daily/weekly digest run).
     subject_id: slot key, e.g. "user_id:YYYY-MM-DD" or "user_id:w:YYYY-MM-DD".
     Returns (True, execution_id) on success, (False, None) if insufficient balance or error.
-    Balance is computed from TokenTransaction ledger (single source of truth).
+    Balance is computed from Usage ledger (single source of truth).
     """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -420,13 +420,13 @@ def refund_for_failed_execution(execution_id: int, db: Session) -> bool:
         return False
     
     # Check if already refunded (look for existing refund transaction)
-    from models.db_models import TokenTransaction
+    from models.db_models import Usage
     existing_refund = (
-        db.query(TokenTransaction)
+        db.query(Usage)
         .filter(
-            TokenTransaction.related_entity_type == "execution",
-            TokenTransaction.related_entity_id == execution_id,
-            TokenTransaction.transaction_type == "refund",
+            Usage.related_entity_type == "execution",
+            Usage.related_entity_id == execution_id,
+            Usage.transaction_type == "refund",
         )
         .first()
     )
@@ -435,11 +435,11 @@ def refund_for_failed_execution(execution_id: int, db: Session) -> bool:
     
     # Get the original deduction transaction to extract metadata
     original_tx = (
-        db.query(TokenTransaction)
+        db.query(Usage)
         .filter(
-            TokenTransaction.related_entity_type == "execution",
-            TokenTransaction.related_entity_id == execution_id,
-            TokenTransaction.transaction_type == "analysis_cost",
+            Usage.related_entity_type == "execution",
+            Usage.related_entity_id == execution_id,
+            Usage.transaction_type == "analysis_cost",
         )
         .first()
     )
@@ -480,15 +480,15 @@ def refund_for_failed_chat(chat_message_id: int, db: Session) -> bool:
     Note: Currently chat tokens are only deducted on successful completion,
     so this function is mainly for future use or manual corrections.
     """
-    from models.db_models import TokenTransaction
-    
+    from models.db_models import Usage
+
     # Check if already refunded
     existing_refund = (
-        db.query(TokenTransaction)
+        db.query(Usage)
         .filter(
-            TokenTransaction.related_entity_type == "chat_message",
-            TokenTransaction.related_entity_id == chat_message_id,
-            TokenTransaction.transaction_type == "refund",
+            Usage.related_entity_type == "chat_message",
+            Usage.related_entity_id == chat_message_id,
+            Usage.transaction_type == "refund",
         )
         .first()
     )
@@ -497,11 +497,11 @@ def refund_for_failed_chat(chat_message_id: int, db: Session) -> bool:
     
     # Get the original deduction transaction
     original_tx = (
-        db.query(TokenTransaction)
+        db.query(Usage)
         .filter(
-            TokenTransaction.related_entity_type == "chat_message",
-            TokenTransaction.related_entity_id == chat_message_id,
-            TokenTransaction.transaction_type == "chat_cost",
+            Usage.related_entity_type == "chat_message",
+            Usage.related_entity_id == chat_message_id,
+            Usage.transaction_type == "chat_cost",
         )
         .first()
     )
@@ -561,7 +561,7 @@ def deduct_for_chat(
     for the exchange; it is converted to platform tokens using LLM_TOKENS_PER_PLATFORM_TOKEN
     (e.g. 10000 LLM tokens = 1 platform token). Returns False if insufficient balance.
     Tracks both LLM tokens (actual usage) and platform tokens (what user pays).
-    Balance is computed from TokenTransaction ledger (single source of truth).
+    Balance is computed from Usage ledger (single source of truth).
     """
     platform_tokens = llm_tokens_to_platform_tokens(llm_tokens)
     user = db.query(User).filter(User.id == user_id).first()

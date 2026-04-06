@@ -10,10 +10,11 @@ import UserStatsSection from '../components/UserStatsSection';
 import ApiKeyManagement from '../components/ApiKeyManagement';
 import CustomSelect, { type SelectOption, type SelectOptionGroup } from '../components/CustomSelect';
 import { digestScheduleApi, type DigestSchedule, type DigestScheduleType } from '../services/api';
+import { tokenApi, type UsageHistoryResponse, type UsageOperationItem } from '../services/tokenApi';
 
 const DELETE_CONFIRM_TEXT = 'DELETE';
 
-type TabType = 'overview' | 'investor-profile' | 'api-keys' | 'account' | 'brief-schedule';
+type TabType = 'overview' | 'usage' | 'investor-profile' | 'api-keys' | 'account' | 'brief-schedule';
 
 type DigestNarrativeStyle = 'default' | 'concise' | 'professional' | 'technical';
 type ScheduleEditorType = 'daily' | 'weekly' | null;
@@ -297,6 +298,40 @@ const BRIEF_STYLE_OPTIONS: SelectOption[] = [
   { value: 'technical', label: 'Technical', description: 'In-depth analysis with more detail' },
 ];
 
+const USAGE_PERIOD_OPTIONS = [
+  { value: 30, label: '30 days' },
+  { value: 90, label: '90 days' },
+  { value: 365, label: '1 year' },
+] as const;
+
+function formatUsageDate(iso: string | null): string {
+  if (!iso) return 'Unknown time';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return 'Unknown time';
+  return date.toLocaleString();
+}
+
+function formatUsageKind(kind: UsageOperationItem['kind']): string {
+  if (kind === 'analysis') return 'AI analysis';
+  if (kind === 'chat') return 'Chat';
+  if (kind === 'digest') return 'Digest';
+  return kind;
+}
+
+function getUsageKindClasses(kind: UsageOperationItem['kind']): string {
+  if (kind === 'analysis') return 'border-cyan-400/30 bg-cyan-400/10 text-cyan-100';
+  if (kind === 'chat') return 'border-amber-400/30 bg-amber-400/10 text-amber-100';
+  if (kind === 'digest') return 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100';
+  return 'border-slate-500/30 bg-slate-500/10 text-slate-200';
+}
+
+function getUsageStatusClasses(status: string): string {
+  if (status === 'completed') return 'border-emerald-400/30 bg-emerald-400/15 text-emerald-200';
+  if (status === 'failed') return 'border-red-400/30 bg-red-400/15 text-red-200';
+  if (status === 'running') return 'border-amber-400/30 bg-amber-400/15 text-amber-100';
+  return 'border-slate-500/30 bg-slate-500/10 text-slate-200';
+}
+
 export default function ProfilePage() {
   const { user, deleteAccount, setProfileCompletion } = useAuth();
   const navigate = useNavigate();
@@ -311,6 +346,10 @@ export default function ProfilePage() {
   const [investorProfileSaving, setInvestorProfileSaving] = useState(false);
   const [investorProfileMessage, setInvestorProfileMessage] = useState<string | null>(null);
   const [activeInvestorDropdown, setActiveInvestorDropdown] = useState<InvestorSelectFieldKey>(null);
+  const [usagePeriodDays, setUsagePeriodDays] = useState<number>(90);
+  const [usageHistory, setUsageHistory] = useState<UsageHistoryResponse | null>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [usageError, setUsageError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -403,6 +442,22 @@ export default function ProfilePage() {
   useEffect(() => {
     loadInvestorProfile();
   }, [loadInvestorProfile]);
+
+  const loadUsageHistory = useCallback(async () => {
+    if (!user) return;
+    setUsageLoading(true);
+    setUsageError(null);
+    try {
+      const data = await tokenApi.getUsageHistory(usagePeriodDays, 200);
+      setUsageHistory(data);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setUsageError(typeof msg === 'string' ? msg : 'Failed to load usage history');
+      setUsageHistory(null);
+    } finally {
+      setUsageLoading(false);
+    }
+  }, [usagePeriodDays, user]);
 
   useEffect(() => {
     if (!activeInvestorDropdown) return;
@@ -520,6 +575,8 @@ export default function ProfilePage() {
   useEffect(() => {
     if (hash === '#investor-profile') {
       setActiveTab('investor-profile');
+    } else if (hash === '#usage') {
+      setActiveTab('usage');
     } else if (hash === '#api-keys') {
       setActiveTab('api-keys');
     } else if (hash === '#account') {
@@ -535,7 +592,10 @@ export default function ProfilePage() {
     if (activeTab === 'brief-schedule') {
       loadSchedules();
     }
-  }, [activeTab, loadSchedules]);
+    if (activeTab === 'usage') {
+      loadUsageHistory();
+    }
+  }, [activeTab, loadSchedules, loadUsageHistory]);
 
   useEffect(() => {
     if (!scheduleEditor) return;
@@ -911,6 +971,170 @@ export default function ProfilePage() {
               </div>
             )}
           </section>
+        </>
+      );
+    }
+
+    if (activeTab === 'usage') {
+      const summary = usageHistory?.summary ?? null;
+
+      return (
+        <>
+          <section className="rounded-2xl border border-slate-700 bg-slate-900 p-6 mb-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div className="max-w-3xl">
+                <span className="inline-flex items-center rounded-full border border-blue-400/30 bg-blue-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-100">
+                  Token usage
+                </span>
+                <h2 className="mt-4 text-xl font-semibold text-white">Exact usage history</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-300">
+                  Review every paid operation across AI analysis, chat, and digest runs. Each row shows the DECK tokens charged and the exact LLM token counts when they are tracked.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {USAGE_PERIOD_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setUsagePeriodDays(option.value)}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                      usagePeriodDays === option.value
+                        ? 'border-blue-400 bg-blue-500/20 text-blue-100'
+                        : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500 hover:text-white'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {usageLoading ? (
+            <section className="rounded-xl border border-slate-700 bg-slate-900 p-6">
+              <p className="text-sm text-slate-400">Loading usage history...</p>
+            </section>
+          ) : usageError ? (
+            <section className="rounded-xl border border-red-900/50 bg-slate-900 p-6">
+              <p className="text-sm text-red-300">{usageError}</p>
+            </section>
+          ) : !summary ? (
+            <section className="rounded-xl border border-slate-700 bg-slate-900 p-6">
+              <p className="text-sm text-slate-400">No usage data available for this period.</p>
+            </section>
+          ) : (
+            <>
+              <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 mb-6">
+                <div className="rounded-2xl border border-slate-700 bg-slate-900 p-5">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Total spend</p>
+                  <p className="mt-3 text-3xl font-semibold text-white">{summary.total_platform_tokens.toLocaleString()}</p>
+                  <p className="mt-1 text-sm text-slate-300">DECK tokens across {summary.total_operations.toLocaleString()} operations</p>
+                  <p className="mt-3 text-xs text-slate-500">{summary.total_llm_tokens.toLocaleString()} raw LLM tokens tracked</p>
+                </div>
+
+                <div className="rounded-2xl border border-cyan-500/20 bg-slate-900 p-5">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-200/80">AI analysis</p>
+                  <p className="mt-3 text-3xl font-semibold text-white">{summary.analysis_platform_tokens.toLocaleString()}</p>
+                  <p className="mt-1 text-sm text-slate-300">{summary.analysis_count.toLocaleString()} executions</p>
+                  <p className="mt-3 text-xs text-slate-500">{summary.analysis_llm_tokens.toLocaleString()} LLM tokens tracked</p>
+                </div>
+
+                <div className="rounded-2xl border border-amber-500/20 bg-slate-900 p-5">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-amber-200/80">Chat</p>
+                  <p className="mt-3 text-3xl font-semibold text-white">{summary.chat_platform_tokens.toLocaleString()}</p>
+                  <p className="mt-1 text-sm text-slate-300">{summary.chat_count.toLocaleString()} turns</p>
+                  <p className="mt-3 text-xs text-slate-500">{summary.chat_llm_tokens.toLocaleString()} LLM tokens tracked</p>
+                </div>
+
+                <div className="rounded-2xl border border-emerald-500/20 bg-slate-900 p-5">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-emerald-200/80">Digest</p>
+                  <p className="mt-3 text-3xl font-semibold text-white">{summary.digest_platform_tokens.toLocaleString()}</p>
+                  <p className="mt-1 text-sm text-slate-300">{summary.digest_count.toLocaleString()} brief runs</p>
+                  <p className="mt-3 text-xs text-slate-500">{summary.digest_llm_tokens.toLocaleString()} LLM tokens tracked</p>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-slate-700 bg-slate-900 p-6">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">Operation history</h3>
+                    <p className="mt-1 text-sm text-slate-400">
+                      Showing {(usageHistory?.returned_operations ?? 0).toLocaleString()} most recent operations from the last {summary.period_days} days.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 space-y-3">
+                  {usageHistory?.items.length ? usageHistory.items.map((item, index) => {
+                    const identifier = item.execution_id != null
+                      ? `Execution #${item.execution_id}`
+                      : item.chat_turn_id != null
+                        ? `Turn #${item.chat_turn_id}`
+                        : `Operation #${index + 1}`;
+
+                    return (
+                      <article
+                        key={`${item.kind}-${item.execution_id ?? item.chat_turn_id ?? index}-${item.created_at ?? index}`}
+                        className="rounded-2xl border border-slate-700/80 bg-slate-950/80 p-4"
+                      >
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${getUsageKindClasses(item.kind)}`}>
+                                {formatUsageKind(item.kind)}
+                              </span>
+                              <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${getUsageStatusClasses(item.status)}`}>
+                                {item.status}
+                              </span>
+                            </div>
+                            <h4 className="mt-3 text-base font-semibold text-white">{item.title}</h4>
+                            <p className="mt-1 text-sm text-slate-300">{item.subject_label}</p>
+                            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-500">
+                              <span>{identifier}</span>
+                              {item.chat_session_id != null && <span>Session #{item.chat_session_id}</span>}
+                              {item.tools_called != null && item.tools_called > 0 && <span>{item.tools_called} tools called</span>}
+                              <span>{formatUsageDate(item.created_at)}</span>
+                            </div>
+                          </div>
+
+                          <div className="grid min-w-full gap-3 sm:min-w-[360px] sm:grid-cols-2 lg:min-w-[420px] lg:grid-cols-4">
+                            <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
+                              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">DECK spent</p>
+                              <p className="mt-2 text-lg font-semibold text-white">
+                                {item.platform_tokens != null ? item.platform_tokens.toLocaleString() : 'N/A'}
+                              </p>
+                            </div>
+                            <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
+                              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">LLM total</p>
+                              <p className="mt-2 text-lg font-semibold text-white">
+                                {item.llm_tokens != null ? item.llm_tokens.toLocaleString() : 'N/A'}
+                              </p>
+                            </div>
+                            <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
+                              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Input</p>
+                              <p className="mt-2 text-lg font-semibold text-white">
+                                {item.input_tokens != null ? item.input_tokens.toLocaleString() : 'N/A'}
+                              </p>
+                            </div>
+                            <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
+                              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Output</p>
+                              <p className="mt-2 text-lg font-semibold text-white">
+                                {item.output_tokens != null ? item.output_tokens.toLocaleString() : 'N/A'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  }) : (
+                    <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 text-sm text-slate-400">
+                      No paid operations found in this period.
+                    </div>
+                  )}
+                </div>
+              </section>
+            </>
+          )}
         </>
       );
     }
@@ -1846,6 +2070,19 @@ export default function ProfilePage() {
             }`}
           >
             Overview
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('usage');
+              navigate('/profile#usage', { replace: true });
+            }}
+            className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
+              activeTab === 'usage'
+                ? 'text-blue-400 border-blue-400'
+                : 'text-gray-400 border-transparent hover:text-white hover:border-gray-600'
+            }`}
+          >
+            Usage
           </button>
           <button
             onClick={() => {

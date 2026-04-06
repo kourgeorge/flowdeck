@@ -241,11 +241,6 @@ class ChatTurnService:
         )
         sort_order = (next_sort_order if next_sort_order is not None else -1) + 1
 
-        try:
-            token_service.deduct_for_chat(user_id, tokens_used, db, commit=False)
-        except Exception:
-            logger.warning("Failed to deduct chat tokens for user_id=%s", user_id, exc_info=True)
-
         assistant_message = save_assistant_message(
             db,
             session_id,
@@ -258,6 +253,21 @@ class ChatTurnService:
             charts=charts or None,
             follow_up_questions=follow_up_questions,
         )
+
+        try:
+            token_service.deduct_for_chat(
+                user_id,
+                tokens_used,
+                db,
+                chat_message_id=assistant_message.id,
+                model=str(model_metadata.get("model")) if model_metadata and model_metadata.get("model") else None,
+                input_tokens=int(model_metadata.get("input_tokens")) if model_metadata and model_metadata.get("input_tokens") is not None else None,
+                output_tokens=int(model_metadata.get("output_tokens")) if model_metadata and model_metadata.get("output_tokens") is not None else None,
+                commit=False,
+            )
+        except Exception:
+            logger.warning("Failed to deduct chat tokens for user_id=%s", user_id, exc_info=True)
+
         update_session_after_messages(db, session_id)
         self._set_turn_state(
             db,

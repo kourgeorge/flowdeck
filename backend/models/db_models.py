@@ -231,13 +231,13 @@ class ApiKey(Base):
         import hashlib
         return hashlib.sha256(key.encode()).hexdigest()
 
-class TokenTransaction(Base):
+class Usage(Base):
     """
     Transaction ledger for all token balance changes.
     Tracks both platform tokens (user balance) and LLM tokens (actual usage for chat).
     Uses polymorphic association to link to any related entity.
     """
-    __tablename__ = "token_transactions"
+    __tablename__ = "usage"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)

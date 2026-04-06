@@ -3,6 +3,7 @@ Token transaction API endpoints.
 Provides transaction history, usage statistics, and balance information.
 """
 
+from typing import Any, Dict
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,15 +13,16 @@ from sqlalchemy.orm import Session
 
 from auth import get_current_user
 from database import get_db
-from models.db_models import User, TokenTransaction
+from models.db_models import User, Usage
 from services import token_service
+from services.usage_service import get_user_usage_history
 
 router = APIRouter(prefix="/api/tokens", tags=["Tokens"])
 
 
 # Schemas
 
-class TokenTransactionOut(BaseModel):
+class UsageOut(BaseModel):
     id: int
     amount: int
     balance_after: int
@@ -40,8 +42,8 @@ class TokenBalanceResponse(BaseModel):
     user_id: int
 
 
-class TokenTransactionsResponse(BaseModel):
-    transactions: List[TokenTransactionOut]
+class UsageResponse(BaseModel):
+    transactions: List[UsageOut]
     total: int
     limit: int
     offset: int
@@ -64,6 +66,45 @@ class TokenUsageBreakdown(BaseModel):
     total_llm_tokens: Optional[int]
 
 
+class UsageOperationItem(BaseModel):
+    kind: str
+    title: str
+    subject_label: str
+    status: str
+    platform_tokens: Optional[int]
+    llm_tokens: Optional[int]
+    input_tokens: Optional[int]
+    output_tokens: Optional[int]
+    cost_usd: Optional[float]
+    created_at: Optional[str]
+    execution_id: Optional[int]
+    chat_turn_id: Optional[int]
+    chat_session_id: Optional[int]
+    tools_called: Optional[int]
+
+
+class UsageSummary(BaseModel):
+    period_days: int
+    total_operations: int
+    total_platform_tokens: int
+    total_llm_tokens: int
+    analysis_count: int
+    analysis_platform_tokens: int
+    analysis_llm_tokens: int
+    chat_count: int
+    chat_platform_tokens: int
+    chat_llm_tokens: int
+    digest_count: int
+    digest_platform_tokens: int
+    digest_llm_tokens: int
+
+
+class UsageHistoryResponse(BaseModel):
+    summary: UsageSummary
+    items: List[UsageOperationItem]
+    returned_operations: int
+
+
 # Endpoints
 
 @router.get("/balance", response_model=TokenBalanceResponse)
@@ -76,8 +117,8 @@ def get_token_balance(
     return TokenBalanceResponse(balance=balance, user_id=current_user.id)
 
 
-@router.get("/transactions", response_model=TokenTransactionsResponse)
-def get_token_transactions(
+@router.get("/transactions", response_model=UsageResponse)
+def get_usage_transactions(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     transaction_type: Optional[str] = Query(None),
@@ -92,25 +133,25 @@ def get_token_transactions(
     - offset: Number of transactions to skip (for pagination)
     - transaction_type: Filter by type (purchase, analysis_cost, chat_cost, etc.)
     """
-    query = db.query(TokenTransaction).filter(
-        TokenTransaction.user_id == current_user.id
+    query = db.query(Usage).filter(
+        Usage.user_id == current_user.id
     )
     
     if transaction_type:
-        query = query.filter(TokenTransaction.transaction_type == transaction_type)
+        query = query.filter(Usage.transaction_type == transaction_type)
     
     # Get total count
     total = query.count()
     
     # Get paginated results
-    transactions = query.order_by(desc(TokenTransaction.created_at))\
+    transactions = query.order_by(desc(Usage.created_at))\
         .limit(limit)\
         .offset(offset)\
         .all()
-    
+
     # Convert to response format
     transactions_out = [
-        TokenTransactionOut(
+        UsageOut(
             id=tx.id,
             amount=tx.amount,
             balance_after=tx.balance_after,
@@ -124,7 +165,7 @@ def get_token_transactions(
         for tx in transactions
     ]
     
-    return TokenTransactionsResponse(
+    return UsageResponse(
         transactions=transactions_out,
         total=total,
         limit=limit,
@@ -147,9 +188,9 @@ def get_usage_statistics(
     cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
     
     # Get transactions in the period
-    transactions = db.query(TokenTransaction).filter(
-        TokenTransaction.user_id == current_user.id,
-        TokenTransaction.created_at >= cutoff_date
+    transactions = db.query(Usage).filter(
+        Usage.user_id == current_user.id,
+        Usage.created_at >= cutoff_date
     ).all()
     
     # Calculate statistics
@@ -190,14 +231,14 @@ def get_usage_breakdown(
     
     # Aggregate by transaction type
     results = db.query(
-        TokenTransaction.transaction_type,
-        func.sum(TokenTransaction.amount).label('total_amount'),
-        func.sum(TokenTransaction.llm_tokens).label('total_llm_tokens')
+        Usage.transaction_type,
+        func.sum(Usage.amount).label('total_amount'),
+        func.sum(Usage.llm_tokens).label('total_llm_tokens')
     ).filter(
-        TokenTransaction.user_id == current_user.id,
-        TokenTransaction.created_at >= cutoff_date
+        Usage.user_id == current_user.id,
+        Usage.created_at >= cutoff_date
     ).group_by(
-        TokenTransaction.transaction_type
+        Usage.transaction_type
     ).all()
     
     # Build breakdown
@@ -224,5 +265,29 @@ def get_usage_breakdown(
             breakdown["rewards"] = total_amount or 0
     
     return TokenUsageBreakdown(**breakdown)
+
+
+@router.get("/usage-history", response_model=UsageHistoryResponse)
+def get_usage_history(
+    days: int = Query(90, ge=1, le=365),
+    limit: int = Query(200, ge=1, le=500),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Return exact per-operation token usage for the authenticated user.
+
+    Includes:
+    - analysis executions
+    - chat turns
+    - digest operations
+    """
+    payload: Dict[str, Any] = get_user_usage_history(
+        db,
+        current_user.id,
+        days=days,
+        limit=limit,
+    )
+    return UsageHistoryResponse(**payload)
 
 # Made with Bob
