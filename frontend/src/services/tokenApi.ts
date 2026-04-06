@@ -22,6 +22,7 @@ export interface UsageOperationItem {
   execution_id: number | null;
   chat_turn_id: number | null;
   chat_session_id: number | null;
+  chat_turn_count: number | null;
   tools_called: number | null;
 }
 
@@ -41,8 +42,19 @@ export interface UsageSummary {
   digest_llm_tokens: number;
 }
 
+export interface UsageDailyTrendPoint {
+  date: string;
+  total_platform_tokens: number;
+  total_llm_tokens: number;
+  analysis_platform_tokens: number;
+  chat_platform_tokens: number;
+  digest_platform_tokens: number;
+  operation_count: number;
+}
+
 export interface UsageHistoryResponse {
   summary: UsageSummary;
+  daily_trend: UsageDailyTrendPoint[];
   items: UsageOperationItem[];
   returned_operations: number;
 }

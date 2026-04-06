@@ -110,7 +110,7 @@ export default function ApiKeyManagement() {
     <div className="space-y-6">
       {/* New Key Display (shown once after creation) */}
       {newKey && (
-        <div className="bg-green-900/20 border border-green-700 rounded-lg p-6">
+        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-6">
           <div className="flex items-start justify-between mb-4">
             <div>
               <h3 className="text-lg font-semibold text-green-400 mb-1">API Key Created!</h3>
@@ -118,24 +118,24 @@ export default function ApiKeyManagement() {
             </div>
             <button
               onClick={() => setNewKey(null)}
-              className="text-gray-400 hover:text-white"
+              className="text-slate-400 hover:text-white"
               aria-label="Close"
             >
               ✕
             </button>
           </div>
-          <div className="bg-gray-900 rounded p-4 mb-4">
+          <div className="mb-4 rounded-xl bg-slate-950 p-4">
             <div className="flex items-center justify-between gap-4">
               <code className="text-sm text-green-400 break-all flex-1">{newKey.key}</code>
               <button
                 onClick={() => copyToClipboard(newKey.key)}
-                className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded transition-colors shrink-0"
+                className="shrink-0 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1 text-sm text-white transition-colors hover:border-slate-500"
               >
                 Copy
               </button>
             </div>
           </div>
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-slate-300">
             Store this key securely. You won't be able to see it again. Use it in the Authorization header: <code className="text-gray-300">Bearer {newKey.key_prefix}...</code>
           </p>
         </div>
@@ -145,7 +145,7 @@ export default function ApiKeyManagement() {
       {!showCreateForm && (
         <button
           onClick={() => setShowCreateForm(true)}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+          className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 transition-colors hover:bg-cyan-400"
         >
           + Create New API Key
         </button>
@@ -153,7 +153,7 @@ export default function ApiKeyManagement() {
 
       {/* Create Form */}
       {showCreateForm && (
-        <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-6">
+        <div className="rounded-2xl border border-slate-700 bg-slate-950/80 p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Create New API Key</h3>
           <form onSubmit={handleCreateKey} className="space-y-4">
             <div>
@@ -165,17 +165,17 @@ export default function ApiKeyManagement() {
                 type="text"
                 value={keyName}
                 onChange={(e) => setKeyName(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 placeholder="e.g., Production Bot, Dev Testing"
                 required
               />
-              <p className="text-xs text-gray-400 mt-1">A descriptive name to identify this key</p>
+              <p className="mt-1 text-xs text-slate-500">A descriptive name to identify this key</p>
             </div>
             {!showExpirationField ? (
               <button
                 type="button"
                 onClick={() => setShowExpirationField(true)}
-                className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                className="text-sm text-cyan-300 transition-colors hover:text-cyan-200"
               >
                 + Set expiration date (optional)
               </button>
@@ -190,7 +190,7 @@ export default function ApiKeyManagement() {
                     type="date"
                     value={expiresAt}
                     onChange={(e) => setExpiresAt(e.target.value)}
-                    className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1 rounded-xl border border-slate-700 bg-slate-950 px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   />
                   <button
                     type="button"
@@ -198,22 +198,22 @@ export default function ApiKeyManagement() {
                       setShowExpirationField(false);
                       setExpiresAt('');
                     }}
-                    className="px-3 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg text-sm transition-colors"
+                    className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white transition-colors hover:border-slate-500"
                   >
                     Remove
                   </button>
                 </div>
-                <p className="text-xs text-gray-400 mt-1">Key will expire at end of this day</p>
+                <p className="mt-1 text-xs text-slate-500">Key will expire at end of this day</p>
               </div>
             )}
             {createError && (
-              <p className="text-sm text-red-400">{createError}</p>
+              <p className="text-sm text-red-300">{createError}</p>
             )}
             <div className="flex gap-3">
               <button
                 type="submit"
                 disabled={creating}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
+                className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 transition-colors hover:bg-cyan-400 disabled:opacity-50"
               >
                 {creating ? 'Creating...' : 'Create API Key'}
               </button>
@@ -226,7 +226,7 @@ export default function ApiKeyManagement() {
                   setShowExpirationField(false);
                   setCreateError(null);
                 }}
-                className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg text-sm font-medium transition-colors"
+                className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:border-slate-500"
               >
                 Cancel
               </button>
@@ -239,11 +239,11 @@ export default function ApiKeyManagement() {
       <div>
         <h3 className="text-lg font-semibold text-white mb-4">Your API Keys</h3>
         {loading ? (
-          <p className="text-gray-400 text-sm">Loading API keys...</p>
+          <p className="text-sm text-slate-400">Loading API keys...</p>
         ) : error ? (
-          <p className="text-red-400 text-sm">{error}</p>
+          <p className="text-sm text-red-300">{error}</p>
         ) : keys.length === 0 ? (
-          <p className="text-gray-400 text-sm">
+          <p className="text-sm text-slate-400">
             No API keys yet. Create one to access FlowDeck programmatically.
           </p>
         ) : (
@@ -251,7 +251,7 @@ export default function ApiKeyManagement() {
             {keys.map((key) => (
               <div
                 key={key.id}
-                className="bg-gray-700/50 border border-gray-600 rounded-lg p-4"
+                className="rounded-2xl border border-slate-700 bg-slate-950/80 p-4"
               >
                 <div className="flex items-start justify-between gap-4 mb-3">
                   <div className="flex-1 min-w-0">
@@ -260,41 +260,41 @@ export default function ApiKeyManagement() {
                       <span
                         className={`px-2 py-0.5 text-xs rounded ${
                           key.is_active
-                            ? 'bg-green-900/30 text-green-400 border border-green-700'
-                            : 'bg-gray-600 text-gray-300 border border-gray-500'
+                            ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                            : 'border border-slate-600 bg-slate-800 text-slate-300'
                         }`}
                       >
                         {key.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-400 font-mono">{key.key_prefix}...</p>
+                    <p className="font-mono text-sm text-slate-400">{key.key_prefix}...</p>
                   </div>
                   <div className="flex gap-2 shrink-0">
                     <button
                       onClick={() => handleToggleActive(key)}
                       disabled={actioningKeyId === key.id}
-                      className="px-3 py-1 bg-gray-600 hover:bg-gray-500 disabled:opacity-50 text-white text-xs rounded transition-colors"
+                      className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1 text-xs text-white transition-colors hover:border-slate-500 disabled:opacity-50"
                     >
                       {key.is_active ? 'Deactivate' : 'Activate'}
                     </button>
                     <button
                       onClick={() => handleDelete(key.id)}
                       disabled={actioningKeyId === key.id}
-                      className="px-3 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs rounded transition-colors"
+                      className="rounded-lg bg-red-600 px-3 py-1 text-xs text-white transition-colors hover:bg-red-500 disabled:opacity-50"
                     >
                       Delete
                     </button>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-gray-400">
+                <div className="grid grid-cols-1 gap-2 text-xs text-slate-400 sm:grid-cols-3">
                   <div>
-                    <span className="text-gray-500">Created:</span> {formatDate(key.created_at)}
+                    <span className="text-slate-500">Created:</span> {formatDate(key.created_at)}
                   </div>
                   <div>
-                    <span className="text-gray-500">Last used:</span> {formatDate(key.last_used_at)}
+                    <span className="text-slate-500">Last used:</span> {formatDate(key.last_used_at)}
                   </div>
                   <div>
-                    <span className="text-gray-500">Expires:</span>{' '}
+                    <span className="text-slate-500">Expires:</span>{' '}
                     {key.expires_at ? formatDate(key.expires_at) : 'Never'}
                   </div>
                 </div>
@@ -305,15 +305,15 @@ export default function ApiKeyManagement() {
       </div>
 
       {/* Documentation Link */}
-      <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
-        <h4 className="text-sm font-semibold text-blue-400 mb-2">📚 How to use API keys</h4>
-        <p className="text-sm text-gray-300 mb-3">
+      <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-4">
+        <h4 className="mb-2 text-sm font-semibold text-blue-200">How to use API keys</h4>
+        <p className="mb-3 text-sm text-slate-300">
           Use your API key in the Authorization header for all API requests:
         </p>
-        <code className="block bg-gray-900 rounded p-3 text-xs text-gray-300 mb-3">
+        <code className="mb-3 block rounded-xl bg-slate-950 p-3 text-xs text-slate-300">
           Authorization: Bearer fd_live_your_key_here
         </code>
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-slate-400">
           API keys work with all authenticated endpoints including chat, reports, and data APIs.
           See the documentation for examples in Python, JavaScript, and cURL.
         </p>
@@ -321,5 +321,3 @@ export default function ApiKeyManagement() {
     </div>
   );
 }
-
-// Made with Bob

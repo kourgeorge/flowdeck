@@ -24,32 +24,32 @@ export default function TokenPurchase() {
     }
   };
 
-  if (loading) return <div className="text-gray-400">Loading packages...</div>;
+  if (loading) return <div className="text-slate-400">Loading packages...</div>;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       {packages.map((pkg) => (
         <div
           key={pkg.id}
-          className="bg-gray-800 border border-gray-700 rounded-xl p-4 relative hover:border-blue-500 transition-colors"
+          className="relative rounded-2xl border border-slate-700 bg-slate-950/80 p-4 transition-colors hover:border-cyan-500/60"
         >
           {pkg.badge && (
-            <div className="absolute top-3 right-3 bg-blue-600 text-white text-xs px-2 py-0.5 rounded">
+            <div className="absolute right-3 top-3 rounded-full bg-cyan-500 px-2 py-0.5 text-xs font-semibold text-slate-950">
               {pkg.badge}
             </div>
           )}
           <h3 className="text-base font-bold text-white mb-1">{pkg.name}</h3>
           <div className="text-2xl font-bold text-white mb-0.5">
             {pkg.tokens.toLocaleString()}
-            <span className="text-sm text-gray-400 ml-1">tokens</span>
+            <span className="ml-1 text-sm text-slate-400">tokens</span>
           </div>
-          <div className="text-lg font-semibold text-blue-400 mb-3">
+          <div className="mb-3 text-lg font-semibold text-cyan-300">
             ${pkg.price.toFixed(2)}
           </div>
           <button
             onClick={() => handlePurchase(pkg.id)}
             disabled={purchasing === pkg.id}
-            className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 px-3 py-2 text-sm font-medium text-slate-950 transition-colors hover:bg-cyan-400 disabled:opacity-50"
           >
             {purchasing === pkg.id ? (
               'Processing...'
@@ -67,5 +67,3 @@ export default function TokenPurchase() {
     </div>
   );
 }
-
-// Made with Bob

@@ -12,20 +12,20 @@ interface StatCardProps {
 function StatCard({ icon, label, value, sub, highlight }: StatCardProps) {
   return (
     <div
-      className={`flex flex-col gap-0.5 rounded-lg px-3 py-2 border ${
+      className={`flex flex-col gap-0.5 rounded-2xl border px-4 py-3 ${
         highlight
-          ? 'bg-blue-900/30 border-blue-700/50'
-          : 'bg-gray-700/40 border-gray-600/50'
+          ? 'border-cyan-500/30 bg-cyan-500/10'
+          : 'border-slate-700 bg-slate-950/80'
       }`}
     >
-      <div className="flex items-center gap-1.5 text-gray-400 text-xs font-medium uppercase tracking-wide">
+      <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-slate-400">
         <span className="w-4 h-4 flex items-center justify-center">{icon}</span>
         {label}
       </div>
-      <div className={`text-lg font-bold leading-tight ${highlight ? 'text-blue-300' : 'text-white'}`}>
+      <div className={`text-lg font-bold leading-tight ${highlight ? 'text-cyan-100' : 'text-white'}`}>
         {typeof value === 'number' ? value.toLocaleString() : value}
       </div>
-      {sub && <div className="text-xs text-gray-500 leading-tight">{sub}</div>}
+      {sub && <div className="text-xs leading-tight text-slate-500">{sub}</div>}
     </div>
   );
 }
@@ -68,9 +68,9 @@ export default function UserStatsSection() {
 
   if (loading) {
     return (
-      <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
-        <h2 className="text-lg font-semibold text-white mb-4">Usage Statistics</h2>
-        <p className="text-gray-400 text-sm">Loading stats…</p>
+      <section className="rounded-2xl border border-slate-700/80 bg-slate-900/95 p-6 shadow-[0_18px_60px_rgba(2,6,23,0.28)]">
+        <h2 className="mb-4 text-lg font-semibold text-white">Usage statistics</h2>
+        <p className="text-sm text-slate-400">Loading stats...</p>
       </section>
     );
   }
@@ -80,10 +80,10 @@ export default function UserStatsSection() {
   }
 
   return (
-    <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
-      <h2 className="text-lg font-semibold text-white mb-1">Usage Statistics</h2>
+    <section className="rounded-2xl border border-slate-700/80 bg-slate-900/95 p-6 shadow-[0_18px_60px_rgba(2,6,23,0.28)]">
+      <h2 className="mb-1 text-lg font-semibold text-white">Usage statistics</h2>
       {stats.member_since && (
-        <p className="text-xs text-gray-500 mb-3">
+        <p className="mb-3 text-xs text-slate-500">
           Member since {formatDate(stats.member_since)}
         </p>
       )}
@@ -143,5 +143,3 @@ export default function UserStatsSection() {
     </section>
   );
 }
-
-// Made with Bob
