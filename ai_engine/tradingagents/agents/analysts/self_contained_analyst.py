@@ -5,16 +5,93 @@ This module provides a complete analyst node that handles all tool calling
 internally without requiring external graph loops.
 """
 
+import json
 import logging
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List
 
 from langchain_core.messages import ToolMessage
 from pydantic import BaseModel
 
 from .helpers import _capture_usage, try_structured_response
+from ..utils.resource_extraction import extract_resources_from_tool
+from ..utils.trace_utils import make_agent_step
 
 
 logger = logging.getLogger(__name__)
+
+
+def _json_safe(value: Any) -> Any:
+    """Convert arbitrary values into JSON-safe data for persistence."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(v) for v in value]
+    return str(value)
+
+
+def _parse_tool_output_snapshot(tool_result: Any) -> Any:
+    """Preserve the tool result as structured JSON when possible, otherwise as text."""
+    if isinstance(tool_result, str):
+        stripped = tool_result.strip()
+        if stripped.startswith("{") or stripped.startswith("["):
+            try:
+                return json.loads(stripped)
+            except Exception:
+                return tool_result
+        return tool_result
+    return _json_safe(tool_result)
+
+
+def _format_tool_output_preview(snapshot: Any, max_chars: int = 1500) -> str:
+    """Create a compact preview for UI inspection while keeping the full snapshot separately."""
+    try:
+        if isinstance(snapshot, (dict, list)):
+            text = json.dumps(snapshot, indent=2, sort_keys=True, default=str)
+        else:
+            text = str(snapshot)
+    except Exception:
+        text = str(snapshot)
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip() + "\n...[truncated preview]"
+
+
+def build_tool_resource_snapshots(
+    tool_name: str,
+    tool_args: Dict[str, Any],
+    tool_result: Any,
+) -> List[Dict[str, Any]]:
+    """Build persisted resource entries with the actual tool data snapshot."""
+    tool_input = _json_safe(tool_args or {})
+    tool_output = _parse_tool_output_snapshot(tool_result)
+    tool_output_preview = _format_tool_output_preview(tool_output)
+    tool_result_text = (
+        tool_result if isinstance(tool_result, str) else json.dumps(_json_safe(tool_result), default=str)
+    )
+    captured_at = datetime.now(timezone.utc).isoformat()
+
+    resource_entries = extract_resources_from_tool(tool_name, tool_args or {}, tool_result_text)
+    if not resource_entries:
+        ticker = str((tool_args or {}).get("ticker") or (tool_args or {}).get("symbol") or "").strip().upper()
+        resource_entries = [{
+            "type": "tool",
+            "ticker": ticker or None,
+            "description": tool_name,
+        }]
+
+    snapshots: List[Dict[str, Any]] = []
+    for entry in resource_entries:
+        snapshot_entry = dict(entry)
+        snapshot_entry["tool_name"] = tool_name
+        snapshot_entry["tool_input"] = tool_input
+        snapshot_entry["tool_output"] = tool_output
+        snapshot_entry["tool_output_preview"] = tool_output_preview
+        snapshot_entry["captured_at"] = captured_at
+        snapshots.append(snapshot_entry)
+    return snapshots
 
 
 def run_self_contained_analyst(
@@ -78,6 +155,7 @@ def run_self_contained_analyst(
     tool_map = {(t.name if hasattr(t, 'name') else t.__name__): t for t in tools}
     total_usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost_usd": 0.0}
     resources_used = []
+    agent_steps = []
     
     # ReAct loop - all happens internally
     for iteration in range(max_iterations):
@@ -92,12 +170,30 @@ def run_self_contained_analyst(
         if usage:
             for key in ["input_tokens", "output_tokens", "total_tokens", "cost_usd"]:
                 total_usage[key] += usage.get(key, 0)
-        
+
         local_messages.append(result)
         
         # Check if LLM wants to use tools
         tool_calls = getattr(result, "tool_calls", [])
-        
+        agent_steps.append(
+            make_agent_step(
+                agent=agent_name,
+                phase="analysis",
+                kind="llm_decision",
+                report_key=report_field,
+                iteration=iteration + 1,
+                status="tool_calls_requested" if tool_calls else "final_answer_ready",
+                summary=(
+                    f"{agent_name} requested {len(tool_calls)} tool call(s)"
+                    if tool_calls
+                    else f"{agent_name} completed tool gathering"
+                ),
+                message_preview=getattr(result, "content", ""),
+                tool_calls=tool_calls,
+                usage=usage,
+            )
+        )
+
         if not tool_calls:
             # No more tools needed - generate final report
             logger.info(f"{agent_name} completed tool calling, generating final report")
@@ -111,6 +207,19 @@ def run_self_contained_analyst(
             tool_name = tool_call["name"]
             tool_args = tool_call["args"]
             tool_id = tool_call["id"]
+            agent_steps.append(
+                make_agent_step(
+                    agent=agent_name,
+                    phase="analysis",
+                    kind="tool_call",
+                    report_key=report_field,
+                    iteration=iteration + 1,
+                    status="started",
+                    summary=f"{agent_name} calling {tool_name}",
+                    tool_name=tool_name,
+                    tool_args=tool_args,
+                )
+            )
             
             if tool_name in tool_map:
                 try:
@@ -128,11 +237,25 @@ def run_self_contained_analyst(
                             name=tool_name,
                         )
                     )
-                    # Track resources
-                    resources_used.append({
-                        "tool": tool_name,
-                        "args": tool_args,
-                    })
+                    resources_used.extend(
+                        build_tool_resource_snapshots(tool_name, tool_args, tool_result)
+                    )
+                    agent_steps.append(
+                        make_agent_step(
+                            agent=agent_name,
+                            phase="analysis",
+                            kind="tool_result",
+                            report_key=report_field,
+                            iteration=iteration + 1,
+                            status="completed",
+                            summary=f"{tool_name} returned successfully",
+                            tool_name=tool_name,
+                            tool_args=tool_args,
+                            observation_preview=_format_tool_output_preview(
+                                _parse_tool_output_snapshot(tool_result)
+                            ),
+                        )
+                    )
                 except Exception as e:
                     logger.error(f"{agent_name} tool {tool_name} failed: {e}")
                     tool_results.append(
@@ -140,6 +263,20 @@ def run_self_contained_analyst(
                             content=f"Error: {str(e)}",
                             tool_call_id=tool_id,
                             name=tool_name,
+                        )
+                    )
+                    agent_steps.append(
+                        make_agent_step(
+                            agent=agent_name,
+                            phase="analysis",
+                            kind="tool_result",
+                            report_key=report_field,
+                            iteration=iteration + 1,
+                            status="error",
+                            summary=f"{tool_name} failed",
+                            tool_name=tool_name,
+                            tool_args=tool_args,
+                            observation_preview=str(e),
                         )
                     )
         
@@ -169,6 +306,19 @@ def run_self_contained_analyst(
             total_usage[key] += final_usage.get(key, 0)
     
     if report is not None:
+        agent_steps.append(
+            make_agent_step(
+                agent=agent_name,
+                phase="analysis",
+                kind="report_synthesis",
+                report_key=report_field,
+                status="completed",
+                summary=f"{agent_name} produced the final structured report",
+                output_preview=report,
+                usage=final_usage,
+                extra={"score": score, "key_takeaways": key_takeaways},
+            )
+        )
         logger.info(f"{agent_name} completed successfully with score {score}")
         return {
             report_field: report,
@@ -176,6 +326,8 @@ def run_self_contained_analyst(
             takeaways_state_key: key_takeaways,
             "report_usage": {report_field: total_usage},
             "report_resources": resources_used,
+            "report_resources_by_report": {report_field: resources_used},
+            "report_steps_by_report": {report_field: agent_steps},
         }
     
     # Fallback: generate narrative response
@@ -200,6 +352,21 @@ def run_self_contained_analyst(
         takeaways_state_key: [],
         "report_usage": {report_field: total_usage},
         "report_resources": resources_used,
+        "report_resources_by_report": {report_field: resources_used},
+        "report_steps_by_report": {
+            report_field: agent_steps + [
+                make_agent_step(
+                    agent=agent_name,
+                    phase="analysis",
+                    kind="report_synthesis",
+                    report_key=report_field,
+                    status="fallback",
+                    summary=f"{agent_name} fell back to an unstructured narrative report",
+                    output_preview=fallback_report,
+                    usage=fallback_usage,
+                )
+            ]
+        },
     }
 
 

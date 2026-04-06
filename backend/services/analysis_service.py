@@ -6,7 +6,7 @@ import os
 import sys
 import datetime
 import threading
-from typing import Dict, Optional, Callable, Any
+from typing import Dict, Optional, Callable, Any, List
 from pathlib import Path
 from dotenv import load_dotenv
 import re
@@ -450,6 +450,7 @@ class AnalysisService:
                         meta["cost_usd"] = llm_usage.get("cost_usd")
                     if resources is not None:
                         meta["resources"] = resources
+                    meta["agent_steps"] = _get_report_agent_steps(chunk, key)
                     save_report(
                         analysis_info["analysis_run_id"],
                         key,
@@ -468,6 +469,33 @@ class AnalysisService:
                         analysis_run_id, key, e,
                     )
                     raise
+
+            def _get_report_resources(
+                chunk: Optional[Dict[str, Any]],
+                report_key: str,
+            ) -> List[Dict[str, Any]]:
+                if not isinstance(chunk, dict):
+                    return []
+                by_report = chunk.get("report_resources_by_report")
+                if isinstance(by_report, dict):
+                    specific = by_report.get(report_key)
+                    if isinstance(specific, list):
+                        return specific
+                resources = chunk.get("report_resources")
+                return resources if isinstance(resources, list) else []
+
+            def _get_report_agent_steps(
+                chunk: Optional[Dict[str, Any]],
+                report_key: str,
+            ) -> List[Dict[str, Any]]:
+                if not isinstance(chunk, dict):
+                    return []
+                by_report = chunk.get("report_steps_by_report")
+                if isinstance(by_report, dict):
+                    specific = by_report.get(report_key)
+                    if isinstance(specific, list):
+                        return specific
+                return []
 
             # Determine when analyst phase is complete (last selected analyst report saved).
             analyst_to_report_key = {
@@ -602,7 +630,7 @@ class AnalysisService:
                                 chunk.get(score_key),
                                 label,
                                 llm_usage=report_usage.get(key),
-                                resources=chunk.get("report_resources"),
+                                resources=_get_report_resources(chunk, key),
                                 chunk=chunk,
                             )
                             _written_reports.add(key)
@@ -648,7 +676,8 @@ class AnalysisService:
                         inner["output_tokens"] = usage.get("output_tokens")
                         inner["total_tokens"] = usage.get("total_tokens")
                         inner["cost_usd"] = usage.get("cost_usd")
-                    inner["resources"] = chunk.get("report_resources") or []
+                    inner["resources"] = _get_report_resources(chunk, "investment_plan")
+                    inner["agent_steps"] = _get_report_agent_steps(chunk, "investment_plan")
                     _written_reports.add("investment_plan")
                     save_report(
                         analysis_info["analysis_run_id"],
@@ -676,7 +705,7 @@ class AnalysisService:
                         llm_usage=report_usage.get("trader_investment_plan"),
                         recommendation=chunk.get("trader_recommendation"),
                         tps_plan=tps or None,
-                        resources=chunk.get("report_resources"),
+                        resources=_get_report_resources(chunk, "trader_investment_plan"),
                         chunk=chunk,
                     )
                     analysis_info["agent_statuses"]["Risky Analyst"] = "in_progress"
@@ -724,7 +753,8 @@ class AnalysisService:
                         inner["output_tokens"] = usage.get("output_tokens")
                         inner["total_tokens"] = usage.get("total_tokens")
                         inner["cost_usd"] = usage.get("cost_usd")
-                    inner["resources"] = chunk.get("report_resources") or []
+                    inner["resources"] = _get_report_resources(chunk, "final_trade_decision")
+                    inner["agent_steps"] = _get_report_agent_steps(chunk, "final_trade_decision")
                     save_report(
                         analysis_info["analysis_run_id"],
                         "final_trade_decision",
@@ -769,7 +799,7 @@ class AnalysisService:
                             last_chunk.get(score_key),
                             label,
                             llm_usage=report_usage.get(report_key),
-                            resources=last_chunk.get("report_resources"),
+                            resources=_get_report_resources(last_chunk, report_key),
                             chunk=last_chunk,
                         )
                         analysis_info["reports"][report_key] = content

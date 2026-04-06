@@ -2244,7 +2244,9 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                             )
                           ) : (
                             <ReportViewer content={currentReportContent} score={currentReportScore} scoreLabel={currentReportScoreLabel}
-                              keyTakeaways={currentReportData?.key_takeaways} reportType={selectedReport}
+                              keyTakeaways={currentReportData?.key_takeaways}
+                              analysisDate={currentReportData?.analysis_date ?? activeAnalysisDate}
+                              reportType={selectedReport}
                               bullViewpoint={currentReportData?.bull_viewpoint} bearViewpoint={currentReportData?.bear_viewpoint}
                               riskyViewpoint={currentReportData?.risky_viewpoint} safeViewpoint={currentReportData?.safe_viewpoint}
                               neutralViewpoint={currentReportData?.neutral_viewpoint}

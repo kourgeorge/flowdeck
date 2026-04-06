@@ -9,12 +9,17 @@ export interface ReportResource {
   title?: string;
   ticker?: string;
   description?: string;
+  tool?: string;
+  args?: unknown;
   /** Tool that was executed (e.g. get_news, get_global_news) */
   tool_name?: string;
   /** JSON or string summary of tool arguments */
-  tool_input?: string;
+  tool_input?: unknown;
+  /** Full saved tool output snapshot at report-generation time */
+  tool_output?: unknown;
   /** Truncated tool result for inspection */
   tool_output_preview?: string;
+  captured_at?: string;
 }
 
 interface ReportViewerProps {
@@ -22,6 +27,7 @@ interface ReportViewerProps {
   score?: number | null;
   scoreLabel?: string | null;
   keyTakeaways?: string[];
+  analysisDate?: string | null;
   reportType?: string | null;
   bullViewpoint?: string[] | null;
   bearViewpoint?: string[] | null;
@@ -139,9 +145,62 @@ function ReportMoreInfo({ reportType }: { reportType: string }) {
   );
 }
 
+function formatResourceValue(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function toDateOnly(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const direct = value.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (direct?.[1]) return direct[1];
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+}
+
+function isResourceRelevantForAnalysisDate(
+  resource: ReportResource,
+  analysisDate?: string | null,
+): boolean {
+  const hasSavedData =
+    resource.tool_output != null ||
+    Boolean(resource.tool_output_preview) ||
+    Boolean(resource.url) ||
+    Boolean(resource.title) ||
+    Boolean(resource.description);
+
+  if (!analysisDate) return hasSavedData;
+
+  const analysisDay = toDateOnly(analysisDate);
+  if (!analysisDay) return hasSavedData;
+
+  const rawInput = resource.tool_input ?? resource.args;
+  const toolInput =
+    typeof rawInput === 'object' && rawInput !== null
+      ? rawInput as Record<string, unknown>
+      : null;
+  const startDay = toDateOnly(toolInput?.start_date);
+  const endDay = toDateOnly(toolInput?.end_date ?? toolInput?.curr_date);
+  const capturedDay = toDateOnly(resource.captured_at);
+
+  if (startDay && endDay) return analysisDay >= startDay && analysisDay <= endDay;
+  if (endDay) return analysisDay === endDay;
+  if (capturedDay) return analysisDay === capturedDay;
+  return hasSavedData;
+}
+
 function ResourceToolDetail({ resource }: { resource: ReportResource }) {
   const [show, setShow] = useState(false);
-  const hasTool = resource.tool_name || resource.tool_input || resource.tool_output_preview;
+  const toolName = resource.tool_name || resource.tool;
+  const toolInput = resource.tool_input ?? resource.args;
+  const toolOutput = resource.tool_output;
+  const hasTool = toolName || toolInput != null || resource.tool_output_preview || toolOutput != null;
   if (!hasTool) return null;
   return (
     <div className="mt-1.5 rounded border border-slate-600 bg-slate-800/60 overflow-hidden text-xs">
@@ -150,23 +209,38 @@ function ResourceToolDetail({ resource }: { resource: ReportResource }) {
         onClick={() => setShow((v) => !v)}
         className="w-full px-2.5 py-1.5 flex items-center justify-between gap-2 text-left text-slate-400 hover:text-slate-300 hover:bg-slate-700/40"
       >
-        <span className="font-medium">Tool: {resource.tool_name || '—'}</span>
+        <span className="font-medium">Tool: {toolName || '—'}</span>
         <svg className={`w-3 h-3 flex-shrink-0 ${show ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
       </button>
       {show && (
         <div className="px-2.5 pb-2 space-y-1.5 font-mono text-slate-400">
-          {resource.tool_input != null && resource.tool_input !== '' && (
-            <div>
-              <div className="text-slate-500 mb-0.5">Input</div>
-              <pre className="whitespace-pre-wrap break-all rounded bg-slate-900/80 p-1.5 text-[11px] max-h-24 overflow-y-auto">{resource.tool_input}</pre>
+          {resource.captured_at && (
+            <div className="text-slate-500">
+              Saved at {resource.captured_at}
             </div>
           )}
-          {resource.tool_output_preview != null && resource.tool_output_preview !== '' && (
+          {toolInput != null && formatResourceValue(toolInput) !== '' && (
+            <div>
+              <div className="text-slate-500 mb-0.5">Input</div>
+              <pre className="whitespace-pre-wrap break-all rounded bg-slate-900/80 p-1.5 text-[11px] max-h-24 overflow-y-auto">{formatResourceValue(toolInput)}</pre>
+            </div>
+          )}
+          {toolOutput != null && formatResourceValue(toolOutput) !== '' ? (
+            <div>
+              <div className="text-slate-500 mb-0.5">Saved Output Snapshot</div>
+              <pre className="whitespace-pre-wrap break-all rounded bg-slate-900/80 p-1.5 text-[11px] max-h-56 overflow-y-auto">{formatResourceValue(toolOutput)}</pre>
+            </div>
+          ) : resource.tool_output_preview != null && resource.tool_output_preview !== '' ? (
             <div>
               <div className="text-slate-500 mb-0.5">Output (preview)</div>
               <pre className="whitespace-pre-wrap break-all rounded bg-slate-900/80 p-1.5 text-[11px] max-h-32 overflow-y-auto">{resource.tool_output_preview}</pre>
+            </div>
+          ) : null}
+          {resource.url && (
+            <div className="text-slate-500">
+              External link available above.
             </div>
           )}
         </div>
@@ -175,8 +249,19 @@ function ResourceToolDetail({ resource }: { resource: ReportResource }) {
   );
 }
 
-function ReportResourcesSection({ resources }: { resources: ReportResource[] }) {
+function ReportResourcesSection({
+  resources,
+  analysisDate,
+}: {
+  resources: ReportResource[];
+  analysisDate?: string | null;
+}) {
   const [isOpen, setIsOpen] = useState(false);
+  const visibleResources = resources.filter((resource) =>
+    isResourceRelevantForAnalysisDate(resource, analysisDate),
+  );
+  if (visibleResources.length === 0) return null;
+
   return (
     <div className="pt-3 border-t border-slate-700">
       <button
@@ -193,18 +278,25 @@ function ReportResourcesSection({ resources }: { resources: ReportResource[] }) 
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
         <span>Resources</span>
-        <span className="text-xs text-slate-500">({resources.length})</span>
+        <span className="text-xs text-slate-500">({visibleResources.length})</span>
       </button>
       {isOpen && (
         <ul className="mt-1.5 space-y-1.5 text-sm text-slate-300">
-          {resources.map((ref, idx) => {
-            const label = ref.title || ref.description || (ref.type && ref.ticker ? `${ref.type} (${ref.ticker})` : ref.type) || 'Source';
-            const source = ref.type || ref.description;
+          {visibleResources.map((ref, idx) => {
+            const label =
+              ref.title ||
+              ref.description ||
+              (ref.type && ref.ticker ? `${ref.type} (${ref.ticker})` : ref.type) ||
+              ref.tool_name ||
+              ref.tool ||
+              'Source';
+            const source = ref.type || ref.description || ref.tool_name || ref.tool;
             return (
               <li key={idx} className="flex flex-col">
                 <span className="font-medium">{label}</span>
                 <div className="flex flex-wrap gap-2 text-xs text-slate-500">
                   {source && <span>{source}</span>}
+                  {analysisDate && <span>Analysis date: {analysisDate}</span>}
                   {ref.url && (
                     <a
                       href={ref.url}
@@ -227,12 +319,12 @@ function ReportResourcesSection({ resources }: { resources: ReportResource[] }) 
   );
 }
 
-export default function ReportViewer({ content, score, scoreLabel, keyTakeaways, reportType, bullViewpoint, bearViewpoint, riskyViewpoint, safeViewpoint, neutralViewpoint, tpsPlan, resources }: ReportViewerProps) {
+export default function ReportViewer({ content, score, scoreLabel, keyTakeaways, analysisDate, reportType, bullViewpoint, bearViewpoint, riskyViewpoint, safeViewpoint, neutralViewpoint, tpsPlan, resources }: ReportViewerProps) {
   const hasContent = content && content.trim().length > 0;
   const hasBullBear = (bullViewpoint && bullViewpoint.length > 0) || (bearViewpoint && bearViewpoint.length > 0);
   const hasRiskViewpoints = (riskyViewpoint && riskyViewpoint.length > 0) || (safeViewpoint && safeViewpoint.length > 0) || (neutralViewpoint && neutralViewpoint.length > 0);
   const hasViewpoints = hasBullBear || hasRiskViewpoints;
-  const hasResources = resources && resources.length > 0;
+  const hasResources = resources?.some((resource) => isResourceRelevantForAnalysisDate(resource, analysisDate)) ?? false;
 
   if (!hasContent && !hasViewpoints && !hasResources) {
     return (
@@ -409,7 +501,7 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
         </div>
       </div>
       )}
-      {hasResources && <ReportResourcesSection resources={resources!} />}
+      {hasResources && <ReportResourcesSection resources={resources!} analysisDate={analysisDate} />}
     </div>
   );
 }

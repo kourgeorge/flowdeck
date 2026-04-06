@@ -23,7 +23,7 @@ def extract_resources_from_tool(
     """
     resources: List[Dict[str, Any]] = []
     args = tool_args or {}
-    ticker = (args.get("ticker") or "").strip().upper()
+    ticker = str(args.get("ticker") or args.get("symbol") or "").strip().upper()
 
     if tool_name == "get_news":
         resources = _resources_from_news(result, ticker)
@@ -36,9 +36,15 @@ def extract_resources_from_tool(
     elif tool_name in ("get_fundamentals", "get_balance_sheet", "get_cashflow", "get_income_statement"):
         if ticker:
             resources = [{"type": "fundamentals", "ticker": ticker, "description": f"Financial data for {ticker}"}]
-    elif tool_name in ("get_ticker_data", "get_ticker_quote", "get_indicators"):
+    elif tool_name == "get_ticker_data":
         if ticker:
-            resources = [{"type": "market_data", "ticker": ticker, "description": f"Market data for {ticker}"}]
+            resources = [{"type": "price_history", "ticker": ticker, "description": f"Historical market data for {ticker}"}]
+    elif tool_name == "get_ticker_quote":
+        if ticker:
+            resources = [{"type": "market_quote", "ticker": ticker, "description": f"Quote snapshot for {ticker}"}]
+    elif tool_name == "get_indicators":
+        if ticker:
+            resources = [{"type": "technical_indicators", "ticker": ticker, "description": f"Technical indicator snapshot for {ticker}"}]
     elif tool_name == "get_analysts_recommendation":
         if ticker:
             resources = [{"type": "analyst_recommendation", "ticker": ticker}]

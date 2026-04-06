@@ -145,8 +145,110 @@ def test_report_row_to_dict_includes_resources():
     assert out["resources"][0]["url"] == "https://example.com"
 
 
+def test_build_tool_resource_snapshots_persists_actual_tool_output():
+    from ai_engine.tradingagents.agents.analysts.self_contained_analyst import build_tool_resource_snapshots
+
+    snapshots = build_tool_resource_snapshots(
+        "get_ticker_quote",
+        {"symbol": "AAPL"},
+        '{"ticker":"AAPL","current_price":123.45,"currency":"USD"}',
+    )
+
+    assert len(snapshots) == 1
+    snapshot = snapshots[0]
+    assert snapshot["type"] == "market_quote"
+    assert snapshot["ticker"] == "AAPL"
+    assert snapshot["tool_name"] == "get_ticker_quote"
+    assert snapshot["tool_input"]["symbol"] == "AAPL"
+    assert snapshot["tool_output"]["ticker"] == "AAPL"
+    assert snapshot["tool_output"]["current_price"] == 123.45
+    assert "current_price" in snapshot["tool_output_preview"]
+
+
+def test_merge_report_resources_keeps_distinct_tool_snapshots_for_same_ticker():
+    from ai_engine.tradingagents.agents.analysts.self_contained_analyst import build_tool_resource_snapshots
+    from ai_engine.tradingagents.agents.utils.agent_states import _merge_report_resources
+
+    quote_snapshot = build_tool_resource_snapshots(
+        "get_ticker_quote",
+        {"symbol": "AMZN"},
+        '{"ticker":"AMZN","current_price":190.0}',
+    )
+    indicators_snapshot = build_tool_resource_snapshots(
+        "get_indicators",
+        {"ticker": "AMZN"},
+        "# Technical Indicators for AMZN",
+    )
+
+    merged = _merge_report_resources(quote_snapshot, indicators_snapshot)
+    assert len(merged) == 2
+    assert {item["tool_name"] for item in merged} == {"get_ticker_quote", "get_indicators"}
+
+
+def test_merge_report_resources_by_report_keeps_resources_scoped_to_report():
+    from ai_engine.tradingagents.agents.analysts.self_contained_analyst import build_tool_resource_snapshots
+    from ai_engine.tradingagents.agents.utils.agent_states import _merge_report_resources_by_report
+
+    market_resources = build_tool_resource_snapshots(
+        "get_ticker_quote",
+        {"symbol": "AMZN"},
+        '{"ticker":"AMZN","current_price":190.0}',
+    )
+    news_resources = build_tool_resource_snapshots(
+        "get_news",
+        {"ticker": "AMZN", "start_date": "2026-04-01", "end_date": "2026-04-06"},
+        '{"articles":[{"link":"https://example.com/amzn","title":"AMZN headline"}]}',
+    )
+
+    merged = _merge_report_resources_by_report(
+        {"market_report": market_resources},
+        {"news_report": news_resources},
+    )
+
+    assert set(merged.keys()) == {"market_report", "news_report"}
+    assert merged["market_report"][0]["tool_name"] == "get_ticker_quote"
+    assert merged["news_report"][0]["tool_name"] == "get_news"
+
+
+def test_merge_report_steps_by_report_appends_steps():
+    from ai_engine.tradingagents.agents.utils.agent_states import _merge_report_steps_by_report
+
+    merged = _merge_report_steps_by_report(
+        {"investment_plan": [{"agent": "Bull Researcher", "kind": "debate_turn"}]},
+        {"investment_plan": [{"agent": "Bear Researcher", "kind": "debate_turn"}]},
+    )
+
+    assert list(merged.keys()) == ["investment_plan"]
+    assert len(merged["investment_plan"]) == 2
+    assert [step["agent"] for step in merged["investment_plan"]] == [
+        "Bull Researcher",
+        "Bear Researcher",
+    ]
+
+
+def test_report_row_to_dict_includes_agent_steps():
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from services.report_service import _report_row_to_dict
+
+    class Row:
+        content = ""
+        metadata_json = json.dumps({
+            "agent_steps": [
+                {"agent": "Market Analyst", "kind": "tool_call", "tool_name": "get_ticker_quote"},
+            ],
+        })
+
+    out = _report_row_to_dict(Row(), "2024-01-01")
+    assert "agent_steps" in out
+    assert isinstance(out["agent_steps"], list)
+    assert len(out["agent_steps"]) == 1
+    assert out["agent_steps"][0]["agent"] == "Market Analyst"
+
+
 def test_extract_resources_node():
     """Extract-resources node reads state with AIMessage + ToolMessages and returns report_resources."""
+    pytest.importorskip("ai_engine.tradingagents.graph.tool_node_with_resources")
     from langchain_core.messages import AIMessage, ToolMessage
     from ai_engine.tradingagents.graph.tool_node_with_resources import make_extract_resources_node
 

@@ -16,6 +16,7 @@ import sys
 import threading
 from pathlib import Path
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 HEARTBEAT_INTERVAL_SEC = 5
 
@@ -253,6 +254,7 @@ def main() -> None:
                 meta["cost_usd"] = llm_usage.get("cost_usd")
             if resources is not None:
                 meta["resources"] = resources
+            meta["agent_steps"] = _get_report_agent_steps(chunk, key)
             save_report(
                 analysis_run_id,
                 key,
@@ -263,6 +265,30 @@ def main() -> None:
         except Exception as e:
             logger.exception("Failed to save report ticker=%s report_type=%s error=%s", ticker, key, e)
             raise
+
+    def _get_report_resources(
+        chunk: Optional[Dict[str, Any]],
+        report_key: str,
+    ) -> List[Dict[str, Any]]:
+        if not isinstance(chunk, dict):
+            return []
+        by_report = chunk.get("report_resources_by_report")
+        if isinstance(by_report, dict):
+            specific = by_report.get(report_key)
+            if isinstance(specific, list):
+                return specific
+        resources = chunk.get("report_resources")
+        return resources if isinstance(resources, list) else []
+
+    def _get_report_agent_steps(chunk: dict | None, report_key: str) -> list[dict]:
+        if not isinstance(chunk, dict):
+            return []
+        by_report = chunk.get("report_steps_by_report")
+        if isinstance(by_report, dict):
+            specific = by_report.get(report_key)
+            if isinstance(specific, list):
+                return specific
+        return []
 
     async def run() -> None:
         stop_heartbeat = threading.Event()
@@ -335,7 +361,7 @@ def main() -> None:
                             chunk.get(score_key),
                             label,
                             llm_usage=report_usage.get(key),
-                            resources=chunk.get("report_resources"),
+                            resources=_get_report_resources(chunk, key),
                             chunk=chunk,
                         )
                         _written_reports.add(key)
@@ -373,12 +399,13 @@ def main() -> None:
                         meta["output_tokens"] = usage.get("output_tokens")
                         meta["total_tokens"] = usage.get("total_tokens")
                         meta["cost_usd"] = usage.get("cost_usd")
+                    meta["agent_steps"] = _get_report_agent_steps(chunk, "investment_plan")
                     _written_reports.add("investment_plan")
                     save_report(
                         analysis_run_id,
                         "investment_plan",
                         content=content,
-                        metadata={**meta, "bull_viewpoint": bull, "bear_viewpoint": bear, "resources": chunk.get("report_resources") or []},
+                        metadata={**meta, "bull_viewpoint": bull, "bear_viewpoint": bear, "resources": _get_report_resources(chunk, "investment_plan")},
                     )
                     _progress_log("Investment plan ready → saved")
 
@@ -394,7 +421,7 @@ def main() -> None:
                         "Trader Plan",
                         llm_usage=report_usage.get("trader_investment_plan"),
                         recommendation=chunk.get("trader_recommendation"),
-                        resources=chunk.get("report_resources"),
+                        resources=_get_report_resources(chunk, "trader_investment_plan"),
                         chunk=chunk,
                     )
                     agent_statuses["Risky Analyst"] = "in_progress"
@@ -431,11 +458,12 @@ def main() -> None:
                         meta["output_tokens"] = usage.get("output_tokens")
                         meta["total_tokens"] = usage.get("total_tokens")
                         meta["cost_usd"] = usage.get("cost_usd")
+                    meta["agent_steps"] = _get_report_agent_steps(chunk, "final_trade_decision")
                     save_report(
                         analysis_run_id,
                         "final_trade_decision",
                         content=content,
-                        metadata={**meta, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral, "resources": chunk.get("report_resources") or []},
+                        metadata={**meta, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral, "resources": _get_report_resources(chunk, "final_trade_decision")},
                     )
                     rec = final_recommendation or ""
                     _progress_log(f"Final trade decision ready → {rec}")

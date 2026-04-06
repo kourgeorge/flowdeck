@@ -1,4 +1,5 @@
 from typing import Annotated, Any, Dict, List, Sequence
+import json
 from datetime import date, timedelta, datetime
 from typing_extensions import TypedDict, Optional
 from langchain_core.messages import AnyMessage
@@ -16,6 +17,33 @@ def _merge_report_usage(current: Dict[str, Any], update: Dict[str, Any]) -> Dict
     return base
 
 
+def _merge_report_resources_by_report(
+    current: Dict[str, List[Dict[str, Any]]],
+    update: Dict[str, List[Dict[str, Any]]],
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Reducer: merge per-report resource lists using the same list dedupe logic."""
+    base = dict(current) if current else {}
+    upd = dict(update) if update else {}
+    for report_key, resources in upd.items():
+        base[report_key] = _merge_report_resources(base.get(report_key, []), resources or [])
+    return base
+
+
+def _merge_report_steps_by_report(
+    current: Dict[str, List[Dict[str, Any]]],
+    update: Dict[str, List[Dict[str, Any]]],
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Reducer: append persisted agent step traces for each report key."""
+    base = dict(current) if current else {}
+    upd = dict(update) if update else {}
+    for report_key, steps in upd.items():
+        existing = list(base.get(report_key, []))
+        new_steps = [step for step in (steps or []) if isinstance(step, dict)]
+        existing.extend(new_steps)
+        base[report_key] = existing
+    return base
+
+
 def _merge_report_resources(
     current: List[Dict[str, Any]], update: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
@@ -23,13 +51,33 @@ def _merge_report_resources(
     combined = list(current) if current else []
     new_entries = update if isinstance(update, list) else []
     seen: set[tuple] = set()
+
+    def _dedupe_key(resource: Dict[str, Any]) -> tuple:
+        resource_type = resource.get("type") or ""
+        if resource.get("url"):
+            return (resource_type, "url", resource.get("url"))
+        if resource.get("tool_name") or resource.get("tool") or resource.get("tool_input") or resource.get("args"):
+            tool_name = resource.get("tool_name") or resource.get("tool") or ""
+            tool_input = resource.get("tool_input")
+            if tool_input is None:
+                tool_input = resource.get("args")
+            try:
+                tool_input_key = json.dumps(tool_input, sort_keys=True, default=str)
+            except Exception:
+                tool_input_key = str(tool_input)
+            return (resource_type, "tool", tool_name, tool_input_key)
+        return (
+            resource_type,
+            "meta",
+            resource.get("title") or resource.get("description") or resource.get("ticker") or "",
+        )
+
     for r in combined:
-        key = (r.get("type") or "", r.get("url") or r.get("title") or r.get("description") or r.get("ticker") or "")
-        seen.add(key)
+        seen.add(_dedupe_key(r))
     for r in new_entries:
         if not isinstance(r, dict):
             continue
-        key = (r.get("type") or "", r.get("url") or r.get("title") or r.get("description") or r.get("ticker") or "")
+        key = _dedupe_key(r)
         if key not in seen:
             seen.add(key)
             combined.append(r)
@@ -149,3 +197,7 @@ class AgentState(TypedDict):
     report_usage: Annotated[Dict[str, Any], _merge_report_usage]
     # Resources used in this run: news, SEC filings, Reddit, etc. (type, url?, title?, ticker?, description?)
     report_resources: Annotated[List[Dict[str, Any]], _merge_report_resources]
+    # Resources used per saved report key so each report can render only its own evidence.
+    report_resources_by_report: Annotated[Dict[str, List[Dict[str, Any]]], _merge_report_resources_by_report]
+    # Agent step traces per saved report key for future visualization/debugging.
+    report_steps_by_report: Annotated[Dict[str, List[Dict[str, Any]]], _merge_report_steps_by_report]

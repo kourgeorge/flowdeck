@@ -49,6 +49,8 @@ class Propagator:
             "technical_score": None,
             "report_usage": {},
             "report_resources": [],
+            "report_resources_by_report": {},
+            "report_steps_by_report": {},
         }
 
     def get_graph_args(self, session_id: str = None) -> Dict[str, Any]:

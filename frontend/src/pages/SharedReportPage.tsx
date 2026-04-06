@@ -32,6 +32,10 @@ const IMPORTANT_EVENT_LABELS: Record<string, string> = {
   rsi_bearish_divergence: 'RSI bearish divergence',
 };
 
+function normalizeOptionalString(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
 interface SharedTickerReport {
   type: 'ticker';
   ticker: string;
@@ -385,6 +389,10 @@ export default function SharedReportPage() {
     return idxA - idxB;
   });
   const current = selectedReport ? reports[selectedReport] : null;
+  const currentAnalysisDate =
+    normalizeOptionalString(current?.analysis_date) ??
+    normalizeOptionalString(data.report_date) ??
+    null;
   const reportScores: Record<string, { score: number | null; score_label: string | null }> = {};
   Object.entries(reports).forEach(([k, v]) => {
     reportScores[k] = { score: v.score ?? null, score_label: v.score_label ?? null };
@@ -475,6 +483,7 @@ export default function SharedReportPage() {
               score={current?.score ?? null}
               scoreLabel={current?.score_label ?? null}
               keyTakeaways={current?.key_takeaways}
+              analysisDate={currentAnalysisDate}
               reportType={selectedReport ?? undefined}
               bullViewpoint={current?.bull_viewpoint ?? null}
               bearViewpoint={current?.bear_viewpoint ?? null}
