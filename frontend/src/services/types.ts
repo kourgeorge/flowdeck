@@ -93,6 +93,30 @@ export interface ReportData {
   currency?: string | null;
 }
 
+export interface AnalysisLiveActivity {
+  id?: string;
+  agent?: string | null;
+  kind?: string | null;
+  status?: string | null;
+  summary?: string | null;
+  detail?: string | null;
+  tool_name?: string | null;
+  captured_at?: string | null;
+}
+
+export interface AnalysisStatus {
+  analysis_run_id: number;
+  ticker: string;
+  date: string | null;
+  status: string;
+  agent_statuses: Record<string, string>;
+  current_agent?: string | null;
+  current_agents?: string[] | null;
+  live_activities?: AnalysisLiveActivity[] | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
 export interface TickerPageData {
   ticker: string;
   quote: TickerQuote | null;

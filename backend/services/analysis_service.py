@@ -116,8 +116,23 @@ def extract_content_string(content):
         return str(content)
 
 
+def _iso_utc_now() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+def _preview_activity_text(value: Any, max_chars: int = 180) -> str:
+    text = extract_content_string(value).replace("\n", " ").strip()
+    text = re.sub(r"\s+", " ", text)
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 1].rstrip() + "…"
+
+
 class AnalysisService:
     """Service for running TradingAgents analyses."""
+
+    _MAX_LIVE_ACTIVITIES = 18
+    _MAX_ACTIVITY_FINGERPRINTS = 72
     
     def __init__(self, results_dir: str = "results"):
         self.results_dir = Path(results_dir)
@@ -128,6 +143,164 @@ class AnalysisService:
         # Status queries read from filesystem only. Key = analysis_run_id (AnalysisRun.id).
         self.running_analyses: Dict[int, Dict] = {}
         self._lock = threading.Lock()  # Lock to prevent race conditions
+
+    def _append_live_activity(
+        self,
+        analysis_info: Dict[str, Any],
+        *,
+        kind: str,
+        summary: str,
+        agent: Optional[str] = None,
+        tool_name: Optional[str] = None,
+        status: Optional[str] = None,
+        detail: Optional[str] = None,
+    ) -> None:
+        summary_text = (summary or "").strip()
+        if not summary_text:
+            return
+
+        fingerprint = "||".join(
+            [
+                kind.strip(),
+                (agent or "").strip(),
+                (tool_name or "").strip(),
+                (status or "").strip(),
+                summary_text,
+                (detail or "").strip(),
+            ]
+        )
+        recent_fingerprints = analysis_info.setdefault("activity_fingerprints", [])
+        if fingerprint in recent_fingerprints:
+            return
+
+        activity_seq = int(analysis_info.get("activity_seq", 0)) + 1
+        analysis_info["activity_seq"] = activity_seq
+
+        activity = {
+            "id": f"{analysis_info.get('analysis_run_id', 'analysis')}-{activity_seq}",
+            "kind": kind,
+            "summary": summary_text,
+            "captured_at": _iso_utc_now(),
+        }
+        if agent:
+            activity["agent"] = agent
+        if tool_name:
+            activity["tool_name"] = tool_name
+        if status:
+            activity["status"] = status
+        if detail:
+            activity["detail"] = detail
+
+        live_activities = analysis_info.setdefault("live_activities", [])
+        live_activities.append(activity)
+        if len(live_activities) > self._MAX_LIVE_ACTIVITIES:
+            del live_activities[:-self._MAX_LIVE_ACTIVITIES]
+
+        recent_fingerprints.append(fingerprint)
+        if len(recent_fingerprints) > self._MAX_ACTIVITY_FINGERPRINTS:
+            del recent_fingerprints[:-self._MAX_ACTIVITY_FINGERPRINTS]
+
+    def _append_agent_transition_activity(
+        self,
+        analysis_info: Dict[str, Any],
+        agent: str,
+        status: str,
+        summary: Optional[str] = None,
+    ) -> None:
+        status_text = status.replace("_", " ").strip() or "updated"
+        self._append_live_activity(
+            analysis_info,
+            kind="status",
+            agent=agent,
+            status=status,
+            summary=summary or f"{agent} {status_text}",
+        )
+
+    def _infer_message_agent(self, analysis_info: Dict[str, Any], message: Any) -> Optional[str]:
+        name = getattr(message, "name", None)
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+
+        current_agents = analysis_info.get("current_agents") or []
+        if len(current_agents) == 1:
+            return current_agents[0]
+        return None
+
+    def _record_live_message_activity(self, analysis_info: Dict[str, Any], message: Any) -> None:
+        agent = self._infer_message_agent(analysis_info, message)
+        content = getattr(message, "content", None)
+        handled_tool_call = False
+
+        if isinstance(content, list):
+            for item in content:
+                if not isinstance(item, dict):
+                    continue
+                if item.get("type") == "tool_use":
+                    tool_name = str(item.get("name") or "tool").strip() or "tool"
+                    self._append_live_activity(
+                        analysis_info,
+                        kind="tool_call",
+                        agent=agent,
+                        tool_name=tool_name,
+                        status="started",
+                        summary=f"{agent or 'Agent'} calling {tool_name}",
+                        detail=_preview_activity_text(item.get("input") or item.get("args") or ""),
+                    )
+                    handled_tool_call = True
+                elif item.get("type") == "text":
+                    text = _preview_activity_text(item.get("text") or "")
+                    if text:
+                        self._append_live_activity(
+                            analysis_info,
+                            kind="reasoning",
+                            agent=agent,
+                            status="running",
+                            summary=text,
+                        )
+
+        tool_calls = getattr(message, "tool_calls", None)
+        if isinstance(tool_calls, list):
+            for tool_call in tool_calls:
+                if not isinstance(tool_call, dict):
+                    continue
+                tool_name = str(tool_call.get("name") or "tool").strip() or "tool"
+                self._append_live_activity(
+                    analysis_info,
+                    kind="tool_call",
+                    agent=agent,
+                    tool_name=tool_name,
+                    status="started",
+                    summary=f"{agent or 'Agent'} calling {tool_name}",
+                    detail=_preview_activity_text(tool_call.get("args") or ""),
+                )
+                handled_tool_call = True
+
+        message_name = getattr(message, "name", None)
+        tool_call_id = getattr(message, "tool_call_id", None)
+        if tool_call_id or (isinstance(message_name, str) and message_name.strip() and not handled_tool_call):
+            tool_name = str(message_name or "tool").strip() or "tool"
+            result_preview = _preview_activity_text(content)
+            self._append_live_activity(
+                analysis_info,
+                kind="tool_result",
+                agent=agent,
+                tool_name=tool_name,
+                status="completed",
+                summary=f"{tool_name} returned data",
+                detail=result_preview,
+            )
+            return
+
+        if not handled_tool_call:
+            text_preview = _preview_activity_text(content)
+            if text_preview:
+                self._append_live_activity(
+                    analysis_info,
+                    kind="reasoning",
+                    agent=agent,
+                    status="running",
+                    summary=text_preview,
+                )
     
     def _persist_analysis_status(self, analysis_run_id: int) -> None:
         """Write current status to shared cache DB (visible to all workers)."""
@@ -141,8 +314,9 @@ class AnalysisService:
             "status": analysis_info["status"],
             "agent_statuses": analysis_info.get("agent_statuses", {}),
             "current_agents": analysis_info.get("current_agents", []),  # Changed to list
+            "live_activities": analysis_info.get("live_activities", []),
             "created_at": analysis_info.get("created_at"),
-            "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "updated_at": _iso_utc_now(),
         }
         set_analysis_status("ticker", analysis_run_id, status_data)
 
@@ -297,14 +471,25 @@ class AnalysisService:
                 "progress_callback": progress_callback,
                 "agent_statuses": agent_statuses,
                 "current_agents": current_agents,  # Changed from current_agent to current_agents (list)
+                "live_activities": [],
                 "reports": {},
                 "analysts": analysts,
                 "messages": [],
                 "tool_calls": [],
                 "initiator_email": initiator_email,
                 "parallel_analysts": parallel_analysts,  # Store mode for later reference
-                "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "activity_seq": 0,
+                "activity_fingerprints": [],
+                "created_at": _iso_utc_now(),
             }
+
+            for agent_name in current_agents:
+                self._append_agent_transition_activity(
+                    self.running_analyses[analysis_run_id],
+                    agent_name,
+                    "in_progress",
+                    summary=f"{agent_name} started",
+                )
             
             # Write initial status to file
             self._persist_analysis_status(analysis_run_id)
@@ -540,12 +725,19 @@ class AnalysisService:
             _progress_log(f"Analysis started analysis_run_id={ar_id} ticker={ticker}")
             last_chunk = None
             for chunk in graph.graph.stream(init_agent_state, **args):
+                activity_seq_before_chunk = int(analysis_info.get("activity_seq", 0))
                 if get_stop_requested(analysis_run_id):
                     logger.info(
                         "Analysis stop requested analysis_run_id=%s ticker=%s",
                         analysis_run_id, ticker,
                     )
                     analysis_info["status"] = "cancelled"
+                    self._append_live_activity(
+                        analysis_info,
+                        kind="status",
+                        status="cancelled",
+                        summary="Analysis cancelled",
+                    )
                     self._persist_analysis_status(analysis_run_id)
                     delete_analysis_status("ticker", analysis_run_id)
                     clear_stop_requested(analysis_run_id)
@@ -578,6 +770,8 @@ class AnalysisService:
                         except Exception as log_err:
                             logger.warning("Failed to write to log file: %s", log_err)
 
+                    self._record_live_message_activity(analysis_info, last_message)
+
                 # Update reports and agent status
                 _reports = [
                     ("market_report", "market_report", "market_score", "Market Score", "Market Analyst"),
@@ -594,6 +788,13 @@ class AnalysisService:
                         if key not in _written_reports:
                             analysis_info["reports"][key] = c
                             analysis_info["agent_statuses"][agent] = "completed"
+                            self._append_live_activity(
+                                analysis_info,
+                                kind="report_synthesis",
+                                agent=agent,
+                                status="completed",
+                                summary=f"{agent} finished {key.replace('_', ' ')}",
+                            )
                             
                             # Update current_agents list
                             current_agents = analysis_info.get("current_agents", [])
@@ -614,13 +815,31 @@ class AnalysisService:
                                         if next_agent:
                                             analysis_info["agent_statuses"][next_agent] = "in_progress"
                                             current_agents.append(next_agent)
+                                            self._append_agent_transition_activity(
+                                                analysis_info,
+                                                next_agent,
+                                                "in_progress",
+                                                summary=f"{next_agent} started",
+                                            )
                                     elif last_analyst_report_key and key == last_analyst_report_key:
                                         current_agents.append("Research Manager")
+                                        self._append_agent_transition_activity(
+                                            analysis_info,
+                                            "Research Manager",
+                                            "in_progress",
+                                            summary="Research Manager started synthesizing the analyst reports",
+                                        )
                                 except ValueError:
                                     pass
                             elif last_analyst_report_key and key == last_analyst_report_key:
                                 # Last analyst completed (parallel or sequential)
                                 current_agents.append("Research Manager")
+                                self._append_agent_transition_activity(
+                                    analysis_info,
+                                    "Research Manager",
+                                    "in_progress",
+                                    summary="Research Manager started synthesizing the analyst reports",
+                                )
                             
                             analysis_info["current_agents"] = current_agents
                             self._persist_analysis_status(analysis_run_id)
@@ -641,6 +860,24 @@ class AnalysisService:
                             analysis_info["agent_statuses"]["Bear Researcher"] = "in_progress"
                             analysis_info["agent_statuses"]["Research Manager"] = "in_progress"
                             analysis_info["current_agents"] = ["Bull Researcher", "Bear Researcher", "Research Manager"]
+                            self._append_agent_transition_activity(
+                                analysis_info,
+                                "Bull Researcher",
+                                "in_progress",
+                                summary="Bull Researcher started the investment debate",
+                            )
+                            self._append_agent_transition_activity(
+                                analysis_info,
+                                "Bear Researcher",
+                                "in_progress",
+                                summary="Bear Researcher started the investment debate",
+                            )
+                            self._append_agent_transition_activity(
+                                analysis_info,
+                                "Research Manager",
+                                "in_progress",
+                                summary="Research Manager started moderating the investment debate",
+                            )
                             self._persist_analysis_status(analysis_run_id)
                             _progress_log("Bull/Bear researchers & Research Manager started")
 
@@ -654,6 +891,19 @@ class AnalysisService:
                         analysis_info["agent_statuses"]["Research Manager"] = "completed"
                         analysis_info["agent_statuses"]["Trader"] = "in_progress"
                         analysis_info["current_agents"] = ["Trader"]
+                        self._append_live_activity(
+                            analysis_info,
+                            kind="report_synthesis",
+                            agent="Research Manager",
+                            status="completed",
+                            summary="Research Manager finalized the investment plan",
+                        )
+                        self._append_agent_transition_activity(
+                            analysis_info,
+                            "Trader",
+                            "in_progress",
+                            summary="Trader started converting the thesis into a trading plan",
+                        )
                         self._persist_analysis_status(analysis_run_id)
                         _progress_log("Bull/Bear/Research Manager completed → Trader started")
                 
@@ -697,6 +947,13 @@ class AnalysisService:
                     if tps:
                         analysis_info["reports"]["trader_tps_plan"] = tps
                     analysis_info["agent_statuses"]["Trader"] = "completed"
+                    self._append_live_activity(
+                        analysis_info,
+                        kind="report_synthesis",
+                        agent="Trader",
+                        status="completed",
+                        summary="Trader produced the execution plan",
+                    )
                     report_usage = chunk.get("report_usage") or {}
                     _write_report(
                         "trader_investment_plan",
@@ -713,6 +970,24 @@ class AnalysisService:
                     analysis_info["agent_statuses"]["Safe Analyst"] = "in_progress"
                     analysis_info["agent_statuses"]["Neutral Analyst"] = "in_progress"
                     analysis_info["current_agents"] = ["Risky Analyst", "Safe Analyst", "Neutral Analyst"]
+                    self._append_agent_transition_activity(
+                        analysis_info,
+                        "Risky Analyst",
+                        "in_progress",
+                        summary="Risky Analyst started the risk debate",
+                    )
+                    self._append_agent_transition_activity(
+                        analysis_info,
+                        "Safe Analyst",
+                        "in_progress",
+                        summary="Safe Analyst started the risk debate",
+                    )
+                    self._append_agent_transition_activity(
+                        analysis_info,
+                        "Neutral Analyst",
+                        "in_progress",
+                        summary="Neutral Analyst started the risk debate",
+                    )
                     self._persist_analysis_status(analysis_run_id)
                     _progress_log("Trader completed → Risk debate (Risky/Safe/Neutral) started")
                 
@@ -726,12 +1001,26 @@ class AnalysisService:
                         analysis_info["agent_statuses"]["Neutral Analyst"] = "completed"
                         analysis_info["agent_statuses"]["Portfolio Manager"] = "in_progress"
                         analysis_info["current_agents"] = ["Portfolio Manager"]
+                        self._append_live_activity(
+                            analysis_info,
+                            kind="report_synthesis",
+                            agent="Portfolio Manager",
+                            status="running",
+                            summary="Portfolio Manager started synthesizing the risk debate",
+                        )
                         self._persist_analysis_status(analysis_run_id)
                         _progress_log("Risk analysts completed → Portfolio Manager started")
                 
                 if "final_trade_decision" in chunk and chunk["final_trade_decision"]:
                     analysis_info["agent_statuses"]["Portfolio Manager"] = "completed"
                     analysis_info["current_agents"] = []
+                    self._append_live_activity(
+                        analysis_info,
+                        kind="report_synthesis",
+                        agent="Portfolio Manager",
+                        status="completed",
+                        summary="Portfolio Manager finalized the trade decision",
+                    )
                     self._persist_analysis_status(analysis_run_id)
                     content = chunk["final_trade_decision"]
                     risky = chunk.get("risky_summary") or []
@@ -770,6 +1059,8 @@ class AnalysisService:
                     _progress_log(f"Final trade decision ready → {rec}")
 
                 # Call progress callback if provided
+                if int(analysis_info.get("activity_seq", 0)) != activity_seq_before_chunk:
+                    self._persist_analysis_status(analysis_run_id)
                 if analysis_info["progress_callback"]:
                     try:
                         analysis_info["progress_callback"](chunk, analysis_info)
@@ -811,6 +1102,12 @@ class AnalysisService:
             
             # Mark as completed
             analysis_info["status"] = "completed"
+            self._append_live_activity(
+                analysis_info,
+                kind="status",
+                status="completed",
+                summary="Analysis completed",
+            )
             self._persist_analysis_status(analysis_run_id)
             logger.info(
                 "Analysis completed analysis_run_id=%s ticker=%s reports=%s",
@@ -926,6 +1223,13 @@ class AnalysisService:
             if analysis_info:
                 analysis_info["status"] = "error"
                 analysis_info["error"] = str(e)
+                self._append_live_activity(
+                    analysis_info,
+                    kind="status",
+                    status="error",
+                    summary="Analysis failed",
+                    detail=_preview_activity_text(str(e)),
+                )
                 self._persist_analysis_status(analysis_run_id)
                 if analysis_info["progress_callback"]:
                     try:

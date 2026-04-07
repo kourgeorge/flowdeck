@@ -1,5 +1,6 @@
 import axios from 'axios';
 import type {
+  AnalysisStatus,
   WidgetsResponse,
   TickerPageData,
   TickerQuote,
@@ -479,7 +480,7 @@ export const tickerApi = {
   },
 
   // Get analysis status (requires auth)
-  getAnalysisStatus: async (analysisRunId: number): Promise<any> => {
+  getAnalysisStatus: async (analysisRunId: number): Promise<AnalysisStatus> => {
     const token = getStoredToken();
     const response = await api.get(`/api/analyses/${analysisRunId}/status`, {
       headers: {

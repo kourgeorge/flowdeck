@@ -3,7 +3,12 @@ import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { tickerApi, configApi } from '../services/api';
 import { WebSocketClient } from '../services/websocket';
-import type { SimilarTicker, TickerPageData, SimilarTickersResponse } from '../services/types';
+import type {
+  AnalysisStatus,
+  SimilarTicker,
+  TickerPageData,
+  SimilarTickersResponse,
+} from '../services/types';
 import { useQuoteRefresh } from '../hooks/useQuoteRefresh';
 import { useAuth } from '../contexts/AuthContext';
 import { subscriptionApi, type Subscription } from '../services/subscriptionApi';
@@ -204,7 +209,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const [loadError, setLoadError] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [isStartingAnalysis, setIsStartingAnalysis] = useState(false);
-  const [analysisProgress, setAnalysisProgress] = useState<{ agent_statuses: Record<string,string>; current_agent?: string | null; current_agents?: string[] | null } | null>(null);
+  const [analysisProgress, setAnalysisProgress] = useState<AnalysisStatus | null>(null);
   const [edgarFilings, setEdgarFilings] = useState<any>(null);
   const [edgarFilingsError, setEdgarFilingsError] = useState<string | null>(null);
   const [isLoadingEdgar, setIsLoadingEdgar] = useState(false);
@@ -229,6 +234,24 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       return false;
     }
   });
+
+  const updateAnalysisProgress = useCallback((data: Partial<AnalysisStatus> | null | undefined) => {
+    const agentStatuses = data?.agent_statuses;
+    if (!agentStatuses) return;
+
+    setAnalysisProgress({
+      analysis_run_id: Number(data?.analysis_run_id ?? stockData?.generation_analysis_run_id ?? 0),
+      ticker,
+      date: data?.date ?? null,
+      status: data?.status ?? 'running',
+      agent_statuses: { ...agentStatuses },
+      current_agent: data?.current_agent ?? null,
+      current_agents: data?.current_agents ? [...data.current_agents] : null,
+      live_activities: data?.live_activities ? [...data.live_activities] : null,
+      created_at: data?.created_at ?? null,
+      updated_at: data?.updated_at ?? null,
+    });
+  }, [stockData?.generation_analysis_run_id, ticker]);
   const [priceFlash, setPriceFlash] = useState(false);
   const [companyOfficers, setCompanyOfficers] = useState<any[]>([]);
   const [isLoadingOfficers, setIsLoadingOfficers] = useState(false);
@@ -448,36 +471,10 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       setAnalysisProgress(null);
       const client = new WebSocketClient(data.generation_analysis_run_id);
       client.on('status', (msg: any) => {
-        const s = msg?.data?.agent_statuses;
-        if (s) {
-          console.log('[WebSocket Status]', {
-            agent_statuses: s,
-            current_agent: msg?.data?.current_agent,
-            current_agents: msg?.data?.current_agents
-          });
-          setAnalysisProgress({
-            agent_statuses: { ...s },
-            current_agent: msg?.data?.current_agent ?? null,
-            current_agents: msg?.data?.current_agents ? [...msg.data.current_agents] : null
-          });
-        }
+        updateAnalysisProgress(msg?.data);
       });
       client.on('progress', (msg: any) => {
-        const s = msg?.data?.agent_statuses;
-        const c = msg?.data?.current_agent;
-        const ca = msg?.data?.current_agents;
-        if (s) {
-          console.log('[WebSocket Progress]', {
-            agent_statuses: s,
-            current_agent: c,
-            current_agents: ca
-          });
-          setAnalysisProgress({
-            agent_statuses: { ...s },
-            current_agent: c ?? null,
-            current_agents: ca ? [...ca] : null
-          });
-        }
+        updateAnalysisProgress(msg?.data);
         // Update stock data to get new reports, but keep the existing data structure
         tickerApi.getTickerPage(ticker).then((freshData) => {
           setStockData(freshData);
@@ -724,13 +721,17 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     // Fallback polling mechanism:
     // 1. Always poll while generation is running so report progress updates in UI
     // 2. If WebSocket is healthy, poll less frequently as a safety net
-    if (!ticker || !stockData?.is_generating) return;
+    const activeRunId = stockData?.generation_analysis_run_id;
+    if (!ticker || !stockData?.is_generating || activeRunId == null) return;
     
     const hasWebSocket = wsClientRef.current?.isConnected() ?? false;
     const pollInterval = hasWebSocket ? 6000 : 3500; // 6s with WS, 3.5s without
     
     const interval = setInterval(() => {
-      tickerApi.getTickerPage(ticker).then((data) => {
+      Promise.all([
+        tickerApi.getTickerPage(ticker),
+        tickerApi.getAnalysisStatus(activeRunId).catch(() => null),
+      ]).then(([data, status]) => {
         setStockData(data);
         if (!viewingHistoricalRunRef.current && data.reports && Object.keys(data.reports).length > 0) {
           const keys = Object.keys(data.reports);
@@ -739,13 +740,16 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
             return OVERVIEW_TAB_KEY;
           });
         }
+        if (status) {
+          updateAnalysisProgress(status);
+        }
         if (!data.is_generating) {
           setAnalysisProgress(null);
         }
       }).catch(() => {});
     }, pollInterval);
     return () => clearInterval(interval);
-  }, [ticker, stockData?.is_generating, stockData?.generation_analysis_run_id]);
+  }, [ticker, stockData?.is_generating, stockData?.generation_analysis_run_id, updateAnalysisProgress]);
 
   useEffect(() => {
     if (activeTab !== 'fundamentals' || !ticker || financialStatements) return;
@@ -2278,6 +2282,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                         agentStatuses={analysisProgress?.agent_statuses ?? null}
                         currentAgent={analysisProgress?.current_agent ?? null}
                         currentAgents={analysisProgress?.current_agents ?? null}
+                        liveActivities={analysisProgress?.live_activities ?? null}
                       />
                     )}
                   </div>
