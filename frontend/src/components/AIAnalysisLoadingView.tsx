@@ -1,4 +1,4 @@
-import type { AnalysisLiveActivity } from '../services/types';
+import type { AnalysisLiveActivity, AnalysisTraceStep } from '../services/types';
 
 const ALL_AGENTS = [
   'Market Analyst',
@@ -23,13 +23,7 @@ interface AIAnalysisLoadingViewProps {
   currentAgent?: string | null;
   currentAgents?: string[] | null;
   liveActivities?: AnalysisLiveActivity[] | null;
-}
-
-function prettifyToken(value: string | null | undefined): string {
-  if (!value) return '';
-  return value
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (match) => match.toUpperCase());
+  liveTrace?: AnalysisTraceStep[] | null;
 }
 
 function getActivityTone(kind: string | null | undefined): string {
@@ -62,39 +56,13 @@ function getActivityGlyph(kind: string | null | undefined): string {
   }
 }
 
-function formatRelativeTime(value: string | null | undefined): string {
-  if (!value) return '';
-  const parsed = Date.parse(value);
-  if (Number.isNaN(parsed)) return '';
-  const diffSeconds = Math.max(0, Math.floor((Date.now() - parsed) / 1000));
-  if (diffSeconds < 5) return 'just now';
-  if (diffSeconds < 60) return `${diffSeconds}s ago`;
-  const diffMinutes = Math.floor(diffSeconds / 60);
-  if (diffMinutes < 60) return `${diffMinutes}m ago`;
-  const diffHours = Math.floor(diffMinutes / 60);
-  return `${diffHours}h ago`;
-}
-
-function getLatestAgentActivity(
-  liveActivities: AnalysisLiveActivity[] | null | undefined,
-  agent: string,
-): AnalysisLiveActivity | null {
-  if (!liveActivities?.length) return null;
-  for (let index = liveActivities.length - 1; index >= 0; index -= 1) {
-    const activity = liveActivities[index];
-    if (activity.agent === agent) {
-      return activity;
-    }
-  }
-  return null;
-}
-
 export default function AIAnalysisLoadingView({
   existingReportKeys = [],
   agentStatuses = null,
   currentAgent = null,
   currentAgents = null,
   liveActivities = null,
+  liveTrace = null,
 }: AIAnalysisLoadingViewProps) {
   const activeAgents = currentAgents && currentAgents.length > 0
     ? currentAgents
@@ -104,19 +72,57 @@ export default function AIAnalysisLoadingView({
   const activeAgentSet = new Set(activeAgents);
   const completedCount = Object.values(agentStatuses || {}).filter((status) => status === 'completed').length;
   const pendingCount = ALL_AGENTS.length - completedCount - activeAgents.length;
-  const recentActivities = (liveActivities || []).slice(-8).reverse();
+  
+  // Use live trace if available (shows complete tool sequence), otherwise fall back to activities
+  const displayItems = liveTrace && liveTrace.length > 0
+    ? liveTrace.slice(-50)
+    : (liveActivities || []).slice(-20);
+  const isUsingTrace = liveTrace && liveTrace.length > 0;
+
+  // Group items by agent
+  const agentGroups = displayItems.reduce((groups, item) => {
+    const isLiveActivity = 'detail' in item;
+    const agent = isLiveActivity ? (item as AnalysisLiveActivity).agent : (item as AnalysisTraceStep).agent;
+    const agentName = agent || 'Unknown Agent';
+    
+    if (!groups[agentName]) {
+      groups[agentName] = [];
+    }
+    groups[agentName].push(item);
+    return groups;
+  }, {} as Record<string, (AnalysisLiveActivity | AnalysisTraceStep)[]>);
+
+  activeAgents.forEach((agentName) => {
+    if (!agentGroups[agentName]) {
+      agentGroups[agentName] = [];
+    }
+  });
+
+  const sortedAgents = Object.keys(agentGroups).sort((a, b) => {
+    // Maintain the original order from ALL_AGENTS array
+    const aIndex = ALL_AGENTS.indexOf(a as typeof ALL_AGENTS[number]);
+    const bIndex = ALL_AGENTS.indexOf(b as typeof ALL_AGENTS[number]);
+    
+    // If both agents are in ALL_AGENTS, sort by their original order
+    if (aIndex !== -1 && bIndex !== -1) {
+      return aIndex - bIndex;
+    }
+    
+    // If only one is in ALL_AGENTS, prioritize it
+    if (aIndex !== -1) return -1;
+    if (bIndex !== -1) return 1;
+    
+    // For agents not in ALL_AGENTS (e.g., "Unknown Agent"), sort alphabetically
+    return a.localeCompare(b);
+  });
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/90 shadow-[0_20px_60px_-32px_rgba(56,189,248,0.45)]">
-      <div className="border-b border-slate-700 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.18),_transparent_45%),radial-gradient(circle_at_top_right,_rgba(59,130,246,0.16),_transparent_38%)] px-5 py-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-300/80">Live Analysis</p>
-            <h3 className="mt-1 text-lg font-semibold text-white">Agents are working through the pipeline</h3>
-            <p className="mt-1 max-w-2xl text-sm text-slate-400">
-              Live operations below are streamed from the active analysis run: thinking, tool calls, tool results, and report synthesis.
-            </p>
-          </div>
+    <div className="space-y-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-300/80">Live Analysis</p>
+          <h3 className="mt-1 text-lg font-semibold text-white">Multi-Agent Analysis Running</h3>
+        </div>
           <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
             <div className="rounded-xl border border-sky-400/20 bg-sky-500/10 px-3 py-2 text-sky-100">
               <div className="text-[11px] uppercase tracking-wide text-sky-300/75">Running</div>
@@ -134,61 +140,10 @@ export default function AIAnalysisLoadingView({
               <div className="text-[11px] uppercase tracking-wide text-violet-300/75">Reports Ready</div>
               <div className="mt-1 text-lg font-semibold">{existingReportKeys.length}</div>
             </div>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {(activeAgents.length > 0 ? activeAgents : ['Pipeline']).map((agent) => {
-            const latestActivity = agent === 'Pipeline' ? recentActivities[0] ?? null : getLatestAgentActivity(liveActivities, agent);
-            return (
-              <div
-                key={agent}
-                className="relative overflow-hidden rounded-2xl border border-sky-400/20 bg-slate-950/70 px-4 py-4"
-              >
-                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-sky-300/70 to-transparent" />
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="relative flex h-2.5 w-2.5">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-400/60" />
-                        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-sky-300" />
-                      </span>
-                      <span className="text-sm font-semibold text-white">{agent}</span>
-                    </div>
-                    <p className="mt-2 text-sm text-slate-300">
-                      {latestActivity?.summary || 'Preparing the next operation'}
-                    </p>
-                  </div>
-                  <span className="rounded-full border border-sky-400/20 bg-sky-500/10 px-2 py-1 text-[11px] uppercase tracking-wide text-sky-200">
-                    {prettifyToken(latestActivity?.kind || 'running')}
-                  </span>
-                </div>
-                <div className="mt-4 space-y-2">
-                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
-                    <div className="h-full w-2/3 animate-pulse rounded-full bg-gradient-to-r from-sky-500 via-cyan-300 to-sky-500" />
-                  </div>
-                  <div className="flex gap-2">
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800">
-                      <div className="h-full w-1/2 animate-pulse rounded-full bg-slate-500/70" />
-                    </div>
-                    <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-800">
-                      <div className="h-full w-3/4 animate-pulse rounded-full bg-slate-500/50" />
-                    </div>
-                  </div>
-                </div>
-                {latestActivity?.tool_name && (
-                  <div className="mt-3 text-xs text-slate-400">
-                    Tool: <span className="font-mono text-cyan-300">{latestActivity.tool_name}</span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
         </div>
       </div>
 
-      <div className="px-5 py-5">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
           {ALL_AGENTS.map((agent, index) => {
             const status = agentStatuses?.[agent] || 'pending';
             const isActive = activeAgentSet.has(agent);
@@ -220,57 +175,171 @@ export default function AIAnalysisLoadingView({
               </div>
             );
           })}
-        </div>
+      </div>
 
-        <div className="mt-5 rounded-2xl border border-slate-700 bg-slate-950/60 p-4">
+      <div className="rounded-2xl border border-slate-700 bg-slate-950/60 p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h4 className="text-sm font-semibold text-white">Live Operations</h4>
-              <p className="mt-1 text-xs text-slate-400">Recent backend events from the running analysis</p>
+              <h4 className="text-sm font-semibold text-white">Agent Activity</h4>
+              <p className="mt-1 text-xs text-slate-400">
+                {isUsingTrace
+                  ? 'Tool calls and results grouped by agent'
+                  : 'Recent operations grouped by agent'}
+              </p>
             </div>
             <span className="rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] uppercase tracking-wide text-slate-400">
-              {recentActivities.length} visible
+              {sortedAgents.length} agents
             </span>
           </div>
 
-          {recentActivities.length > 0 ? (
-            <ol className="mt-4 space-y-3">
-              {recentActivities.map((activity) => (
-                <li
-                  key={activity.id || `${activity.agent || 'agent'}-${activity.summary || 'step'}-${activity.captured_at || ''}`}
-                  className={`rounded-xl border px-3 py-3 ${getActivityTone(activity.kind)}`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full border border-current/20 bg-black/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide">
-                          {getActivityGlyph(activity.kind)}
-                        </span>
-                        {activity.agent && (
-                          <span className="text-xs font-medium text-white">{activity.agent}</span>
-                        )}
-                        {activity.tool_name && (
-                          <span className="font-mono text-xs opacity-90">{activity.tool_name}</span>
-                        )}
+          {sortedAgents.length > 0 ? (
+            <div className="mt-4 space-y-3">
+              {sortedAgents.map((agentName) => {
+                const agentItems = agentGroups[agentName];
+                const toolCount = agentItems.filter(item => {
+                  const isLiveActivity = 'detail' in item;
+                  return isLiveActivity
+                    ? (item as AnalysisLiveActivity).tool_name
+                    : (item as AnalysisTraceStep).tool_name;
+                }).length;
+
+                // Check if agent is currently active
+                const agentStatus = agentStatuses?.[agentName];
+                const isActive = activeAgentSet.has(agentName);
+                const isCompleted = agentStatus === 'completed';
+
+                return (
+                  <details key={agentName} className="overflow-hidden rounded-xl border border-sky-400/30 bg-slate-900/70">
+                    <summary className="cursor-pointer list-none px-4 py-3 hover:bg-sky-500/5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          {isActive ? (
+                            <span className="relative flex h-2 w-2">
+                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-400/60" />
+                              <span className="relative inline-flex h-2 w-2 rounded-full bg-sky-300" />
+                            </span>
+                          ) : isCompleted ? (
+                            <span className="flex h-2 w-2 rounded-full bg-emerald-400" />
+                          ) : (
+                            <span className="flex h-2 w-2 rounded-full bg-slate-600" />
+                          )}
+                          <h5 className="text-sm font-semibold text-white">{agentName}</h5>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="rounded-full border border-slate-600 bg-slate-800/80 px-2 py-1 text-[11px] text-slate-300">
+                            {agentItems.length} steps
+                          </span>
+                          <span className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-200">
+                            {toolCount} tools
+                          </span>
+                          <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
                       </div>
-                      <p className="mt-2 text-sm leading-5 text-white">{activity.summary}</p>
-                      {activity.detail && (
-                        <p className="mt-1 text-xs leading-5 opacity-80">{activity.detail}</p>
+                    </summary>
+                    <div className="border-t border-slate-700/50 bg-slate-950/30 px-4 py-3">
+                      {agentItems.length > 0 ? (
+                        <ol className="space-y-2">
+                          {(() => {
+                            const pairedItems: JSX.Element[] = [];
+                            let skipNext = false;
+
+                            agentItems.forEach((item, idx) => {
+                              if (skipNext) {
+                                skipNext = false;
+                                return;
+                              }
+
+                              const isLiveActivity = 'detail' in item;
+                              const traceStep = item as AnalysisTraceStep;
+                              const activity = isLiveActivity ? item as AnalysisLiveActivity : {
+                                id: undefined,
+                                agent: traceStep.agent || null,
+                                kind: traceStep.kind || null,
+                                status: traceStep.status || null,
+                                summary: traceStep.summary || (traceStep.tool_name ? `Called ${traceStep.tool_name}` : 'Processing'),
+                                detail: traceStep.message_preview || traceStep.observation_preview || traceStep.output_preview || null,
+                                tool_name: traceStep.tool_name || null,
+                                captured_at: traceStep.captured_at || null,
+                              };
+                              const toolArgs = !isLiveActivity ? traceStep.tool_args : null;
+
+                              if (activity.kind === 'status' && activity.summary?.toLowerCase().includes('started')) {
+                                return;
+                              }
+
+                              let resultActivity = null;
+                              if (activity.kind === 'tool_call' && idx + 1 < agentItems.length) {
+                                const nextItem = agentItems[idx + 1];
+                                const nextIsLiveActivity = 'detail' in nextItem;
+                                const nextActivity = nextIsLiveActivity ? nextItem as AnalysisLiveActivity : {
+                                  kind: (nextItem as AnalysisTraceStep).kind || null,
+                                  tool_name: (nextItem as AnalysisTraceStep).tool_name || null,
+                                  detail: (nextItem as AnalysisTraceStep).message_preview || (nextItem as AnalysisTraceStep).observation_preview || (nextItem as AnalysisTraceStep).output_preview || null,
+                                };
+
+                                if (nextActivity.kind === 'tool_result' && nextActivity.tool_name === activity.tool_name) {
+                                  resultActivity = nextActivity;
+                                  skipNext = true;
+                                }
+                              }
+
+                              pairedItems.push(
+                                <li key={`${agentName}-${idx}`} className={`rounded-lg border px-2 py-2 text-xs ${getActivityTone(activity.kind)}`}>
+                                  <div className="flex items-center gap-2">
+                                    <span className="rounded border border-current/20 bg-black/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase">
+                                      {getActivityGlyph(activity.kind)}
+                                    </span>
+                                    {activity.tool_name && (
+                                      <span className="font-mono font-semibold">🔧 {activity.tool_name}</span>
+                                    )}
+                                    {!activity.tool_name && activity.summary && (
+                                      <span>{activity.summary}</span>
+                                    )}
+                                  </div>
+                                  {toolArgs != null && (
+                                    <div className="mt-1.5 border-t border-current/10 pt-1.5 text-[11px] opacity-75">
+                                      <div className="mb-1 text-[10px] font-semibold uppercase opacity-60">Parameters</div>
+                                      <pre className="overflow-x-auto whitespace-pre-wrap rounded bg-black/20 px-2 py-1 font-mono text-[10px]">
+                                        {JSON.stringify(toolArgs, null, 2)}
+                                      </pre>
+                                    </div>
+                                  )}
+                                  {toolArgs == null && activity.detail && (
+                                    <div className="mt-1.5 border-t border-current/10 pt-1.5 text-[11px] opacity-75">
+                                      <div className="mb-1 text-[10px] font-semibold uppercase opacity-60">Request</div>
+                                      <div>{activity.detail.substring(0, 150)}{activity.detail.length > 150 ? '...' : ''}</div>
+                                    </div>
+                                  )}
+                                  {resultActivity?.detail && (
+                                    <div className="mt-1.5 border-t border-emerald-400/20 pt-1.5 text-[11px] text-emerald-200/90">
+                                      <div className="mb-1 text-[10px] font-semibold uppercase opacity-60">Response</div>
+                                      <div>{resultActivity.detail.substring(0, 150)}{resultActivity.detail.length > 150 ? '...' : ''}</div>
+                                    </div>
+                                  )}
+                                </li>
+                              );
+                            });
+
+                            return pairedItems;
+                          })()}
+                        </ol>
+                      ) : (
+                        <div className="rounded-lg border border-dashed border-slate-700 px-3 py-4 text-xs text-slate-400">
+                          Waiting for live activity...
+                        </div>
                       )}
                     </div>
-                    <div className="shrink-0 text-[11px] uppercase tracking-wide opacity-70">
-                      {formatRelativeTime(activity.captured_at)}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ol>
+                  </details>
+                );
+              })}
+            </div>
           ) : (
             <div className="mt-4 rounded-xl border border-dashed border-slate-700 px-4 py-6 text-sm text-slate-500">
-              Waiting for the first streamed operation.
+              No agent activity yet.
             </div>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
