@@ -40,6 +40,7 @@ from routers.schedule import router as schedule_router
 from routers.public import router as public_router
 from routers.share import router as share_router
 from routers.tokens import router as tokens_router
+from routers.polymarket import router as polymarket_router
 from data_layer import init_data_gateway
 from data_layer.market import MarketDataLayer
 from data_layer.sources.market import CachedMarketSource
@@ -259,6 +260,7 @@ app.include_router(payments_router)
 app.include_router(chat_router)
 app.include_router(api_keys_router)
 app.include_router(tokens_router)
+app.include_router(polymarket_router)
 
 
 @app.get("/")
