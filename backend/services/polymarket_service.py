@@ -77,13 +77,13 @@ class PolymarketService:
                 )
             
             # Step 3: Score and rank markets by relevance
-            # Use higher threshold to filter out weakly related markets
+            # Use moderate threshold - negative scores filter out other companies
             scored_markets = self.scorer.rank_markets_by_relevance(
                 all_markets,
                 ticker,
                 narratives,
                 company_info,
-                min_score=0.15  # Increased from 0.1 to filter out generic tech markets
+                min_score=0.05  # Low threshold since negative scoring handles filtering
             )
             logger.info(f"Scored {len(scored_markets)} relevant markets")
             

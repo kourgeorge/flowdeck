@@ -49,9 +49,10 @@ When viewing Polymarket sentiment for INTC (Intel), the system was showing marke
   - Macro narratives: Reduced from 4 to 2, only added if few direct matches
   - Removed economic indicators and market sentiment (too generic)
 
-### 4. Increased Minimum Relevance Threshold (`polymarket_service.py`)
-- **Changed**: `min_score` from 0.1 to 0.15
-- **Effect**: Filters out weakly related markets that only match through broad narratives
+### 4. Adjusted Minimum Relevance Threshold (`polymarket_service.py`)
+- **Changed**: `min_score` from 0.1 to 0.05
+- **Why**: Negative scoring (-0.5) already filters out other companies, so we can use a lower threshold
+- **Effect**: Allows relevant markets through while still blocking other company markets
 
 ## Testing Results
 
