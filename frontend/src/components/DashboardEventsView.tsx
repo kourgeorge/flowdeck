@@ -16,6 +16,7 @@ interface DashboardEventsViewProps {
   widgets: TickerWidget[];
   tickerToName: Record<string, string>;
   dashboardLoading?: boolean;
+  compact?: boolean;
 }
 
 type EventBundle = {
@@ -175,7 +176,12 @@ function FilterChip({
   );
 }
 
-export default function DashboardEventsView({ widgets, tickerToName, dashboardLoading = false }: DashboardEventsViewProps) {
+export default function DashboardEventsView({
+  widgets,
+  tickerToName,
+  dashboardLoading = false,
+  compact = false,
+}: DashboardEventsViewProps) {
   const [bundles, setBundles] = useState<EventBundle[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [refreshIndex, setRefreshIndex] = useState(0);
@@ -311,10 +317,10 @@ export default function DashboardEventsView({ widgets, tickerToName, dashboardLo
     const entries = visibleBundles.flatMap((bundle) => (
       bundle.events.map((event) => ({ bundle, event }))
     ));
-    return entries
-      .sort((left, right) => eventSortValue(right.event) - eventSortValue(left.event))
-      .slice(0, 40);
-  }, [visibleBundles]);
+    const sorted = entries
+      .sort((left, right) => eventSortValue(right.event) - eventSortValue(left.event));
+    return compact ? sorted : sorted.slice(0, 40);
+  }, [compact, visibleBundles]);
 
   const toggleEventExpanded = (eventKey: string) => {
     setExpandedEvents((current) => ({
@@ -352,6 +358,90 @@ export default function DashboardEventsView({ widgets, tickerToName, dashboardLo
         <p className="mt-2 text-sm text-gray-400">
           Subscribe to stocks first, then this view will become a live event monitor for your portfolio.
         </p>
+      </div>
+    );
+  }
+
+  if (compact) {
+    if (isLoading && bundles.length === 0) {
+      return (
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="space-y-1">
+          {[1, 2, 3, 4, 5, 6].map((item) => (
+            <div key={item} className="animate-pulse rounded-[0.9rem] border border-slate-700/70 bg-slate-950/40 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <div className="h-4 w-14 rounded-full bg-slate-700/70" />
+                <div className="h-3 flex-1 rounded-full bg-slate-700/60" />
+                <div className="h-4 w-12 rounded-full bg-slate-700/70" />
+              </div>
+            </div>
+          ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (loadError) {
+      return (
+        <div className="rounded-[0.95rem] border border-rose-500/20 bg-rose-500/10 px-3 py-4 text-sm text-rose-100">
+          {loadError}
+        </div>
+      );
+    }
+
+    if (!isLoading && visibleFeed.length === 0) {
+      return (
+        <div className="rounded-[0.95rem] border border-dashed border-slate-700 px-4 py-6 text-sm text-slate-400">
+          No active portfolio events right now.
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex h-full min-h-0 flex-col space-y-2">
+        {failedTickers.length > 0 && (
+          <div className="rounded-[0.9rem] border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100">
+            Partial coverage: {failedTickers.join(', ')}
+          </div>
+        )}
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1 max-h-[39.75rem]">
+          <div className="space-y-1">
+            {visibleFeed.map(({ bundle, event }, index) => {
+              const domainMeta = DOMAIN_META[event.domain];
+              const score = getEventContribution(event).toFixed(2);
+              return (
+                <Link
+                  key={`${bundle.ticker}-${event.event_type}-${event.detected_on ?? 'recent'}-${index}`}
+                  to={`/tickers/${bundle.ticker}`}
+                  className="flex h-9 items-center justify-between gap-3 overflow-hidden rounded-[0.9rem] border border-slate-700/70 bg-slate-950/40 px-3 py-2 transition-colors hover:border-slate-500/70 hover:bg-slate-900"
+                >
+                  <div className="min-w-0 flex items-center gap-2">
+                    <span className="shrink-0 rounded-full border border-slate-600/80 bg-slate-900/80 px-2 py-0.5 text-[10px] font-semibold text-white">
+                      {bundle.ticker}
+                    </span>
+                    <span className="truncate text-xs text-slate-200">
+                      {formatDominantEventLabel(event.event_type)}
+                    </span>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5 text-[10px]">
+                    <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 font-mono font-semibold text-sky-100">
+                      {score}
+                    </span>
+                    <span className={`rounded-full border px-2 py-0.5 font-medium ${STRENGTH_META[event.strength].chip}`}>
+                      {STRENGTH_META[event.strength].label}
+                    </span>
+                    <span className={`hidden rounded-full border px-2 py-0.5 font-medium md:inline-flex ${domainMeta.chip}`}>
+                      {domainMeta.label}
+                    </span>
+                    <span className="text-slate-500">
+                      {formatShortDate(event.detected_on)}
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
       </div>
     );
   }

@@ -15,6 +15,7 @@ import {
 import { digestApi, tickerApi, type DigestBriefItem } from '../services/api';
 import type { TickerWidget } from '../services/types';
 import AspectSpiderChart, { formatReportKey, getAnalysisScoreEntries, getScoreColor } from './AspectSpiderChart';
+import DashboardEventsView from './DashboardEventsView';
 import DashboardPriceTrendsChart from './DashboardPriceTrendsChart';
 import { SubscribedChangeColumnsChart } from './OverviewStatsPanel';
 import { DashboardPanelSkeleton, StatTileSkeleton } from './PortfolioPulseSkeleton';
@@ -339,15 +340,17 @@ function DashboardPanel({
   action,
   children,
   className = '',
+  bodyClassName = '',
 }: {
   title: string;
   subtitle?: string;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  bodyClassName?: string;
 }) {
   return (
-    <section className={`rounded-[1.1rem] border border-slate-700/80 bg-slate-900/80 shadow-[0_14px_40px_rgba(2,6,23,0.28)] backdrop-blur-sm ${className}`}>
+    <section className={`flex flex-col rounded-[1.1rem] border border-slate-700/80 bg-slate-900/80 shadow-[0_14px_40px_rgba(2,6,23,0.28)] backdrop-blur-sm ${className}`}>
       <div className="flex items-start justify-between gap-4 border-b border-slate-700/70 px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-300">{title}</h2>
@@ -355,7 +358,7 @@ function DashboardPanel({
         </div>
         {action}
       </div>
-      <div className="p-4">{children}</div>
+      <div className={`min-h-0 p-4 ${bodyClassName}`}>{children}</div>
     </section>
   );
 }
@@ -1507,10 +1510,20 @@ export default function PortfolioPulseDashboard({
       </div>
     </DashboardPanel>
   );
+  const eventsPanel = (
+    <DashboardPanel
+      title="Events"
+      subtitle="Compact live feed of the strongest portfolio signals."
+      className="h-full"
+      bodyClassName="flex min-h-0 flex-1 flex-col"
+    >
+      <DashboardEventsView widgets={widgets} tickerToName={tickerToName} compact />
+    </DashboardPanel>
+  );
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-3">
         <section className="relative overflow-hidden rounded-[1.25rem] border border-cyan-400/25 bg-slate-900 px-5 py-5 shadow-[0_20px_60px_rgba(8,47,73,0.12)] xl:col-span-2 animate-fade-in">
           <div className="pointer-events-none absolute -right-16 top-0 h-40 w-40 rounded-full bg-cyan-400/10 blur-3xl" />
           <div className="pointer-events-none absolute bottom-0 left-1/3 h-32 w-32 rounded-full bg-emerald-400/10 blur-3xl" />
@@ -1662,12 +1675,12 @@ export default function PortfolioPulseDashboard({
           </div>
         </section>
 
-        <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
-          {signalsPanel}
+        <div className="h-full min-h-0 animate-fade-in" style={{ animationDelay: '100ms' }}>
+          {eventsPanel}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.35fr_0.95fr]">
         <div className="flex min-h-[360px] flex-col gap-4 animate-fade-in" style={{ animationDelay: '200ms' }}>
           <Suspense fallback={<DashboardPanelSkeleton title="Price Trends" />}>
             <DashboardPriceTrendsChart tickers={tickers} period="6mo" height={360} />
@@ -1682,8 +1695,14 @@ export default function PortfolioPulseDashboard({
         <div className="animate-fade-in" style={{ animationDelay: '250ms' }}>
           {latestBriefPanel}
         </div>
+      </div>
 
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <div className="animate-fade-in" style={{ animationDelay: '300ms' }}>
+          {signalsPanel}
+        </div>
+
+        <div className="animate-fade-in" style={{ animationDelay: '350ms' }}>
           <DashboardPanel
             title="Portfolio Extremes & News"
             subtitle="Best and worst performers, sector concentration, and the latest portfolio headlines."
