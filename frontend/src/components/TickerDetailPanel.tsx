@@ -26,6 +26,7 @@ import NewsWidget from './NewsWidget';
 import InsiderTransactionsWidget from './InsiderTransactionsWidget';
 import AIAnalysisLoadingView from './AIAnalysisLoadingView';
 import EventsPanel from './EventsPanel';
+import PredictionMarketWidget from './PredictionMarketWidget';
 import { parseReportDate } from '../utils/date';
 import { formatPrice } from '../utils/currency';
 import AspectSpiderChart, { getAnalysisScoreEntries } from './AspectSpiderChart';
@@ -54,7 +55,7 @@ const REPORT_PROCESS_ORDER = [
 ];
 const SIMILAR_STOCKS_PER_PAGE = 10;
 
-const MAIN_TAB_IDS = ['overview', 'fundamentals', 'sec-filings', 'insider-transactions', 'news', 'events', 'similar-stocks', 'ai-analysis'] as const;
+const MAIN_TAB_IDS = ['overview', 'fundamentals', 'sec-filings', 'insider-transactions', 'news', 'events', 'prediction-markets', 'similar-stocks', 'ai-analysis'] as const;
 type MainTabId = (typeof MAIN_TAB_IDS)[number];
 const DEFAULT_MAIN_TAB: MainTabId = 'ai-analysis';
 
@@ -1408,6 +1409,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                   ...(hasInsiderTransactions ? [{ id: 'insider-transactions', label: 'Insider Transactions' }] : []),
                   { id: 'news', label: 'News' },
                   { id: 'events', label: 'Events' },
+                  { id: 'prediction-markets', label: 'Prediction Markets' },
                   ...(hasSimilarStocks ? [{ id: 'similar-stocks', label: 'Similar Stocks' }] : []),
                   { id: 'ai-analysis', label: 'AI Analysis' },
                 ].map((tab) => {
@@ -1866,6 +1868,13 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
               isLoading={isLoadingEvents}
               error={eventsError}
             />
+          )}
+
+          {/* Prediction Markets Tab */}
+          {activeTab === 'prediction-markets' && (
+            <div className="min-h-[400px]">
+              <PredictionMarketWidget ticker={ticker} />
+            </div>
           )}
 
           {/* Similar Stocks Tab */}
