@@ -243,17 +243,21 @@ def map_ticker_to_narratives(
             seen.add(query_lower)
             narratives.append(query)
     
-    # 1. Direct company mentions (highest priority)
+    # 1. Direct company mentions (highest priority) - EXPANDED
     add_narrative(ticker_upper)
     add_narrative(f"{ticker_upper} stock")
     add_narrative(f"{ticker_upper} price")
     add_narrative(f"{ticker_upper} earnings")
+    add_narrative(f"{ticker_upper} Week")  # Catches "INTC Week of..." markets
+    add_narrative(f"${ticker_upper}")
+    add_narrative(f"({ticker_upper})")
     
     # Add company-specific keywords if available
     if ticker_upper in COMPANY_SPECIFIC_KEYWORDS:
         for keyword in COMPANY_SPECIFIC_KEYWORDS[ticker_upper]:
             add_narrative(keyword)
             add_narrative(f"{keyword} stock")
+            add_narrative(f"{keyword} price")
     
     # Add company name if provided
     if company_info and company_info.get('name'):
@@ -261,32 +265,37 @@ def map_ticker_to_narratives(
         add_narrative(company_name)
         add_narrative(f"{company_name} stock")
         add_narrative(f"{company_name} earnings")
+        add_narrative(f"{company_name} price")
     
-    # 2. Industry-specific narratives (high priority)
+    # 2. Industry-specific narratives (high priority) - LIMITED
     if company_info and company_info.get('industry'):
         industry = company_info['industry']
         if industry in INDUSTRY_NARRATIVES:
-            for narrative in INDUSTRY_NARRATIVES[industry]:
+            # Only add top 3 industry narratives to avoid too broad matches
+            for narrative in INDUSTRY_NARRATIVES[industry][:3]:
                 add_narrative(narrative)
     
-    # 3. Sector-specific narratives (medium-high priority)
+    # 3. Sector-specific narratives (medium priority) - VERY LIMITED
+    # Reduce sector narratives as they're too broad and match other companies
     if company_info and company_info.get('sector'):
         sector = company_info['sector']
         if sector in SECTOR_NARRATIVES:
-            for narrative in SECTOR_NARRATIVES[sector]:
+            # Only add top 2 sector narratives, skip generic ones
+            sector_narratives = SECTOR_NARRATIVES[sector]
+            # Filter out overly generic narratives
+            specific_narratives = [n for n in sector_narratives
+                                  if 'sector' not in n.lower() and 'stocks' not in n.lower()]
+            for narrative in specific_narratives[:2]:
                 add_narrative(narrative)
     
-    # 4. Macro economic drivers (medium priority - always relevant)
-    for narrative in NARRATIVE_TEMPLATES["macro_liquidity"][:4]:  # Top 4 macro narratives
-        add_narrative(narrative)
+    # 4. Macro economic drivers (lower priority) - REDUCED
+    # Only add if we have few direct matches
+    if len(narratives) < 15:
+        for narrative in NARRATIVE_TEMPLATES["macro_liquidity"][:2]:  # Reduced from 4 to 2
+            add_narrative(narrative)
     
-    # 5. Economic indicators (lower priority)
-    for narrative in NARRATIVE_TEMPLATES["economic_indicators"][:3]:  # Top 3
-        add_narrative(narrative)
-    
-    # 6. Market sentiment (lower priority)
-    for narrative in NARRATIVE_TEMPLATES["market_sentiment"][:2]:  # Top 2
-        add_narrative(narrative)
+    # Skip economic indicators and market sentiment for now - too generic
+    # These can be added back if needed, but they dilute relevance
     
     logger.info(f"Generated {len(narratives)} narratives for {ticker_upper}")
     

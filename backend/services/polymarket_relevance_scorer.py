@@ -40,10 +40,14 @@ def score_market_relevance(
     """
     score = 0.0
     
-    # Extract market text
+    # Extract market text - include event-level description for more context
     question = market.get('question', '').lower()
     description = market.get('description', '').lower()
-    combined_text = f"{question} {description}"
+    event_description = market.get('event_description', '').lower()
+    event_title = market.get('event_title', '').lower()
+    
+    # Combine all text sources for comprehensive matching
+    combined_text = f"{question} {description} {event_description} {event_title}"
     
     # Get company name if available
     company_name = ""
@@ -105,12 +109,14 @@ def calculate_keyword_score(
         company_name: Company name (lowercase)
         
     Returns:
-        Keyword match score
+        Keyword match score (can be negative if other tickers found)
     """
+    import re
+    
     score = 0.0
     
     # Exact ticker match (highest weight)
-    if f" {ticker} " in f" {text} " or f"${ticker}" in text:
+    if f" {ticker} " in f" {text} " or f"${ticker}" in text or f"({ticker})" in text:
         score = 0.3
     # Company name match
     elif company_name and company_name in text:
@@ -121,6 +127,29 @@ def calculate_keyword_score(
     # Partial company name match
     elif company_name and any(word in text for word in company_name.split() if len(word) > 3):
         score = 0.1
+    
+    # PENALTY: Check if market is about OTHER specific companies/tickers
+    # This prevents showing "META price" markets when searching for INTC
+    other_ticker_pattern = (
+        r'\b(meta|googl|google|alphabet|amzn|amazon|tsla|tesla|aapl|apple|msft|microsoft|'
+        r'nflx|netflix|nvda|nvidia|amd|pltr|palantir|hood|robinhood|coin|coinbase|'
+        r'open|opendoor|rklb|rocket)\b'
+    )
+    
+    match = re.search(other_ticker_pattern, text, re.IGNORECASE)
+    if match:
+        # Check if this is actually our target ticker
+        found_ticker = match.group(0).lower()
+        target_words = [ticker]
+        if company_name:
+            target_words.extend(company_name.lower().split())
+        
+        # If the found ticker is not our target, apply heavy penalty
+        is_our_ticker = any(word in found_ticker for word in target_words if len(word) > 2)
+        
+        if not is_our_ticker:
+            # Heavy penalty for markets about other specific companies
+            score = -0.5
     
     return score
 
