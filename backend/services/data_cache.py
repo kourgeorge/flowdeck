@@ -13,9 +13,10 @@ import threading
 import time
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
+from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, TypeVar, Union
 
 T = TypeVar("T")
+_MISSING = object()
 
 
 def _cache_dumps(obj: Any) -> str:
@@ -304,6 +305,66 @@ class _SQLiteTTLStore:
 _store: Optional[Union[_TTLStore, _SQLiteTTLStore]] = None
 
 
+class _InflightCall(Generic[T]):
+    """Represents one in-flight cache fill that other callers can wait on."""
+
+    def __init__(self) -> None:
+        self._event = threading.Event()
+        self._value: Union[T, object] = _MISSING
+        self._error: Optional[BaseException] = None
+        self._from_cache = False
+
+    def resolve(self, value: Union[T, object], from_cache: bool = False) -> None:
+        self._value = value
+        self._from_cache = from_cache
+        self._event.set()
+
+    def reject(self, error: BaseException) -> None:
+        self._error = error
+        self._event.set()
+
+    def wait(self) -> Tuple[Union[T, object], bool]:
+        self._event.wait()
+        if self._error is not None:
+            raise self._error
+        return self._value, self._from_cache
+
+
+_inflight_lock = threading.Lock()
+_inflight_calls: Dict[str, _InflightCall[Any]] = {}
+
+
+def _begin_inflight(key: str) -> Tuple[_InflightCall[Any], bool]:
+    """Return (call, is_leader) for this key's single-flight group."""
+    with _inflight_lock:
+        existing = _inflight_calls.get(key)
+        if existing is not None:
+            return existing, False
+        call: _InflightCall[Any] = _InflightCall()
+        _inflight_calls[key] = call
+        return call, True
+
+
+def _finish_inflight_success(
+    key: str,
+    call: _InflightCall[Any],
+    value: Any,
+    *,
+    from_cache: bool = False,
+) -> None:
+    with _inflight_lock:
+        if _inflight_calls.get(key) is call:
+            del _inflight_calls[key]
+    call.resolve(value, from_cache=from_cache)
+
+
+def _finish_inflight_error(key: str, call: _InflightCall[Any], error: BaseException) -> None:
+    with _inflight_lock:
+        if _inflight_calls.get(key) is call:
+            del _inflight_calls[key]
+    call.reject(error)
+
+
 def _get_store() -> Union[_TTLStore, _SQLiteTTLStore]:
     """Get or create the shared store."""
     global _store
@@ -368,9 +429,26 @@ def get_cached_with_origin(
     if cached is not None:
         return (cached, True)
 
-    value = fetch_fn()
-    store.set(key, value, ttl_seconds)
-    return (value, False)
+    call, is_leader = _begin_inflight(key)
+    if not is_leader:
+        value, from_cache = call.wait()
+        return (value, from_cache)
+
+    try:
+        # Second-chance read: another thread/process may have filled the cache
+        # after our initial miss but before we became the single-flight leader.
+        cached = store.get(key)
+        if cached is not None:
+            _finish_inflight_success(key, call, cached, from_cache=True)
+            return (cached, True)
+
+        value = fetch_fn()
+        store.set(key, value, ttl_seconds)
+        _finish_inflight_success(key, call, value, from_cache=False)
+        return (value, False)
+    except BaseException as exc:
+        _finish_inflight_error(key, call, exc)
+        raise
 
 
 def refresh_cached(
@@ -422,11 +500,48 @@ def get_cached_batch(
         else:
             missing.append(key)
     if missing:
-        fetched = batch_fetch_fn(missing)
-        for k, v in fetched.items():
-            result[k] = v
-            if v is not None:
-                store.set(k, v, ttl_by_key[k])
+        inflight_by_key: Dict[str, Tuple[_InflightCall[Any], bool]] = {
+            key: _begin_inflight(key) for key in missing
+        }
+
+        leaders_to_fetch: List[str] = []
+        for key, (call, is_leader) in inflight_by_key.items():
+            if not is_leader:
+                continue
+
+            cached = store.get(key)
+            if cached is not None:
+                result[key] = cached
+                _finish_inflight_success(key, call, cached, from_cache=True)
+            else:
+                leaders_to_fetch.append(key)
+
+        if leaders_to_fetch:
+            try:
+                fetched = batch_fetch_fn(leaders_to_fetch)
+                for key in leaders_to_fetch:
+                    call, _ = inflight_by_key[key]
+                    if key not in fetched:
+                        _finish_inflight_success(key, call, _MISSING, from_cache=False)
+                        continue
+
+                    value = fetched[key]
+                    result[key] = value
+                    if value is not None:
+                        store.set(key, value, ttl_by_key[key])
+                    _finish_inflight_success(key, call, value, from_cache=False)
+            except BaseException as exc:
+                for key in leaders_to_fetch:
+                    call, _ = inflight_by_key[key]
+                    _finish_inflight_error(key, call, exc)
+                raise
+
+        for key, (call, is_leader) in inflight_by_key.items():
+            if is_leader:
+                continue
+            value, _from_cache = call.wait()
+            if value is not _MISSING:
+                result[key] = value
     return result
 
 
@@ -443,6 +558,8 @@ def clear_cache() -> None:
     global _store
     if _store is not None:
         _store.clear()
+    with _inflight_lock:
+        _inflight_calls.clear()
 
 
 def get_analysis_status(type_name: str, run_id: int) -> Optional[Dict[str, Any]]:
