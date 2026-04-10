@@ -33,9 +33,12 @@ class ReportsBatchBody(BaseModel):
 
 router = APIRouter(prefix="/api/data", tags=["Data API"])
 
-# Single-flight for market overview: concurrent requests with same params share one thread/fetch.
+# Single-flight for market overview: concurrent identical requests share one fetch.
 _market_overview_in_flight: Dict[Tuple, asyncio.Task] = {}
 _market_overview_lock = asyncio.Lock()
+# Same protection for market overview sections (indices/sectors/regions/commodities).
+_market_overview_section_in_flight: Dict[Tuple, asyncio.Task] = {}
+_market_overview_section_lock = asyncio.Lock()
 
 
 def _gateway():
@@ -151,15 +154,31 @@ async def data_market_overview_section(
     """
     logger.info("Market overview section requested: section=%s range=%s limit=%s offset=%s", section, range_, limit, offset)
     gw = _gateway()
+    key = (section.lower(), limit, offset, range_)
     try:
+        async with _market_overview_section_lock:
+            if key in _market_overview_section_in_flight:
+                task = _market_overview_section_in_flight[key]
+            else:
+                task = asyncio.create_task(
+                    asyncio.to_thread(
+                        gw.get_market_overview_section,
+                        section,
+                        limit,
+                        offset,
+                        range_,
+                    )
+                )
+                _market_overview_section_in_flight[key] = task
+
+                def _remove_when_done(t: asyncio.Task) -> None:
+                    if _market_overview_section_in_flight.get(key) is t:
+                        _market_overview_section_in_flight.pop(key, None)
+
+                task.add_done_callback(_remove_when_done)
+
         return await asyncio.wait_for(
-            asyncio.to_thread(
-                gw.get_market_overview_section,
-                section,
-                limit,
-                offset,
-                range_,
-            ),
+            asyncio.shield(task),
             timeout=MARKET_OVERVIEW_SECTION_TIMEOUT_SEC,
         )
     except asyncio.TimeoutError:
