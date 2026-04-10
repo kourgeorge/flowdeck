@@ -19,6 +19,38 @@ const api = axios.create({
   },
 });
 
+type CachedRequestEntry<T> = {
+  expiresAt: number;
+  promise: Promise<T>;
+};
+
+const requestCache = new Map<string, CachedRequestEntry<unknown>>();
+
+function getCachedRequest<T>(
+  key: string,
+  ttlMs: number,
+  loader: () => Promise<T>,
+): Promise<T> {
+  const now = Date.now();
+  const cached = requestCache.get(key);
+  if (cached && cached.expiresAt > now) {
+    return cached.promise as Promise<T>;
+  }
+
+  const promise = loader().catch((error) => {
+    const current = requestCache.get(key);
+    if (current?.promise === promise) requestCache.delete(key);
+    throw error;
+  });
+
+  requestCache.set(key, {
+    expiresAt: now + ttlMs,
+    promise,
+  });
+
+  return promise;
+}
+
 type AnalystRecommendationsResponse = {
   ticker: string;
   recommendation: string | null;
@@ -421,7 +453,11 @@ export const tickerApi = {
     website: string;
     quoteType?: string;
   }> => {
-    const response = await api.get(`/api/data/company/${ticker}`);
+    const response = await getCachedRequest(
+      `company-info:${ticker.toUpperCase()}`,
+      15 * 60 * 1000,
+      () => api.get(`/api/data/company/${ticker}`),
+    );
     return response.data;
   },
 
@@ -441,21 +477,33 @@ export const tickerApi = {
     count: number;
     error?: string;
   }> => {
-    const response = await api.get(`/api/data/company-officers/${ticker}`);
+    const response = await getCachedRequest(
+      `company-officers:${ticker.toUpperCase()}`,
+      15 * 60 * 1000,
+      () => api.get(`/api/data/company-officers/${ticker}`),
+    );
     return response.data;
   },
 
   // Get extended ticker info (raw market data via /api/data)
   getExtendedInfo: async (ticker: string): Promise<any> => {
-    const response = await api.get(`/api/data/extended-info/${ticker}`);
+    const response = await getCachedRequest(
+      `extended-info:${ticker.toUpperCase()}`,
+      15 * 60 * 1000,
+      () => api.get(`/api/data/extended-info/${ticker}`),
+    );
     return response.data;
   },
 
   // Get similar tickers based on sector/industry (raw market data via /api/data)
   getSimilarTickers: async (ticker: string, limit: number = 10, offset: number = 0): Promise<SimilarTickersResponse> => {
-    const response = await api.get(`/api/data/similar-tickers/${ticker}`, {
-      params: { limit, offset },
-    });
+    const response = await getCachedRequest(
+      `similar-tickers:${ticker.toUpperCase()}:${limit}:${offset}`,
+      15 * 60 * 1000,
+      () => api.get(`/api/data/similar-tickers/${ticker}`, {
+        params: { limit, offset },
+      }),
+    );
     return response.data;
   },
 
@@ -492,15 +540,23 @@ export const tickerApi = {
 
   // Get historical price data (raw market data via /api/data)
   getHistoricalPrices: async (ticker: string, period: string = '6mo', interval: string = '1d'): Promise<any> => {
-    const response = await api.get(`/api/data/historical/${ticker}`, {
-      params: { period, interval },
-    });
+    const response = await getCachedRequest(
+      `historical:${ticker.toUpperCase()}:${period}:${interval}`,
+      5 * 60 * 1000,
+      () => api.get(`/api/data/historical/${ticker}`, {
+        params: { period, interval },
+      }),
+    );
     return response.data;
   },
 
   // Get fundamental data (raw market data via /api/data)
   getFundamentals: async (ticker: string): Promise<{ ticker: string; date: string; fundamentals: string | object }> => {
-    const response = await api.get(`/api/data/fundamentals/${ticker}`);
+    const response = await getCachedRequest(
+      `fundamentals:${ticker.toUpperCase()}`,
+      30 * 60 * 1000,
+      () => api.get(`/api/data/fundamentals/${ticker}`),
+    );
     return response.data;
   },
 
@@ -518,7 +574,11 @@ export const tickerApi = {
     sector_weightings: Record<string, number> | null;
     asset_classes: Record<string, number> | null;
   }> => {
-    const response = await api.get(`/api/data/fund-info/${ticker}`);
+    const response = await getCachedRequest(
+      `fund-info:${ticker.toUpperCase()}`,
+      30 * 60 * 1000,
+      () => api.get(`/api/data/fund-info/${ticker}`),
+    );
     return response.data;
   },
 
@@ -528,9 +588,13 @@ export const tickerApi = {
     statementType: string = 'all',
     freq: string = 'quarterly'
   ): Promise<{ ticker: string; date: string; frequency: string; statements: any }> => {
-    const response = await api.get(`/api/data/financial-statements/${ticker}`, {
-      params: { statement_type: statementType, freq },
-    });
+    const response = await getCachedRequest(
+      `financial-statements:${ticker.toUpperCase()}:${statementType}:${freq}`,
+      30 * 60 * 1000,
+      () => api.get(`/api/data/financial-statements/${ticker}`, {
+        params: { statement_type: statementType, freq },
+      }),
+    );
     return response.data;
   },
 
@@ -552,7 +616,11 @@ export const tickerApi = {
     count: number;
     error?: string;
   }> => {
-    const response = await api.get(`/api/data/news`, { params: { ticker } });
+    const response = await getCachedRequest(
+      `news:${ticker.toUpperCase()}`,
+      2 * 60 * 1000,
+      () => api.get(`/api/data/news`, { params: { ticker } }),
+    );
     return response.data;
   },
 
@@ -673,9 +741,13 @@ export const tickerApi = {
     count: number;
     error?: string;
   }> => {
-    const response = await api.get(`/api/data/insider-transactions/${ticker}`, {
-      params: { limit },
-    });
+    const response = await getCachedRequest(
+      `insider-transactions:${ticker.toUpperCase()}:${limit}`,
+      5 * 60 * 1000,
+      () => api.get(`/api/data/insider-transactions/${ticker}`, {
+        params: { limit },
+      }),
+    );
     return response.data;
   },
 
@@ -691,7 +763,11 @@ export const tickerApi = {
     count: number;
     error?: string;
   }> => {
-    const response = await api.get(`/api/data/future-events/${ticker}`);
+    const response = await getCachedRequest(
+      `future-events:${ticker.toUpperCase()}`,
+      30 * 60 * 1000,
+      () => api.get(`/api/data/future-events/${ticker}`),
+    );
     return response.data;
   },
 
@@ -715,15 +791,24 @@ export const tickerApi = {
     event_count: number;
     error?: string;
   }> => {
-    const response = await api.get(`/api/data/events/${ticker}`, {
-      params: params?.lookbackDays != null ? { lookback_days: params.lookbackDays } : undefined,
-    });
+    const lookbackDays = params?.lookbackDays ?? 'default';
+    const response = await getCachedRequest(
+      `events:${ticker.toUpperCase()}:${lookbackDays}`,
+      5 * 60 * 1000,
+      () => api.get(`/api/data/events/${ticker}`, {
+        params: params?.lookbackDays != null ? { lookback_days: params.lookbackDays } : undefined,
+      }),
+    );
     return response.data;
   },
 
   // Get analyst recommendations from Yahoo (raw market data via /api/data)
   getAnalystRecommendations: async (ticker: string): Promise<AnalystRecommendationsResponse> => {
-    const response = await api.get(`/api/data/analyst-recommendations/${ticker}`);
+    const response = await getCachedRequest(
+      `analyst-recommendations:${ticker.toUpperCase()}`,
+      15 * 60 * 1000,
+      () => api.get(`/api/data/analyst-recommendations/${ticker}`),
+    );
     return normalizeAnalystRecommendationsPayload(response.data, ticker);
   },
 
@@ -732,9 +817,13 @@ export const tickerApi = {
     ticker: string,
     freq: 'annual' | 'quarterly' = 'annual'
   ): Promise<any> => {
-    const response = await api.get(`/api/data/financial-charts/${ticker}`, {
-      params: { freq },
-    });
+    const response = await getCachedRequest(
+      `financial-charts:${ticker.toUpperCase()}:${freq}`,
+      30 * 60 * 1000,
+      () => api.get(`/api/data/financial-charts/${ticker}`, {
+        params: { freq },
+      }),
+    );
     return response.data;
   },
 
@@ -835,7 +924,11 @@ export const tickerApi = {
     }>;
     error: string | null;
   }> => {
-    const response = await api.get(`/api/data/edgar-filings/${ticker}`);
+    const response = await getCachedRequest(
+      `edgar-filings:${ticker.toUpperCase()}`,
+      24 * 60 * 60 * 1000,
+      () => api.get(`/api/data/edgar-filings/${ticker}`),
+    );
     return response.data;
   },
 

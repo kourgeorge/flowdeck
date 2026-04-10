@@ -14,6 +14,7 @@ import {
   ResponsiveContainer,
   ComposedChart,
 } from 'recharts';
+import { tickerApi } from '../services/api';
 
 const formatB = (v: number | null | undefined) => {
   if (v == null || Number.isNaN(v)) return '';
@@ -99,10 +100,9 @@ const chartTheme = {
 
 interface FundamentalChartsProps {
   ticker: string;
-  apiBase?: string;
 }
 
-export default function FundamentalCharts({ ticker, apiBase = '' }: FundamentalChartsProps) {
+export default function FundamentalCharts({ ticker }: FundamentalChartsProps) {
   const [data, setData] = useState<FinancialChartsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -112,8 +112,7 @@ export default function FundamentalCharts({ ticker, apiBase = '' }: FundamentalC
     if (!ticker) return;
     setLoading(true);
     setError(null);
-    fetch(`${apiBase}/api/data/financial-charts/${ticker}?freq=${freq}`)
-      .then((r) => r.json())
+    tickerApi.getFinancialCharts(ticker, freq)
       .then((d: FinancialChartsData) => {
         setData(d);
         if (d.error) setError(d.error);
@@ -123,7 +122,7 @@ export default function FundamentalCharts({ ticker, apiBase = '' }: FundamentalC
         setData(null);
       })
       .finally(() => setLoading(false));
-  }, [ticker, freq, apiBase]);
+  }, [ticker, freq]);
 
   if (loading) {
     return (

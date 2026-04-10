@@ -197,6 +197,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const [newsData, setNewsData] = useState<any[]>([]);
   const [newsError, setNewsError] = useState<string | null>(null);
   const [isLoadingNews, setIsLoadingNews] = useState(false);
+  const [hasLoadedNews, setHasLoadedNews] = useState(false);
   const [insiderTransactions, setInsiderTransactions] = useState<any[]>([]);
   const [insiderTransactionsError, setInsiderTransactionsError] = useState<string | null>(null);
   const [isLoadingInsiderTransactions, setIsLoadingInsiderTransactions] = useState(false);
@@ -213,6 +214,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const [edgarFilings, setEdgarFilings] = useState<any>(null);
   const [edgarFilingsError, setEdgarFilingsError] = useState<string | null>(null);
   const [isLoadingEdgar, setIsLoadingEdgar] = useState(false);
+  const [hasLoadedEdgar, setHasLoadedEdgar] = useState(false);
   const [futureEvents, setFutureEvents] = useState<any>(null);
   const [isLoadingFutureEvents, setIsLoadingFutureEvents] = useState(false);
   const [eventsData, setEventsData] = useState<any>(null);
@@ -265,6 +267,14 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const insiderFetchIdRef = useRef(0);
   const viewingHistoricalRunRef = useRef(false);
   const analysisReferencePriceCacheRef = useRef<Record<string, number | null>>({});
+  const tabPrewarmRef = useRef({
+    news: false,
+    companyOfficers: false,
+    financialStatements: false,
+    financialCharts: false,
+    insiderTransactions: false,
+    edgarFilings: false,
+  });
 
   const quoteType = companyInfo?.quoteType ?? (
     fundamentalsData && typeof fundamentalsData === 'object' && 'QuoteType' in fundamentalsData
@@ -594,9 +604,10 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     setCompanyInfo(null); setExtendedInfo(null); setFundamentalsData(null);
     setFinancialStatements(null); setNewsData([]); setNewsError(null); setInsiderTransactions([]);
     setInsiderTransactionsError(null); setIsLoadingInsiderTransactions(false); setHasLoadedInsiderTransactions(false);
+    setHasLoadedNews(false);
     setCompanyOfficers([]); setIsLoadingOfficers(false); setHasLoadedCompanyOfficers(false);
     setFundamentalsSubTab(nextTab === 'fundamentals' && (nextSub === 'charts' || nextSub === 'statements') ? nextSub : 'charts'); setFundInfo(null);
-    setAnalysisProgress(null); setEdgarFilings(null); setEdgarFilingsError(null); setFutureEvents(null);
+    setAnalysisProgress(null); setEdgarFilings(null); setEdgarFilingsError(null); setHasLoadedEdgar(false); setFutureEvents(null);
     setEventsData(null); setEventsError(undefined); setIsLoadingEvents(false);
     setAnalystPriceHistory([]); setIsLoadingAnalystPriceHistory(false);
     setSimilarTickers(null); setSimilarTickerPages({}); setSimilarHasMoreByPage({}); setSimilarStocksPage(1);
@@ -604,6 +615,14 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     setSelectedReport(nextTab === 'ai-analysis' ? (reportKeyFromParam(nextReport) ?? null) : null);
     setLoadError(null); setAnalysisError(null);
     setIsStartingAnalysis(false);
+    tabPrewarmRef.current = {
+      news: false,
+      companyOfficers: false,
+      financialStatements: false,
+      financialCharts: false,
+      insiderTransactions: false,
+      edgarFilings: false,
+    };
     // EXPERIMENTAL: reset historical run state
     setSelectedRunId(null); setHistoricalReportsData(null);
     // END EXPERIMENTAL
@@ -775,7 +794,8 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
     if (!ticker) return;
     setNewsError(null); setIsLoadingNews(true);
     tickerApi.getNews(ticker).then((r) => { setNewsData(r.articles || []); setNewsError('error' in r ? r.error ?? null : null); setIsLoadingNews(false); })
-      .catch((err) => { setNewsError(err.response?.data?.detail ?? err.message ?? 'Unable to fetch news.'); setNewsData([]); setIsLoadingNews(false); });
+      .catch((err) => { setNewsError(err.response?.data?.detail ?? err.message ?? 'Unable to fetch news.'); setNewsData([]); setIsLoadingNews(false); })
+      .finally(() => setHasLoadedNews(true));
   }, [ticker]);
 
   const fetchInsiderTransactions = useCallback(() => {
@@ -814,6 +834,25 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
         setHasLoadedCompanyOfficers(true);
       })
       .finally(() => setIsLoadingOfficers(false));
+  }, [ticker]);
+
+  const fetchEdgarFilings = useCallback(() => {
+    if (!ticker) return;
+    setIsLoadingEdgar(true);
+    setEdgarFilingsError(null);
+    tickerApi.getEdgarFilings(ticker)
+      .then((data) => {
+        setEdgarFilings(data);
+        setEdgarFilingsError(data.error ?? null);
+      })
+      .catch((err) => {
+        setEdgarFilingsError(err.response?.data?.detail ?? err.message ?? 'Unable to load SEC filings.');
+        setEdgarFilings(null);
+      })
+      .finally(() => {
+        setIsLoadingEdgar(false);
+        setHasLoadedEdgar(true);
+      });
   }, [ticker]);
 
   const refreshSubscriptionForTicker = useCallback(async () => {
@@ -899,7 +938,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   }, [runSelectorOpen]);
   // END EXPERIMENTAL
 
-  useEffect(() => { if (activeTab === 'news' && ticker && !isLoadingNews) fetchNews(); }, [activeTab, ticker, fetchNews]);
+  useEffect(() => { if (activeTab === 'news' && ticker && !hasLoadedNews && !isLoadingNews) fetchNews(); }, [activeTab, ticker, hasLoadedNews, isLoadingNews, fetchNews]);
   useEffect(() => { if (activeTab === 'overview' && ticker && !hasLoadedCompanyOfficers && !isLoadingOfficers) fetchCompanyOfficers(); }, [activeTab, ticker, fetchCompanyOfficers, hasLoadedCompanyOfficers, isLoadingOfficers]);
   useEffect(() => {
     if (
@@ -914,15 +953,50 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   }, [activeTab, hasInsiderTransactions, ticker, fetchInsiderTransactions, hasLoadedInsiderTransactions, isLoadingInsiderTransactions]);
 
   useEffect(() => {
-    if (activeTab !== 'sec-filings' || !ticker) return;
-    let cancelled = false;
-    setIsLoadingEdgar(true); setEdgarFilingsError(null);
-    tickerApi.getEdgarFilings(ticker)
-      .then((data) => { if (!cancelled) { setEdgarFilings(data); if (data.error) setEdgarFilingsError(data.error); } })
-      .catch((err) => { if (!cancelled) { setEdgarFilingsError(err.response?.data?.detail ?? err.message ?? 'Unable to load SEC filings.'); setEdgarFilings(null); } })
-      .finally(() => { if (!cancelled) setIsLoadingEdgar(false); });
-    return () => { cancelled = true; };
-  }, [activeTab, ticker]);
+    if (activeTab === 'sec-filings' && ticker && !hasLoadedEdgar && !isLoadingEdgar) {
+      fetchEdgarFilings();
+    }
+  }, [activeTab, ticker, hasLoadedEdgar, isLoadingEdgar, fetchEdgarFilings]);
+
+  useEffect(() => {
+    if (!ticker || hasLoadedNews || isLoadingNews || tabPrewarmRef.current.news) return;
+    tabPrewarmRef.current.news = true;
+    fetchNews();
+  }, [ticker, hasLoadedNews, isLoadingNews, fetchNews]);
+
+  useEffect(() => {
+    if (!ticker || !companyInfo || !hasFundamentals || hasLoadedCompanyOfficers || isLoadingOfficers || tabPrewarmRef.current.companyOfficers) return;
+    tabPrewarmRef.current.companyOfficers = true;
+    fetchCompanyOfficers();
+  }, [ticker, companyInfo, hasFundamentals, hasLoadedCompanyOfficers, isLoadingOfficers, fetchCompanyOfficers]);
+
+  useEffect(() => {
+    if (!ticker || !companyInfo || !hasFundamentals || financialStatements || isLoadingFundamentals || tabPrewarmRef.current.financialStatements) return;
+    tabPrewarmRef.current.financialStatements = true;
+    setIsLoadingFundamentals(true);
+    tickerApi.getFinancialStatements(ticker, 'all', 'quarterly')
+      .then((response) => setFinancialStatements(response.statements))
+      .catch(() => {})
+      .finally(() => setIsLoadingFundamentals(false));
+  }, [ticker, companyInfo, hasFundamentals, financialStatements, isLoadingFundamentals]);
+
+  useEffect(() => {
+    if (!ticker || !companyInfo || !hasFundamentals || tabPrewarmRef.current.financialCharts) return;
+    tabPrewarmRef.current.financialCharts = true;
+    tickerApi.getFinancialCharts(ticker, 'annual').catch(() => {});
+  }, [ticker, companyInfo, hasFundamentals]);
+
+  useEffect(() => {
+    if (!ticker || !companyInfo || !hasInsiderTransactions || hasLoadedInsiderTransactions || isLoadingInsiderTransactions || tabPrewarmRef.current.insiderTransactions) return;
+    tabPrewarmRef.current.insiderTransactions = true;
+    fetchInsiderTransactions();
+  }, [ticker, companyInfo, hasInsiderTransactions, hasLoadedInsiderTransactions, isLoadingInsiderTransactions, fetchInsiderTransactions]);
+
+  useEffect(() => {
+    if (!ticker || !companyInfo || !isUSCompany || hasLoadedEdgar || isLoadingEdgar || tabPrewarmRef.current.edgarFilings) return;
+    tabPrewarmRef.current.edgarFilings = true;
+    fetchEdgarFilings();
+  }, [ticker, companyInfo, isUSCompany, hasLoadedEdgar, isLoadingEdgar, fetchEdgarFilings]);
 
   const handleGenerateReport = async (source: 'fresh' | 'generate' = 'fresh') => {
     if (!ticker) return;
