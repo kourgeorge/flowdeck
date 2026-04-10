@@ -1144,8 +1144,19 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const analystChartHeight = 220;
   const analystChartPadding = { top: 20, right: 92, bottom: 30, left: 14 };
   const analystChartPlotLeft = analystChartPadding.left;
-  const analystChartForecastX = analystChartWidth - analystChartPadding.right;
-  const analystChartActualEndX = analystChartPlotLeft + (analystChartForecastX - analystChartPlotLeft) * 0.72;
+  const analystChartPlotRight = analystChartWidth - analystChartPadding.right;
+  const analystChartHistoryWidthWeight = 1;
+  const analystChartForecastWidthWeight = 2;
+  const analystChartPlotWidth = analystChartPlotRight - analystChartPlotLeft;
+  const analystChartActualEndX = analystChartPlotLeft + (
+    analystChartPlotWidth
+    * (analystChartHistoryWidthWeight / (analystChartHistoryWidthWeight + analystChartForecastWidthWeight))
+  );
+  const analystChartForecastX = analystChartPlotRight;
+  const analystChartYAxisTickFontSize = 12;
+  const analystChartXAxisTickFontSize = 14;
+  const analystChartXAxisTickY = analystChartHeight - 6;
+  const analystChartXAxisMonthTickRotation = -45;
   const analystChartMinValue = analystHasTrendChart ? Math.min(...analystTrendChartValues) : 0;
   const analystChartMaxValue = analystHasTrendChart ? Math.max(...analystTrendChartValues) : 1;
   const analystChartValueRange = Math.max(analystChartMaxValue - analystChartMinValue, analystChartMaxValue * 0.05, 1);
@@ -1492,9 +1503,6 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                           <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-gray-400">
                             Price Trend & Targets
                           </div>
-                          <div className="mt-1 text-sm text-gray-400">
-                            Last 6 months of price action with 12-month analyst targets projected forward.
-                          </div>
                         </div>
                         <div className="rounded-full border border-gray-700 bg-gray-800/60 px-3 py-1.5 text-xs font-semibold text-white">
                           {analystRecommendations.total_analysts ?? 0} analysts
@@ -1528,7 +1536,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                                     x={analystChartPadding.left}
                                     y={line.y - 4}
                                     fill="rgba(148, 163, 184, 0.78)"
-                                    fontSize="10"
+                                    fontSize={analystChartYAxisTickFontSize}
                                   >
                                     {formatPrice(line.value, stockData?.quote?.currency, 0)}
                                   </text>
@@ -1549,7 +1557,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                                     x={analystAnchorPoint.x + 6}
                                     y={analystChartPadding.top + 12}
                                     fill="rgba(255,255,255,0.75)"
-                                    fontSize="10"
+                                    fontSize="12"
                                   >
                                     Now
                                   </text>
@@ -1587,10 +1595,11 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                                   <circle cx={point.x} cy={point.y} r="7" fill="rgba(248,250,252,0.12)" />
                                   <text
                                     x={point.x}
-                                    y={analystChartHeight - 8}
-                                    textAnchor="middle"
+                                    y={analystChartXAxisTickY}
+                                    textAnchor="end"
                                     fill={index === analystRenderedActualPoints.length - 1 ? 'rgba(255,255,255,0.88)' : 'rgba(148,163,184,0.82)'}
-                                    fontSize="10"
+                                    fontSize={analystChartXAxisTickFontSize}
+                                    transform={`rotate(${analystChartXAxisMonthTickRotation} ${point.x} ${analystChartXAxisTickY})`}
                                   >
                                     {point.label}
                                   </text>
@@ -1619,10 +1628,10 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
 
                               <text
                                 x={analystChartForecastX}
-                                y={analystChartHeight - 8}
+                                y={analystChartXAxisTickY}
                                 textAnchor="middle"
                                 fill="rgba(148,163,184,0.82)"
-                                fontSize="10"
+                                fontSize={analystChartXAxisTickFontSize}
                               >
                                 12M
                               </text>
