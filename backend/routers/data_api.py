@@ -7,13 +7,12 @@ Single source of truth for all market/fundamental data. Used by:
 
 All data flows through DataGateway (market, reports, EDGAR sources).
 Blocking engine calls run in thread pool (non-blocking event loop).
-Market overview uses single-flight coalescing: concurrent identical requests share one fetch.
 """
 
 import asyncio
 import json
 import logging
-from typing import Dict, Any, Tuple
+from typing import Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -32,13 +31,6 @@ class ReportsBatchBody(BaseModel):
 
 
 router = APIRouter(prefix="/api/data", tags=["Data API"])
-
-# Single-flight for market overview: concurrent identical requests share one fetch.
-_market_overview_in_flight: Dict[Tuple, asyncio.Task] = {}
-_market_overview_lock = asyncio.Lock()
-# Same protection for market overview sections (indices/sectors/regions/commodities).
-_market_overview_section_in_flight: Dict[Tuple, asyncio.Task] = {}
-_market_overview_section_lock = asyncio.Lock()
 
 
 def _gateway():
@@ -89,7 +81,8 @@ async def data_market_overview(
 ) -> Dict[str, Any]:
     """Get market overview: US indices, sectors, regional ETFs, and commodities with price and change. Pagination per group. range: 1d, 1w, 1mo, 3mo, 6mo, ytd."""
     gw = _gateway()
-    key = (
+    return await asyncio.to_thread(
+        gw.get_market_overview,
         limit_indices,
         offset_indices,
         limit_sectors,
@@ -100,32 +93,6 @@ async def data_market_overview(
         offset_commodities,
         range_,
     )
-    async with _market_overview_lock:
-        if key in _market_overview_in_flight:
-            task = _market_overview_in_flight[key]
-        else:
-            task = asyncio.create_task(
-                asyncio.to_thread(
-                    gw.get_market_overview,
-                    limit_indices,
-                    offset_indices,
-                    limit_sectors,
-                    offset_sectors,
-                    limit_regions,
-                    offset_regions,
-                    limit_commodities,
-                    offset_commodities,
-                    range_,
-                )
-            )
-            _market_overview_in_flight[key] = task
-
-            def _remove_when_done(t: asyncio.Task) -> None:
-                if _market_overview_in_flight.get(key) is t:
-                    _market_overview_in_flight.pop(key, None)
-
-            task.add_done_callback(_remove_when_done)
-    return await task
 
 
 # Max time for section overview (regions/1w with many tickers can be slow or hang on Yahoo).
@@ -154,31 +121,15 @@ async def data_market_overview_section(
     """
     logger.info("Market overview section requested: section=%s range=%s limit=%s offset=%s", section, range_, limit, offset)
     gw = _gateway()
-    key = (section.lower(), limit, offset, range_)
     try:
-        async with _market_overview_section_lock:
-            if key in _market_overview_section_in_flight:
-                task = _market_overview_section_in_flight[key]
-            else:
-                task = asyncio.create_task(
-                    asyncio.to_thread(
-                        gw.get_market_overview_section,
-                        section,
-                        limit,
-                        offset,
-                        range_,
-                    )
-                )
-                _market_overview_section_in_flight[key] = task
-
-                def _remove_when_done(t: asyncio.Task) -> None:
-                    if _market_overview_section_in_flight.get(key) is t:
-                        _market_overview_section_in_flight.pop(key, None)
-
-                task.add_done_callback(_remove_when_done)
-
         return await asyncio.wait_for(
-            asyncio.shield(task),
+            asyncio.to_thread(
+                gw.get_market_overview_section,
+                section,
+                limit,
+                offset,
+                range_,
+            ),
             timeout=MARKET_OVERVIEW_SECTION_TIMEOUT_SEC,
         )
     except asyncio.TimeoutError:
