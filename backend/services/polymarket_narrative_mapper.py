@@ -226,7 +226,7 @@ def map_ticker_to_narratives(
     
     Args:
         ticker: Stock ticker symbol (e.g., "NVDA")
-        company_info: Optional dict with keys: name, sector, industry
+        company_info: Optional dict with keys: name, sector, industry, longBusinessSummary, etc.
         
     Returns:
         Ordered list of search queries, most relevant first
@@ -242,6 +242,36 @@ def map_ticker_to_narratives(
         if query_lower not in seen:
             seen.add(query_lower)
             narratives.append(query)
+    
+    # Helper to extract key terms from business description
+    def extract_business_keywords(description: str, max_keywords: int = 5) -> List[str]:
+        """Extract important business keywords from description."""
+        if not description:
+            return []
+        
+        # Common words to skip
+        stop_words = {
+            'the', 'and', 'for', 'with', 'from', 'that', 'this', 'are', 'was', 'were',
+            'been', 'being', 'have', 'has', 'had', 'does', 'did', 'will', 'would',
+            'could', 'should', 'may', 'might', 'must', 'can', 'its', 'their', 'our',
+            'company', 'corporation', 'inc', 'ltd', 'llc', 'provides', 'offers'
+        }
+        
+        # Split into words and filter
+        words = description.lower().split()
+        keywords = []
+        
+        for word in words:
+            # Clean word
+            word = word.strip('.,;:()[]{}"\'-')
+            # Skip if too short, stop word, or already seen
+            if len(word) < 4 or word in stop_words:
+                continue
+            # Add if not already in keywords
+            if word not in keywords and len(keywords) < max_keywords:
+                keywords.append(word)
+        
+        return keywords
     
     # 1. Direct company mentions (highest priority) - EXPANDED
     add_narrative(ticker_upper)
@@ -266,6 +296,22 @@ def map_ticker_to_narratives(
         add_narrative(f"{company_name} stock")
         add_narrative(f"{company_name} earnings")
         add_narrative(f"{company_name} price")
+    
+    # Extract keywords from business description (NEW)
+    if company_info:
+        # Try different description field names
+        description = (
+            company_info.get('longBusinessSummary') or
+            company_info.get('description') or
+            company_info.get('business_summary') or
+            ''
+        )
+        if description:
+            business_keywords = extract_business_keywords(description, max_keywords=5)
+            for keyword in business_keywords:
+                add_narrative(keyword)
+                # Also add keyword with stock/market context
+                add_narrative(f"{keyword} market")
     
     # 2. Industry-specific narratives (high priority) - LIMITED
     if company_info and company_info.get('industry'):
