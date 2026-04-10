@@ -15,10 +15,11 @@ AI reports & analysis
 - Evaluate merging Market and Technical agents
 - the analysis should be adapted to the ticker type. it an index or etf, look for news in the web.
 - how to analyse entire industeries - using only indices and etf tickers?
-- on demand - write a personal narrarive about the stock and the market specific to the user on his watchlist.
+- on demand - write a personal narrarive about the stock and the market specific to the user on his watchlist - add a siill to the agent
 - try get more information about the ticker from the web - some indices are not described prioperly in yahoo.
 - dies the analysis taking into account the details domaon and sector of the ticker.
 - need to get what aspects are important in each domain and sector. Sales/profit/revenue/etc. etc and use it in the analysis.
+-IMPOSRTANT - Use events in the trading agents analysis! add a tool and give the agents access to it
 
 Portfolio
 ─────────

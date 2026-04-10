@@ -106,6 +106,7 @@ async def start_analysis(
                             "current_agent": analysis_info.get("current_agent"),
                             "current_agents": analysis_info.get("current_agents", []),
                             "live_activities": analysis_info.get("live_activities", []),
+                            "live_trace": analysis_info.get("live_trace", []),
                             "reports": analysis_info.get("reports", {}),
                             "status": analysis_info.get("status", "running"),
                         }
@@ -205,6 +206,7 @@ async def websocket_endpoint(websocket: WebSocket, analysis_run_id: str, token: 
                     "current_agent": status.get("current_agent"),
                     "current_agents": status.get("current_agents", []),
                     "live_activities": status.get("live_activities", []),
+                    "live_trace": status.get("live_trace", []),
                 }
             })
 
@@ -226,6 +228,7 @@ async def websocket_endpoint(websocket: WebSocket, analysis_run_id: str, token: 
                                 "current_agent": status.get("current_agent"),
                                 "current_agents": status.get("current_agents", []),
                                 "live_activities": status.get("live_activities", []),
+                                "live_trace": status.get("live_trace", []),
                             }
                         })
                     else:

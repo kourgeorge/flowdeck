@@ -20,7 +20,7 @@ from services.data_cache import (
     get_stop_requested,
     set_analysis_status,
 )
-from ai_engine.tradingagents.agents.utils.trace_utils import sort_agent_steps
+from ai_engine.tradingagents.agents.utils.trace_utils import make_agent_step, preview_text, sort_agent_steps
 from services.report_service import save_report, update_execution_status
 from services.email_service import notify_subscribers_new_report
 
@@ -132,6 +132,7 @@ class AnalysisService:
     """Service for running TradingAgents analyses."""
 
     _MAX_LIVE_ACTIVITIES = 18
+    _MAX_LIVE_TRACE_STEPS = 120
     _MAX_ACTIVITY_FINGERPRINTS = 72
     
     def __init__(self, results_dir: str = "results"):
@@ -216,6 +217,42 @@ class AnalysisService:
             summary=summary or f"{agent} {status_text}",
         )
 
+    def _append_live_trace_step(self, analysis_info: Dict[str, Any], step: Dict[str, Any]) -> None:
+        if not isinstance(step, dict):
+            return
+
+        fingerprint = "||".join(
+            [
+                str(step.get("agent") or "").strip(),
+                str(step.get("phase") or "").strip(),
+                str(step.get("kind") or "").strip(),
+                str(step.get("status") or "").strip(),
+                str(step.get("summary") or "").strip(),
+                str(step.get("tool_name") or "").strip(),
+                preview_text(step.get("message_preview") or ""),
+                preview_text(step.get("tool_args") or ""),
+                preview_text(step.get("observation_preview") or ""),
+                preview_text(step.get("output_preview") or ""),
+            ]
+        )
+
+        recent_fingerprints = analysis_info.setdefault("trace_fingerprints", [])
+        if fingerprint in recent_fingerprints:
+            return
+
+        live_trace = analysis_info.setdefault("live_trace", [])
+        live_trace.append(step)
+        if len(live_trace) > self._MAX_LIVE_TRACE_STEPS:
+            del live_trace[:-self._MAX_LIVE_TRACE_STEPS]
+
+        recent_fingerprints.append(fingerprint)
+        if len(recent_fingerprints) > self._MAX_ACTIVITY_FINGERPRINTS:
+            del recent_fingerprints[:-self._MAX_ACTIVITY_FINGERPRINTS]
+
+    def _append_live_trace_steps(self, analysis_info: Dict[str, Any], steps: List[Dict[str, Any]]) -> None:
+        for step in sort_agent_steps(steps):
+            self._append_live_trace_step(analysis_info, step)
+
     def _infer_message_agent(self, analysis_info: Dict[str, Any], message: Any) -> Optional[str]:
         name = getattr(message, "name", None)
         if isinstance(name, str) and name.strip():
@@ -228,8 +265,11 @@ class AnalysisService:
 
     def _record_live_message_activity(self, analysis_info: Dict[str, Any], message: Any) -> None:
         agent = self._infer_message_agent(analysis_info, message)
+        trace_agent = agent or "Agent"
         content = getattr(message, "content", None)
         handled_tool_call = False
+        message_preview = ""
+        trace_tool_calls: List[Dict[str, Any]] = []
 
         if isinstance(content, list):
             for item in content:
@@ -237,6 +277,7 @@ class AnalysisService:
                     continue
                 if item.get("type") == "tool_use":
                     tool_name = str(item.get("name") or "tool").strip() or "tool"
+                    tool_args = item.get("input") or item.get("args") or {}
                     self._append_live_activity(
                         analysis_info,
                         kind="tool_call",
@@ -244,12 +285,32 @@ class AnalysisService:
                         tool_name=tool_name,
                         status="started",
                         summary=f"{agent or 'Agent'} calling {tool_name}",
-                        detail=_preview_activity_text(item.get("input") or item.get("args") or ""),
+                        detail=_preview_activity_text(tool_args),
+                    )
+                    self._append_live_trace_step(
+                        analysis_info,
+                        make_agent_step(
+                            agent=trace_agent,
+                            phase="analysis",
+                            kind="tool_call",
+                            status="started",
+                            summary=f"{trace_agent} calling {tool_name}",
+                            tool_name=tool_name,
+                            tool_args=tool_args,
+                        ),
+                    )
+                    trace_tool_calls.append(
+                        {
+                            "id": item.get("id"),
+                            "name": tool_name,
+                            "args": tool_args,
+                        }
                     )
                     handled_tool_call = True
                 elif item.get("type") == "text":
                     text = _preview_activity_text(item.get("text") or "")
                     if text:
+                        message_preview = f"{message_preview} {text}".strip()
                         self._append_live_activity(
                             analysis_info,
                             kind="reasoning",
@@ -264,6 +325,7 @@ class AnalysisService:
                 if not isinstance(tool_call, dict):
                     continue
                 tool_name = str(tool_call.get("name") or "tool").strip() or "tool"
+                tool_args = tool_call.get("args") or {}
                 self._append_live_activity(
                     analysis_info,
                     kind="tool_call",
@@ -271,8 +333,21 @@ class AnalysisService:
                     tool_name=tool_name,
                     status="started",
                     summary=f"{agent or 'Agent'} calling {tool_name}",
-                    detail=_preview_activity_text(tool_call.get("args") or ""),
+                    detail=_preview_activity_text(tool_args),
                 )
+                self._append_live_trace_step(
+                    analysis_info,
+                    make_agent_step(
+                        agent=trace_agent,
+                        phase="analysis",
+                        kind="tool_call",
+                        status="started",
+                        summary=f"{trace_agent} calling {tool_name}",
+                        tool_name=tool_name,
+                        tool_args=tool_args,
+                    ),
+                )
+                trace_tool_calls.append(tool_call)
                 handled_tool_call = True
 
         message_name = getattr(message, "name", None)
@@ -289,6 +364,33 @@ class AnalysisService:
                 summary=f"{tool_name} returned data",
                 detail=result_preview,
             )
+            self._append_live_trace_step(
+                analysis_info,
+                make_agent_step(
+                    agent=trace_agent,
+                    phase="analysis",
+                    kind="tool_result",
+                    status="completed",
+                    summary=f"{tool_name} returned data",
+                    tool_name=tool_name,
+                    observation_preview=content,
+                ),
+            )
+            return
+
+        if trace_tool_calls:
+            self._append_live_trace_step(
+                analysis_info,
+                make_agent_step(
+                    agent=trace_agent,
+                    phase="analysis",
+                    kind="llm_decision",
+                    status="tool_calls_requested",
+                    summary=f"{trace_agent} requested {len(trace_tool_calls)} tool call(s)",
+                    message_preview=message_preview or content,
+                    tool_calls=trace_tool_calls,
+                ),
+            )
             return
 
         if not handled_tool_call:
@@ -300,6 +402,17 @@ class AnalysisService:
                     agent=agent,
                     status="running",
                     summary=text_preview,
+                )
+                self._append_live_trace_step(
+                    analysis_info,
+                    make_agent_step(
+                        agent=trace_agent,
+                        phase="analysis",
+                        kind="llm_decision",
+                        status="responded",
+                        summary=f"{trace_agent} responded",
+                        message_preview=content,
+                    ),
                 )
     
     def _persist_analysis_status(self, analysis_run_id: int) -> None:
@@ -315,6 +428,7 @@ class AnalysisService:
             "agent_statuses": analysis_info.get("agent_statuses", {}),
             "current_agents": analysis_info.get("current_agents", []),  # Changed to list
             "live_activities": analysis_info.get("live_activities", []),
+            "live_trace": analysis_info.get("live_trace", []),
             "created_at": analysis_info.get("created_at"),
             "updated_at": _iso_utc_now(),
         }
@@ -472,6 +586,7 @@ class AnalysisService:
                 "agent_statuses": agent_statuses,
                 "current_agents": current_agents,  # Changed from current_agent to current_agents (list)
                 "live_activities": [],
+                "live_trace": [],
                 "reports": {},
                 "analysts": analysts,
                 "messages": [],
@@ -636,7 +751,10 @@ class AnalysisService:
                         meta["cost_usd"] = llm_usage.get("cost_usd")
                     if resources is not None:
                         meta["resources"] = resources
-                    meta["agent_steps"] = _get_report_agent_steps(chunk, key)
+                    report_agent_steps = _get_report_agent_steps(chunk, key)
+                    meta["agent_steps"] = report_agent_steps
+                    if report_agent_steps:
+                        self._append_live_trace_steps(analysis_info, report_agent_steps)
                     save_report(
                         analysis_info["analysis_run_id"],
                         key,

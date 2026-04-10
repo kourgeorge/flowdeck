@@ -196,7 +196,7 @@ export default function AIAnalysisLoadingView({
             <div className="mt-4 space-y-3">
               {sortedAgents.map((agentName) => {
                 const agentItems = agentGroups[agentName];
-                const toolCount = agentItems.filter(item => {
+                const toolCount = agentItems.filter((item: AnalysisLiveActivity | AnalysisTraceStep) => {
                   const isLiveActivity = 'detail' in item;
                   return isLiveActivity
                     ? (item as AnalysisLiveActivity).tool_name

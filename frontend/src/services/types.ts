@@ -113,6 +113,31 @@ export interface AnalysisLiveActivity {
   captured_at?: string | null;
 }
 
+export interface AnalysisTraceStep {
+  agent?: string;
+  phase?: string;
+  kind?: string;
+  report_key?: string;
+  iteration?: number;
+  round_number?: number;
+  status?: string;
+  summary?: string;
+  message_preview?: string;
+  output_preview?: string;
+  observation_preview?: string;
+  tool_name?: string;
+  tool_args?: unknown;
+  tool_calls?: Array<{ id?: string; name?: string; args?: unknown }>;
+  usage?: {
+    input_tokens?: number | null;
+    output_tokens?: number | null;
+    total_tokens?: number | null;
+    cost_usd?: number | null;
+  } | null;
+  extra?: Record<string, unknown> | null;
+  captured_at?: string;
+}
+
 export interface AnalysisStatus {
   analysis_run_id: number;
   ticker: string;
@@ -122,6 +147,7 @@ export interface AnalysisStatus {
   current_agent?: string | null;
   current_agents?: string[] | null;
   live_activities?: AnalysisLiveActivity[] | null;
+  live_trace?: AnalysisTraceStep[] | null;
   created_at?: string | null;
   updated_at?: string | null;
 }

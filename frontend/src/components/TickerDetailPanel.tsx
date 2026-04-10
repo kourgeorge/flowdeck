@@ -250,6 +250,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
       current_agent: data?.current_agent ?? null,
       current_agents: data?.current_agents ? [...data.current_agents] : null,
       live_activities: data?.live_activities ? [...data.live_activities] : null,
+      live_trace: data?.live_trace ? [...data.live_trace] : null,
       created_at: data?.created_at ?? null,
       updated_at: data?.updated_at ?? null,
     });
@@ -2366,6 +2367,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                         currentAgent={analysisProgress?.current_agent ?? null}
                         currentAgents={analysisProgress?.current_agents ?? null}
                         liveActivities={analysisProgress?.live_activities ?? null}
+                        liveTrace={analysisProgress?.live_trace ?? null}
                       />
                     )}
                   </div>
