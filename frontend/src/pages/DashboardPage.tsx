@@ -249,7 +249,7 @@ export default function DashboardPage() {
                     </div>
                   ) : recentAnalyzedNonSubscribed.length === 0 ? (
                     <div className="bg-gray-800 rounded-lg border border-gray-700 border-t-0 p-8 text-center">
-                      <p className="text-gray-400 text-sm">No analyzed stocks in the last 3 days.</p>
+                      <p className="text-gray-400 text-sm">No analyzed stocks yet.</p>
                     </div>
                   ) : (
                     <TickerListView
@@ -265,7 +265,7 @@ export default function DashboardPage() {
                           )}
                           {recentTotal != null && recentAnalyzedWidgets.length >= recentTotal && recentTotal > 0 && (
                             <div className="py-2 text-center text-gray-500 text-xs">
-                              All {recentAnalyzedNonSubscribed.length} analyzed in the last 3 days
+                              All {recentAnalyzedNonSubscribed.length} recently analyzed
                             </div>
                           )}
                         </>

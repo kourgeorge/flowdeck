@@ -218,6 +218,11 @@ class DataGateway:
     ) -> Optional[tuple[int, str]]:
         return self._reports.get_latest_execution_for_ticker(ticker)
 
+    def get_latest_widget_data_for_tickers(
+        self, tickers: List[str]
+    ) -> Dict[str, Dict[str, Any]]:
+        return self._reports.get_latest_widget_data_for_tickers(tickers)
+
     def get_analysis_run_for_date(
         self, ticker: str, date_str: str
     ) -> Optional[tuple[int, str]]:
@@ -256,6 +261,14 @@ class DataGateway:
         return self._reports.get_tickers_with_reports_for_recent_days_paginated(
             end_date, days, limit, offset
         )
+
+    def get_latest_analyzed_tickers(self) -> List[str]:
+        return self._reports.get_latest_analyzed_tickers()
+
+    def get_latest_analyzed_tickers_paginated(
+        self, limit: int, offset: int = 0
+    ) -> tuple[List[str], int]:
+        return self._reports.get_latest_analyzed_tickers_paginated(limit, offset)
 
     # ---------- User ----------
     def get_user_context(self, user_id: int, db: Any) -> str:

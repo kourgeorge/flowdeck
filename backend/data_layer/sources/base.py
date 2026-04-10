@@ -155,6 +155,11 @@ class ReportDataSourceProtocol(Protocol):
     ) -> Optional[tuple[int, str]]:
         ...
 
+    def get_latest_widget_data_for_tickers(
+        self, tickers: List[str]
+    ) -> Dict[str, Dict[str, Any]]:
+        ...
+
     def get_analysis_run_for_date(
         self, ticker: str, date_str: str
     ) -> Optional[tuple[int, str]]:
@@ -187,6 +192,14 @@ class ReportDataSourceProtocol(Protocol):
 
     def get_tickers_with_reports_for_recent_days_paginated(
         self, end_date: str, days: int, limit: int, offset: int = 0
+    ) -> tuple[List[str], int]:
+        ...
+
+    def get_latest_analyzed_tickers(self) -> List[str]:
+        ...
+
+    def get_latest_analyzed_tickers_paginated(
+        self, limit: int, offset: int = 0
     ) -> tuple[List[str], int]:
         ...
 

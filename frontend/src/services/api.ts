@@ -1,6 +1,7 @@
 import axios from 'axios';
 import type {
   AnalysisStatus,
+  TickerEventSummariesResponse,
   WidgetsResponse,
   TickerPageData,
   TickerQuote,
@@ -345,23 +346,42 @@ export const tickerApi = {
   // Get widgets for tickers (optional date YYYY-MM-DD for report-of-day filter when no tickers).
   // When onlyAnalyzedToday=true and no tickers, returns only tickers that have reports for the date (no major-stocks list).
   // With recentDays>1 and onlyAnalyzedToday, returns tickers analyzed in the trailing N-day window ending at date.
-  // When limit/offset are set with onlyAnalyzedToday, returns paginated results and response.total is set.
+  // When latestAnalyzed=true and no tickers, returns latest analyzed tickers overall, newest first.
+  // When limit/offset are set, response.total is set for paginated list modes.
   getWidgets: async (
     tickers?: string[],
     date?: string,
     onlyAnalyzedToday?: boolean,
     limit?: number,
     offset?: number,
-    recentDays?: number
+    recentDays?: number,
+    latestAnalyzed?: boolean,
+    includeEvents?: boolean
   ): Promise<WidgetsResponse> => {
     const params: Record<string, string> = {};
     if (tickers?.length) params.tickers = tickers.join(',');
     if (date) params.date = date;
     if (onlyAnalyzedToday) params.only_date = 'true';
     if (recentDays != null) params.recent_days = String(recentDays);
+    if (latestAnalyzed != null) params.latest_analyzed = String(latestAnalyzed);
+    if (includeEvents != null) params.include_events = String(includeEvents);
     if (limit != null) params.limit = String(limit);
     if (offset != null) params.offset = String(offset);
     const response = await api.get<WidgetsResponse>('/api/tickers/widgets', { params });
+    return response.data;
+  },
+
+  getEventSummaries: async (tickers: string[]): Promise<TickerEventSummariesResponse> => {
+    const normalized = Array.from(new Set(tickers.map((ticker) => ticker.toUpperCase()).filter(Boolean)));
+    if (normalized.length === 0) return { summaries: {} };
+    const cacheKey = `ticker-event-summaries:${normalized.join(',')}`;
+    const response = await getCachedRequest(
+      cacheKey,
+      5 * 60 * 1000,
+      () => api.get<TickerEventSummariesResponse>('/api/tickers/event-summaries', {
+        params: { tickers: normalized.join(',') },
+      }),
+    );
     return response.data;
   },
 

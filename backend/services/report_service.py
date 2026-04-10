@@ -298,6 +298,79 @@ class ReportService:
         """Return (execution_id, date_display) for the latest ticker run, or None."""
         return self.get_latest_execution("ticker", "ticker", ticker.upper())
 
+    def get_latest_widget_data_for_tickers(
+        self, tickers: List[str]
+    ) -> Dict[str, Dict[str, Any]]:
+        """Return latest execution + parsed reports for each ticker in one batched read."""
+        normalized_tickers: List[str] = []
+        seen: set[str] = set()
+        for ticker in tickers:
+            ticker_upper = str(ticker).strip().upper()
+            if ticker_upper and ticker_upper not in seen:
+                normalized_tickers.append(ticker_upper)
+                seen.add(ticker_upper)
+        if not normalized_tickers:
+            return {}
+
+        db = SessionLocal()
+        try:
+            execution_rows = (
+                db.query(Execution.id, Execution.subject_id, Execution.created_at)
+                .filter(
+                    Execution.execution_type == "ticker",
+                    Execution.subject_type == "ticker",
+                    Execution.subject_id.in_(normalized_tickers),
+                )
+                .order_by(
+                    Execution.subject_id.asc(),
+                    Execution.created_at.desc(),
+                    Execution.id.desc(),
+                )
+                .all()
+            )
+
+            latest_by_ticker: Dict[str, tuple[int, Optional[datetime]]] = {}
+            for execution_id, subject_id, created_at in execution_rows:
+                ticker_upper = str(subject_id).upper()
+                if ticker_upper not in latest_by_ticker:
+                    latest_by_ticker[ticker_upper] = (int(execution_id), created_at)
+                if len(latest_by_ticker) >= len(normalized_tickers):
+                    break
+
+            if not latest_by_ticker:
+                return {}
+
+            execution_to_date: Dict[int, str] = {}
+            execution_to_ticker: Dict[int, str] = {}
+            execution_ids: List[int] = []
+            result: Dict[str, Dict[str, Any]] = {}
+            for ticker_upper, (execution_id, created_at) in latest_by_ticker.items():
+                execution_ids.append(execution_id)
+                date_display = created_at.strftime("%Y-%m-%d %H:%M") if created_at else str(execution_id)
+                execution_to_date[execution_id] = date_display
+                execution_to_ticker[execution_id] = ticker_upper
+                result[ticker_upper] = {
+                    "execution_id": execution_id,
+                    "report_date": date_display,
+                    "reports_with_scores": {},
+                }
+
+            report_rows = (
+                db.query(Report)
+                .filter(Report.execution_id.in_(execution_ids))
+                .all()
+            )
+            for report in report_rows:
+                date_display = execution_to_date.get(report.execution_id, "")
+                report_dict = _report_row_to_dict(report, date_display)
+                ticker_upper = execution_to_ticker.get(report.execution_id)
+                if ticker_upper is not None:
+                    result[ticker_upper]["reports_with_scores"][report.report_type] = report_dict
+
+            return result
+        finally:
+            db.close()
+
     def has_report_for_date(self, ticker: str, date: str) -> bool:
         """date is YYYY-MM-DD; matches any run where date(created_at) = date."""
         db = SessionLocal()
@@ -547,13 +620,15 @@ class ReportService:
             start_dt = end_dt - timedelta(days=days - 1)
             
             rows = (
-                db.query(distinct(Execution.subject_id))
+                db.query(Execution.subject_id, func.max(Execution.created_at).label("latest_created_at"))
                 .join(Report, Report.execution_id == Execution.id)
                 .filter(
                     Execution.execution_type == "ticker",
                     func.date(Execution.created_at) >= start_dt.strftime("%Y-%m-%d"),
                     func.date(Execution.created_at) <= end_date,
                 )
+                .group_by(Execution.subject_id)
+                .order_by(func.max(Execution.created_at).desc(), Execution.subject_id.asc())
                 .all()
             )
             return [str(r[0]).upper() for r in rows if r[0]]
@@ -586,13 +661,63 @@ class ReportService:
             
             # Get paginated results
             rows = (
-                db.query(distinct(Execution.subject_id))
+                db.query(Execution.subject_id, func.max(Execution.created_at).label("latest_created_at"))
                 .join(Report, Report.execution_id == Execution.id)
                 .filter(
                     Execution.execution_type == "ticker",
                     func.date(Execution.created_at) >= start_dt.strftime("%Y-%m-%d"),
                     func.date(Execution.created_at) <= end_date,
                 )
+                .group_by(Execution.subject_id)
+                .order_by(func.max(Execution.created_at).desc(), Execution.subject_id.asc())
+                .limit(limit)
+                .offset(offset)
+                .all()
+            )
+            tickers = [str(r[0]).upper() for r in rows if r[0]]
+            return (tickers, total_count)
+        finally:
+            db.close()
+
+    def get_latest_analyzed_tickers(self) -> List[str]:
+        """Return all analyzed tickers ordered by most recent execution descending."""
+        db = SessionLocal()
+        try:
+            from sqlalchemy import func
+
+            rows = (
+                db.query(Execution.subject_id, func.max(Execution.created_at).label("latest_created_at"))
+                .join(Report, Report.execution_id == Execution.id)
+                .filter(Execution.execution_type == "ticker")
+                .group_by(Execution.subject_id)
+                .order_by(func.max(Execution.created_at).desc(), Execution.subject_id.asc())
+                .all()
+            )
+            return [str(r[0]).upper() for r in rows if r[0]]
+        finally:
+            db.close()
+
+    def get_latest_analyzed_tickers_paginated(
+        self, limit: int, offset: int = 0
+    ) -> tuple[List[str], int]:
+        """Return analyzed tickers ordered by most recent execution descending."""
+        db = SessionLocal()
+        try:
+            from sqlalchemy import distinct, func
+
+            total_count = (
+                db.query(func.count(distinct(Execution.subject_id)))
+                .join(Report, Report.execution_id == Execution.id)
+                .filter(Execution.execution_type == "ticker")
+                .scalar()
+            ) or 0
+
+            rows = (
+                db.query(Execution.subject_id, func.max(Execution.created_at).label("latest_created_at"))
+                .join(Report, Report.execution_id == Execution.id)
+                .filter(Execution.execution_type == "ticker")
+                .group_by(Execution.subject_id)
+                .order_by(func.max(Execution.created_at).desc(), Execution.subject_id.asc())
                 .limit(limit)
                 .offset(offset)
                 .all()

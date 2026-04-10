@@ -130,6 +130,17 @@ class WidgetsResponse(BaseModel):
     total: Optional[int] = None
 
 
+class TickerEventSummaryLite(BaseModel):
+    """Lightweight event summary for list views."""
+    dominant_events: Optional[List[str]] = None
+    event_count: Optional[int] = None
+
+
+class TickerEventSummariesResponse(BaseModel):
+    """Batch event-summary response keyed by ticker."""
+    summaries: Dict[str, TickerEventSummaryLite]
+
+
 class HistoricalAnalysis(BaseModel):
     """Historical analysis data."""
     analysis_run_id: int

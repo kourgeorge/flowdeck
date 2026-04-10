@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Optional
 
@@ -14,6 +15,8 @@ from database import get_db
 from models.schemas import (
     ReportData,
     ReportScoreSummary,
+    TickerEventSummariesResponse,
+    TickerEventSummaryLite,
     TickerPageData,
     TickerQuote,
     TickerWidget,
@@ -26,6 +29,7 @@ from services import token_service
 from services.share_service import get_share_url
 from processing import (
     get_cached_ticker_event_summary,
+    get_ticker_event_summary,
     warm_ticker_event_summary_async,
 )
 
@@ -73,6 +77,8 @@ def _get_ticker_widgets_sync(
     limit: Optional[int] = None,
     offset: int = 0,
     recent_days: Optional[int] = None,
+    latest_analyzed: bool = False,
+    include_events: bool = True,
 ) -> WidgetsResponse:
     """Sync implementation of widget data (runs in thread pool to avoid blocking event loop)."""
     gw = get_data_gateway()
@@ -84,7 +90,11 @@ def _get_ticker_widgets_sync(
     else:
         report_date = date or datetime.now().strftime("%Y-%m-%d")
         recent_window_days = recent_days if recent_days and recent_days > 1 else None
-        if only_date and limit is not None:
+        if latest_analyzed and limit is not None:
+            ticker_list, total_count = gw.get_latest_analyzed_tickers_paginated(limit, offset)
+        elif latest_analyzed:
+            ticker_list = gw.get_latest_analyzed_tickers()
+        elif only_date and limit is not None:
             if recent_window_days:
                 ticker_list, total_count = gw.get_tickers_with_reports_for_recent_days_paginated(
                     report_date, recent_window_days, limit, offset
@@ -124,27 +134,34 @@ def _get_ticker_widgets_sync(
     except Exception:
         company_names = {t: None for t in ticker_list}
 
-    today = datetime.now().strftime("%Y-%m-%d")
     event_summaries: dict[str, dict[str, object]] = {}
-    for ticker in ticker_list:
-        try:
-            summary = get_cached_ticker_event_summary(ticker, as_of_date=today)
-            if summary is None:
-                warm_ticker_event_summary_async(gw, ticker, as_of_date=today)
+    if include_events:
+        today = datetime.now().strftime("%Y-%m-%d")
+        for ticker in ticker_list:
+            try:
+                summary = get_cached_ticker_event_summary(ticker, as_of_date=today)
+                if summary is None:
+                    warm_ticker_event_summary_async(gw, ticker, as_of_date=today)
+                    event_summaries[ticker] = {
+                        "dominant_events": None,
+                        "event_count": None,
+                    }
+                else:
+                    event_summaries[ticker] = {
+                        "dominant_events": summary.dominant_events[:3],
+                        "event_count": summary.event_count,
+                    }
+            except Exception:
                 event_summaries[ticker] = {
                     "dominant_events": None,
                     "event_count": None,
                 }
-            else:
-                event_summaries[ticker] = {
-                    "dominant_events": summary.dominant_events[:3],
-                    "event_count": summary.event_count,
-                }
-        except Exception:
-            event_summaries[ticker] = {
-                "dominant_events": None,
-                "event_count": None,
-            }
+
+    latest_widget_data = {}
+    try:
+        latest_widget_data = gw.get_latest_widget_data_for_tickers(ticker_list)
+    except Exception as e:
+        print(f"Warning: Failed to get latest widget data batch: {e}")
 
     for ticker in ticker_list:
         quote_data = quotes_dict.get(ticker) if quotes_dict else None
@@ -170,27 +187,26 @@ def _get_ticker_widgets_sync(
         report_scores = None
 
         try:
-            latest_run = gw.get_latest_execution_for_ticker(ticker)
-            if latest_run:
-                latest_ar_id, latest_date = latest_run
-                scores_raw = gw.get_reports_with_scores(latest_ar_id)
-                if scores_raw:
-                    report_scores = {
-                        k: ReportScoreSummary(score=v.get("score"), score_label=v.get("score_label"))
-                        for k, v in scores_raw.items()
-                        if v.get("score") is not None or v.get("score_label")
-                    }
-                    if not report_scores:
-                        report_scores = None
-                    tip = scores_raw.get("trader_investment_plan") or {}
-                    ftd = scores_raw.get("final_trade_decision") or {}
-                    if ftd.get("recommendation"):
-                        recommendation = ftd["recommendation"]
-                    elif tip.get("recommendation"):
-                        recommendation = tip.get("recommendation")
-                    confidence = _extract_confidence(tip, ftd)
+            latest_payload = latest_widget_data.get(ticker) or {}
+            latest_date = latest_payload.get("report_date")
+            scores_raw = latest_payload.get("reports_with_scores") or {}
+            if scores_raw:
+                report_scores = {
+                    k: ReportScoreSummary(score=v.get("score"), score_label=v.get("score_label"))
+                    for k, v in scores_raw.items()
+                    if v.get("score") is not None or v.get("score_label")
+                }
+                if not report_scores:
+                    report_scores = None
+                tip = scores_raw.get("trader_investment_plan") or {}
+                ftd = scores_raw.get("final_trade_decision") or {}
+                if ftd.get("recommendation"):
+                    recommendation = ftd["recommendation"]
+                elif tip.get("recommendation"):
+                    recommendation = tip.get("recommendation")
+                confidence = _extract_confidence(tip, ftd)
         except Exception as e:
-            print(f"Warning: Failed to get reports for {ticker}: {e}")
+            print(f"Warning: Failed to get batched reports for {ticker}: {e}")
 
         is_major = (ticker.upper() in major_set) if use_major_split else None
         company_name = company_names.get(ticker)
@@ -233,6 +249,59 @@ def _get_ticker_widgets_sync(
         widgets.append(widget)
 
     return WidgetsResponse(widgets=widgets, total=total_count)
+
+
+def _get_ticker_event_summaries_sync(tickers: str) -> TickerEventSummariesResponse:
+    """Batch-load deterministic event summaries for list views."""
+    gw = get_data_gateway()
+    ticker_list: list[str] = []
+    seen: set[str] = set()
+    for ticker in tickers.split(","):
+        ticker_upper = ticker.strip().upper()
+        if ticker_upper and ticker_upper not in seen:
+            ticker_list.append(ticker_upper)
+            seen.add(ticker_upper)
+
+    if not ticker_list:
+        return TickerEventSummariesResponse(summaries={})
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    summaries: dict[str, TickerEventSummaryLite] = {}
+
+    def _load_one(ticker: str) -> tuple[str, TickerEventSummaryLite]:
+        try:
+            summary = get_ticker_event_summary(gw, ticker, as_of_date=today)
+            return (
+                ticker,
+                TickerEventSummaryLite(
+                    dominant_events=summary.dominant_events[:3],
+                    event_count=summary.event_count,
+                ),
+            )
+        except Exception:
+            return (
+                ticker,
+                TickerEventSummaryLite(
+                    dominant_events=[],
+                    event_count=0,
+                ),
+            )
+
+    max_workers = min(4, len(ticker_list))
+    if max_workers <= 1:
+        for ticker in ticker_list:
+            key, summary = _load_one(ticker)
+            summaries[key] = summary
+        return TickerEventSummariesResponse(summaries=summaries)
+
+    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ticker-event-batch") as executor:
+        futures = {executor.submit(_load_one, ticker): ticker for ticker in ticker_list}
+        for future in as_completed(futures):
+            ticker, summary = future.result()
+            summaries[ticker] = summary
+
+    ordered = {ticker: summaries[ticker] for ticker in ticker_list if ticker in summaries}
+    return TickerEventSummariesResponse(summaries=ordered)
 
 
 def _get_ticker_page_sync(ticker: str) -> TickerPageData:
@@ -372,17 +441,41 @@ async def get_ticker_widgets(
     date: Optional[str] = Query(None, description="Date (YYYY-MM-DD) for report filter; default today"),
     only_date: bool = Query(False, description="When set with no tickers: return only tickers with reports for the given date (no major-stocks list)"),
     recent_days: Optional[int] = Query(None, ge=1, le=30, description="When only_date: include reports from the last N days ending at date"),
+    latest_analyzed: bool = Query(False, description="When true with no tickers: return latest analyzed tickers overall, newest first"),
+    include_events: bool = Query(True, description="When false: skip event summary enrichment for faster list loads"),
     limit: Optional[int] = Query(None, description="When only_date: max number of widgets to return (paginated)"),
     offset: int = Query(0, description="When only_date and limit: pagination offset"),
 ):
     """Get widget data for tickers. Uses cached batch quote fetch for speed. Runs in thread pool (non-blocking)."""
     try:
-        return await asyncio.to_thread(_get_ticker_widgets_sync, tickers, date, only_date, limit, offset, recent_days)
+        return await asyncio.to_thread(
+            _get_ticker_widgets_sync,
+            tickers,
+            date,
+            only_date,
+            limit,
+            offset,
+            recent_days,
+            latest_analyzed,
+            include_events,
+        )
     except Exception as e:
         print(f"Error in get_ticker_widgets: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to load widget data: {str(e)}")
+
+
+@router.get("/event-summaries", response_model=TickerEventSummariesResponse)
+async def get_ticker_event_summaries(
+    tickers: str = Query(..., description="Comma-separated list of tickers"),
+):
+    """Batch deterministic event summaries for list views. Loaded lazily by the recent tab."""
+    try:
+        return await asyncio.to_thread(_get_ticker_event_summaries_sync, tickers)
+    except Exception as e:
+        print(f"Error in get_ticker_event_summaries: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to load event summaries: {str(e)}")
 
 
 @router.get("/{ticker}/reports/{analysis_run_id}")

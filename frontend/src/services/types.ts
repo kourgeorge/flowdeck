@@ -31,6 +31,15 @@ export interface WidgetsResponse {
   total?: number;
 }
 
+export interface TickerEventSummaryLite {
+  dominant_events?: string[] | null;
+  event_count?: number | null;
+}
+
+export interface TickerEventSummariesResponse {
+  summaries: Record<string, TickerEventSummaryLite>;
+}
+
 export interface TickerQuote {
   ticker: string;
   current_price: number;

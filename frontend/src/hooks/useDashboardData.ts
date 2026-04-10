@@ -4,15 +4,13 @@ import { subscriptionApi } from '../services/subscriptionApi';
 import type { TickerWidget as StockWidgetType } from '../services/types';
 import { useAuth } from '../contexts/AuthContext';
 
-const RECENT_PAGE_SIZE = 20;
-const RECENT_ANALYZED_DAYS = 3;
+const RECENT_PAGE_SIZE = 10;
 
 export interface UseDashboardDataReturn {
   widgets: StockWidgetType[];
   recentAnalyzedWidgets: StockWidgetType[];
   recentTotal: number | null;
   loadingMoreRecent: boolean;
-  backgroundLoadingAll: boolean;
   tickerToName: Record<string, string>;
   isLoading: boolean;
   subscribedTickers: string[];
@@ -33,14 +31,13 @@ export function useDashboardData({
   const [recentAnalyzedWidgets, setRecentAnalyzedWidgets] = useState<StockWidgetType[]>([]);
   const [recentTotal, setRecentTotal] = useState<number | null>(null);
   const [loadingMoreRecent, setLoadingMoreRecent] = useState(false);
-  const [backgroundLoadingAll, setBackgroundLoadingAll] = useState(false);
   const [tickerToName, setTickerToName] = useState<Record<string, string>>({});
   const [subscriptionsReady, setSubscriptionsReady] = useState(false);
   const [recentReady, setRecentReady] = useState(false);
   const [subscribedTickers, setSubscribedTickers] = useState<string[]>([]);
 
   const recentScrollRef = useRef<HTMLDivElement>(null);
-  const backgroundLoadStartedRef = useRef(false);
+  const recentEventRequestsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!user) {
@@ -107,47 +104,25 @@ export function useDashboardData({
 
   // Load first page of recently analyzed
   const loadRecentPage = useCallback(async (offset: number, append: boolean) => {
-    const today = new Date().toISOString().slice(0, 10);
-    const res = await tickerApi.getWidgets(undefined, today, true, RECENT_PAGE_SIZE, offset, RECENT_ANALYZED_DAYS);
+    const res = await tickerApi.getWidgets(undefined, undefined, false, RECENT_PAGE_SIZE, offset, undefined, true, false);
     if (res.total != null) setRecentTotal(res.total);
     if (append) {
-      setRecentAnalyzedWidgets((prev) => [...prev, ...res.widgets]);
+      setRecentAnalyzedWidgets((prev) => {
+        const existingTickers = new Set(prev.map((widget) => widget.ticker));
+        const appended = res.widgets.filter((widget) => !existingTickers.has(widget.ticker));
+        return appended.length > 0 ? [...prev, ...appended] : prev;
+      });
     } else {
       setRecentAnalyzedWidgets(res.widgets);
     }
     return res;
   }, []);
 
-  // Background-load all remaining pages
-  const loadAllRecentInBackground = useCallback(async (knownTotal: number, alreadyLoaded: number) => {
-    if (backgroundLoadStartedRef.current) return;
-    backgroundLoadStartedRef.current = true;
-    setBackgroundLoadingAll(true);
-    try {
-      const today = new Date().toISOString().slice(0, 10);
-      let offset = alreadyLoaded;
-      while (offset < knownTotal) {
-        const res = await tickerApi.getWidgets(undefined, today, true, RECENT_PAGE_SIZE, offset, RECENT_ANALYZED_DAYS);
-        if (res.total != null) setRecentTotal(res.total);
-        setRecentAnalyzedWidgets((prev) => {
-          const existingTickers = new Set(prev.map((w) => w.ticker));
-          const newWidgets = res.widgets.filter((w) => !existingTickers.has(w.ticker));
-          return newWidgets.length > 0 ? [...prev, ...newWidgets] : prev;
-        });
-        offset += res.widgets.length;
-        if (res.widgets.length === 0) break;
-      }
-    } catch {
-      // Non-critical
-    } finally {
-      setBackgroundLoadingAll(false);
-    }
-  }, []);
-
   useEffect(() => {
     if (!user) {
       setRecentAnalyzedWidgets([]);
       setRecentTotal(null);
+      recentEventRequestsRef.current.clear();
       setRecentReady(true);
       return;
     }
@@ -157,41 +132,60 @@ export function useDashboardData({
     }
 
     setRecentReady(false);
-    backgroundLoadStartedRef.current = false;
+    recentEventRequestsRef.current.clear();
     loadRecentPage(0, false)
       .catch(() => { setRecentAnalyzedWidgets([]); setRecentTotal(null); })
       .finally(() => setRecentReady(true));
     const interval = setInterval(() => {
-      backgroundLoadStartedRef.current = false;
+      recentEventRequestsRef.current.clear();
       loadRecentPage(0, false).catch(() => {});
     }, 60000);
     return () => clearInterval(interval);
   }, [user, loadRecentPage, enableRecentAnalyzed]);
 
   useEffect(() => {
-    if (!user || !enableRecentAnalyzed) return;
-    if (recentTotal == null || backgroundLoadStartedRef.current) return;
-    if (recentAnalyzedWidgets.length >= recentTotal) return;
-    loadAllRecentInBackground(recentTotal, recentAnalyzedWidgets.length);
-  }, [user, recentTotal, recentAnalyzedWidgets.length, loadAllRecentInBackground, enableRecentAnalyzed]);
+    if (!user || !enableRecentAnalyzed || recentAnalyzedWidgets.length === 0) return;
+
+    const unresolvedTickers = recentAnalyzedWidgets
+      .filter((widget) => widget.dominant_events == null && widget.event_count == null)
+      .map((widget) => widget.ticker)
+      .filter((ticker) => !recentEventRequestsRef.current.has(ticker));
+
+    if (unresolvedTickers.length === 0) return;
+
+    unresolvedTickers.forEach((ticker) => recentEventRequestsRef.current.add(ticker));
+
+    tickerApi.getEventSummaries(unresolvedTickers)
+      .then((response) => {
+        setRecentAnalyzedWidgets((prev) => prev.map((widget) => {
+          const summary = response.summaries[widget.ticker];
+          if (!summary) return widget;
+          return {
+            ...widget,
+            dominant_events: summary.dominant_events ?? [],
+            event_count: summary.event_count ?? 0,
+          };
+        }));
+      })
+      .catch(() => {
+        unresolvedTickers.forEach((ticker) => recentEventRequestsRef.current.delete(ticker));
+      });
+  }, [user, enableRecentAnalyzed, recentAnalyzedWidgets]);
 
   // Infinite scroll for overview tab recent list
   const handleRecentScroll = useCallback(() => {
     const el = recentScrollRef.current;
-    if (!el || loadingMoreRecent || backgroundLoadingAll || recentTotal == null) return;
+    if (!el || loadingMoreRecent || recentTotal == null) return;
     if (recentAnalyzedWidgets.length >= recentTotal) return;
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 120) {
       setLoadingMoreRecent(true);
-      const today = new Date().toISOString().slice(0, 10);
-      tickerApi
-        .getWidgets(undefined, today, true, RECENT_PAGE_SIZE, recentAnalyzedWidgets.length, RECENT_ANALYZED_DAYS)
+      loadRecentPage(recentAnalyzedWidgets.length, true)
         .then((res) => {
           if (res.total != null) setRecentTotal(res.total);
-          setRecentAnalyzedWidgets((prev) => [...prev, ...res.widgets]);
         })
         .finally(() => setLoadingMoreRecent(false));
     }
-  }, [loadingMoreRecent, backgroundLoadingAll, recentTotal, recentAnalyzedWidgets.length]);
+  }, [loadingMoreRecent, recentTotal, recentAnalyzedWidgets.length, loadRecentPage]);
 
   const handleSubscriptionChange = useCallback(() => {
     loadSubscriptions();
@@ -204,7 +198,6 @@ export function useDashboardData({
     recentAnalyzedWidgets,
     recentTotal,
     loadingMoreRecent,
-    backgroundLoadingAll,
     tickerToName,
     isLoading,
     subscribedTickers,
