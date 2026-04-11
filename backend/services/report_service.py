@@ -192,6 +192,30 @@ def _report_row_to_dict(row: Report, date: str) -> Dict[str, Any]:
         "total_tokens": meta.get("total_tokens"),
         "cost_usd": meta.get("cost_usd"),
     }
+    if meta.get("fair_value_bear") is not None:
+        out["fair_value_bear"] = meta.get("fair_value_bear")
+    if meta.get("fair_value_base") is not None:
+        out["fair_value_base"] = meta.get("fair_value_base")
+    if meta.get("fair_value_bull") is not None:
+        out["fair_value_bull"] = meta.get("fair_value_bull")
+    if meta.get("current_discount_pct") is not None:
+        out["current_discount_pct"] = meta.get("current_discount_pct")
+    if meta.get("valuation_conviction") is not None:
+        out["valuation_conviction"] = meta.get("valuation_conviction")
+    if meta.get("valuation_key_assumptions") is not None:
+        out["valuation_key_assumptions"] = meta.get("valuation_key_assumptions")
+    if meta.get("valuation_summary") is not None:
+        out["valuation_summary"] = meta.get("valuation_summary")
+    if meta.get("valuation_bridge") is not None:
+        out["valuation_bridge"] = meta.get("valuation_bridge")
+    if meta.get("valuation_sensitivity") is not None:
+        out["valuation_sensitivity"] = meta.get("valuation_sensitivity")
+    if meta.get("dcf") is not None:
+        out["dcf"] = meta.get("dcf")
+    if meta.get("pe_comps") is not None:
+        out["pe_comps"] = meta.get("pe_comps")
+    if meta.get("ev_ebitda") is not None:
+        out["ev_ebitda"] = meta.get("ev_ebitda")
     if meta.get("bull_viewpoint") is not None:
         out["bull_viewpoint"] = meta["bull_viewpoint"]
     if meta.get("bear_viewpoint") is not None:

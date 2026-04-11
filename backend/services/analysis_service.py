@@ -91,6 +91,7 @@ _REPORT_TO_STATE_TAKEAWAYS_KEY = {
     "fundamentals_report": "fundamentals_key_takeaways",
     "technical_report": "technical_key_takeaways",
     "sec_report": "sec_key_takeaways",
+    "valuation_report": "valuation_key_takeaways",
     "investment_plan": "investment_plan_key_takeaways",
     "trader_investment_plan": "trader_key_takeaways",
     "final_trade_decision": "final_report_key_takeaways",
@@ -476,7 +477,7 @@ class AnalysisService:
 
             # Default analysts if not provided (social = sentiment/social media analyst)
             if analysts is None:
-                analysts = ["market", "social", "news", "fundamentals", "technical", "sec"]
+                analysts = ["market", "social", "news", "fundamentals", "technical", "sec", "valuation"]
             # Exclude SEC analyst when no SEC EDGAR data exists for this ticker
             if "sec" in analysts and not _has_sec_data(ticker):
                 analysts = [a for a in analysts if a != "sec"]
@@ -532,6 +533,7 @@ class AnalysisService:
                 "Fundamentals Analyst": "pending",
                 "Technical Analyst": "pending",
                 "SEC Analyst": "pending",
+                "Valuation Analyst": "pending",
                 "Bull Researcher": "pending",
                 "Bear Researcher": "pending",
                 "Research Manager": "pending",
@@ -550,6 +552,7 @@ class AnalysisService:
                 "fundamentals": "Fundamentals Analyst",
                 "technical": "Technical Analyst",
                 "sec": "SEC Analyst",
+                "valuation": "Valuation Analyst",
             }
             
             # Check if parallel execution is enabled (default: True)
@@ -809,6 +812,7 @@ class AnalysisService:
                 "fundamentals": "fundamentals_report",
                 "technical": "technical_report",
                 "sec": "sec_report",
+                "valuation": "valuation_report",
             }
             report_key_to_analyst = {
                 "market_report": "market",
@@ -817,6 +821,7 @@ class AnalysisService:
                 "fundamentals_report": "fundamentals",
                 "technical_report": "technical",
                 "sec_report": "sec",
+                "valuation_report": "valuation",
             }
             analyst_status_map_run = {
                 "market": "Market Analyst",
@@ -825,6 +830,7 @@ class AnalysisService:
                 "fundamentals": "Fundamentals Analyst",
                 "technical": "Technical Analyst",
                 "sec": "SEC Analyst",
+                "valuation": "Valuation Analyst",
             }
             last_analyst_report_key = None
             for analyst in reversed(analysts):
@@ -898,6 +904,7 @@ class AnalysisService:
                     ("fundamentals_report", "fundamentals_report", "fundamentals_score", "Fundamentals Score", "Fundamentals Analyst"),
                     ("technical_report", "technical_report", "technical_score", "Technical Score", "Technical Analyst"),
                     ("sec_report", "sec_report", "sec_score", "SEC Score", "SEC Analyst"),
+                    ("valuation_report", "valuation_report", "valuation_score", "Valuation Score", "Valuation Analyst"),
                 ]
                 for key, chunk_key, score_key, label, agent in _reports:
                     if chunk_key in chunk and chunk[chunk_key]:
@@ -970,6 +977,18 @@ class AnalysisService:
                                 llm_usage=report_usage.get(key),
                                 resources=_get_report_resources(chunk, key),
                                 chunk=chunk,
+                                fair_value_bear=chunk.get("fair_value_bear") if key == "valuation_report" else None,
+                                fair_value_base=chunk.get("fair_value_base") if key == "valuation_report" else None,
+                                fair_value_bull=chunk.get("fair_value_bull") if key == "valuation_report" else None,
+                                current_discount_pct=chunk.get("current_discount_pct") if key == "valuation_report" else None,
+                                valuation_conviction=chunk.get("valuation_conviction") if key == "valuation_report" else None,
+                                valuation_key_assumptions=chunk.get("valuation_key_assumptions") if key == "valuation_report" else None,
+                                valuation_summary=chunk.get("valuation_summary") if key == "valuation_report" else None,
+                                valuation_bridge=chunk.get("valuation_bridge") if key == "valuation_report" else None,
+                                valuation_sensitivity=chunk.get("valuation_sensitivity") if key == "valuation_report" else None,
+                                dcf=chunk.get("dcf") if key == "valuation_report" else None,
+                                pe_comps=chunk.get("pe_comps") if key == "valuation_report" else None,
+                                ev_ebitda=chunk.get("ev_ebitda") if key == "valuation_report" else None,
                             )
                             _written_reports.add(key)
                             _progress_log(f"{agent} completed → {key} saved")
@@ -1194,6 +1213,7 @@ class AnalysisService:
                 fallback_reports = [
                     ("technical", "technical_report", "technical_score", "Technical Score", "Technical Analyst"),
                     ("sec", "sec_report", "sec_score", "SEC Score", "SEC Analyst"),
+                    ("valuation", "valuation_report", "valuation_score", "Valuation Score", "Valuation Analyst"),
                 ]
                 for analyst_key, report_key, score_key, label, agent in fallback_reports:
                     if analyst_key not in analysts or report_key in analysis_info.get("reports", {}):

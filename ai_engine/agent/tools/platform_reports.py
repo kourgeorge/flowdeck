@@ -29,6 +29,7 @@ _REPORT_LABELS = {
     "technical_report": "Technical Analysis",
     "news_report": "News Analysis",
     "sec_report": "SEC Analysis",
+    "valuation_report": "Valuation Analysis",
     "investment_plan": "Investment Plan",
     "trader_investment_plan": "Trader Plan",
     "final_trade_decision": "Final Decision",
@@ -41,6 +42,7 @@ _REPORT_ALIASES: dict[str, str] = {
     "technical": "technical_report",
     "news": "news_report",
     "sec": "sec_report",
+    "valuation": "valuation_report",
     "investment": "investment_plan",
     "plan": "investment_plan",
     "trader": "trader_investment_plan",
@@ -67,7 +69,8 @@ _PLATFORM_REPORTS_SPEC = ToolSpec(
         "With report_type: returns the full content of that specific report. "
         "Available reports: Final Trade Decision (risk-adjusted recommendation), "
         "Investment Plan (bull vs bear researcher debate), Trader Plan, Market Analysis, "
-        "Fundamentals Analysis, Technical Analysis, News Analysis, SEC/Regulatory Analysis. "
+        "Fundamentals Analysis, Technical Analysis, News Analysis, SEC/Regulatory Analysis, "
+        "and Valuation Analysis. "
         "Use report_type when the user asks to 'read', 'show', 'summarize', or 'deep dive' into a specific report. "
         "By default returns the LATEST report. Use the 'date' parameter to access historical reports — "
         "first call get_historical_report_dates to discover available dates, then pass the desired date here."
@@ -91,6 +94,7 @@ _PLATFORM_REPORTS_SPEC = ToolSpec(
                     "'technical_report' (or 'technical'), "
                     "'news_report' (or 'news'), "
                     "'sec_report' (or 'sec'). "
+                    "'valuation_report' (or 'valuation'). "
                     "Omit or leave null to fetch all available reports."
                 ),
             },
@@ -387,5 +391,4 @@ def _fetch_historical_dates(ticker: str) -> str:
         "the date parameter set to one of the dates above (YYYY-MM-DD)."
     )
     return "\n".join(lines)
-
 

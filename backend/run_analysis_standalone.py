@@ -54,6 +54,7 @@ _REPORT_TO_STATE_TAKEAWAYS_KEY = {
     "fundamentals_report": "fundamentals_key_takeaways",
     "technical_report": "technical_key_takeaways",
     "sec_report": "sec_key_takeaways",
+    "valuation_report": "valuation_key_takeaways",
     "investment_plan": "investment_plan_key_takeaways",
     "trader_investment_plan": "trader_key_takeaways",
     "final_trade_decision": "final_report_key_takeaways",
@@ -113,7 +114,7 @@ def main() -> None:
     analysis_date = args.analysis_date.strip()
     analysts = [a.strip() for a in args.analysts.split(",") if a.strip()]
     if not analysts:
-        analysts = ["market", "social", "news", "fundamentals", "technical"]
+        analysts = ["market", "social", "news", "fundamentals", "technical", "sec", "valuation"]
 
     os.environ["INFO_SERVICE_URL"] = args.info_service_url.strip().rstrip("/")
 
@@ -319,6 +320,7 @@ def main() -> None:
                 "fundamentals": "fundamentals_report",
                 "technical": "technical_report",
                 "sec": "sec_report",
+                "valuation": "valuation_report",
             }
             last_analyst_report_key = None
             for analyst in reversed(analysts):
@@ -349,6 +351,7 @@ def main() -> None:
                     ("fundamentals_report", "fundamentals_report", "fundamentals_score", "Fundamentals Score", "Fundamentals Analyst"),
                     ("technical_report", "technical_report", "technical_score", "Technical Score", "Technical Analyst"),
                     ("sec_report", "sec_report", "sec_score", "SEC Score", "SEC Analyst"),
+                    ("valuation_report", "valuation_report", "valuation_score", "Valuation Score", "Valuation Analyst"),
                 ]
                 for key, chunk_key, score_key, label, agent in _reports:
                     if chunk_key in chunk and chunk[chunk_key] and key not in _written_reports:
@@ -364,6 +367,18 @@ def main() -> None:
                             llm_usage=report_usage.get(key),
                             resources=_get_report_resources(chunk, key),
                             chunk=chunk,
+                            fair_value_bear=chunk.get("fair_value_bear") if key == "valuation_report" else None,
+                            fair_value_base=chunk.get("fair_value_base") if key == "valuation_report" else None,
+                            fair_value_bull=chunk.get("fair_value_bull") if key == "valuation_report" else None,
+                            current_discount_pct=chunk.get("current_discount_pct") if key == "valuation_report" else None,
+                            valuation_conviction=chunk.get("valuation_conviction") if key == "valuation_report" else None,
+                            valuation_key_assumptions=chunk.get("valuation_key_assumptions") if key == "valuation_report" else None,
+                            valuation_summary=chunk.get("valuation_summary") if key == "valuation_report" else None,
+                            valuation_bridge=chunk.get("valuation_bridge") if key == "valuation_report" else None,
+                            valuation_sensitivity=chunk.get("valuation_sensitivity") if key == "valuation_report" else None,
+                            dcf=chunk.get("dcf") if key == "valuation_report" else None,
+                            pe_comps=chunk.get("pe_comps") if key == "valuation_report" else None,
+                            ev_ebitda=chunk.get("ev_ebitda") if key == "valuation_report" else None,
                         )
                         _written_reports.add(key)
                         _progress_log(f"{agent} completed → {key} saved")

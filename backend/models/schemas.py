@@ -182,8 +182,24 @@ class ReportData(BaseModel):
     bull_case_return_pct: Optional[float] = None
     current_price: Optional[float] = None
     currency: Optional[str] = None
+    fair_value_bear: Optional[float] = None
+    fair_value_base: Optional[float] = None
+    fair_value_bull: Optional[float] = None
+    current_discount_pct: Optional[float] = None
+    valuation_conviction: Optional[str] = None
+    valuation_key_assumptions: Optional[List[str]] = None
+    valuation_summary: Optional[Dict[str, Any]] = None
+    valuation_bridge: Optional[Dict[str, Any]] = None
+    valuation_sensitivity: Optional[Dict[str, Any]] = None
+    dcf: Optional[Dict[str, Any]] = None
+    pe_comps: Optional[Dict[str, Any]] = None
+    ev_ebitda: Optional[Dict[str, Any]] = None
 
-    @field_validator('expected_return_pct', 'bear_case_return_pct', 'bull_case_return_pct', 'current_price', mode='before')
+    @field_validator(
+        'expected_return_pct', 'bear_case_return_pct', 'bull_case_return_pct', 'current_price',
+        'fair_value_bear', 'fair_value_base', 'fair_value_bull', 'current_discount_pct',
+        mode='before'
+    )
     @classmethod
     def sanitize_return_pcts(cls, v):
         return _sanitize_float(v) if v is not None else None

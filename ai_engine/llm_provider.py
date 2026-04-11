@@ -134,7 +134,7 @@ def get_llm(
     *,
     model_name: Optional[str] = None,
     temperature: Optional[float] = None,
-    request_timeout: Optional[int] = 300,
+    request_timeout: Optional[int] = 600,
 ) -> BaseChatModel:
     """
     Return a chat model for the given role (or explicit model name) using config.
@@ -144,7 +144,7 @@ def get_llm(
         config: Must contain llm_provider and optionally deep_think_llm, quick_think_llm, backend_url.
         model_name: If set, overrides the model for this role (still uses same provider).
         temperature: Optional override (e.g. 0.0 for deterministic).
-        request_timeout: Request timeout in seconds (default 120).
+        request_timeout: Request timeout in seconds (default 600).
 
     Returns:
         A LangChain-compatible chat model (BaseChatModel).
@@ -155,7 +155,7 @@ def get_llm(
     provider = (config.get(CONFIG_LLM_PROVIDER) or config.get("llm_provider") or "openai").lower()
     model = model_name or _model_for_role(role, config)
     base_url = config.get(CONFIG_BACKEND_URL) or config.get("backend_url")
-    timeout = request_timeout if request_timeout is not None else 120
+    timeout = request_timeout if request_timeout is not None else 600
     temp = temperature if temperature is not None else (0.0 if role == "deep" else 0.0)
     # Skip temperature if model doesn't support it, or config explicitly disables it
     use_temp = (
