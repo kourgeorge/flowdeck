@@ -7,6 +7,7 @@ const ALL_AGENTS = [
   'Fundamentals Analyst',
   'Technical Analyst',
   'SEC Analyst',
+  'Valuation Analyst',
   'Bull Researcher',
   'Bear Researcher',
   'Research Manager',

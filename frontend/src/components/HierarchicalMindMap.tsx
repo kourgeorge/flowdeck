@@ -11,12 +11,13 @@ const REPORT_LABELS: Record<string, string> = {
   fundamentals_report: 'Fundamentals',
   sec_report: 'SEC',
   technical_report: 'Technical',
+  valuation_report: 'Valuation',
   investment_plan: 'Research',
   trader_investment_plan: 'Trader',
   final_trade_decision: 'Risk Analysis',
 };
 
-const EVIDENCE_KEYS = ['market_report', 'sentiment_report', 'news_report', 'fundamentals_report', 'sec_report', 'technical_report'] as const;
+const EVIDENCE_KEYS = ['market_report', 'sentiment_report', 'news_report', 'fundamentals_report', 'sec_report', 'technical_report', 'valuation_report'] as const;
 const SYNTHESIS_KEYS = ['investment_plan', 'trader_investment_plan'] as const;
 const DECISION_KEYS = ['final_trade_decision'] as const;
 

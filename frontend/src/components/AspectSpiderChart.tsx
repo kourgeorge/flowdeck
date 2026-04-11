@@ -46,6 +46,7 @@ const REPORT_LABELS: Record<string, string> = {
   news_report: 'News',
   technical_report: 'Technical',
   sec_report: 'SEC',
+  valuation_report: 'Valuation',
   investment_plan: 'Research',
   final_trade_decision: 'Low Risk',
   research_report: 'Research',
@@ -83,7 +84,7 @@ export function getAnalysisScoreEntries(scores: ReportScoreMap | null | undefine
   if (!scores || Object.keys(scores).length === 0) return [];
   const REPORT_ORDER = [
     'market_report', 'sentiment_report', 'news_report', 'fundamentals_report', 'technical_report',
-    'sec_report', 'investment_plan', 'final_trade_decision',
+    'sec_report', 'valuation_report', 'investment_plan', 'final_trade_decision',
   ];
   return (Object.entries(scores) as [string, { score: number | null }][])
     .filter(([reportType]) => !EXCLUDED_REPORT_TYPES.has(reportType))
@@ -107,7 +108,7 @@ function getSpiderData(scoreEntries: [string, { score: number | null }][]) {
 }
 
 function calculateAverageAnalystScore(scoreEntries: [string, { score: number | null }][]): number | null {
-  const analystReports = ['market_report', 'news_report', 'fundamentals_report', 'technical_report', 'sec_report'];
+  const analystReports = ['market_report', 'news_report', 'fundamentals_report', 'technical_report', 'sec_report', 'valuation_report'];
   const analystScores = scoreEntries
     .filter(([type]) => analystReports.includes(type))
     .map(([, data]) => data.score)
@@ -331,4 +332,3 @@ function PentagonalRadar({ spiderData, radarColor, size }: PentagonalRadarProps)
     </div>
   );
 }
-

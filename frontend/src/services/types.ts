@@ -100,6 +100,25 @@ export interface ReportData {
   agent_steps?: Record<string, unknown>[] | null;
   current_price?: number | null;
   currency?: string | null;
+  fair_value_bear?: number | null;
+  fair_value_base?: number | null;
+  fair_value_bull?: number | null;
+  current_discount_pct?: number | null;
+  valuation_conviction?: string | null;
+  valuation_key_assumptions?: string[] | null;
+  valuation_bridge?: {
+    current_price?: number | null;
+    growth_premium?: number | null;
+    multiple_expansion?: number | null;
+    risk_discount?: number | null;
+    fair_value?: number | null;
+  } | null;
+  valuation_sensitivity?: {
+    fcf_growth_rate?: { delta?: number | null; low?: number | null; high?: number | null } | null;
+    wacc?: { delta?: number | null; low?: number | null; high?: number | null } | null;
+    terminal_growth?: { delta?: number | null; low?: number | null; high?: number | null } | null;
+    exit_multiple?: { delta?: number | null; low?: number | null; high?: number | null } | null;
+  } | null;
 }
 
 export interface AnalysisLiveActivity {

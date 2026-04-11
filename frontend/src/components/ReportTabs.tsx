@@ -43,6 +43,7 @@ export default function ReportTabs({ availableReports, selectedReport, onSelectR
     technical_report: 'Technical',
     news_report: 'News',
     sec_report: 'SEC',
+    valuation_report: 'Valuation',
     investment_plan: 'Research',
     trader_investment_plan: 'Trader',
     final_trade_decision: 'Risk Analysis',

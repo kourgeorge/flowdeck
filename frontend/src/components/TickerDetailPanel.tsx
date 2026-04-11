@@ -50,7 +50,7 @@ interface StockDetailPanelProps {
 }
 const REPORT_PROCESS_ORDER = [
   'market_report','sentiment_report','news_report','technical_report',
-  'fundamentals_report','sec_report','investment_plan','trader_investment_plan','final_trade_decision',
+  'fundamentals_report','sec_report','valuation_report','investment_plan','trader_investment_plan','final_trade_decision',
 ];
 const SIMILAR_STOCKS_PER_PAGE = 10;
 
@@ -2340,7 +2340,9 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                               neutralViewpoint={currentReportData?.neutral_viewpoint}
                               tpsPlan={currentReportData?.tps_plan}
                               resources={currentReportData?.resources ?? null}
-                              agentSteps={currentReportData?.agent_steps ?? null} />
+                              agentSteps={currentReportData?.agent_steps ?? null}
+                              valuationBridge={currentReportData?.valuation_bridge ?? null}
+                              valuationSensitivity={currentReportData?.valuation_sensitivity ?? null} />
                           )}
                         </div>
                       </div>

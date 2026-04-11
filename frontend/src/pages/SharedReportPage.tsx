@@ -17,7 +17,7 @@ import { parseReportDate } from '../utils/date';
 
 const REPORT_ORDER = [
   'market_report', 'sentiment_report', 'news_report', 'technical_report',
-  'fundamentals_report', 'sec_report', 'investment_plan', 'trader_investment_plan', 'final_trade_decision',
+  'fundamentals_report', 'sec_report', 'valuation_report', 'investment_plan', 'trader_investment_plan', 'final_trade_decision',
 ];
 const IMPORTANT_EVENT_LABELS: Record<string, string> = {
   price_spike_up: 'Price spike up',
@@ -507,6 +507,19 @@ export default function SharedReportPage() {
               tpsPlan={current?.tps_plan ?? null}
               resources={current?.resources ?? undefined}
               agentSteps={current?.agent_steps ?? undefined}
+              valuationBridge={(current?.valuation_bridge as {
+                current_price?: number | null;
+                growth_premium?: number | null;
+                multiple_expansion?: number | null;
+                risk_discount?: number | null;
+                fair_value?: number | null;
+              } | null | undefined) ?? null}
+              valuationSensitivity={(current?.valuation_sensitivity as {
+                fcf_growth_rate?: { delta?: number | null; low?: number | null; high?: number | null } | null;
+                wacc?: { delta?: number | null; low?: number | null; high?: number | null } | null;
+                terminal_growth?: { delta?: number | null; low?: number | null; high?: number | null } | null;
+                exit_multiple?: { delta?: number | null; low?: number | null; high?: number | null } | null;
+              } | null | undefined) ?? null}
             />
           </div>
         </div>

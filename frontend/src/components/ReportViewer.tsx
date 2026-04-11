@@ -66,6 +66,19 @@ interface ReportViewerProps {
   resources?: ReportResource[] | null;
   /** Persisted execution trace for this report */
   agentSteps?: AgentStep[] | null;
+  valuationBridge?: {
+    current_price?: number | null;
+    growth_premium?: number | null;
+    multiple_expansion?: number | null;
+    risk_discount?: number | null;
+    fair_value?: number | null;
+  } | null;
+  valuationSensitivity?: {
+    fcf_growth_rate?: { delta?: number | null; low?: number | null; high?: number | null } | null;
+    wacc?: { delta?: number | null; low?: number | null; high?: number | null } | null;
+    terminal_growth?: { delta?: number | null; low?: number | null; high?: number | null } | null;
+    exit_multiple?: { delta?: number | null; low?: number | null; high?: number | null } | null;
+  } | null;
 }
 
 const REPORT_METADATA: Record<string, { title: string; contains: string; aspects: string; methodology: string }> = {
@@ -104,6 +117,12 @@ const REPORT_METADATA: Record<string, { title: string; contains: string; aspects
     contains: 'An advanced technical report on regime, support/resistance, and divergences. Provides actionable recommendations with specific price levels.',
     aspects: 'Divergence detection (bullish/bearish between price and RSI or MACD); regime detection (trending vs ranging, volatility level); support/resistance via price clustering, volume profile, recent highs/lows, and moving averages; entry/exit targets and stop-loss levels.',
     methodology: 'Runs in the analyst chain when technical analysis is selected. The Technical Analyst follows a sequence: assess market regime, identify support and resistance, check for divergences, then synthesize findings into recommendations and a Technical Score (1–10).',
+  },
+  valuation_report: {
+    title: 'Valuation',
+    contains: 'A multi-method fair value analysis with scenario-based valuation ranges and an overall Valuation Score (1–10).',
+    aspects: 'DCF inputs, peer multiple comparisons, growth and discount-rate assumptions, bear/base/bull fair values, current premium or discount versus base fair value, and the key assumptions driving the estimate.',
+    methodology: 'Runs in the analyst chain when valuation analysis is selected. The Valuation Analyst gathers quote, fundamentals, financial statements, peer comps, growth assumptions, and WACC inputs, then synthesizes them into a fair value range and narrative assessment.',
   },
   investment_plan: {
     title: 'Research',
@@ -181,6 +200,72 @@ function formatResourceValue(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+function formatCurrencyValue(value: number | null | undefined): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'N/A';
+  return `$${value.toFixed(2)}`;
+}
+
+function buildDeterministicValuationBridgeMarkdown(
+  valuationBridge?: {
+    current_price?: number | null;
+    growth_premium?: number | null;
+    multiple_expansion?: number | null;
+    risk_discount?: number | null;
+    fair_value?: number | null;
+  } | null,
+): string | null {
+  if (!valuationBridge) return null;
+  const currentPrice = typeof valuationBridge.current_price === 'number' ? valuationBridge.current_price : null;
+  const growthPremium = typeof valuationBridge.growth_premium === 'number' ? valuationBridge.growth_premium : null;
+  const multipleExpansion = typeof valuationBridge.multiple_expansion === 'number' ? valuationBridge.multiple_expansion : null;
+  const riskDiscount = typeof valuationBridge.risk_discount === 'number' ? valuationBridge.risk_discount : null;
+  const fairValue = typeof valuationBridge.fair_value === 'number' ? valuationBridge.fair_value : null;
+  if ([currentPrice, growthPremium, multipleExpansion, riskDiscount, fairValue].every((value) => value == null)) {
+    return null;
+  }
+  return [
+    '### 3. Valuation Bridge',
+    `- Current Price: ${formatCurrencyValue(currentPrice)}`,
+    `- Plus: Growth premium (${formatCurrencyValue(growthPremium)})`,
+    `- Plus: Multiple expansion (${formatCurrencyValue(multipleExpansion)})`,
+    `- Less: Risk discount (${formatCurrencyValue(riskDiscount)})`,
+    `- **Fair Value: ${formatCurrencyValue(fairValue)}**`,
+  ].join('\n');
+}
+
+function buildDeterministicValuationSensitivityMarkdown(
+  valuationSensitivity?: {
+    fcf_growth_rate?: { delta?: number | null; low?: number | null; high?: number | null } | null;
+    wacc?: { delta?: number | null; low?: number | null; high?: number | null } | null;
+    terminal_growth?: { delta?: number | null; low?: number | null; high?: number | null } | null;
+    exit_multiple?: { delta?: number | null; low?: number | null; high?: number | null } | null;
+  } | null,
+): string | null {
+  if (!valuationSensitivity) return null;
+  const fcf = valuationSensitivity.fcf_growth_rate;
+  const wacc = valuationSensitivity.wacc;
+  const terminal = valuationSensitivity.terminal_growth;
+  const exit = valuationSensitivity.exit_multiple;
+  if (!fcf && !wacc && !terminal && !exit) return null;
+
+  return [
+    '### 5. Sensitivity Analysis',
+    `- FCF Growth Rate: ±2% -> Fair value range: ${formatCurrencyValue(fcf?.low)} to ${formatCurrencyValue(fcf?.high)}`,
+    `- WACC: ±1% -> Fair value range: ${formatCurrencyValue(wacc?.low)} to ${formatCurrencyValue(wacc?.high)}`,
+    `- Terminal Growth: ±0.5% -> Fair value range: ${formatCurrencyValue(terminal?.low)} to ${formatCurrencyValue(terminal?.high)}`,
+    `- Exit Multiple: ±2x -> Fair value range: ${formatCurrencyValue(exit?.low)} to ${formatCurrencyValue(exit?.high)}`,
+  ].join('\n');
+}
+
+function replaceMarkdownSection(content: string, sectionHeading: string, replacement: string): string {
+  const escapedHeading = sectionHeading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`${escapedHeading}\\b[\\s\\S]*?(?=\\n### |\\n## |$)`, 'm');
+  if (pattern.test(content)) {
+    return content.replace(pattern, replacement);
+  }
+  return `${replacement}\n\n${content}`;
 }
 
 function toDateOnly(value: unknown): string | null {
@@ -591,9 +676,22 @@ export function ReportAgentTrajectorySection({
   );
 }
 
-export default function ReportViewer({ content, score, scoreLabel, keyTakeaways, analysisDate, reportType, bullViewpoint, bearViewpoint, riskyViewpoint, safeViewpoint, neutralViewpoint, tpsPlan, resources, agentSteps }: ReportViewerProps) {
+export default function ReportViewer({ content, score, scoreLabel, keyTakeaways, analysisDate, reportType, bullViewpoint, bearViewpoint, riskyViewpoint, safeViewpoint, neutralViewpoint, tpsPlan, resources, agentSteps, valuationBridge, valuationSensitivity }: ReportViewerProps) {
   const { user } = useAuth();
-  const hasContent = content && content.trim().length > 0;
+  const deterministicValuationBridge = reportType === 'valuation_report'
+    ? buildDeterministicValuationBridgeMarkdown(valuationBridge)
+    : null;
+  const deterministicValuationSensitivity = reportType === 'valuation_report'
+    ? buildDeterministicValuationSensitivityMarkdown(valuationSensitivity)
+    : null;
+  let renderedContent = content;
+  if (renderedContent && deterministicValuationBridge) {
+    renderedContent = replaceMarkdownSection(renderedContent, '### 3. Valuation Bridge', deterministicValuationBridge);
+  }
+  if (renderedContent && deterministicValuationSensitivity) {
+    renderedContent = replaceMarkdownSection(renderedContent, '### 5. Sensitivity Analysis', deterministicValuationSensitivity);
+  }
+  const hasContent = renderedContent && renderedContent.trim().length > 0;
   const hasBullBear = (bullViewpoint && bullViewpoint.length > 0) || (bearViewpoint && bearViewpoint.length > 0);
   const hasRiskViewpoints = (riskyViewpoint && riskyViewpoint.length > 0) || (safeViewpoint && safeViewpoint.length > 0) || (neutralViewpoint && neutralViewpoint.length > 0);
   const hasViewpoints = hasBullBear || hasRiskViewpoints;
@@ -771,7 +869,7 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
             ),
           }}
         >
-          {content}
+          {renderedContent}
         </ReactMarkdown>
         </div>
       </div>
