@@ -207,19 +207,6 @@ def run_self_contained_analyst(
             tool_name = tool_call["name"]
             tool_args = tool_call["args"]
             tool_id = tool_call["id"]
-            agent_steps.append(
-                make_agent_step(
-                    agent=agent_name,
-                    phase="analysis",
-                    kind="tool_call",
-                    report_key=report_field,
-                    iteration=iteration + 1,
-                    status="started",
-                    summary=f"{agent_name} calling {tool_name}",
-                    tool_name=tool_name,
-                    tool_args=tool_args,
-                )
-            )
             
             if tool_name in tool_map:
                 try:
@@ -240,6 +227,7 @@ def run_self_contained_analyst(
                     resources_used.extend(
                         build_tool_resource_snapshots(tool_name, tool_args, tool_result)
                     )
+                    # Create a single combined step with both input and output
                     agent_steps.append(
                         make_agent_step(
                             agent=agent_name,
@@ -285,9 +273,10 @@ def run_self_contained_analyst(
     
     # Generate final structured report
     structured_chain = prompt | llm.with_structured_output(structured_output_class)
-    report, score, final_usage, key_takeaways = try_structured_response(
+    report, score, final_usage, key_takeaways, structured_result = try_structured_response(
         structured_chain,
         local_messages,
+        report_field=report_field,
         score_field=score_field,
         logger=logger,
         agent_name=agent_name,
@@ -306,6 +295,14 @@ def run_self_contained_analyst(
             total_usage[key] += final_usage.get(key, 0)
     
     if report is not None:
+        extra_state = {}
+        if structured_result is not None:
+            try:
+                extra_state = structured_result.model_dump()
+            except Exception:
+                extra_state = {}
+            for key in ("report", report_field, score_field, "key_takeaways"):
+                extra_state.pop(key, None)
         agent_steps.append(
             make_agent_step(
                 agent=agent_name,
@@ -324,6 +321,7 @@ def run_self_contained_analyst(
             report_field: report,
             score_state_key: score,
             takeaways_state_key: key_takeaways,
+            **extra_state,
             "report_usage": {report_field: total_usage},
             "report_resources": resources_used,
             "report_resources_by_report": {report_field: resources_used},

@@ -57,12 +57,13 @@ def try_structured_response(
     structured_chain,
     messages,
     *,
+    report_field: str,
     score_field: str,
     logger: Any,
     agent_name: str,
     llm: Any = None,
-) -> Tuple[Optional[str], Optional[int], Optional[dict], List[str]]:
-    """Invoke structured chain; return (report, score, usage_meta, key_takeaways)."""
+) -> Tuple[Optional[str], Optional[int], Optional[dict], List[str], Optional[Any]]:
+    """Invoke structured chain; return (report, score, usage_meta, key_takeaways, structured_result)."""
     usage_cb = _UsageCaptureCallback()
     try:
         structured_result = structured_chain.invoke(
@@ -70,10 +71,12 @@ def try_structured_response(
         )
     except Exception:
         logger.exception("%s structured output failed; falling back.", agent_name)
-        return None, None, None, []
+        return None, None, None, [], None
     report = getattr(structured_result, "report", None)
+    if report is None:
+        report = getattr(structured_result, report_field, None)
     score = getattr(structured_result, score_field, None)
     usage_meta = None
     if llm is not None and usage_cb.last_message is not None:
         usage_meta = _capture_usage(usage_cb.last_message, llm)
-    return report, score, usage_meta, _normalized_key_takeaways(structured_result)
+    return report, score, usage_meta, _normalized_key_takeaways(structured_result), structured_result

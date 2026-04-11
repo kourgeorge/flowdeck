@@ -55,6 +55,7 @@ class GraphSetup:
                 - "fundamentals": Fundamentals analyst
                 - "technical": Technical analyst (advanced pattern recognition)
                 - "sec": SEC/Regulatory analyst (EDGAR risk factors, MD&A, competition)
+                - "valuation": Valuation analyst (multi-method fair value analysis)
             parallel_analysts: If True and more than one analyst is selected, run analyst
                 nodes in parallel (fan-out from START, then barrier before Bull Researcher).
                 If False, preserve the previous sequential ordering of selected_analysts.
@@ -81,6 +82,9 @@ class GraphSetup:
 
         if "sec" in selected_analysts:
             analyst_nodes["sec"] = create_sec_analyst(self.quick_thinking_llm)
+
+        if "valuation" in selected_analysts:
+            analyst_nodes["valuation"] = create_valuation_analyst(self.quick_thinking_llm)
 
         # Create researcher and manager nodes
         bull_researcher_node = create_bull_researcher(

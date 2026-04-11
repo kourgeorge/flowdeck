@@ -49,6 +49,7 @@ def create_research_manager(llm, memory):
         fundamentals_report = state["fundamentals_report"]
         sec_report = state.get("sec_report", "")
         technical_report = state.get("technical_report", "")
+        valuation_report = state.get("valuation_report", "")
         events_report = state.get("events_report", "")
 
         investment_debate_state = state["investment_debate_state"]
@@ -58,6 +59,8 @@ def create_research_manager(llm, memory):
             curr_situation += f"\n\n{sec_report}"
         if technical_report:
             curr_situation += f"\n\n{technical_report}"
+        if valuation_report:
+            curr_situation += f"\n\n{valuation_report}"
         if events_report:
             curr_situation += f"\n\n{events_report}"
         past_memories = memory.get_memories(curr_situation, n_matches=2)
@@ -95,7 +98,7 @@ Take into account your past mistakes on similar situations. Use these insights t
 - expected_return_pct: Base-case expected percentage return (e.g. 0.64 for +0.64%).
 - bear_case_return_pct: Downside scenario percentage return (e.g. -12.87 for -12.87%).
 - bull_case_return_pct: Upside scenario percentage return (e.g. 9.41 for +9.41%).
-Use the debate and your view to estimate these three numbers. They must be numeric (can be negative for bear).
+Use the debate, analyst reports (especially the Valuation Analyst's fair value scenarios if available), and your view to estimate these three numbers. They must be numeric (can be negative for bear). If the Valuation Analyst has provided bear/base/bull fair values, use those as the foundation for calculating return percentages.
 
 **CRITICAL: You MUST provide key_takeaways as a list of 3-5 one-sentence trader-facing takeaways summarizing the plan and thesis.**
 

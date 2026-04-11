@@ -161,6 +161,15 @@ class AgentState(TypedDict):
     technical_report: Annotated[str, "Report from the Technical Analyst with advanced pattern recognition"]
     technical_score: Annotated[Optional[int], "Technical analysis score from 1-10 indicating stock performance"]
     technical_key_takeaways: Annotated[Optional[List[str]], "Structured key takeaways from technical analyst"]
+    valuation_report: Annotated[str, "Report from the Valuation Analyst with multi-method fair value analysis"]
+    valuation_score: Annotated[Optional[int], "Valuation score from 1-10 based on upside/downside to fair value"]
+    valuation_key_takeaways: Annotated[Optional[List[str]], "Structured key takeaways from valuation analyst"]
+    fair_value_bear: Annotated[Optional[float], "Conservative fair value estimate (bear case)"]
+    fair_value_base: Annotated[Optional[float], "Base case fair value estimate (most likely)"]
+    fair_value_bull: Annotated[Optional[float], "Optimistic fair value estimate (bull case)"]
+    current_discount_pct: Annotated[Optional[float], "Percentage discount/premium vs base fair value (positive=discount, negative=premium)"]
+    valuation_conviction: Annotated[Optional[str], "Valuation conviction level: high, medium, or low"]
+    valuation_key_assumptions: Annotated[Optional[List[str]], "Top 3-5 critical assumptions driving the valuation"]
 
     # researcher team discussion step
     investment_debate_state: Annotated[
