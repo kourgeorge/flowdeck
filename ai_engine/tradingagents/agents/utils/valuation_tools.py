@@ -423,6 +423,142 @@ def _net_debt(
     return float(total_debt - cash)
 
 
+def _normalize_fcf_for_growth_stage(
+    current_fcf: float,
+    operating_cf: float,
+    capex: float,
+    revenue: float,
+    is_high_growth: bool = False,
+) -> tuple[float, str]:
+    """
+    Normalize FCF for companies with negative cash flows due to growth investments.
+    
+    Returns:
+        tuple: (normalized_fcf, explanation)
+    """
+    # If FCF is already positive, no normalization needed
+    if current_fcf > 0:
+        return current_fcf, "FCF is positive, no normalization needed"
+    
+    # Case 1: Negative FCF due to high CapEx (growth investments)
+    if operating_cf > 0 and capex > operating_cf:
+        # Use operating cash flow as proxy, assuming normalized CapEx
+        normalized_capex = operating_cf * 0.15  # Assume 15% maintenance CapEx
+        normalized_fcf = operating_cf - normalized_capex
+        explanation = f"Normalized negative FCF (${current_fcf:,.0f}) by using operating CF (${operating_cf:,.0f}) with normalized CapEx (15% of OpCF)"
+        return max(normalized_fcf, revenue * 0.05), explanation
+    
+    # Case 2: Negative operating cash flow (more concerning)
+    if operating_cf <= 0:
+        # For high-growth companies, estimate based on revenue
+        if is_high_growth and revenue > 0:
+            normalized_fcf = revenue * 0.08  # Assume 8% FCF margin at maturity
+            explanation = f"High-growth company with negative OpCF. Estimated normalized FCF based on 8% of revenue (${revenue:,.0f})"
+            return normalized_fcf, explanation
+        else:
+            # Conservative estimate for struggling companies
+            normalized_fcf = max(revenue * 0.03, 1.0) if revenue > 0 else 1.0
+            explanation = f"Negative operating cash flow. Using conservative 3% revenue estimate"
+            return normalized_fcf, explanation
+    
+    # Case 3: Small negative FCF
+    if current_fcf > -abs(revenue * 0.05):
+        normalized_fcf = abs(current_fcf) * 0.5  # Assume temporary issue
+        explanation = f"Small negative FCF, assuming temporary. Using 50% of absolute value"
+        return max(normalized_fcf, 1.0), explanation
+    
+    # Default: use small positive value
+    return max(revenue * 0.02, 1.0), "Unable to normalize, using 2% of revenue"
+
+
+def _detect_growth_stage(
+    revenue_growth: Optional[float],
+    revenue_cagr: Optional[float],
+    current_fcf: float,
+    operating_cf: float,
+) -> tuple[bool, int]:
+    """
+    Detect if company is in high-growth stage and determine appropriate projection period.
+    
+    Returns:
+        tuple: (is_high_growth, recommended_projection_years)
+    """
+    # High growth indicators
+    growth_rates = [g for g in [revenue_growth, revenue_cagr] if g is not None]
+    avg_growth = sum(growth_rates) / len(growth_rates) if growth_rates else 0.0
+    
+    is_high_growth = (
+        avg_growth > 0.20 or  # 20%+ growth
+        (current_fcf < 0 and operating_cf > 0 and avg_growth > 0.15)  # Negative FCF but growing fast
+    )
+    
+    # Determine projection period
+    if is_high_growth:
+        if avg_growth > 0.30:
+            return True, 10  # Very high growth: 10-year projection
+        else:
+            return True, 7   # High growth: 7-year projection
+    else:
+        return False, 5  # Mature: standard 5-year projection
+
+
+def _reverse_dcf_implied_growth(
+    current_price: float,
+    current_fcf: float,
+    wacc: float,
+    terminal_growth: float,
+    net_debt: float,
+    shares_outstanding: float,
+    projection_years: int = 5,
+) -> Optional[float]:
+    """
+    Calculate the implied growth rate given the current stock price (reverse DCF).
+    
+    This helps determine what growth rate the market is pricing in.
+    """
+    if current_fcf <= 0 or shares_outstanding <= 0:
+        return None
+    
+    # Target enterprise value from current price
+    target_equity_value = current_price * shares_outstanding
+    target_enterprise_value = target_equity_value + net_debt
+    
+    # Binary search for implied growth rate
+    low, high = -0.10, 0.50  # Search between -10% and 50% growth
+    tolerance = 0.0001
+    max_iterations = 100
+    
+    for _ in range(max_iterations):
+        mid_growth = (low + high) / 2
+        
+        # Calculate PV with this growth rate
+        fcf = current_fcf
+        present_value = 0.0
+        
+        for year in range(1, projection_years + 1):
+            fcf *= (1 + mid_growth)
+            present_value += fcf / ((1 + wacc) ** year)
+        
+        # Terminal value
+        spread = max(wacc - terminal_growth, 0.01)
+        terminal_fcf = fcf * (1 + terminal_growth)
+        terminal_value = terminal_fcf / spread
+        present_value += terminal_value / ((1 + wacc) ** projection_years)
+        
+        # Check if we're close enough
+        if abs(present_value - target_enterprise_value) < tolerance * target_enterprise_value:
+            return mid_growth
+        
+        # Adjust search range
+        if present_value < target_enterprise_value:
+            low = mid_growth
+        else:
+            high = mid_growth
+    
+    # Return best estimate if didn't converge
+    return (low + high) / 2
+
+
 def _discounted_cash_flow_value(
     current_fcf: float,
     growth: float,
@@ -433,31 +569,54 @@ def _discounted_cash_flow_value(
     projection_years: int = 5,
 ) -> float:
     """
-    Calculate DCF fair value per share.
+    Calculate DCF fair value per share with enhanced negative cash flow handling.
     
-    Returns the equity value per share, which can be negative if net debt
-    exceeds the present value of future cash flows. A minimum of $1.00 is
-    applied to avoid unrealistic valuations below $1.
+    This function properly handles negative cash flows by:
+    1. Discounting negative flows (which reduces NPV)
+    2. Allowing negative valuations when debt exceeds PV of cash flows
+    3. Applying a floor of $1.00 to avoid unrealistic sub-dollar valuations
+    
+    Args:
+        current_fcf: Current free cash flow (can be negative)
+        growth: Expected FCF growth rate
+        wacc: Weighted average cost of capital (discount rate)
+        terminal_growth: Perpetual growth rate for terminal value
+        net_debt: Net debt (total debt - cash)
+        shares_outstanding: Number of shares outstanding
+        projection_years: Number of years to project (default 5, use 7-10 for high-growth)
+    
+    Returns:
+        Fair value per share (minimum $1.00)
     """
     fcf = current_fcf
     present_value = 0.0
     
-    # Project and discount future cash flows
+    # Project and discount future cash flows (handles negative flows naturally)
     for year in range(1, projection_years + 1):
         fcf *= (1 + growth)
+        # Negative cash flows are discounted just like positive ones
+        # This reduces the total NPV appropriately
         present_value += fcf / ((1 + wacc) ** year)
     
     # Calculate terminal value
+    # Only calculate if terminal FCF is positive
     spread = max(wacc - terminal_growth, 0.01)
     terminal_fcf = fcf * (1 + terminal_growth)
-    terminal_value = terminal_fcf / spread
-    present_value += terminal_value / ((1 + wacc) ** projection_years)
+    
+    if terminal_fcf > 0:
+        terminal_value = terminal_fcf / spread
+        present_value += terminal_value / ((1 + wacc) ** projection_years)
+    else:
+        # If still negative at terminal year, don't add terminal value
+        # This is appropriate for companies that may not reach profitability
+        pass
     
     # Calculate equity value (enterprise value minus net debt)
     equity_value = present_value - net_debt
     
     # Calculate per-share value with a floor of $1.00
-    # (allows negative scenarios to show realistic low values)
+    # This prevents unrealistic valuations below $1 while still showing
+    # when a company is overvalued (negative equity value becomes $1)
     per_share_value = equity_value / shares_outstanding
     return max(per_share_value, 1.00)
 
@@ -497,12 +656,14 @@ def calculate_multi_method_valuation_data(
         shares_outstanding = _latest_numeric(balance_sheet_quarterly or balance_sheet_annual, "shareIssued", "ordinarySharesNumber")
     shares_outstanding = max(shares_outstanding or 1.0, 1.0)
 
+    # Extract FCF and its components for negative cash flow analysis
     current_fcf = _latest_numeric(cashflow_annual, "freeCashFlow")
+    operating_cf = _latest_numeric(cashflow_annual, "operatingCashFlow") or 0.0
+    capex = abs(_latest_numeric(cashflow_annual, "capitalExpenditure") or 0.0)
+    
     if current_fcf is None:
-        operating_cf = _latest_numeric(cashflow_annual, "operatingCashFlow")
-        capex = _latest_numeric(cashflow_annual, "capitalExpenditure")
         if operating_cf is not None:
-            current_fcf = operating_cf - abs(capex or 0.0)
+            current_fcf = operating_cf - capex
     if current_fcf is None:
         quarterly_fcf = _sum_latest(cashflow_quarterly, "freeCashFlow", count=4)
         if quarterly_fcf is not None:
@@ -511,12 +672,37 @@ def calculate_multi_method_valuation_data(
         revenue_ttm = _first_numeric(fundamentals, "RevenueTTM") or _latest_numeric(income_annual, "totalRevenue") or 0.0
         profit_margin = _first_numeric(fundamentals, "ProfitMargin") or 0.15
         current_fcf = revenue_ttm * profit_margin * 0.9
-    current_fcf = max(float(current_fcf), 0.0)
-
+    
+    current_fcf = float(current_fcf)
+    revenue_ttm = _first_numeric(fundamentals, "RevenueTTM") or _latest_numeric(income_annual, "totalRevenue") or 0.0
+    
+    # Detect growth stage and determine projection period
     revenue_growth = _first_numeric(fundamentals, "QuarterlyRevenueGrowthYOY")
     earnings_growth = _first_numeric(fundamentals, "QuarterlyEarningsGrowthYOY")
     revenue_cagr = _cagr(income_annual, "totalRevenue")
     earnings_cagr = _cagr(income_annual, "netIncome")
+    
+    is_high_growth, projection_years = _detect_growth_stage(
+        revenue_growth, revenue_cagr, current_fcf, operating_cf
+    )
+    
+    # Handle negative FCF scenarios
+    fcf_normalization_note = None
+    original_fcf = current_fcf
+    if current_fcf < 0:
+        normalized_fcf, explanation = _normalize_fcf_for_growth_stage(
+            current_fcf, operating_cf, capex, revenue_ttm, is_high_growth
+        )
+        fcf_normalization_note = {
+            "original_fcf": original_fcf,
+            "normalized_fcf": normalized_fcf,
+            "explanation": explanation,
+            "is_high_growth": is_high_growth,
+        }
+        # Use normalized FCF for valuation but keep original for reporting
+        current_fcf_for_valuation = normalized_fcf
+    else:
+        current_fcf_for_valuation = current_fcf
     growth_samples = [g for g in [revenue_growth, earnings_growth, revenue_cagr, earnings_cagr] if g is not None]
     base_growth = _clamp(sum(growth_samples) / len(growth_samples), 0.04, 0.18) if growth_samples else 0.08
     bear_growth = _clamp(base_growth - 0.05, 0.01, 0.16)
@@ -540,11 +726,28 @@ def calculate_multi_method_valuation_data(
     terminal_growth = {"bear": 0.02, "base": 0.03, "bull": 0.04}
 
     net_debt = _net_debt(fundamentals, balance_sheet_annual, balance_sheet_quarterly)
+    
+    # Calculate DCF with appropriate projection period for growth stage
     dcf = {
-        "bear": _discounted_cash_flow_value(current_fcf, bear_growth, wacc_bear, terminal_growth["bear"], net_debt, shares_outstanding),
-        "base": _discounted_cash_flow_value(current_fcf, base_growth, wacc_base, terminal_growth["base"], net_debt, shares_outstanding),
-        "bull": _discounted_cash_flow_value(current_fcf, bull_growth, wacc_bull, terminal_growth["bull"], net_debt, shares_outstanding),
+        "bear": _discounted_cash_flow_value(
+            current_fcf_for_valuation, bear_growth, wacc_bear,
+            terminal_growth["bear"], net_debt, shares_outstanding, projection_years
+        ),
+        "base": _discounted_cash_flow_value(
+            current_fcf_for_valuation, base_growth, wacc_base,
+            terminal_growth["base"], net_debt, shares_outstanding, projection_years
+        ),
+        "bull": _discounted_cash_flow_value(
+            current_fcf_for_valuation, bull_growth, wacc_bull,
+            terminal_growth["bull"], net_debt, shares_outstanding, projection_years
+        ),
     }
+    
+    # Calculate reverse DCF (implied growth rate from current price)
+    implied_growth = _reverse_dcf_implied_growth(
+        current_price, current_fcf_for_valuation, wacc_base,
+        terminal_growth["base"], net_debt, shares_outstanding, projection_years
+    )
 
     eps = _first_numeric(fundamentals, "EPS")
     if eps is None:
@@ -610,7 +813,7 @@ def calculate_multi_method_valuation_data(
         ev_ebitda_base=ev_ebitda["base"],
     )
     valuation_sensitivity = _build_sensitivity_analysis(
-        current_fcf=current_fcf,
+        current_fcf=current_fcf_for_valuation,
         base_growth=base_growth,
         wacc_base=wacc_base,
         terminal_growth_base=terminal_growth["base"],
@@ -622,6 +825,24 @@ def calculate_multi_method_valuation_data(
         base_ev_multiple=base_ev_mult,
         ebitda=ebitda,
     )
+    
+    # Build key assumptions with enhanced negative FCF context
+    key_assumptions = [
+        f"DCF projection period: {projection_years} years ({'high-growth' if is_high_growth else 'mature'} company)",
+        f"FCF growth: bear {bear_growth*100:.1f}%, base {base_growth*100:.1f}%, bull {bull_growth*100:.1f}%",
+        f"WACC: bear {wacc_bear*100:.1f}%, base {wacc_base*100:.1f}%, bull {wacc_bull*100:.1f}%",
+        f"Terminal growth: bear {terminal_growth['bear']*100:.1f}%, base {terminal_growth['base']*100:.1f}%, bull {terminal_growth['bull']*100:.1f}%",
+        f"Forward EPS used for P/E comps: {forward_eps:.2f}",
+        f"Base EV/EBITDA multiple: {base_ev_mult:.2f}x",
+    ]
+    
+    # Add negative FCF context if applicable
+    if fcf_normalization_note:
+        key_assumptions.insert(1, f"⚠️ Negative FCF normalized: {fcf_normalization_note['explanation']}")
+    
+    # Add implied growth from reverse DCF
+    if implied_growth is not None:
+        key_assumptions.append(f"Market-implied growth rate (reverse DCF): {implied_growth*100:.1f}%")
 
     return {
         "ticker": ticker.upper(),
@@ -638,20 +859,21 @@ def calculate_multi_method_valuation_data(
         "valuation_conviction": valuation_conviction,
         "valuation_bridge": valuation_bridge,
         "valuation_sensitivity": valuation_sensitivity,
-        "valuation_key_assumptions": [
-            f"FCF growth: bear {bear_growth*100:.1f}%, base {base_growth*100:.1f}%, bull {bull_growth*100:.1f}%",
-            f"WACC: bear {wacc_bear*100:.1f}%, base {wacc_base*100:.1f}%, bull {wacc_bull*100:.1f}%",
-            f"Terminal growth: bear {terminal_growth['bear']*100:.1f}%, base {terminal_growth['base']*100:.1f}%, bull {terminal_growth['bull']*100:.1f}%",
-            f"Forward EPS used for P/E comps: {forward_eps:.2f}",
-            f"Base EV/EBITDA multiple: {base_ev_mult:.2f}x",
-        ],
+        "valuation_key_assumptions": key_assumptions,
         "inputs": {
             "shares_outstanding": shares_outstanding,
-            "current_fcf": current_fcf,
+            "current_fcf": original_fcf,  # Report original FCF
+            "current_fcf_for_valuation": current_fcf_for_valuation,  # Show normalized if different
+            "operating_cash_flow": operating_cf,
+            "capex": capex,
             "net_debt": net_debt,
             "eps": eps,
             "ebitda": ebitda,
             "analyst_price_targets": {"low": target_low, "average": target_avg, "high": target_high},
+            "fcf_normalization": fcf_normalization_note,  # Include normalization details
+            "is_high_growth": is_high_growth,
+            "projection_years": projection_years,
+            "implied_growth_rate": implied_growth,
         },
     }
 
@@ -959,19 +1181,34 @@ def get_dcf_inputs(
     curr_date: Annotated[Optional[str], "current date you are trading at, yyyy-mm-dd"] = None,
 ) -> str:
     """
-    Retrieve all inputs needed for DCF (Discounted Cash Flow) valuation:
+    Retrieve all inputs needed for DCF (Discounted Cash Flow) valuation with enhanced
+    negative cash flow handling:
+    
     - Free cash flow (historical and projected)
-    - Growth rates
+    - Growth rates and growth stage detection
     - Terminal growth rate
-    - WACC
+    - WACC (Weighted Average Cost of Capital)
     - Shares outstanding
+    - Negative FCF normalization (if applicable)
+    - Reverse DCF implied growth rate
+    
+    The function automatically:
+    1. Detects if company is in high-growth stage (uses 7-10 year projections)
+    2. Normalizes negative FCF due to growth investments vs. operational issues
+    3. Calculates market-implied growth rate from current stock price
+    4. Handles negative cash flows by discounting them appropriately
+    
+    Negative FCF Scenarios:
+    - High CapEx (growth investments): Normalized using operating cash flow
+    - Negative operating CF: Estimated based on revenue and growth stage
+    - Temporary issues: Partially normalized based on magnitude
     
     Args:
         ticker (str): Ticker symbol of the company
         curr_date (str): Current date you are trading at, yyyy-mm-dd (optional)
     
     Returns:
-        str: JSON containing DCF model inputs
+        str: JSON containing comprehensive DCF model inputs with negative FCF context
     """
     require_info_service()
     
@@ -984,17 +1221,24 @@ def get_dcf_inputs(
     result = {
         "ticker": ticker.upper(),
         "dcf_inputs": {
-            "current_fcf": "Calculate: Operating CF - CapEx",
+            "current_fcf": "Calculate: Operating CF - CapEx (can be negative)",
             "fcf_growth_rate": "Use analyst estimates or historical average",
-            "projection_years": 5,
+            "projection_years": "5 years (mature) or 7-10 years (high-growth)",
             "terminal_growth_rate": "Typically 2-3% (GDP growth)",
             "wacc": "Calculate using get_wacc_inputs",
             "shares_outstanding": "Extract from fundamentals",
             "net_debt": "Total Debt - Cash",
         },
+        "negative_fcf_handling": {
+            "detection": "Automatically detects negative FCF scenarios",
+            "normalization": "Adjusts for high CapEx, growth investments, or temporary issues",
+            "growth_stage": "Identifies high-growth companies (20%+ revenue growth)",
+            "projection_period": "Extended to 7-10 years for high-growth companies",
+            "reverse_dcf": "Calculates market-implied growth rate from current price",
+        },
         "historical_fcf": {
-            "note": "Calculate from cashflow statements",
-            "years": "Last 3-5 years",
+            "note": "Calculate from cashflow statements (last 3-5 years)",
+            "components": "Operating CF, CapEx, and resulting FCF",
         },
         "raw_data": {
             "fundamentals": fundamentals,
