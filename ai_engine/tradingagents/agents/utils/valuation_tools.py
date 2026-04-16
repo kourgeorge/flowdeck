@@ -5,9 +5,12 @@ Valuation tools for calculating fair value using multiple methods.
 from langchain_core.tools import tool
 from typing import Annotated, Optional, Dict, Any
 import json
+import logging
 import math
 from pathlib import Path
 from statistics import median, pstdev
+
+logger = logging.getLogger(__name__)
 
 from ...datasources.info_service_client import (
     get_analyst_recommendations,
@@ -155,14 +158,25 @@ def _candidate_rank(
     target_sector: str,
     target_industry: str,
     valid_metric_count: int,
-) -> tuple[int, int, int]:
+    geography_penalty: float = 1.0,
+) -> tuple[int, int, float]:
+    """
+    Rank peer candidates for selection.
+    
+    Returns tuple for sorting (higher is better):
+    - same_industry (1 or 0): Highest priority
+    - same_sector (1 or 0): Second priority
+    - adjusted_metric_count (float): Third priority, adjusted for geography
+    """
     same_industry = int(
         bool(candidate_industry and target_industry and candidate_industry.casefold() == target_industry.casefold())
     )
     same_sector = int(
         bool(candidate_sector and target_sector and candidate_sector.casefold() == target_sector.casefold())
     )
-    return (same_industry, same_sector, valid_metric_count)
+    # Apply geography penalty to metric count for ranking
+    adjusted_metric_count = valid_metric_count * geography_penalty
+    return (same_industry, same_sector, adjusted_metric_count)
 
 
 def _average_metric(entries: list[Dict[str, Any]], metric_name: str) -> Optional[float]:
@@ -183,34 +197,81 @@ def _build_valuation_bridge(
     pe_comps_base: float,
     ev_ebitda_base: float,
 ) -> Dict[str, float]:
+    """
+    Build valuation bridge attributing price gap to growth, multiples, and risk.
+    
+    Attribution logic:
+    - Growth premium: DCF value above current price (future cash flow value)
+    - Multiple expansion: Comps value above current price (peer re-rating potential)
+    - Risk discount: Difference between methods (uncertainty/risk premium)
+    """
     avg_comps_base = (pe_comps_base + ev_ebitda_base) / 2.0
-    upside_gap = fair_value_base - current_price
+    total_gap = fair_value_base - current_price
 
-    if upside_gap <= 0:
+    # Handle overvalued case (negative gap)
+    if total_gap <= 0:
         return {
             "current_price": current_price,
             "growth_premium": 0.0,
             "multiple_expansion": 0.0,
-            "risk_discount": max(current_price - fair_value_base, 0.0),
+            "risk_discount": abs(total_gap),  # Premium being paid
             "fair_value": fair_value_base,
         }
 
-    growth_premium = max(dcf_base - current_price, 0.0)
-    multiple_expansion = max(avg_comps_base - current_price, 0.0)
-    positive_total = growth_premium + multiple_expansion
+    # Calculate actual contributions from each method
+    dcf_contribution = max(dcf_base - current_price, 0.0)
+    comps_contribution = max(avg_comps_base - current_price, 0.0)
+    
+    # Determine which driver is dominant
+    if dcf_base > avg_comps_base:
+        # DCF-driven: Growth is the primary driver
+        # Growth premium = DCF upside
+        growth_premium = dcf_contribution
+        
+        # Multiple expansion = additional comps upside
+        multiple_expansion = comps_contribution
+        
+        # Risk discount = difference between weighted fair value and sum of components
+        # This captures the discount applied when averaging methods
+        implied_total = growth_premium + multiple_expansion
+        risk_discount = max(implied_total - total_gap, 0.0)
+        
+    else:
+        # Comps-driven: Multiple expansion is the primary driver
+        # Multiple expansion = comps upside
+        multiple_expansion = comps_contribution
+        
+        # Growth premium = additional DCF upside
+        growth_premium = dcf_contribution
+        
+        # Risk discount = difference between weighted fair value and sum of components
+        implied_total = growth_premium + multiple_expansion
+        risk_discount = max(implied_total - total_gap, 0.0)
+    
+    # Handle edge case where components don't sum to gap
+    # This happens when fair value is between current price and both methods
+    if growth_premium + multiple_expansion < total_gap:
+        # Distribute shortfall proportionally to method distances from current price
+        shortfall = total_gap - (growth_premium + multiple_expansion)
+        
+        total_distance = dcf_contribution + comps_contribution
+        if total_distance > 0:
+            # Proportional allocation based on method contributions
+            growth_weight = dcf_contribution / total_distance
+            multiple_weight = comps_contribution / total_distance
+            
+            growth_premium += shortfall * growth_weight
+            multiple_expansion += shortfall * multiple_weight
+        else:
+            # Equal split if no clear driver
+            growth_premium += shortfall * 0.5
+            multiple_expansion += shortfall * 0.5
 
-    if positive_total < upside_gap:
-        shortfall = upside_gap - positive_total
-        growth_premium += shortfall * 0.6
-        multiple_expansion += shortfall * 0.4
-        positive_total = growth_premium + multiple_expansion
-
-    risk_discount = max(positive_total - upside_gap, 0.0)
     return {
         "current_price": current_price,
-        "growth_premium": growth_premium,
-        "multiple_expansion": multiple_expansion,
-        "risk_discount": risk_discount,
+        "growth_premium": round(growth_premium, 2),
+        "multiple_expansion": round(multiple_expansion, 2),
+        "risk_discount": round(risk_discount, 2),
         "fair_value": fair_value_base,
     }
 
@@ -228,13 +289,42 @@ def _build_sensitivity_analysis(
     dcf_base: float,
     base_ev_multiple: float,
     ebitda: float,
+    beta: float = 1.0,
+    growth_samples: Optional[list] = None,
 ) -> Dict[str, Dict[str, float]]:
+    """
+    Build sensitivity analysis with dynamic deltas based on actual uncertainty.
+    
+    Args:
+        beta: Company beta for WACC uncertainty calculation
+        growth_samples: List of growth rate samples for volatility calculation
+    """
     def weighted_from_dcf(dcf_value: float) -> float:
         return _weighted_base_value(dcf_value, pe_comps_base, ev_ebitda_base)
 
+    # Calculate dynamic growth delta based on historical volatility
+    if growth_samples and len(growth_samples) >= 2:
+        growth_std = pstdev(growth_samples)
+        # Use 1 standard deviation for sensitivity (captures ~68% of outcomes)
+        growth_delta = min(max(growth_std, 0.01), 0.05)  # Between 1% and 5%
+    else:
+        growth_delta = 0.02  # Fallback to 2%
+    
+    # Calculate dynamic WACC delta based on beta uncertainty
+    # Higher beta = more systematic risk = more WACC uncertainty
+    wacc_uncertainty = 0.005 + (0.005 * abs(beta - 1.0))  # 0.5% base + beta adjustment
+    wacc_delta = min(wacc_uncertainty, 0.02)  # Cap at 2%
+    
+    # Terminal growth delta: smaller than FCF growth (more stable long-term)
+    terminal_delta = 0.005  # 0.5% is reasonable for perpetual growth
+    
+    # Exit multiple delta: scale with current multiple (higher multiples = more volatility)
+    exit_multiple_delta = max(base_ev_multiple * 0.15, 2.0)  # 15% of current or min 2x
+
+    # Calculate sensitivity ranges
     fcf_low = _discounted_cash_flow_value(
         current_fcf=current_fcf,
-        growth=base_growth - 0.02,
+        growth=base_growth - growth_delta,
         wacc=wacc_base,
         terminal_growth=terminal_growth_base,
         net_debt=net_debt,
@@ -242,7 +332,7 @@ def _build_sensitivity_analysis(
     )
     fcf_high = _discounted_cash_flow_value(
         current_fcf=current_fcf,
-        growth=base_growth + 0.02,
+        growth=base_growth + growth_delta,
         wacc=wacc_base,
         terminal_growth=terminal_growth_base,
         net_debt=net_debt,
@@ -251,7 +341,7 @@ def _build_sensitivity_analysis(
     wacc_low = _discounted_cash_flow_value(
         current_fcf=current_fcf,
         growth=base_growth,
-        wacc=wacc_base - 0.01,
+        wacc=wacc_base - wacc_delta,
         terminal_growth=terminal_growth_base,
         net_debt=net_debt,
         shares_outstanding=shares_outstanding,
@@ -259,7 +349,7 @@ def _build_sensitivity_analysis(
     wacc_high = _discounted_cash_flow_value(
         current_fcf=current_fcf,
         growth=base_growth,
-        wacc=wacc_base + 0.01,
+        wacc=wacc_base + wacc_delta,
         terminal_growth=terminal_growth_base,
         net_debt=net_debt,
         shares_outstanding=shares_outstanding,
@@ -268,7 +358,7 @@ def _build_sensitivity_analysis(
         current_fcf=current_fcf,
         growth=base_growth,
         wacc=wacc_base,
-        terminal_growth=terminal_growth_base - 0.005,
+        terminal_growth=terminal_growth_base - terminal_delta,
         net_debt=net_debt,
         shares_outstanding=shares_outstanding,
     )
@@ -276,31 +366,31 @@ def _build_sensitivity_analysis(
         current_fcf=current_fcf,
         growth=base_growth,
         wacc=wacc_base,
-        terminal_growth=terminal_growth_base + 0.005,
+        terminal_growth=terminal_growth_base + terminal_delta,
         net_debt=net_debt,
         shares_outstanding=shares_outstanding,
     )
-    exit_low_ev = max((((ebitda * (base_ev_multiple - 2.0)) - net_debt) / shares_outstanding), 0.01)
-    exit_high_ev = max((((ebitda * (base_ev_multiple + 2.0)) - net_debt) / shares_outstanding), 0.01)
+    exit_low_ev = max((((ebitda * (base_ev_multiple - exit_multiple_delta)) - net_debt) / shares_outstanding), 0.01)
+    exit_high_ev = max((((ebitda * (base_ev_multiple + exit_multiple_delta)) - net_debt) / shares_outstanding), 0.01)
 
     return {
         "fcf_growth_rate": {
-            "delta": 0.02,
+            "delta": round(growth_delta, 4),
             "low": min(weighted_from_dcf(fcf_low), weighted_from_dcf(fcf_high)),
             "high": max(weighted_from_dcf(fcf_low), weighted_from_dcf(fcf_high)),
         },
         "wacc": {
-            "delta": 0.01,
+            "delta": round(wacc_delta, 4),
             "low": min(weighted_from_dcf(wacc_high), weighted_from_dcf(wacc_low)),
             "high": max(weighted_from_dcf(wacc_high), weighted_from_dcf(wacc_low)),
         },
         "terminal_growth": {
-            "delta": 0.005,
+            "delta": round(terminal_delta, 4),
             "low": min(weighted_from_dcf(tg_low), weighted_from_dcf(tg_high)),
             "high": max(weighted_from_dcf(tg_low), weighted_from_dcf(tg_high)),
         },
         "exit_multiple": {
-            "delta": 2.0,
+            "delta": round(exit_multiple_delta, 2),
             "low": _weighted_base_value(dcf_base, pe_comps_base, exit_low_ev),
             "high": _weighted_base_value(dcf_base, pe_comps_base, exit_high_ev),
         },
@@ -621,20 +711,136 @@ def _discounted_cash_flow_value(
     return max(per_share_value, 1.00)
 
 
-def _deterministic_score(current_discount_pct: float) -> int:
+def _deterministic_score(current_discount_pct: float, conviction: str = "medium") -> int:
+    """
+    Calculate valuation score based on discount/premium and conviction level.
+    
+    Args:
+        current_discount_pct: Percentage discount (positive) or premium (negative)
+        conviction: Conviction level ("high", "medium", "low")
+    
+    Returns:
+        Score from 1-10
+    """
+    # Base score from discount/premium
     if current_discount_pct >= 40:
-        return 10
-    if current_discount_pct >= 25:
-        return 8
-    if current_discount_pct >= 10:
-        return 7
-    if current_discount_pct >= 0:
-        return 6
-    if current_discount_pct >= -10:
-        return 5
-    if current_discount_pct >= -20:
-        return 3
-    return 1
+        base = 10
+    elif current_discount_pct >= 25:
+        base = 8
+    elif current_discount_pct >= 10:
+        base = 7
+    elif current_discount_pct >= 0:
+        base = 6
+    elif current_discount_pct >= -10:
+        base = 5
+    elif current_discount_pct >= -20:
+        base = 3
+    else:
+        base = 1
+    
+    # Adjust for conviction level
+    if conviction == "low":
+        # Reduce score for low conviction (more uncertainty)
+        base = max(base - 1, 1)
+    elif conviction == "high" and base >= 7:
+        # Boost high conviction opportunities (but not overvalued stocks)
+        base = min(base + 1, 10)
+    
+    return base
+
+
+def _get_current_risk_free_rate() -> float:
+    """
+    Fetch current risk-free rate from market rates service.
+    Falls back to reasonable default if service unavailable.
+    """
+    try:
+        from ...datasources.info_service_client import get_market_rates
+        rates = get_market_rates()
+        if rates and rates.get("risk_free_rate"):
+            return float(rates["risk_free_rate"])
+    except Exception:
+        pass
+    # Fallback to reasonable default (will be logged by service)
+    return 0.045
+
+
+def _get_market_risk_premium() -> float:
+    """
+    Fetch current market risk premium based on VIX (volatility index).
+    Falls back to historical average if service unavailable.
+    
+    Returns:
+        Market risk premium as decimal (e.g., 0.055 for 5.5%)
+    """
+    try:
+        from ...datasources.info_service_client import get_market_rates
+        rates = get_market_rates()
+        if rates and rates.get("market_risk_premium"):
+            return float(rates["market_risk_premium"])
+    except Exception:
+        pass
+    # Fallback to historical average
+    return 0.055
+
+
+def _calculate_terminal_growth(
+    sector: Optional[str] = None,
+    is_high_growth: bool = False,
+    revenue_growth: Optional[float] = None
+) -> Dict[str, float]:
+    """
+    Calculate terminal growth rate based on sector characteristics and company growth stage.
+    
+    Terminal growth represents the perpetual growth rate in the terminal value calculation
+    and should reflect long-term sustainable growth considering:
+    - Long-term GDP growth (~2.5% for US economy)
+    - Sector-specific growth characteristics
+    - Company maturity stage (high-growth companies may sustain higher terminal rates)
+    
+    Args:
+        sector: Company sector (e.g., "Technology", "Healthcare")
+        is_high_growth: Whether company is in high-growth stage
+        revenue_growth: Recent revenue growth rate (as decimal)
+    
+    Returns:
+        Dict with bear/base/bull terminal growth rates
+    """
+    # Base: Long-term US GDP growth
+    base_gdp = 0.025  # 2.5%
+    
+    # Sector-specific adjustments based on long-term growth characteristics
+    sector_adjustments = {
+        "Utilities": -0.005,              # 2.0% - Regulated, mature, GDP-like
+        "Consumer Staples": 0.000,        # 2.5% - Defensive, GDP-like growth
+        "Industrials": 0.000,             # 2.5% - Cyclical but GDP-like long-term
+        "Materials": 0.000,               # 2.5% - Commodity-driven, GDP-like
+        "Financials": 0.002,              # 2.7% - Slight premium from financial deepening
+        "Real Estate": 0.002,             # 2.7% - Population growth, urbanization
+        "Energy": 0.003,                  # 2.8% - Global demand growth
+        "Healthcare": 0.005,              # 3.0% - Aging demographics, innovation
+        "Consumer Discretionary": 0.005,  # 3.0% - Economic growth, rising incomes
+        "Technology": 0.010,              # 3.5% - Digital transformation, innovation
+        "Communication Services": 0.008,  # 3.3% - Digital adoption, connectivity
+    }
+    
+    sector_adj = sector_adjustments.get(sector, 0.0) if sector else 0.0
+    base_terminal = base_gdp + sector_adj
+    
+    # Growth stage adjustment
+    # High-growth companies (>20% revenue growth) that are expanding market share
+    # may sustain above-sector terminal growth as they mature
+    if is_high_growth and revenue_growth and revenue_growth > 0.20:
+        # Add 0.5% premium for high-growth companies, capped at 4.0%
+        # Rationale: Market leaders often sustain above-average growth long-term
+        base_terminal = min(base_terminal + 0.005, 0.040)
+    
+    # Generate bear/base/bull scenarios with reasonable bounds
+    return {
+        "bear": max(base_terminal - 0.010, 0.015),  # -1.0%, minimum 1.5%
+        "base": base_terminal,
+        "bull": min(base_terminal + 0.010, 0.045)   # +1.0%, maximum 4.5%
+    }
 
 
 def calculate_multi_method_valuation_data(
@@ -703,14 +909,64 @@ def calculate_multi_method_valuation_data(
         current_fcf_for_valuation = normalized_fcf
     else:
         current_fcf_for_valuation = current_fcf
+    # Collect growth samples with metadata for weighted averaging
     growth_samples = [g for g in [revenue_growth, earnings_growth, revenue_cagr, earnings_cagr] if g is not None]
-    base_growth = _clamp(sum(growth_samples) / len(growth_samples), 0.04, 0.18) if growth_samples else 0.08
-    bear_growth = _clamp(base_growth - 0.05, 0.01, 0.16)
-    bull_growth = _clamp(base_growth + 0.05, 0.06, 0.26)
+    
+    # Track data availability for transparency
+    growth_data_source = []
+    if revenue_growth is not None:
+        growth_data_source.append("revenue_growth_yoy")
+    if earnings_growth is not None:
+        growth_data_source.append("earnings_growth_yoy")
+    if revenue_cagr is not None:
+        growth_data_source.append("revenue_cagr")
+    if earnings_cagr is not None:
+        growth_data_source.append("earnings_cagr")
+    
+    if growth_samples:
+        # Use weighted average favoring more recent metrics
+        # Order: revenue_growth (most recent), earnings_growth, revenue_cagr, earnings_cagr
+        weights = [0.35, 0.30, 0.20, 0.15][:len(growth_samples)]
+        weights_sum = sum(weights)
+        weighted_growth = sum(g * w for g, w in zip(growth_samples, weights)) / weights_sum
+        
+        # Calculate growth volatility for dynamic scenario spreads
+        if len(growth_samples) >= 2:
+            growth_volatility = pstdev(growth_samples)
+            # Use 1.5 standard deviations for bear/bull scenarios
+            bear_spread = min(1.5 * growth_volatility, 0.10)  # Cap at 10%
+            bull_spread = min(1.5 * growth_volatility, 0.10)
+        else:
+            # Fallback to moderate spread if insufficient data
+            bear_spread = 0.05
+            bull_spread = 0.05
+        
+        base_growth = weighted_growth
+    else:
+        # FALLBACK: No growth data available - use conservative estimate
+        # This is a FALLBACK ONLY - LLM should note data limitation
+        base_growth = 0.08
+        bear_spread = 0.03
+        bull_spread = 0.03
+        growth_data_source = ["FALLBACK_ESTIMATE"]
+    
+    # Apply dynamic clamping based on company growth stage
+    if is_high_growth:
+        # High-growth companies: 10-40% range
+        base_growth = _clamp(base_growth, 0.10, 0.40)
+        bear_growth = _clamp(base_growth - bear_spread, 0.05, 0.35)
+        bull_growth = _clamp(base_growth + bull_spread, 0.15, 0.50)
+    else:
+        # Mature companies: 2-20% range
+        base_growth = _clamp(base_growth, 0.02, 0.20)
+        bear_growth = _clamp(base_growth - bear_spread, 0.00, 0.15)
+        bull_growth = _clamp(base_growth + bull_spread, 0.04, 0.25)
 
     beta = _clamp(_first_numeric(fundamentals, "Beta") or 1.1, 0.8, 2.0)
-    risk_free_rate = 0.045
-    market_risk_premium = 0.055
+    # Fetch current risk-free rate from FRED (10-year treasury)
+    risk_free_rate = _get_current_risk_free_rate()
+    # Fetch dynamic market risk premium based on VIX
+    market_risk_premium = _get_market_risk_premium()
     cost_of_equity = risk_free_rate + beta * market_risk_premium
     total_debt = _latest_numeric(balance_sheet_quarterly or balance_sheet_annual, "totalDebt", "longTermDebtAndCapitalLeaseObligation", "longTermDebt") or 0.0
     interest_expense = abs(_latest_numeric(income_annual, "interestExpense", "netInterestIncome") or 0.0)
@@ -723,7 +979,14 @@ def calculate_multi_method_valuation_data(
     wacc_base = _clamp((1 - debt_weight) * cost_of_equity + debt_weight * cost_of_debt * (1 - tax_rate), 0.08, 0.13)
     wacc_bear = _clamp(wacc_base + 0.01, 0.09, 0.14)
     wacc_bull = _clamp(wacc_base - 0.01, 0.07, 0.12)
-    terminal_growth = {"bear": 0.02, "base": 0.03, "bull": 0.04}
+    
+    # Calculate dynamic terminal growth based on sector and growth stage
+    sector = fundamentals.get("Sector") or fundamentals.get("sector")
+    terminal_growth = _calculate_terminal_growth(
+        sector=sector,
+        is_high_growth=is_high_growth,
+        revenue_growth=revenue_growth
+    )
 
     net_debt = _net_debt(fundamentals, balance_sheet_annual, balance_sheet_quarterly)
     
@@ -801,10 +1064,38 @@ def calculate_multi_method_valuation_data(
     fair_value_base = valuation_summary["weighted_avg"]["base"]
     fair_value_bull = valuation_summary["weighted_avg"]["bull"]
     current_discount_pct = ((fair_value_base - current_price) / fair_value_base * 100.0) if fair_value_base > 0 else 0.0
+    
+    # Calculate method dispersion
     base_values = [dcf["base"], pe_comps["base"], ev_ebitda["base"]]
     dispersion = (pstdev(base_values) / max(sum(base_values) / len(base_values), 1e-9)) if len(base_values) >= 2 else 0.0
-    valuation_conviction = "high" if dispersion < 0.12 else "medium" if dispersion < 0.25 else "low"
-    valuation_score = _deterministic_score(current_discount_pct)
+    
+    # Enhanced conviction scoring with data quality factors
+    data_quality_score = 1.0
+    if fcf_normalization_note:
+        data_quality_score *= 0.85  # Penalize normalized FCF (higher uncertainty)
+    if growth_samples and len(growth_samples) < 2:
+        data_quality_score *= 0.90  # Penalize limited growth data
+    
+    # Adjust dispersion for data quality
+    adjusted_dispersion = dispersion / data_quality_score
+    valuation_conviction = (
+        "high" if adjusted_dispersion < 0.15
+        else "medium" if adjusted_dispersion < 0.30
+        else "low"
+    )
+    
+    # Validations for extreme values
+    if any(dcf[k] <= 0 for k in dcf):
+        logger.warning(f"{ticker}: Negative or zero DCF values detected - {dcf}")
+    if any(pe_comps[k] > 200 for k in pe_comps):
+        logger.warning(f"{ticker}: Extreme P/E multiples (>200) detected - {pe_comps}")
+    if any(ev_ebitda[k] > 100 for k in ev_ebitda):
+        logger.warning(f"{ticker}: Extreme EV/EBITDA multiples (>100) detected - {ev_ebitda}")
+    if abs(current_discount_pct) > 80:
+        logger.warning(f"{ticker}: Extreme discount/premium (>{abs(current_discount_pct):.1f}%) - may indicate data issues")
+    
+    # Calculate score with conviction adjustment
+    valuation_score = _deterministic_score(current_discount_pct, valuation_conviction)
     valuation_bridge = _build_valuation_bridge(
         current_price=current_price,
         fair_value_base=fair_value_base,
@@ -824,14 +1115,16 @@ def calculate_multi_method_valuation_data(
         dcf_base=dcf["base"],
         base_ev_multiple=base_ev_mult,
         ebitda=ebitda,
+        beta=beta,
+        growth_samples=growth_samples,
     )
     
-    # Build key assumptions with enhanced negative FCF context
+    # Build key assumptions with data source transparency
     key_assumptions = [
         f"DCF projection period: {projection_years} years ({'high-growth' if is_high_growth else 'mature'} company)",
-        f"FCF growth: bear {bear_growth*100:.1f}%, base {base_growth*100:.1f}%, bull {bull_growth*100:.1f}%",
-        f"WACC: bear {wacc_bear*100:.1f}%, base {wacc_base*100:.1f}%, bull {wacc_bull*100:.1f}%",
-        f"Terminal growth: bear {terminal_growth['bear']*100:.1f}%, base {terminal_growth['base']*100:.1f}%, bull {terminal_growth['bull']*100:.1f}%",
+        f"FCF growth: bear {bear_growth*100:.1f}%, base {base_growth*100:.1f}%, bull {bull_growth*100:.1f}% (source: {', '.join(growth_data_source)})",
+        f"WACC: bear {wacc_bear*100:.1f}%, base {wacc_base*100:.1f}%, bull {wacc_bull*100:.1f}% (from market rates: risk-free {risk_free_rate*100:.2f}%, MRP {market_risk_premium*100:.2f}%)",
+        f"Terminal growth: bear {terminal_growth['bear']*100:.1f}%, base {terminal_growth['base']*100:.1f}%, bull {terminal_growth['bull']*100:.1f}% (sector-based: {sector or 'Unknown'})",
         f"Forward EPS used for P/E comps: {forward_eps:.2f}",
         f"Base EV/EBITDA multiple: {base_ev_mult:.2f}x",
     ]
@@ -843,6 +1136,10 @@ def calculate_multi_method_valuation_data(
     # Add implied growth from reverse DCF
     if implied_growth is not None:
         key_assumptions.append(f"Market-implied growth rate (reverse DCF): {implied_growth*100:.1f}%")
+    
+    # Add data quality warning if using fallback estimates
+    if "FALLBACK_ESTIMATE" in growth_data_source:
+        key_assumptions.append("⚠️ WARNING: Growth estimates unavailable - using conservative fallback (8%). Valuation reliability is LOW.")
 
     return {
         "ticker": ticker.upper(),
@@ -1010,6 +1307,10 @@ def get_peer_comparables(
         elif target_sector and candidate_sector.casefold() == target_sector.casefold():
             candidate_universe.append(item)
 
+    # Extract target company characteristics for validation
+    target_market_cap = _first_numeric(fundamentals, "MarketCapitalization")
+    target_country = fundamentals.get("Country") or fundamentals.get("country")
+    
     ranked_candidates = []
     for item in candidate_universe:
         candidate_ticker = _normalize_upper(item.get("ticker"))
@@ -1019,6 +1320,27 @@ def get_peer_comparables(
         candidate_payload = _json_loads_maybe(get_fundamentals_via_service(candidate_ticker))
         candidate_fundamentals = candidate_payload.get("fundamentals") or {}
         candidate_profile = _extract_company_profile(candidate_payload)
+        
+        # Enhanced validation: Size filter
+        candidate_market_cap = _first_numeric(candidate_fundamentals, "MarketCapitalization")
+        if target_market_cap and candidate_market_cap:
+            # Calculate size ratio (larger / smaller)
+            size_ratio = max(target_market_cap, candidate_market_cap) / min(target_market_cap, candidate_market_cap)
+            # Skip peers with >10x size difference (different market dynamics)
+            if size_ratio > 10.0:
+                logger.debug(f"Skipping {candidate_ticker}: size ratio {size_ratio:.1f}x too large")
+                continue
+        
+        # Enhanced validation: Geography filter
+        candidate_country = candidate_fundamentals.get("Country") or candidate_fundamentals.get("country")
+        geography_penalty = 1.0
+        if target_country and candidate_country:
+            if target_country != candidate_country:
+                # Penalize international peers (different regulatory/tax environments)
+                # But don't exclude them entirely (useful for global companies)
+                geography_penalty = 0.7
+                logger.debug(f"{candidate_ticker}: international peer ({candidate_country} vs {target_country}), applying 0.7x penalty")
+        
         candidate_entry = _peer_metric_entry(
             ticker=candidate_ticker,
             name=candidate_profile.get("name") or candidate_name or candidate_ticker,
@@ -1028,6 +1350,9 @@ def get_peer_comparables(
         )
         if candidate_entry is None:
             continue
+        
+        # Apply geography penalty to ranking score
+        candidate_entry["geography_penalty"] = geography_penalty
         ranked_candidates.append(candidate_entry)
 
     ranked_candidates.sort(
@@ -1037,10 +1362,16 @@ def get_peer_comparables(
             target_sector,
             target_industry,
             int(item.get("valid_metric_count") or 0),
+            item.get("geography_penalty", 1.0),
         ),
         reverse=True,
     )
-    selected_peers = ranked_candidates[:3]
+    # Select up to 3 peers, but only those with sufficient data quality
+    MIN_VALID_METRICS = 2
+    selected_peers = [
+        p for p in ranked_candidates[:5]
+        if p.get("valid_metric_count", 0) >= MIN_VALID_METRICS
+    ][:3]
 
     result = {
         "ticker": ticker_upper,
@@ -1101,26 +1432,66 @@ def get_growth_estimates(
     require_info_service()
     
     # Get fundamental data and financial statements
-    fundamentals = get_fundamentals_via_service(ticker)
+    fundamentals_str = get_fundamentals_via_service(ticker)
+    fundamentals = _json_loads_maybe(fundamentals_str)
     income_data = get_financial_statements(ticker, statement_type="income_statement", freq="annual")
+    
+    # Extract analyst growth estimates from fundamentals
+    revenue_growth_next_year = _first_numeric(fundamentals, "RevenueGrowthNextYear", "QuarterlyRevenueGrowthYOY")
+    revenue_growth_next_5y = _first_numeric(fundamentals, "RevenueGrowth5Y", "RevenueGrowthNext5Y")
+    earnings_growth_next_year = _first_numeric(fundamentals, "EarningsGrowthNextYear", "QuarterlyEarningsGrowthYOY")
+    earnings_growth_next_5y = _first_numeric(fundamentals, "EarningsGrowth5Y", "EarningsGrowthNext5Y", "EPSGrowth5Y")
+    
+    # Calculate historical growth rates from income statements
+    annual_reports = []
+    if income_data is not None:
+        annual_reports = _statement_reports(income_data, "income_statement", "annualReports")
+    
+    # Revenue CAGR calculations
+    revenue_cagr_3y = None
+    revenue_cagr_5y = None
+    if len(annual_reports) >= 4:
+        revenue_cagr_3y = _cagr(annual_reports[:4], "totalRevenue")
+    if len(annual_reports) >= 6:
+        revenue_cagr_5y = _cagr(annual_reports[:6], "totalRevenue")
+    
+    # Earnings CAGR calculations
+    earnings_cagr_3y = None
+    earnings_cagr_5y = None
+    if len(annual_reports) >= 4:
+        earnings_cagr_3y = _cagr(annual_reports[:4], "netIncome")
+    if len(annual_reports) >= 6:
+        earnings_cagr_5y = _cagr(annual_reports[:6], "netIncome")
+    
+    # Format percentages
+    def format_pct(value: Optional[float]) -> Optional[str]:
+        if value is None:
+            return None
+        return f"{value * 100:.2f}%"
     
     result = {
         "ticker": ticker.upper(),
         "growth_estimates": {
-            "revenue_growth_next_year": "Extract from analyst estimates",
-            "revenue_growth_next_5y": "Extract from analyst estimates",
-            "earnings_growth_next_year": "Extract from analyst estimates",
-            "earnings_growth_next_5y": "Extract from analyst estimates",
+            "revenue_growth_next_year": format_pct(revenue_growth_next_year) or "Not available",
+            "revenue_growth_next_5y": format_pct(revenue_growth_next_5y) or "Not available",
+            "earnings_growth_next_year": format_pct(earnings_growth_next_year) or "Not available",
+            "earnings_growth_next_5y": format_pct(earnings_growth_next_5y) or "Not available",
         },
         "historical_growth": {
-            "revenue_cagr_3y": "Calculate from income statements",
-            "revenue_cagr_5y": "Calculate from income statements",
-            "earnings_cagr_3y": "Calculate from income statements",
-            "earnings_cagr_5y": "Calculate from income statements",
+            "revenue_cagr_3y": format_pct(revenue_cagr_3y) or "Not available",
+            "revenue_cagr_5y": format_pct(revenue_cagr_5y) or "Not available",
+            "earnings_cagr_3y": format_pct(earnings_cagr_3y) or "Not available",
+            "earnings_cagr_5y": format_pct(earnings_cagr_5y) or "Not available",
         },
-        "raw_data": {
-            "fundamentals": fundamentals,
-            "income_statements": str(income_data) if income_data else "Not available",
+        "raw_values": {
+            "revenue_growth_next_year": revenue_growth_next_year,
+            "revenue_growth_next_5y": revenue_growth_next_5y,
+            "earnings_growth_next_year": earnings_growth_next_year,
+            "earnings_growth_next_5y": earnings_growth_next_5y,
+            "revenue_cagr_3y": revenue_cagr_3y,
+            "revenue_cagr_5y": revenue_cagr_5y,
+            "earnings_cagr_3y": earnings_cagr_3y,
+            "earnings_cagr_5y": earnings_cagr_5y,
         },
     }
     
@@ -1145,30 +1516,126 @@ def get_wacc_inputs(
         curr_date (str): Current date you are trading at, yyyy-mm-dd (optional)
     
     Returns:
-        str: JSON containing WACC calculation inputs
+        str: JSON containing WACC calculation inputs and calculated WACC
     """
     require_info_service()
     
-    # Get fundamental data and balance sheet
-    fundamentals = get_fundamentals_via_service(ticker)
-    balance_sheet = get_financial_statements(ticker, statement_type="balance_sheet", freq="quarterly")
+    # Get fundamental data and financial statements
+    fundamentals_str = get_fundamentals_via_service(ticker)
+    fundamentals = _json_loads_maybe(fundamentals_str)
+    balance_sheet_data = get_financial_statements(ticker, statement_type="balance_sheet", freq="quarterly")
+    income_data = get_financial_statements(ticker, statement_type="income_statement", freq="annual")
+    
+    # Extract beta from fundamentals
+    beta = _first_numeric(fundamentals, "Beta", "beta")
+    if beta is None:
+        beta = 1.0  # Default to market beta if not available
+    
+    # Extract market cap
+    market_cap = _first_numeric(fundamentals, "MarketCapitalization", "marketCap")
+    
+    # Extract tax rate from income statement
+    tax_rate = None
+    if income_data is not None:
+        annual_reports = _statement_reports(income_data, "income_statement", "annualReports")
+        if annual_reports:
+            latest = annual_reports[0]
+            income_before_tax = _safe_float(latest.get("incomeBeforeTax"))
+            income_tax = _safe_float(latest.get("incomeTaxExpense"))
+            if income_before_tax and income_tax and income_before_tax > 0:
+                tax_rate = income_tax / income_before_tax
+    
+    if tax_rate is None:
+        tax_rate = 0.21  # Default US corporate tax rate
+    
+    # Calculate debt metrics from balance sheet
+    total_debt = None
+    cash = None
+    net_debt = None
+    
+    if balance_sheet_data is not None:
+        bs_reports = _statement_reports(balance_sheet_data, "balance_sheet", "annualReports")
+        if not bs_reports:
+            bs_reports = _statement_reports(balance_sheet_data, "balance_sheet", "quarterlyReports")
+        
+        if bs_reports:
+            total_debt = _latest_numeric(
+                bs_reports,
+                "totalDebt",
+                "longTermDebtAndCapitalLeaseObligation",
+                "longTermDebt"
+            )
+            cash = _latest_numeric(
+                bs_reports,
+                "cashAndCashEquivalents",
+                "cashCashEquivalentsAndShortTermInvestments"
+            )
+    
+    if total_debt is None:
+        total_debt = 0.0
+    if cash is None:
+        cash = 0.0
+    
+    net_debt = total_debt - cash
+    
+    # Calculate cost of debt from income statement
+    cost_of_debt = None
+    if income_data is not None:
+        annual_reports = _statement_reports(income_data, "income_statement", "annualReports")
+        if annual_reports:
+            interest_expense = _latest_numeric(annual_reports, "interestExpense", "interestAndDebtExpense")
+            if interest_expense and total_debt and total_debt > 0:
+                cost_of_debt = interest_expense / total_debt
+    
+    if cost_of_debt is None:
+        cost_of_debt = 0.05  # Default 5% cost of debt
+    
+    # Fetch current market rates dynamically
+    risk_free_rate = _get_current_risk_free_rate()
+    market_risk_premium = _get_market_risk_premium()
+    
+    # Calculate cost of equity using CAPM: Re = Rf + Beta * (Rm - Rf)
+    cost_of_equity = risk_free_rate + (beta * market_risk_premium)
+    
+    # Calculate WACC: (E/V * Re) + (D/V * Rd * (1-Tc))
+    wacc = None
+    debt_to_equity = None
+    
+    if market_cap and market_cap > 0:
+        total_value = market_cap + net_debt
+        if total_value > 0:
+            equity_weight = market_cap / total_value
+            debt_weight = net_debt / total_value
+            
+            wacc = (equity_weight * cost_of_equity) + (debt_weight * cost_of_debt * (1 - tax_rate))
+            
+            if total_debt > 0 and market_cap > 0:
+                debt_to_equity = total_debt / market_cap
     
     result = {
         "ticker": ticker.upper(),
         "wacc_inputs": {
-            "beta": "Extract from fundamentals (typically 5-year beta)",
-            "risk_free_rate": "Current 10-year Treasury yield (e.g., 4.5%)",
-            "market_risk_premium": "Historical average ~7-8%",
-            "cost_of_debt": "Calculate from interest expense / total debt",
-            "tax_rate": "Effective tax rate from income statement",
-            "debt_to_equity": "Calculate from balance sheet",
-            "market_cap": "Extract from fundamentals",
-            "total_debt": "Extract from balance sheet",
+            "beta": round(beta, 3) if beta else None,
+            "risk_free_rate": f"{risk_free_rate * 100:.2f}%",
+            "market_risk_premium": f"{market_risk_premium * 100:.2f}%",
+            "cost_of_debt": f"{cost_of_debt * 100:.2f}%" if cost_of_debt else None,
+            "tax_rate": f"{tax_rate * 100:.2f}%" if tax_rate else None,
+            "cost_of_equity": f"{cost_of_equity * 100:.2f}%",
+            "market_cap": market_cap,
+            "total_debt": total_debt,
+            "net_debt": net_debt,
+            "debt_to_equity": round(debt_to_equity, 3) if debt_to_equity else None,
         },
-        "calculated_wacc": "To be calculated: (E/V * Re) + (D/V * Rd * (1-Tc))",
-        "raw_data": {
-            "fundamentals": fundamentals,
-            "balance_sheet": str(balance_sheet) if balance_sheet else "Not available",
+        "calculated_wacc": f"{wacc * 100:.2f}%" if wacc else "Unable to calculate (missing market cap)",
+        "raw_values": {
+            "beta": beta,
+            "risk_free_rate": risk_free_rate,
+            "market_risk_premium": market_risk_premium,
+            "cost_of_debt": cost_of_debt,
+            "tax_rate": tax_rate,
+            "cost_of_equity": cost_of_equity,
+            "wacc": wacc,
+            "debt_to_equity": debt_to_equity,
         },
     }
     
@@ -1198,11 +1665,6 @@ def get_dcf_inputs(
     3. Calculates market-implied growth rate from current stock price
     4. Handles negative cash flows by discounting them appropriately
     
-    Negative FCF Scenarios:
-    - High CapEx (growth investments): Normalized using operating cash flow
-    - Negative operating CF: Estimated based on revenue and growth stage
-    - Temporary issues: Partially normalized based on magnitude
-    
     Args:
         ticker (str): Ticker symbol of the company
         curr_date (str): Current date you are trading at, yyyy-mm-dd (optional)
@@ -1213,38 +1675,209 @@ def get_dcf_inputs(
     require_info_service()
     
     # Get all necessary financial data
-    fundamentals = get_fundamentals_via_service(ticker)
-    cashflow = get_financial_statements(ticker, statement_type="cashflow", freq="annual")
-    income = get_financial_statements(ticker, statement_type="income_statement", freq="annual")
-    balance_sheet = get_financial_statements(ticker, statement_type="balance_sheet", freq="quarterly")
+    fundamentals_str = get_fundamentals_via_service(ticker)
+    fundamentals = _json_loads_maybe(fundamentals_str)
+    cashflow_data = get_financial_statements(ticker, statement_type="cashflow", freq="annual")
+    cashflow_quarterly = get_financial_statements(ticker, statement_type="cashflow", freq="quarterly")
+    income_data = get_financial_statements(ticker, statement_type="income_statement", freq="annual")
+    balance_sheet_data = get_financial_statements(ticker, statement_type="balance_sheet", freq="quarterly")
+    
+    # Extract shares outstanding
+    shares_outstanding = _first_numeric(fundamentals, "SharesOutstanding", "sharesOutstanding")
+    
+    # Calculate net debt
+    net_debt = _net_debt(fundamentals,
+                        _statement_reports(balance_sheet_data, "balance_sheet", "annualReports") if balance_sheet_data else [],
+                        _statement_reports(balance_sheet_data, "balance_sheet", "quarterlyReports") if balance_sheet_data else [])
+    
+    # Get cashflow data
+    cf_reports = []
+    cf_quarterly_reports = []
+    if cashflow_data is not None:
+        cf_reports = _statement_reports(cashflow_data, "cashflow", "annualReports")
+    if cashflow_quarterly is not None:
+        cf_quarterly_reports = _statement_reports(cashflow_quarterly, "cashflow", "quarterlyReports")
+    
+    # Calculate current FCF with comprehensive fallback logic
+    current_fcf = None
+    operating_cf = None
+    capex = None
+    historical_fcf = []
+    fcf_data_source = []
+    
+    # Try 1: Direct FCF from annual reports
+    if cf_reports:
+        current_fcf = _latest_numeric(cf_reports, "freeCashFlow")
+        if current_fcf is not None:
+            fcf_data_source.append("annual_freeCashFlow")
+    
+    # Try 2: Calculate from operating CF and CapEx (annual)
+    if current_fcf is None and cf_reports:
+        latest_cf = cf_reports[0]
+        operating_cf = _safe_float(latest_cf.get("operatingCashflow"))
+        capex = _safe_float(latest_cf.get("capitalExpenditures"))
+        
+        if operating_cf is not None and capex is not None:
+            current_fcf = operating_cf - abs(capex)
+            fcf_data_source.append("annual_operating_cf_minus_capex")
+    
+    # Try 3: Sum quarterly FCF (TTM)
+    if current_fcf is None and cf_quarterly_reports:
+        quarterly_fcf = _sum_latest(cf_quarterly_reports, "freeCashFlow", count=4)
+        if quarterly_fcf is not None:
+            current_fcf = quarterly_fcf
+            fcf_data_source.append("quarterly_fcf_ttm")
+    
+    # Try 4: Calculate from quarterly operating CF and CapEx (TTM)
+    if current_fcf is None and cf_quarterly_reports:
+        quarterly_op_cf = _sum_latest(cf_quarterly_reports, "operatingCashflow", count=4)
+        quarterly_capex = _sum_latest(cf_quarterly_reports, "capitalExpenditures", count=4)
+        if quarterly_op_cf is not None and quarterly_capex is not None:
+            current_fcf = quarterly_op_cf - abs(quarterly_capex)
+            fcf_data_source.append("quarterly_operating_cf_minus_capex_ttm")
+    
+    # Try 5: Estimate from revenue and profit margin
+    if current_fcf is None:
+        revenue_ttm = _first_numeric(fundamentals, "RevenueTTM")
+        profit_margin = _first_numeric(fundamentals, "ProfitMargin")
+        if revenue_ttm and profit_margin:
+            current_fcf = revenue_ttm * profit_margin * 0.9  # 90% conversion to FCF
+            fcf_data_source.append("estimated_from_revenue_and_margin")
+    
+    # Extract operating CF and CapEx for analysis (if not already set)
+    if operating_cf is None and cf_reports:
+        operating_cf = _safe_float(cf_reports[0].get("operatingCashflow"))
+    if capex is None and cf_reports:
+        capex = _safe_float(cf_reports[0].get("capitalExpenditures"))
+    
+    # Calculate historical FCF for last 3-5 years
+    if cf_reports:
+        for report in cf_reports[:5]:
+            op_cf = _safe_float(report.get("operatingCashflow"))
+            cx = _safe_float(report.get("capitalExpenditures"))
+            if op_cf is not None and cx is not None:
+                fcf = op_cf - abs(cx)
+                historical_fcf.append({
+                    "year": report.get("fiscalDateEnding"),
+                    "operating_cf": op_cf,
+                    "capex": abs(cx),
+                    "fcf": fcf
+                })
+    
+    # Get revenue for normalization
+    revenue = None
+    revenue_growth = None
+    if income_data is not None:
+        income_reports = _statement_reports(income_data, "income_statement", "annualReports")
+        if income_reports:
+            revenue = _safe_float(income_reports[0].get("totalRevenue"))
+            # Calculate revenue growth
+            if len(income_reports) >= 2:
+                prev_revenue = _safe_float(income_reports[1].get("totalRevenue"))
+                if revenue and prev_revenue and prev_revenue > 0:
+                    revenue_growth = (revenue - prev_revenue) / prev_revenue
+    
+    # Calculate historical revenue CAGR
+    revenue_cagr_3y = None
+    if income_data is not None:
+        income_reports = _statement_reports(income_data, "income_statement", "annualReports")
+        if len(income_reports) >= 4:
+            revenue_cagr_3y = _cagr(income_reports[:4], "totalRevenue")
+    
+    # Detect growth stage
+    is_high_growth = False
+    projection_years = 5
+    if current_fcf is not None and operating_cf is not None:
+        is_high_growth, projection_years = _detect_growth_stage(
+            revenue_growth, revenue_cagr_3y, current_fcf, operating_cf
+        )
+    
+    # Normalize FCF if negative
+    normalized_fcf = current_fcf
+    normalization_note = None
+    if current_fcf is not None and current_fcf < 0 and revenue:
+        normalized_fcf, normalization_note = _normalize_fcf_for_growth_stage(
+            current_fcf, operating_cf or 0, abs(capex) if capex else 0, revenue, is_high_growth
+        )
+    
+    # Calculate FCF growth rate from historical data
+    fcf_growth_rate = None
+    if len(historical_fcf) >= 3:
+        fcf_values = [item["fcf"] for item in historical_fcf if item["fcf"] > 0]
+        if len(fcf_values) >= 2:
+            fcf_growth_rate = _cagr([{"fcf": v} for v in reversed(fcf_values)], "fcf")
+    
+    # Use revenue growth as fallback
+    if fcf_growth_rate is None:
+        fcf_growth_rate = revenue_cagr_3y or revenue_growth
+    
+    # Track data source for growth rate
+    growth_data_source = []
+    if fcf_growth_rate is not None:
+        growth_data_source.append("historical_fcf_cagr")
+    elif revenue_cagr_3y is not None:
+        growth_data_source.append("revenue_cagr_3y")
+    elif revenue_growth is not None:
+        growth_data_source.append("revenue_growth_yoy")
+    
+    # Use fallback only if no data available
+    if fcf_growth_rate is None:
+        fcf_growth_rate = 0.10 if is_high_growth else 0.05
+        growth_data_source.append("FALLBACK_ESTIMATE")
+    
+    # Terminal growth - use GDP estimate (this is a reasonable economic assumption)
+    terminal_growth_rate = 0.025  # Long-term GDP growth estimate
+    
+    # WACC calculation - simplified, should use get_wacc_inputs for full calculation
+    wacc = 0.10  # Default 10% WACC
+    wacc_data_source = ["SIMPLIFIED_ESTIMATE"]
+    beta = _first_numeric(fundamentals, "Beta", "beta")
+    if beta:
+        risk_free_rate = 0.045  # Approximate current rate
+        market_risk_premium = 0.075  # Historical average
+        wacc = risk_free_rate + (beta * market_risk_premium)
+        wacc_data_source = ["beta_based_calculation"]
     
     result = {
         "ticker": ticker.upper(),
         "dcf_inputs": {
-            "current_fcf": "Calculate: Operating CF - CapEx (can be negative)",
-            "fcf_growth_rate": "Use analyst estimates or historical average",
-            "projection_years": "5 years (mature) or 7-10 years (high-growth)",
-            "terminal_growth_rate": "Typically 2-3% (GDP growth)",
-            "wacc": "Calculate using get_wacc_inputs",
-            "shares_outstanding": "Extract from fundamentals",
-            "net_debt": "Total Debt - Cash",
+            "current_fcf": current_fcf,
+            "normalized_fcf": normalized_fcf if normalized_fcf != current_fcf else None,
+            "fcf_growth_rate": fcf_growth_rate,
+            "projection_years": projection_years,
+            "terminal_growth_rate": terminal_growth_rate,
+            "wacc": wacc,
+            "shares_outstanding": shares_outstanding,
+            "net_debt": net_debt,
         },
-        "negative_fcf_handling": {
-            "detection": "Automatically detects negative FCF scenarios",
-            "normalization": "Adjusts for high CapEx, growth investments, or temporary issues",
-            "growth_stage": "Identifies high-growth companies (20%+ revenue growth)",
-            "projection_period": "Extended to 7-10 years for high-growth companies",
-            "reverse_dcf": "Calculates market-implied growth rate from current price",
+        "growth_analysis": {
+            "is_high_growth": is_high_growth,
+            "revenue_growth_yoy": revenue_growth,
+            "revenue_cagr_3y": revenue_cagr_3y,
+            "fcf_growth_rate": fcf_growth_rate,
+            "recommended_projection_years": projection_years,
         },
-        "historical_fcf": {
-            "note": "Calculate from cashflow statements (last 3-5 years)",
-            "components": "Operating CF, CapEx, and resulting FCF",
+        "fcf_analysis": {
+            "operating_cashflow": operating_cf,
+            "capex": abs(capex) if capex else None,
+            "free_cashflow": current_fcf,
+            "is_negative": current_fcf < 0 if current_fcf is not None else None,
+            "normalization_applied": normalization_note,
         },
-        "raw_data": {
-            "fundamentals": fundamentals,
-            "cashflow": str(cashflow) if cashflow else "Not available",
-            "income": str(income) if income else "Not available",
-            "balance_sheet": str(balance_sheet) if balance_sheet else "Not available",
+        "historical_fcf": historical_fcf[:5],
+        "formatted_values": {
+            "current_fcf": f"${current_fcf:,.0f}" if current_fcf else "Not available",
+            "normalized_fcf": f"${normalized_fcf:,.0f}" if normalized_fcf and normalized_fcf != current_fcf else None,
+            "fcf_growth_rate": f"{fcf_growth_rate * 100:.2f}%" if fcf_growth_rate else "Not available",
+            "terminal_growth_rate": f"{terminal_growth_rate * 100:.2f}%",
+            "wacc": f"{wacc * 100:.2f}%",
+            "net_debt": f"${net_debt:,.0f}" if net_debt else "Not available",
+        },
+        "data_sources": {
+            "current_fcf": fcf_data_source if fcf_data_source else ["NOT_AVAILABLE"],
+            "fcf_growth_rate": growth_data_source,
+            "wacc": wacc_data_source,
+            "note": "FALLBACK_ESTIMATE or estimated values indicate missing data - analyst must explicitly state this limitation"
         },
     }
     
