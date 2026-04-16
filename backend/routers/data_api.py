@@ -59,6 +59,17 @@ async def data_quote(ticker: str):
     return result
 
 
+@router.get("/market-rates")
+async def data_market_rates():
+    """
+    Get current market rates including treasury yields and risk-free rate from FRED.
+    
+    Returns treasury rates used for valuation models (WACC, DCF).
+    Data is cached for 24 hours to minimize API calls.
+    """
+    return await asyncio.to_thread(_gateway().get_market_rates)
+
+
 @router.get("/market-movers")
 async def data_market_movers(
     count: int = Query(8, ge=1, le=100, description="Number of gainers and losers to return (each)"),

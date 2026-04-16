@@ -193,6 +193,11 @@ class DataGateway:
             ticker, indicator, curr_date, look_back_days
         )
 
+    def get_market_rates(self) -> Dict[str, Any]:
+        """Get current market rates (treasury yields, risk-free rate) from FRED."""
+        from services.market_rates_service import MarketRatesService
+        return MarketRatesService.get_market_rates()
+
     def get_global_news(
         self,
         curr_date: str,

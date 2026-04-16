@@ -470,3 +470,30 @@ def get_insider_sentiment(
     if isinstance(data, dict) and "data" in data:
         return data["data"]
     return str(data)
+
+
+def get_market_rates(base_url: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """
+    Fetch current market rates (treasury yields, risk-free rate) from info service.
+    
+    Returns:
+        Dictionary with market rates:
+        {
+            "risk_free_rate": float,  # 10-year treasury (standard for WACC)
+            "treasury_10y": float,
+            "treasury_2y": float,
+            "treasury_3m": float,
+            "last_updated": str (ISO format),
+            "source": "FRED",
+            "cache_age_hours": float
+        }
+        
+        Returns None if service not configured or error occurs.
+    """
+    base_url = base_url or _get_info_service_base_url()
+    if not base_url:
+        return None
+    try:
+        return _get(None, base_url, "/api/data/market-rates")
+    except Exception:
+        return None

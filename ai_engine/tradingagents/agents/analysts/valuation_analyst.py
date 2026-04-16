@@ -23,6 +23,7 @@ from ..utils.valuation_tools import (
     get_wacc_inputs,
     get_dcf_inputs,
 )
+from ..utils.market_rates_tools import get_market_rates
 from .self_contained_analyst import create_self_contained_analyst
 from .output_schema import analyst_key_takeaways_field
 from .prompts import build_valuation_analyst_prompt
@@ -159,18 +160,19 @@ def create_valuation_analyst(llm):
             get_growth_estimates,
             get_wacc_inputs,
             get_dcf_inputs,
+            get_market_rates,
             calculate_multi_method_valuation,
             get_balance_sheet,
             get_cashflow,
             get_income_statement,
-            calculate_valuation_summary_table,
+            # calculate_valuation_summary_table removed - redundant with calculate_multi_method_valuation
         ],
         prompt_builder=build_valuation_analyst_prompt,
         structured_output_class=ValuationAnalysisOutput,
         score_field="valuation_score",
         report_field="valuation_report",
         agent_name="Valuation Analyst",
-        max_iterations=4,  # Reduced: gather data upfront, call calculate_multi_method_valuation once, emit report
+        max_iterations=5,  # Increased from 4: allows buffer if LLM doesn't batch tools optimally
     )
 
 # Made with Bob
