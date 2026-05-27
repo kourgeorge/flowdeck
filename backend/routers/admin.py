@@ -139,6 +139,37 @@ class AdminAnalysesResponse(TZAwareBaseModel):
     total: int
 
 
+class AdminAccuracySummary(TZAwareBaseModel):
+    total_rows: int
+    scored_rows: int
+    correct_count: int
+    incorrect_count: int
+    hold_count: int
+    unavailable_count: int
+    buy_count: int
+    sell_count: int
+    accuracy_percent: Optional[float] = None
+
+
+class AdminAccuracyRow(TZAwareBaseModel):
+    analysis_run_id: int
+    ticker: str
+    created_at: datetime
+    recommendation: Optional[str] = None
+    analysis_price: Optional[float] = None
+    current_price: Optional[float] = None
+    return_percent: Optional[float] = None
+    outcome: str
+    is_scored: bool = False
+    quote_status: str = "unavailable"
+
+
+class AdminAccuracyResponse(TZAwareBaseModel):
+    period_days: int
+    summary: AdminAccuracySummary
+    rows: list[AdminAccuracyRow]
+
+
 class AdminSubscriptionItem(TZAwareBaseModel):
     id: int
     user_id: int
@@ -495,6 +526,21 @@ def get_analyses_daily(
     result = admin_service.get_analyses_daily(db, days)
     return AnalysesDailyResponse(
         data=[AnalysisDailyCount(date=it["date"], count=it["count"]) for it in result]
+    )
+
+
+@router.get("/analysis-accuracy", response_model=AdminAccuracyResponse)
+def get_analysis_accuracy(
+    _user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+    days: int = Query(30, ge=1, le=90),
+):
+    """Return recommendation accuracy for completed ticker analyses in the selected period."""
+    result = admin_service.get_analysis_accuracy(db, days)
+    return AdminAccuracyResponse(
+        period_days=int(result.get("period_days") or days),
+        summary=AdminAccuracySummary(**(result.get("summary") or {})),
+        rows=[AdminAccuracyRow(**row) for row in (result.get("rows") or [])],
     )
 
 

@@ -95,6 +95,37 @@ export interface AdminSubscriptionItem {
   created_at: string;
 }
 
+export interface AdminAccuracySummary {
+  total_rows: number;
+  scored_rows: number;
+  correct_count: number;
+  incorrect_count: number;
+  hold_count: number;
+  unavailable_count: number;
+  buy_count: number;
+  sell_count: number;
+  accuracy_percent: number | null;
+}
+
+export interface AdminAccuracyRow {
+  analysis_run_id: number;
+  ticker: string;
+  created_at: string;
+  recommendation: string | null;
+  analysis_price: number | null;
+  current_price: number | null;
+  return_percent: number | null;
+  outcome: string;
+  is_scored: boolean;
+  quote_status: string;
+}
+
+export interface AdminAccuracyResponse {
+  period_days: number;
+  summary: AdminAccuracySummary;
+  rows: AdminAccuracyRow[];
+}
+
 export interface AnalysisDailyCount {
   date: string;
   count: number;
@@ -366,6 +397,14 @@ export const adminApi = {
   ): Promise<{ data: AnalysisDailyCount[] }> => {
     const res = await api.get<{ data: AnalysisDailyCount[] }>(
       '/api/admin/analyses/daily',
+      { params: { days }, headers: authHeaders() },
+    );
+    return res.data;
+  },
+
+  getAnalysisAccuracy: async (days = 30): Promise<AdminAccuracyResponse> => {
+    const res = await api.get<AdminAccuracyResponse>(
+      '/api/admin/analysis-accuracy',
       { params: { days }, headers: authHeaders() },
     );
     return res.data;

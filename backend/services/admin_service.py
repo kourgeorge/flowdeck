@@ -11,7 +11,9 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from config import RESULTS_DIR
+from data_layer import get_data_gateway
 from models.db_models import Execution, Report, ReportView, Subscription, User
+from services.data_cache import get_cached_batch
 
 
 def get_stats(db: Session) -> dict:
@@ -479,6 +481,260 @@ def get_analyses_daily(db: Session, days: int) -> list[dict]:
         result.append({"date": date_str, "count": count_val})
         current += timedelta(days=1)
     return result
+
+
+def _parse_report_metadata(raw: Optional[str]) -> dict[str, Any]:
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        return {}
+
+
+def _normalize_recommendation(value: Any) -> Optional[str]:
+    rec = str(value or "").strip().upper()
+    if not rec:
+        return None
+    aliases = {
+        "STRONG_BUY": "BUY",
+        "OUTPERFORM": "BUY",
+        "OVERWEIGHT": "BUY",
+        "ACCUMULATE": "BUY",
+        "BUY": "BUY",
+        "STRONG_SELL": "SELL",
+        "UNDERPERFORM": "SELL",
+        "UNDERWEIGHT": "SELL",
+        "REDUCE": "SELL",
+        "SELL": "SELL",
+        "HOLD": "HOLD",
+        "NEUTRAL": "HOLD",
+        "MARKET_PERFORM": "HOLD",
+    }
+    return aliases.get(rec, rec if rec in {"BUY", "SELL", "HOLD"} else None)
+
+
+def _coerce_price(value: Any) -> Optional[float]:
+    try:
+        price = float(value)
+        if price <= 0:
+            return None
+        return round(price, 4)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_accuracy_inputs(report_rows: list[tuple[str, Optional[str]]]) -> tuple[Optional[str], Optional[float]]:
+    recommendation: Optional[str] = None
+    analysis_price: Optional[float] = None
+
+    preferred_report_order = (
+        "final_trade_decision",
+        "trader_investment_plan",
+        "investment_plan",
+    )
+    rows_by_type = {report_type: _parse_report_metadata(meta_json) for report_type, meta_json in report_rows}
+
+    for report_type in preferred_report_order:
+        meta = rows_by_type.get(report_type) or {}
+        if recommendation is None:
+            recommendation = _normalize_recommendation(
+                meta.get("recommendation") or meta.get("trader_recommendation")
+            )
+        if analysis_price is None:
+            analysis_price = _coerce_price(
+                meta.get("current_price") or meta.get("analysis_price") or meta.get("price")
+            )
+        if recommendation is not None and analysis_price is not None:
+            return recommendation, analysis_price
+
+    for meta in rows_by_type.values():
+        if recommendation is None:
+            recommendation = _normalize_recommendation(
+                meta.get("recommendation") or meta.get("trader_recommendation")
+            )
+        if analysis_price is None:
+            analysis_price = _coerce_price(
+                meta.get("current_price") or meta.get("analysis_price") or meta.get("price")
+            )
+        if recommendation is not None and analysis_price is not None:
+            break
+
+    return recommendation, analysis_price
+
+
+def _get_current_quotes_for_accuracy(tickers: list[str]) -> dict[str, Optional[dict[str, Any]]]:
+    unique_tickers = []
+    seen: set[str] = set()
+    for ticker in tickers:
+        ticker_upper = str(ticker or "").strip().upper()
+        if not ticker_upper or ticker_upper in seen:
+            continue
+        seen.add(ticker_upper)
+        unique_tickers.append(ticker_upper)
+
+    if not unique_tickers:
+        return {}
+
+    ttl_seconds = 60.0
+    key_pairs = [(f"admin_accuracy_quote:{ticker}", ttl_seconds) for ticker in unique_tickers]
+
+    def _fetch_batch(keys: list[str]) -> dict[str, Optional[dict[str, Any]]]:
+        key_to_ticker = {key: key.split("admin_accuracy_quote:", 1)[-1] for key in keys}
+        fetched = get_data_gateway().get_quotes_batch(list(key_to_ticker.values()))
+        return {key: fetched.get(ticker) for key, ticker in key_to_ticker.items()}
+
+    cached = get_cached_batch(key_pairs, _fetch_batch)
+    return {
+        ticker: cached.get(f"admin_accuracy_quote:{ticker}")
+        for ticker in unique_tickers
+    }
+
+
+def get_analysis_accuracy(db: Session, days: int) -> dict[str, Any]:
+    """Return per-analysis recommendation accuracy rows and summary for completed ticker analyses."""
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    latest_per_ticker = (
+        db.query(
+            Execution.subject_id.label("subject_id"),
+            func.max(Execution.id).label("latest_execution_id"),
+        )
+        .filter(
+            Execution.execution_type == "ticker",
+            Execution.status == "completed",
+            Execution.created_at >= since,
+        )
+        .group_by(Execution.subject_id)
+        .subquery()
+    )
+
+    execution_rows = (
+        db.query(Execution.id, Execution.subject_id, Execution.created_at)
+        .join(
+            latest_per_ticker,
+            Execution.id == latest_per_ticker.c.latest_execution_id,
+        )
+        .order_by(Execution.created_at.desc(), Execution.id.desc())
+        .all()
+    )
+
+    if not execution_rows:
+        return {
+            "period_days": days,
+            "summary": {
+                "total_rows": 0,
+                "scored_rows": 0,
+                "correct_count": 0,
+                "incorrect_count": 0,
+                "hold_count": 0,
+                "unavailable_count": 0,
+                "buy_count": 0,
+                "sell_count": 0,
+                "accuracy_percent": None,
+            },
+            "rows": [],
+        }
+
+    execution_ids = [int(execution_id) for execution_id, _subject_id, _created_at in execution_rows]
+    report_rows = (
+        db.query(Report.execution_id, Report.report_type, Report.metadata_json)
+        .filter(Report.execution_id.in_(execution_ids))
+        .all()
+    )
+    reports_by_execution: dict[int, list[tuple[str, Optional[str]]]] = {}
+    for execution_id, report_type, metadata_json in report_rows:
+        reports_by_execution.setdefault(int(execution_id), []).append(
+            (str(report_type or ""), str(metadata_json) if metadata_json is not None else None)
+        )
+
+    ticker_list = [
+        str(subject_id).upper()
+        for _execution_id, subject_id, _created_at in execution_rows
+        if subject_id is not None
+    ]
+    current_quotes = _get_current_quotes_for_accuracy(ticker_list)
+
+    rows: list[dict[str, Any]] = []
+    correct_count = 0
+    incorrect_count = 0
+    hold_count = 0
+    unavailable_count = 0
+    buy_count = 0
+    sell_count = 0
+
+    for execution_id, subject_id, created_at in execution_rows:
+        run_id = int(execution_id)
+        ticker = str(subject_id or "").upper()
+        recommendation, analysis_price = _extract_accuracy_inputs(reports_by_execution.get(run_id, []))
+        quote = current_quotes.get(ticker) or {}
+        current_price = _coerce_price(quote.get("current_price"))
+        return_percent: Optional[float] = None
+        if analysis_price is not None and current_price is not None and analysis_price > 0:
+            return_percent = round(((current_price - analysis_price) / analysis_price) * 100.0, 2)
+
+        outcome = "unavailable"
+        is_scored = False
+        if recommendation == "HOLD":
+            outcome = "neutral"
+            hold_count += 1
+        elif recommendation == "BUY":
+            buy_count += 1
+            if analysis_price is not None and current_price is not None:
+                is_scored = True
+                if current_price > analysis_price:
+                    outcome = "correct"
+                    correct_count += 1
+                else:
+                    outcome = "incorrect"
+                    incorrect_count += 1
+            else:
+                unavailable_count += 1
+        elif recommendation == "SELL":
+            sell_count += 1
+            if analysis_price is not None and current_price is not None:
+                is_scored = True
+                if current_price < analysis_price:
+                    outcome = "correct"
+                    correct_count += 1
+                else:
+                    outcome = "incorrect"
+                    incorrect_count += 1
+            else:
+                unavailable_count += 1
+        else:
+            unavailable_count += 1
+
+        rows.append({
+            "analysis_run_id": run_id,
+            "ticker": ticker,
+            "created_at": created_at,
+            "recommendation": recommendation,
+            "analysis_price": analysis_price,
+            "current_price": current_price,
+            "return_percent": return_percent,
+            "outcome": outcome,
+            "is_scored": is_scored,
+            "quote_status": "available" if current_price is not None else "unavailable",
+        })
+
+    scored_rows = correct_count + incorrect_count
+    accuracy_percent = round((correct_count / scored_rows) * 100.0, 2) if scored_rows > 0 else None
+    return {
+        "period_days": days,
+        "summary": {
+            "total_rows": len(rows),
+            "scored_rows": scored_rows,
+            "correct_count": correct_count,
+            "incorrect_count": incorrect_count,
+            "hold_count": hold_count,
+            "unavailable_count": unavailable_count,
+            "buy_count": buy_count,
+            "sell_count": sell_count,
+            "accuracy_percent": accuracy_percent,
+        },
+        "rows": rows,
+    }
 
 
 # --- Mission control (file + cache + DB) ---

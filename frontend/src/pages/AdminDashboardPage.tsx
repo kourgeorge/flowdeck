@@ -10,6 +10,7 @@ import {
   type AdminReportDetail,
   type AdminAnalysisItem,
   type AdminSubscriptionItem,
+  type AdminAccuracyResponse,
   type AnalysisDailyCount,
   type ViewsDailyCount,
   type AdminReportViewRunItem,
@@ -30,8 +31,8 @@ import MissionControlTab from '../components/admin/MissionControlTab';
 import UsersTab from '../components/admin/UsersTab';
 import AnalyticsTab from '../components/admin/AnalyticsTab';
 
-type AdminTab = 'overview' | 'mission-control' | 'users' | 'analytics';
-const ADMIN_TAB_IDS: AdminTab[] = ['overview', 'mission-control', 'users', 'analytics'];
+type AdminTab = 'overview' | 'mission-control' | 'users' | 'analytics' | 'accuracy';
+const ADMIN_TAB_IDS: AdminTab[] = ['overview', 'mission-control', 'users', 'analytics', 'accuracy'];
 type MissionSortKey = 'ticker' | 'company' | 'type' | 'market_cap' | 'sector' | 'industry' | 'last_completed' | 'reports' | 'status' | 'priority' | 'subscriptions';
 type MissionSortDirection = 'asc' | 'desc';
 type ViewRunsSortKey = 'ticker' | 'analysis_run_id' | 'unique_views' | 'viewed';
@@ -74,6 +75,10 @@ export default function AdminDashboardPage() {
   const [dailyAnalyses, setDailyAnalyses] = useState<AnalysisDailyCount[]>([]);
   const [dailyViews, setDailyViews] = useState<ViewsDailyCount[]>([]);
   const [analyticsDays, setAnalyticsDays] = useState(30);
+  const [accuracyDays, setAccuracyDays] = useState(30);
+  const [accuracyData, setAccuracyData] = useState<AdminAccuracyResponse | null>(null);
+  const [accuracyLoading, setAccuracyLoading] = useState(false);
+  const [accuracyError, setAccuracyError] = useState<string | null>(null);
 
   const [missionItems, setMissionItems] = useState<MissionControlTickerItem[]>([]);
   const [selectedMissionTickers, setSelectedMissionTickers] = useState<string[]>([]);
@@ -550,8 +555,25 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     if (activeTab === 'mission-control') {
       void refreshMissionControl();
+      return;
     }
-  }, [activeTab]);
+    if (activeTab === 'accuracy') {
+      const loadAccuracy = async () => {
+        setAccuracyLoading(true);
+        setAccuracyError(null);
+        try {
+          const result = await adminApi.getAnalysisAccuracy(accuracyDays);
+          setAccuracyData(result);
+        } catch (err: unknown) {
+          const ax = err as { response?: { data?: { detail?: string } } };
+          setAccuracyError(ax.response?.data?.detail ?? 'Failed to load analysis accuracy');
+        } finally {
+          setAccuracyLoading(false);
+        }
+      };
+      void loadAccuracy();
+    }
+  }, [activeTab, accuracyDays]);
 
   useEffect(() => {
     if (activeTab !== 'mission-control') return;
@@ -694,6 +716,17 @@ export default function AdminDashboardPage() {
               >
                 Analytics
               </button>
+              <button
+                type="button"
+                onClick={() => handleAdminTabChange('accuracy')}
+                className={`px-2 py-1.5 text-sm font-medium transition-colors ${
+                  activeTab === 'accuracy'
+                    ? 'border-b-2 border-blue-500 text-blue-400'
+                    : 'text-slate-400 hover:text-slate-300'
+                }`}
+              >
+                Accuracy
+              </button>
             </div>
           </div>
 
@@ -794,6 +827,183 @@ export default function AdminDashboardPage() {
               days={analyticsDays}
               onDaysChange={setAnalyticsDays}
             />
+          )}
+
+          {activeTab === 'accuracy' && (
+            <section className="space-y-6">
+              <div className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-white">Prediction accuracy</h2>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Compares stored recommendation and analysis-time price against the latest batched quote.
+                    HOLD rows are shown but excluded from the accuracy percentage.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {[7, 30, 90].map((days) => (
+                    <button
+                      key={days}
+                      type="button"
+                      onClick={() => setAccuracyDays(days)}
+                      className={`rounded-lg border px-3 py-1.5 text-sm transition ${
+                        accuracyDays === days
+                          ? 'border-blue-500 bg-blue-500/10 text-blue-300'
+                          : 'border-slate-700 text-slate-300 hover:border-slate-600 hover:text-white'
+                      }`}
+                    >
+                      {days}d
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {accuracyError && (
+                <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                  {accuracyError}
+                </div>
+              )}
+
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Accuracy</p>
+                  <p className="mt-2 text-2xl font-semibold text-white">
+                    {accuracyData?.summary.accuracy_percent != null ? `${accuracyData.summary.accuracy_percent.toFixed(2)}%` : '—'}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    BUY and SELL only
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Scored rows</p>
+                  <p className="mt-2 text-2xl font-semibold text-white">
+                    {accuracyData?.summary.scored_rows?.toLocaleString() ?? '0'}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Correct + incorrect
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Correct</p>
+                  <p className="mt-2 text-2xl font-semibold text-emerald-300">
+                    {accuracyData?.summary.correct_count?.toLocaleString() ?? '0'}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    BUY up or SELL down
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Neutral HOLD</p>
+                  <p className="mt-2 text-2xl font-semibold text-amber-300">
+                    {accuracyData?.summary.hold_count?.toLocaleString() ?? '0'}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Visible, excluded from rate
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Unavailable</p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-200">
+                    {accuracyData?.summary.unavailable_count?.toLocaleString() ?? '0'}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Missing price or recommendation
+                  </p>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60">
+                <div className="border-b border-slate-800 px-5 py-4">
+                  <h3 className="text-sm font-semibold text-white">Analysis outcomes</h3>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Latest quote is fetched in batch and may be temporarily unavailable for some tickers.
+                  </p>
+                </div>
+                {accuracyLoading ? (
+                  <div className="flex min-h-48 items-center justify-center">
+                    <div className="text-center">
+                      <svg className="mx-auto mb-3 h-7 w-7 animate-spin text-blue-400" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      <p className="text-sm text-slate-400">Loading accuracy data…</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-slate-800 text-sm">
+                      <thead className="bg-slate-950/40">
+                        <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                          <th className="px-4 py-3 font-medium">Ticker</th>
+                          <th className="px-4 py-3 font-medium">Run</th>
+                          <th className="px-4 py-3 font-medium">Date</th>
+                          <th className="px-4 py-3 font-medium">Recommendation</th>
+                          <th className="px-4 py-3 font-medium">Analysis price</th>
+                          <th className="px-4 py-3 font-medium">Current price</th>
+                          <th className="px-4 py-3 font-medium">Return</th>
+                          <th className="px-4 py-3 font-medium">Outcome</th>
+                          <th className="px-4 py-3 font-medium">Quote</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {(accuracyData?.rows ?? []).map((row) => {
+                          const outcomeClasses =
+                            row.outcome === 'correct'
+                              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                              : row.outcome === 'incorrect'
+                                ? 'border-red-500/30 bg-red-500/10 text-red-200'
+                                : row.outcome === 'neutral'
+                                  ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+                                  : 'border-slate-700 bg-slate-800/60 text-slate-300';
+                          const recommendationClasses =
+                            row.recommendation === 'BUY'
+                              ? 'text-emerald-300'
+                              : row.recommendation === 'SELL'
+                                ? 'text-red-300'
+                                : row.recommendation === 'HOLD'
+                                  ? 'text-amber-300'
+                                  : 'text-slate-400';
+
+                          return (
+                            <tr key={`${row.analysis_run_id}-${row.ticker}`} className="text-slate-200">
+                              <td className="px-4 py-3 font-medium text-white">{row.ticker}</td>
+                              <td className="px-4 py-3 text-slate-300">{row.analysis_run_id}</td>
+                              <td className="px-4 py-3 text-slate-300">{formatDate(row.created_at, true)}</td>
+                              <td className={`px-4 py-3 font-medium ${recommendationClasses}`}>
+                                {row.recommendation ?? '—'}
+                              </td>
+                              <td className="px-4 py-3 text-slate-300">
+                                {row.analysis_price != null ? row.analysis_price.toFixed(2) : '—'}
+                              </td>
+                              <td className="px-4 py-3 text-slate-300">
+                                {row.current_price != null ? row.current_price.toFixed(2) : '—'}
+                              </td>
+                              <td className="px-4 py-3 text-slate-300">
+                                {row.return_percent != null
+                                  ? `${row.return_percent > 0 ? '+' : ''}${row.return_percent.toFixed(2)}%`
+                                  : '—'}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${outcomeClasses}`}>
+                                  {row.outcome}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-slate-300">{row.quote_status}</td>
+                            </tr>
+                          );
+                        })}
+                        {(accuracyData?.rows ?? []).length === 0 && (
+                          <tr>
+                            <td colSpan={9} className="px-4 py-8 text-center text-sm text-slate-400">
+                              No completed analyses found for this window.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </section>
           )}
         </div>
       </div>
