@@ -137,10 +137,29 @@ async def lifespan(app: FastAPI):
                 scheduler = BackgroundScheduler()
 
             from services.scheduler import run_scheduled_jobs
+            import asyncio
+
+            def _run_scheduled_jobs_sync():
+                """Wrapper to run async scheduled jobs in a thread-safe manner."""
+                try:
+                    # Get or create event loop for this thread
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_closed():
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                    except RuntimeError:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                    
+                    # Run the coroutine
+                    loop.run_until_complete(run_scheduled_jobs())
+                except Exception:
+                    logger.exception("Scheduled jobs execution failed")
 
             interval_minutes = int(os.environ.get("DIGEST_SCHEDULER_INTERVAL_MINUTES", "15"))
             scheduler.add_job(
-                lambda: __import__("asyncio").run(run_scheduled_jobs()),
+                _run_scheduled_jobs_sync,
                 "interval",
                 minutes=interval_minutes,
                 id="scheduled_jobs",
