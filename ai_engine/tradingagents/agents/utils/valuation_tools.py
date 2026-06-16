@@ -3,7 +3,7 @@ Valuation tools for calculating fair value using multiple methods.
 """
 
 from langchain_core.tools import tool
-from typing import Annotated, Optional, Dict, Any
+from typing import Annotated, Optional, Dict, Any, List
 import json
 import logging
 import math
@@ -58,11 +58,17 @@ _EXCLUDED_NAME_KEYWORDS = (
 )
 
 
-def _weighted_base_value(dcf_base: float, pe_comps_base: float, ev_ebitda_base: float) -> float:
+def _weighted_base_value(
+    dcf_base: float,
+    pe_comps_base: float,
+    ev_ebitda_base: float,
+    method_weights: Optional[Dict[str, float]] = None,
+) -> float:
+    method_weights = method_weights or DEFAULT_METHOD_WEIGHTS
     return (
-        dcf_base * DEFAULT_METHOD_WEIGHTS["DCF"]
-        + pe_comps_base * DEFAULT_METHOD_WEIGHTS["P/E Comps"]
-        + ev_ebitda_base * DEFAULT_METHOD_WEIGHTS["EV/EBITDA"]
+        dcf_base * method_weights["DCF"]
+        + pe_comps_base * method_weights["P/E Comps"]
+        + ev_ebitda_base * method_weights["EV/EBITDA"]
     )
 
 
@@ -196,6 +202,7 @@ def _build_valuation_bridge(
     dcf_base: float,
     pe_comps_base: float,
     ev_ebitda_base: float,
+    method_weights: Optional[Dict[str, float]] = None,
 ) -> Dict[str, float]:
     """
     Build valuation bridge attributing price gap to growth, multiples, and risk.
@@ -205,6 +212,7 @@ def _build_valuation_bridge(
     - Multiple expansion: Comps value above current price (peer re-rating potential)
     - Risk discount: Difference between methods (uncertainty/risk premium)
     """
+    method_weights = method_weights or DEFAULT_METHOD_WEIGHTS
     avg_comps_base = (pe_comps_base + ev_ebitda_base) / 2.0
     total_gap = fair_value_base - current_price
 
@@ -291,6 +299,7 @@ def _build_sensitivity_analysis(
     ebitda: float,
     beta: float = 1.0,
     growth_samples: Optional[list] = None,
+    method_weights: Optional[Dict[str, float]] = None,
 ) -> Dict[str, Dict[str, float]]:
     """
     Build sensitivity analysis with dynamic deltas based on actual uncertainty.
@@ -299,8 +308,10 @@ def _build_sensitivity_analysis(
         beta: Company beta for WACC uncertainty calculation
         growth_samples: List of growth rate samples for volatility calculation
     """
+    method_weights = method_weights or DEFAULT_METHOD_WEIGHTS
+
     def weighted_from_dcf(dcf_value: float) -> float:
-        return _weighted_base_value(dcf_value, pe_comps_base, ev_ebitda_base)
+        return _weighted_base_value(dcf_value, pe_comps_base, ev_ebitda_base, method_weights)
 
     # Calculate dynamic growth delta based on historical volatility
     if growth_samples and len(growth_samples) >= 2:
@@ -391,8 +402,8 @@ def _build_sensitivity_analysis(
         },
         "exit_multiple": {
             "delta": round(exit_multiple_delta, 2),
-            "low": _weighted_base_value(dcf_base, pe_comps_base, exit_low_ev),
-            "high": _weighted_base_value(dcf_base, pe_comps_base, exit_high_ev),
+            "low": _weighted_base_value(dcf_base, pe_comps_base, exit_low_ev, method_weights),
+            "high": _weighted_base_value(dcf_base, pe_comps_base, exit_high_ev, method_weights),
         },
     }
 
@@ -843,6 +854,109 @@ def _calculate_terminal_growth(
     }
 
 
+def _determine_dynamic_method_weights(
+    *,
+    sector: Optional[str],
+    is_high_growth: bool,
+    current_fcf: float,
+    current_fcf_for_valuation: float,
+    fcf_normalization_note: Optional[Dict[str, Any]],
+    growth_samples: List[float],
+    growth_data_source: List[str],
+    eps: Optional[float],
+    trailing_pe: Optional[float],
+    forward_pe: Optional[float],
+    ebitda: Optional[float],
+    total_debt: float,
+    market_cap: float,
+    revenue_ttm: float,
+) -> Dict[str, float]:
+    scores = {
+        "DCF": 1.0,
+        "P/E Comps": 1.0,
+        "EV/EBITDA": 1.0,
+    }
+
+    debt_ratio = total_debt / max(total_debt + market_cap, 1.0)
+    fcf_margin = current_fcf / revenue_ttm if revenue_ttm > 0 else 0.0
+    normalized_fcf_ratio = (
+        current_fcf_for_valuation / max(abs(current_fcf), 1.0)
+        if current_fcf < 0 else 1.0
+    )
+    sector_normalized = (sector or "").strip().lower()
+
+    if current_fcf <= 0:
+        scores["DCF"] *= 0.45
+    elif fcf_margin < 0.05:
+        scores["DCF"] *= 0.80
+    else:
+        scores["DCF"] *= 1.15
+
+    if fcf_normalization_note:
+        scores["DCF"] *= 0.75 if is_high_growth else 0.60
+        if normalized_fcf_ratio > 2.0:
+            scores["DCF"] *= 0.85
+
+    if "FALLBACK_ESTIMATE" in growth_data_source:
+        scores["DCF"] *= 0.75
+    elif len(growth_samples) >= 3:
+        scores["DCF"] *= 1.10
+    elif len(growth_samples) == 1:
+        scores["DCF"] *= 0.90
+
+    if is_high_growth:
+        scores["DCF"] *= 0.90
+        scores["P/E Comps"] *= 0.85
+        scores["EV/EBITDA"] *= 1.10
+
+    if eps is None or eps <= 0:
+        scores["P/E Comps"] = 0.05
+    else:
+        if trailing_pe is None and forward_pe is None:
+            scores["P/E Comps"] *= 0.85
+        if forward_pe is not None and forward_pe > 60:
+            scores["P/E Comps"] *= 0.75
+        elif forward_pe is not None and forward_pe < 8:
+            scores["P/E Comps"] *= 0.90
+
+    if ebitda is None or ebitda <= 0:
+        scores["EV/EBITDA"] *= 0.35
+    else:
+        scores["EV/EBITDA"] *= 1.10
+
+    if debt_ratio > 0.25:
+        scores["EV/EBITDA"] *= 1.20
+        scores["P/E Comps"] *= 0.90
+    elif debt_ratio < 0.10:
+        scores["DCF"] *= 1.05
+
+    if revenue_ttm > 0 and (abs(current_fcf_for_valuation) / revenue_ttm) < 0.03:
+        scores["EV/EBITDA"] *= 1.10
+
+    if any(keyword in sector_normalized for keyword in ("financial", "bank", "insurance", "capital markets")):
+        scores["DCF"] *= 0.55
+        scores["P/E Comps"] *= 1.15
+        scores["EV/EBITDA"] *= 0.75
+    elif "real estate" in sector_normalized or "reit" in sector_normalized:
+        scores["DCF"] *= 0.80
+        scores["EV/EBITDA"] *= 1.20
+    elif "utilities" in sector_normalized:
+        scores["DCF"] *= 1.15
+        scores["EV/EBITDA"] *= 1.10
+    elif any(keyword in sector_normalized for keyword in ("technology", "software", "internet")):
+        scores["DCF"] *= 1.05 if current_fcf_for_valuation > 0 else 0.85
+        scores["P/E Comps"] *= 0.90
+        scores["EV/EBITDA"] *= 1.10
+    elif any(keyword in sector_normalized for keyword in ("energy", "materials", "industrials", "manufacturing")):
+        scores["EV/EBITDA"] *= 1.15
+
+    scores = {method: max(score, 0.05) for method, score in scores.items()}
+    total_score = sum(scores.values()) or 1.0
+    normalized = {method: score / total_score for method, score in scores.items()}
+
+    return normalized
+
+
 def calculate_multi_method_valuation_data(
     *,
     ticker: str,
@@ -989,6 +1103,7 @@ def calculate_multi_method_valuation_data(
     )
 
     net_debt = _net_debt(fundamentals, balance_sheet_annual, balance_sheet_quarterly)
+    debt_ratio = total_debt / max(total_debt + market_cap, 1.0)
     
     # Calculate DCF with appropriate projection period for growth stage
     dcf = {
@@ -1012,13 +1127,13 @@ def calculate_multi_method_valuation_data(
         terminal_growth["base"], net_debt, shares_outstanding, projection_years
     )
 
-    eps = _first_numeric(fundamentals, "EPS")
-    if eps is None:
+    raw_eps = _first_numeric(fundamentals, "EPS")
+    if raw_eps is None:
         net_income = _latest_numeric(income_annual, "netIncome")
         if net_income is not None and shares_outstanding > 0:
-            eps = net_income / shares_outstanding
-    eps = max(eps or 0.01, 0.01)
-    trailing_pe = _first_numeric(fundamentals, "TrailingPE") or (current_price / eps if eps > 0 else None)
+            raw_eps = net_income / shares_outstanding
+    eps = max(raw_eps or 0.01, 0.01)
+    trailing_pe = _first_numeric(fundamentals, "TrailingPE") or (current_price / raw_eps if raw_eps and raw_eps > 0 else None)
     forward_pe = _first_numeric(fundamentals, "ForwardPE")
     analyst_recommendations = analyst_recommendations or {}
     price_targets = (analyst_recommendations.get("price_targets") or {}) if isinstance(analyst_recommendations, dict) else {}
@@ -1059,7 +1174,29 @@ def calculate_multi_method_valuation_data(
         "bull": max(((ebitda * bull_ev_mult) - net_debt) / shares_outstanding, 0.01),
     }
 
-    valuation_summary = calculate_valuation_summary(dcf=dcf, pe_comps=pe_comps, ev_ebitda=ev_ebitda)
+    method_weights = _determine_dynamic_method_weights(
+        sector=sector,
+        is_high_growth=is_high_growth,
+        current_fcf=original_fcf,
+        current_fcf_for_valuation=current_fcf_for_valuation,
+        fcf_normalization_note=fcf_normalization_note,
+        growth_samples=growth_samples,
+        growth_data_source=growth_data_source,
+        eps=raw_eps,
+        trailing_pe=trailing_pe,
+        forward_pe=forward_pe,
+        ebitda=ebitda,
+        total_debt=total_debt,
+        market_cap=market_cap,
+        revenue_ttm=revenue_ttm,
+    )
+
+    valuation_summary = calculate_valuation_summary(
+        dcf=dcf,
+        pe_comps=pe_comps,
+        ev_ebitda=ev_ebitda,
+        method_weights=method_weights,
+    )
     fair_value_bear = valuation_summary["weighted_avg"]["bear"]
     fair_value_base = valuation_summary["weighted_avg"]["base"]
     fair_value_bull = valuation_summary["weighted_avg"]["bull"]
@@ -1102,6 +1239,7 @@ def calculate_multi_method_valuation_data(
         dcf_base=dcf["base"],
         pe_comps_base=pe_comps["base"],
         ev_ebitda_base=ev_ebitda["base"],
+        method_weights=method_weights,
     )
     valuation_sensitivity = _build_sensitivity_analysis(
         current_fcf=current_fcf_for_valuation,
@@ -1117,6 +1255,7 @@ def calculate_multi_method_valuation_data(
         ebitda=ebitda,
         beta=beta,
         growth_samples=growth_samples,
+        method_weights=method_weights,
     )
     
     # Build key assumptions with data source transparency
@@ -1127,6 +1266,14 @@ def calculate_multi_method_valuation_data(
         f"Terminal growth: bear {terminal_growth['bear']*100:.1f}%, base {terminal_growth['base']*100:.1f}%, bull {terminal_growth['bull']*100:.1f}% (sector-based: {sector or 'Unknown'})",
         f"Forward EPS used for P/E comps: {forward_eps:.2f}",
         f"Base EV/EBITDA multiple: {base_ev_mult:.2f}x",
+        "Method weights: "
+        f"DCF {method_weights['DCF']*100:.1f}%, "
+        f"P/E Comps {method_weights['P/E Comps']*100:.1f}%, "
+        f"EV/EBITDA {method_weights['EV/EBITDA']*100:.1f}% "
+        f"(dynamic by company profile: sector={sector or 'Unknown'}, "
+        f"{'high-growth' if is_high_growth else 'mature'}, "
+        f"FCF {'normalized' if fcf_normalization_note else 'reported'}, "
+        f"debt ratio {debt_ratio*100:.1f}%)",
     ]
     
     # Add negative FCF context if applicable

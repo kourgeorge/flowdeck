@@ -404,7 +404,7 @@ Generate three scenarios:
 **CRITICAL: Base conclusions on the WEIGHTED AVERAGE fair value, NOT on a single method.**
 
 The valuation summary table provides:
-- **Weighted Avg Implied Value**: This is your PRIMARY fair value estimate (DCF 40%, P/E 30%, EV/EBITDA 30%)
+- **Weighted Avg Implied Value**: This is your PRIMARY fair value estimate using the dynamic method weights returned by `calculate_multi_method_valuation`
 - Individual method values: DCF, P/E Comps, EV/EBITDA
 
 **Method Divergence Analysis (REQUIRED):**
@@ -424,10 +424,10 @@ The valuation summary table provides:
 ### 2. Valuation Summary Table
 Use `calculate_multi_method_valuation` as the authoritative source for DCF, P/E comps, EV/EBITDA, fair values, valuation score, conviction, and the complete valuation summary table.
 Do not calculate the valuation table or scenario values mentally, and do not leave placeholders.
-Use these fixed weights:
-- Method weights: DCF 40%, P/E Comps 30%, EV/EBITDA 30%
-- Scenario weights for each method's implied value: Bear 25%, Base 50%, Bull 25%
-The markdown table in `report` must match the values returned by `calculate_multi_method_valuation`.
+Use the weights returned by `calculate_multi_method_valuation`.
+- Method weights are determined dynamically from the company profile and data quality
+- Scenario weights for each method's implied value remain: Bear 25%, Base 50%, Bull 25%
+The markdown table in `report` must match the values returned by `calculate_multi_method_valuation`, including the dynamic method weights.
 
 | Method | Bear | Base | Bull | Weight | Implied Value |
 |--------|------|------|------|--------|---------------|
