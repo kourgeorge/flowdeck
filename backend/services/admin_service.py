@@ -938,61 +938,69 @@ def get_mission_control_items(db: Session) -> list[dict]:
         last_status: Optional[str]
     ) -> float:
         """
-        Calculate priority score for rerunning analysis.
+        Calculate priority score for rerunning analysis (0-100 scale).
         Higher score = higher priority.
         Only considers stocks that have been executed at least once.
         
-        Factors:
-        1. Status bonus (0-50 points) - failed executions get high priority
-        2. Market cap (normalized, 0-40 points)
-        3. Subscription count (0-30 points)
-        4. Days since last run (0-30 points, older = higher priority)
+        Formula: priority = (days_since_last_run × market_cap_factor × subscription_factor) / normalization
         
-        Max score: 150 points
+        Factors:
+        1. Failed status: Always returns 100 (highest priority)
+        2. Days since last run (0-30+ days) - PRIMARY factor
+        3. Market cap factor (1.0-1.5x multiplier) - modest boost for larger companies
+        4. Subscription factor (1.0-2.0x multiplier) - boost for subscribed stocks
+        
+        Score normalized to 0-100 range.
         Returns 0 for never-executed stocks.
         """
         # Never executed = 0 priority (excluded from consideration)
         if last_status is None:
             return 0.0
         
-        score = 0.0
-        
-        # Status bonus (0-50 points)
-        # Failed executions should be retried with high priority
+        # Failed executions get maximum priority
         if last_status == "failed":
-            score += 50.0  # High priority for failed runs
-        # completed status gets 0 bonus (normal priority)
+            return 100.0
         
-        # Market cap component (0-40 points)
-        # Normalize market cap: $1B = 10 points, $100B = 20 points, $1T+ = 40 points
-        if market_cap and market_cap > 0:
-            import math
-            # Log scale: log10(market_cap in billions)
-            market_cap_billions = market_cap / 1_000_000_000
-            if market_cap_billions > 0:
-                log_cap = math.log10(market_cap_billions)
-                # Scale: 0 (1B) to 3 (1T) -> 0 to 40 points
-                score += min(40.0, max(0.0, log_cap * 13.33))
-        
-        # Subscription count component (0-30 points)
-        # Linear scale: 1 sub = 3 points, 10+ subs = 30 points
-        score += min(30.0, subscription_count * 3.0)
-        
-        # Days since last run component (0-30 points)
-        # Linear scale: 1 day = 1 point, 30+ days = 30 points
+        # Calculate days since last run (PRIMARY factor)
         if last_completed_at:
             now = datetime.now(timezone.utc)
             # Ensure last_completed_at is timezone-aware
             if last_completed_at.tzinfo is None:
                 last_completed_at = last_completed_at.replace(tzinfo=timezone.utc)
             days_since = (now - last_completed_at).total_seconds() / 86400
-            score += min(30.0, max(0.0, days_since))
         else:
             # Has status but no completed_at (shouldn't happen, but handle gracefully)
-            # Give moderate age priority
-            score += 15.0
+            days_since = 15.0  # Assume moderate age
         
-        return round(score, 2)
+        # Normalize days to 0-50 range (50 = 30+ days old)
+        # This makes days the dominant factor
+        days_score = min(50.0, (days_since / 30.0) * 50.0)
+        
+        # Market cap factor (1.0 to 1.5x multiplier)
+        # Modest boost for larger companies
+        market_cap_factor = 1.0
+        if market_cap and market_cap > 0:
+            import math
+            # Log scale: $1B = 1.0x, $100B = 1.25x, $1T+ = 1.5x
+            market_cap_billions = market_cap / 1_000_000_000
+            if market_cap_billions > 0:
+                log_cap = math.log10(market_cap_billions)
+                # Scale: 0 (1B) to 3 (1T) -> 1.0 to 1.5
+                market_cap_factor = 1.0 + min(0.5, max(0.0, log_cap / 6.0))
+        
+        # Subscription factor (1.0 to 2.0x multiplier)
+        # More subscriptions = higher priority
+        # 0 subs = 1.0x, 1 sub = 1.2x, 3 subs = 1.6x, 5+ subs = 2.0x
+        subscription_factor = 1.0 + min(1.0, subscription_count * 0.2)
+        
+        # Calculate raw score: days × market_cap_factor × subscription_factor
+        raw_score = days_score * market_cap_factor * subscription_factor
+        
+        # Normalize to 0-100 range
+        # Max possible: 50 × 1.5 × 2.0 = 150, so divide by 1.5 to get 0-100
+        normalized_score = min(100.0, raw_score / 1.5)
+        
+        return round(normalized_score, 2)
 
     def _quote_type_sort_rank(qt: Optional[str]) -> int:
         return 0 if str(qt or "").strip().upper() == "EQUITY" else 1
