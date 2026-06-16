@@ -46,7 +46,17 @@ def _get_info_service_base_url() -> Optional[str]:
     return url.rstrip("/") if url else None
 
 
-def _get(session: Optional[requests.Session], base_url: str, path: str, params: Optional[Dict] = None, timeout: int = 30) -> Any:
+def _get(session: Optional[requests.Session], base_url: str, path: str, params: Optional[Dict] = None, timeout: int = 60) -> Any:
+    """
+    Make HTTP GET request to info service.
+    
+    Args:
+        session: Optional requests session for connection pooling
+        base_url: Base URL of the info service
+        path: API endpoint path
+        params: Query parameters
+        timeout: Request timeout in seconds (default 60s, increased from 30s to handle data-intensive operations)
+    """
     if requests is None:
         raise RuntimeError("requests is required for info service client; install with: pip install requests")
     url = urljoin(base_url + "/", path.lstrip("/"))
@@ -75,7 +85,7 @@ def get_news(ticker: str, start_date: str, end_date: str, base_url: Optional[str
     if not base_url:
         raise ValueError("Info service URL not configured (set INFO_SERVICE_URL or config info_service_url)")
     params = {"ticker": ticker.upper(), "lookback_days": lookback_days}
-    data = _get(None, base_url, "/api/data/news", params=params)
+    data = _get(None, base_url, "/api/data/news", params=params, timeout=90)
     if isinstance(data, dict):
         return json.dumps(data)
     return data
@@ -110,7 +120,7 @@ def get_insider_transactions(
     base_url = base_url or _get_info_service_base_url()
     if not base_url:
         raise ValueError("Info service URL not configured (set INFO_SERVICE_URL or config info_service_url)")
-    data = _get(None, base_url, f"/api/data/insider-transactions/{ticker.upper()}", params={"limit": limit})
+    data = _get(None, base_url, f"/api/data/insider-transactions/{ticker.upper()}", params={"limit": limit}, timeout=90)
     if isinstance(data, dict):
         return json.dumps(data)
     return str(data)
@@ -138,7 +148,7 @@ def get_fundamentals(ticker: str, base_url: Optional[str] = None) -> str:
     base_url = base_url or _get_info_service_base_url()
     if not base_url:
         raise ValueError("Info service URL not configured (set INFO_SERVICE_URL or config info_service_url)")
-    data = _get(None, base_url, f"/api/data/fundamentals/{ticker.upper()}")
+    data = _get(None, base_url, f"/api/data/fundamentals/{ticker.upper()}", timeout=90)
     if isinstance(data, dict):
         return json.dumps(data)
     return data
@@ -430,7 +440,7 @@ def get_indicators(
     if not base_url:
         raise ValueError("Info service URL not configured (set INFO_SERVICE_URL or config info_service_url)")
     params = {"indicator": indicator, "curr_date": curr_date, "look_back_days": look_back_days}
-    data = _get(None, base_url, f"/api/data/indicators/{ticker.upper()}", params=params)
+    data = _get(None, base_url, f"/api/data/indicators/{ticker.upper()}", params=params, timeout=90)
     if isinstance(data, dict) and "data" in data:
         return data["data"]
     return str(data)
@@ -450,7 +460,7 @@ def get_global_news(
     params: Dict[str, Any] = {"curr_date": curr_date, "lookback_days": lookback_days, "limit": limit}
     if query:
         params["query"] = query
-    data = _get(None, base_url, "/api/data/global-news", params=params)
+    data = _get(None, base_url, "/api/data/global-news", params=params, timeout=90)
     if isinstance(data, dict) and "data" in data:
         return data["data"]
     return str(data)
