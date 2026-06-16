@@ -258,17 +258,26 @@ export default function OverviewTab({
                           type="button"
                           onClick={async () => {
                             if (!window.confirm(`Delete analysis run ${a.id} (${a.ticker})? This cannot be undone.`)) return;
-                            await adminApi.deleteAnalysis(a.id);
-                            const [s, aRes, rRes] = await Promise.all([
-                              adminApi.getStats(),
-                              adminApi.getAnalyses(50),
-                              adminApi.getReports(200),
-                            ]);
-                            setStats(s);
-                            setAnalyses(aRes.analyses);
-                            setAnalysesTotal(aRes.total);
-                            setReports(rRes.reports);
-                            setReportsTotal(rRes.total);
+                            try {
+                              await adminApi.deleteAnalysis(a.id);
+                              // Optimistically remove from local state first for immediate UI update
+                              setAnalyses(analyses.filter((item) => item.id !== a.id));
+                              setAnalysesTotal(analysesTotal - 1);
+                              // Then fetch fresh data to ensure consistency
+                              const [s, aRes, rRes] = await Promise.all([
+                                adminApi.getStats(),
+                                adminApi.getAnalyses(50),
+                                adminApi.getReports(200),
+                              ]);
+                              setStats(s);
+                              setAnalyses(aRes.analyses);
+                              setAnalysesTotal(aRes.total);
+                              setReports(rRes.reports);
+                              setReportsTotal(rRes.total);
+                            } catch (error) {
+                              console.error('Failed to delete analysis:', error);
+                              window.alert('Failed to delete analysis. Please try again.');
+                            }
                           }}
                           className="text-red-400 hover:text-red-300 hover:underline text-sm font-medium"
                         >
