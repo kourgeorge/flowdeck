@@ -14,6 +14,120 @@ app.include_router(tickers_router)
 
 
 class TestTickerWidgetsAPI(unittest.TestCase):
+    def _quote(self, ticker: str = "AAPL") -> dict:
+        return {
+            "ticker": ticker,
+            "current_price": 100.0,
+            "daily_change": 1.0,
+            "daily_change_percent": 1.0,
+            "bid_price": None,
+            "ask_price": None,
+            "bid_size": None,
+            "ask_size": None,
+            "volume": None,
+            "previous_close": 99.0,
+            "day_high": 101.0,
+            "day_low": 98.0,
+            "fifty_two_week_high": 120.0,
+            "fifty_two_week_low": 80.0,
+            "market_status": "REGULAR",
+            "last_update_time": "2026-03-20T15:30:00Z",
+            "currency": "USD",
+        }
+
+    def _valuation_report(self) -> dict:
+        return {
+            "content": "Valuation report body.",
+            "score": 7,
+            "score_label": "Bullish",
+            "key_takeaways": ["Base case implies upside."],
+            "analysis_date": "2026-06-17",
+            "generated_at": "2026-06-17T11:00:00Z",
+            "days_ago": 0,
+            "current_price": 100.0,
+            "currency": "USD",
+            "fair_value_bear": 90.0,
+            "fair_value_base": 125.0,
+            "fair_value_bull": 150.0,
+            "current_discount_pct": 20.0,
+            "valuation_conviction": "high",
+            "valuation_key_assumptions": ["Revenue growth holds"],
+            "valuation_summary": {
+                "rows": [
+                    {
+                        "method": "DCF",
+                        "bear": 90.0,
+                        "base": 125.0,
+                        "bull": 150.0,
+                        "weight": 0.5,
+                        "implied_value": 122.5,
+                    }
+                ],
+                "weighted_avg": {
+                    "bear": 90.0,
+                    "base": 125.0,
+                    "bull": 150.0,
+                    "weight": 1.0,
+                    "implied_value": 122.5,
+                },
+            },
+            "valuation_bridge": {
+                "current_price": 100.0,
+                "growth_premium": 20.0,
+                "multiple_expansion": 10.0,
+                "risk_discount": 5.0,
+                "fair_value": 125.0,
+            },
+            "valuation_sensitivity": {
+                "wacc": {"delta": 0.01, "low": 115.0, "high": 135.0}
+            },
+            "dcf": {"bear": 90.0, "base": 125.0, "bull": 150.0},
+            "pe_comps": {"bear": 92.0, "base": 123.0, "bull": 148.0},
+            "ev_ebitda": {"bear": 88.0, "base": 127.0, "bull": 152.0},
+        }
+
+    def test_ticker_page_preserves_valuation_metadata(self) -> None:
+        mock_gateway = MagicMock()
+        mock_gateway.get_quote.return_value = self._quote("AAPL")
+        mock_gateway.get_latest_execution_for_ticker.return_value = (42, "2026-06-17")
+        mock_gateway.get_reports_for_run.return_value = {"valuation_report": "Valuation report body."}
+        mock_gateway.get_reports_with_scores.return_value = {"valuation_report": self._valuation_report()}
+        mock_gateway.get_historical_analyses.return_value = []
+
+        with patch("routers.tickers.get_data_gateway", return_value=mock_gateway), patch(
+            "routers.tickers.get_share_url",
+            return_value="https://example.test/share/42",
+        ):
+            client = TestClient(app)
+            response = client.get("/api/tickers/AAPL")
+
+        self.assertEqual(response.status_code, 200, response.text)
+        valuation_report = response.json()["reports_with_scores"]["valuation_report"]
+        self.assertEqual(valuation_report["fair_value_base"], 125.0)
+        self.assertEqual(valuation_report["current_discount_pct"], 20.0)
+        self.assertEqual(valuation_report["valuation_conviction"], "high")
+        self.assertEqual(valuation_report["valuation_key_assumptions"], ["Revenue growth holds"])
+        self.assertEqual(valuation_report["valuation_summary"]["weighted_avg"]["base"], 125.0)
+        self.assertEqual(valuation_report["valuation_bridge"]["fair_value"], 125.0)
+        self.assertEqual(valuation_report["valuation_sensitivity"]["wacc"]["low"], 115.0)
+        self.assertEqual(valuation_report["dcf"]["base"], 125.0)
+
+    def test_historical_report_endpoint_preserves_valuation_metadata(self) -> None:
+        mock_gateway = MagicMock()
+        mock_gateway.get_reports_with_scores.return_value = {"valuation_report": self._valuation_report()}
+
+        with patch("routers.tickers.get_data_gateway", return_value=mock_gateway):
+            client = TestClient(app)
+            response = client.get("/api/tickers/AAPL/reports/42")
+
+        self.assertEqual(response.status_code, 200, response.text)
+        valuation_report = response.json()["valuation_report"]
+        self.assertEqual(valuation_report["fair_value_bear"], 90.0)
+        self.assertEqual(valuation_report["fair_value_base"], 125.0)
+        self.assertEqual(valuation_report["fair_value_bull"], 150.0)
+        self.assertEqual(valuation_report["valuation_summary"]["rows"][0]["method"], "DCF")
+        self.assertEqual(valuation_report["pe_comps"]["base"], 123.0)
+
     def test_widgets_endpoint_can_return_latest_analyzed_tickers_overall(self) -> None:
         mock_gateway = MagicMock()
         mock_gateway.get_latest_analyzed_tickers_paginated.return_value = (["MSFT", "AAPL"], 2)
