@@ -392,6 +392,14 @@ export const adminApi = {
     return res.data;
   },
 
+  deleteUser: async (userId: number): Promise<{ ok: boolean; id: number }> => {
+    const res = await api.delete<{ ok: boolean; id: number }>(
+      `/api/admin/users/${userId}`,
+      { headers: authHeaders() },
+    );
+    return res.data;
+  },
+
   getAnalysesDaily: async (
     days = 30,
   ): Promise<{ data: AnalysisDailyCount[] }> => {

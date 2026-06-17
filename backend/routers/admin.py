@@ -350,6 +350,18 @@ def admin_add_tokens_to_user(
     return AdminAddTokensResponse(token_balance=token_service.get_balance(user_id, db))
 
 
+@router.delete("/users/{user_id}")
+def admin_delete_user(
+    user_id: int,
+    _user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a user account. Admin only. This action is irreversible."""
+    if not admin_service.delete_user(db, user_id):
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"ok": True, "id": user_id}
+
+
 @router.get("/reports", response_model=AdminReportsResponse)
 def get_admin_reports(
     _user: User = Depends(get_current_admin_user),

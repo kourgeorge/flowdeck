@@ -58,6 +58,19 @@ def get_user(db: Session, user_id: int) -> Optional[User]:
     return db.query(User).filter(User.id == user_id).first()
 
 
+def delete_user(db: Session, user_id: int) -> bool:
+    """Delete a user by id. Returns True if user was found and deleted, False if not found."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return False
+    
+    # The User model has cascade="all, delete-orphan" relationships, so related records
+    # (subscriptions, profile, etc.) will be automatically deleted
+    db.delete(user)
+    db.commit()
+    return True
+
+
 def list_users(
     db: Session, limit: int, offset: int
 ) -> tuple[list[dict], int]:

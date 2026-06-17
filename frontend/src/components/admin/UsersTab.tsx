@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   type AdminStats,
@@ -73,6 +73,25 @@ export default function UsersTab({
   expandedSubscriptionUserIds,
   setExpandedSubscriptionUserIds,
 }: UsersTabProps) {
+  const [deleteConfirmUser, setDeleteConfirmUser] = useState<AdminUserItem | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDeleteUser = async (user: AdminUserItem) => {
+    setDeleteError(null);
+    setDeletingUserId(user.id);
+    try {
+      await adminApi.deleteUser(user.id);
+      setUsers((prev) => prev.filter((u) => u.id !== user.id));
+      setDeleteConfirmUser(null);
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { detail?: string } } };
+      setDeleteError(ax.response?.data?.detail ?? 'Failed to delete user');
+    } finally {
+      setDeletingUserId(null);
+    }
+  };
+
   return (
     <section className="space-y-10">
       <h2 className="text-lg font-semibold text-white">Users ({usersTotal})</h2>
@@ -82,6 +101,19 @@ export default function UsersTab({
           <button
             type="button"
             onClick={() => setAddTokensError(null)}
+            className="ml-2 text-red-400 hover:text-red-100"
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
+      {deleteError && (
+        <div className="rounded-lg border border-red-800 bg-red-950/50 px-4 py-2 text-sm text-red-200">
+          {deleteError}
+          <button
+            type="button"
+            onClick={() => setDeleteError(null)}
             className="ml-2 text-red-400 hover:text-red-100"
             aria-label="Dismiss"
           >
@@ -152,6 +184,15 @@ export default function UsersTab({
                         className="rounded bg-blue-600 px-2 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                       >
                         {isAdding ? '…' : 'Add tokens'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirmUser(u)}
+                        disabled={isAdding || deletingUserId === u.id}
+                        className="rounded bg-red-600 px-2 py-1 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                        aria-label={`Delete user ${u.email}`}
+                      >
+                        {deletingUserId === u.id ? '…' : 'Delete'}
                       </button>
                     </div>
                   </td>
@@ -358,6 +399,43 @@ export default function UsersTab({
           </tbody>
         </table>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      {deleteConfirmUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="rounded-lg border border-gray-700 bg-gray-800 p-6 shadow-xl max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-white mb-4">Delete User</h3>
+            <p className="text-gray-300 mb-6">
+              Are you sure you want to delete user <strong>{deleteConfirmUser.email}</strong>?
+              This action cannot be undone and will permanently remove all user data, including:
+            </p>
+            <ul className="text-gray-400 text-sm mb-6 list-disc list-inside space-y-1">
+              <li>User account and profile</li>
+              <li>All subscriptions ({deleteConfirmUser.subscription_count})</li>
+              <li>Chat history and analysis runs</li>
+              <li>Token balance ({deleteConfirmUser.token_balance.toLocaleString()} tokens)</li>
+            </ul>
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmUser(null)}
+                disabled={deletingUserId !== null}
+                className="rounded bg-gray-600 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteUser(deleteConfirmUser)}
+                disabled={deletingUserId !== null}
+                className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deletingUserId === deleteConfirmUser.id ? 'Deleting...' : 'Delete User'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
