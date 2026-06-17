@@ -17,8 +17,7 @@ from pathlib import Path
 try:
     import pandas as pd
 except ImportError:
-    print("Error: pandas is required. Install with: pip install pandas lxml html5lib")
-    exit(1)
+    pd = None
 
 STOCK_LISTS_PATH = Path(__file__).parent / "data" / "stock_lists.json"
 
@@ -35,6 +34,10 @@ def extract_sp500_tickers() -> list[str]:
     """
     Extract S&P 500 tickers from Wikipedia using pandas.
     """
+    if pd is None:
+        print("Error: pandas is required. Install with: pip install pandas lxml html5lib")
+        return []
+
     print(f"Fetching {SP500_URL}...")
     try:
         # Read all tables from the page with proper headers
@@ -75,6 +78,10 @@ def extract_nasdaq100_tickers() -> list[str]:
     """
     Extract NASDAQ-100 tickers from Wikipedia using pandas.
     """
+    if pd is None:
+        print("Error: pandas is required. Install with: pip install pandas lxml html5lib")
+        return []
+
     print(f"Fetching {NASDAQ100_URL}...")
     try:
         # Read all tables from the page with proper headers
