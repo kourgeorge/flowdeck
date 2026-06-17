@@ -242,6 +242,8 @@ Call these tools together in parallel:
 2. `get_ticker_quote` - current market price
 3. `get_market_rates` - **CRITICAL**: Current treasury yields and risk-free rate from FRED (used in WACC/DCF calculations)
 4. `get_fundamentals` - company overview and key metrics
+
+**For individual stocks only (skip for ETFs/indices):**
 5. `get_balance_sheet` - net debt, shares outstanding
 6. `get_income_statement` - earnings, revenue
 7. `get_cashflow` - free cash flow generation
@@ -249,6 +251,8 @@ Call these tools together in parallel:
 9. `get_growth_estimates` - analyst consensus and historical growth
 10. `get_wacc_inputs` - beta, risk-free rate, cost of capital components
 11. `get_dcf_inputs` - free cash flow, growth rates, terminal value inputs
+
+**Note:** ETFs and indices are detected automatically from fundamentals (quote type, asset type, or name). For ETFs/indices, only call tools 1-4 above, then proceed directly to `calculate_multi_method_valuation`.
 
 ### Iteration 2: Deterministic Calculation (call ONCE with all gathered data)
 12. `calculate_multi_method_valuation` - **This tool does ALL the math**: For individual stocks: DCF, P/E comps, EV/EBITDA calculations. For ETFs/indices: aggregate valuation regime analysis using relative multiples. Always produces bear/base/bull scenarios, valuation score, conviction level, weighted averages, valuation summary table, bridge, and sensitivity analysis. Uses current market rates automatically. You don't need to calculate anything manually.
@@ -264,10 +268,11 @@ Use the deterministic calculation results to write your comprehensive valuation 
 
 When tools return incomplete or missing data, follow these guidelines:
 
-**If peer comparables returns < 3 peers:**
+**If peer comparables returns < 3 peers (for individual stocks only):**
 - State clearly: "Limited peer set - only X comparable companies found"
 - Use available peers but note lower confidence
 - Reduce conviction level to "medium" or "low"
+- **Note:** ETFs/indices do not use peer comparables at all - they use aggregate regime analysis instead
 
 **If growth estimates return "Not available":**
 - Check `get_growth_estimates` tool output for historical growth rates
