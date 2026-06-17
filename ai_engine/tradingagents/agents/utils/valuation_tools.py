@@ -57,6 +57,21 @@ _EXCLUDED_NAME_KEYWORDS = (
     " INCOME SHARES",
 )
 
+_INDEX_ETF_NAME_KEYWORDS = (
+    " ETF",
+    " ETN",
+    " INDEX",
+    " INDEX FUND",
+    " TRUST",
+    " FUND",
+    " SPDR",
+    " ISHARES",
+    " VANGUARD",
+    " INVESCO",
+    " PROSHARES",
+    " DIREXION",
+)
+
 
 def _weighted_base_value(
     dcf_base: float,
@@ -194,6 +209,237 @@ def _average_metric(entries: list[Dict[str, Any]], metric_name: str) -> Optional
     if not values:
         return None
     return sum(values) / len(values)
+
+
+def _is_index_or_etf(fundamentals: Dict[str, Any]) -> bool:
+    profile = _extract_company_profile(fundamentals)
+    candidates = [
+        fundamentals.get("QuoteType"),
+        fundamentals.get("AssetType"),
+        fundamentals.get("SecurityType"),
+        fundamentals.get("InstrumentType"),
+        fundamentals.get("Category"),
+        fundamentals.get("FundFamily"),
+        profile.get("quoteType"),
+        profile.get("assetType"),
+        profile.get("securityType"),
+        profile.get("instrumentType"),
+        profile.get("category"),
+    ]
+    normalized_fields = " ".join(_normalize_upper(value) for value in candidates if value)
+    if any(keyword.strip() in normalized_fields for keyword in ("ETF", "ETN", "INDEX", "MUTUAL FUND", "FUND")):
+        return True
+
+    name_candidates = [
+        fundamentals.get("Name"),
+        fundamentals.get("name"),
+        profile.get("name"),
+        profile.get("longName"),
+        profile.get("shortName"),
+    ]
+    normalized_name = " ".join(_normalize_upper(value) for value in name_candidates if value)
+    return any(keyword in normalized_name for keyword in _INDEX_ETF_NAME_KEYWORDS)
+
+
+def _build_index_etf_valuation(
+    *,
+    ticker: str,
+    current_price: float,
+    fundamentals: Dict[str, Any],
+    analyst_recommendations: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    analyst_recommendations = analyst_recommendations or {}
+    profile = _extract_company_profile(fundamentals)
+    name = (
+        _normalize_text(fundamentals.get("Name"))
+        or _normalize_text(profile.get("longName"))
+        or _normalize_text(profile.get("shortName"))
+        or ticker.upper()
+    )
+    quote_type = (
+        _normalize_text(fundamentals.get("QuoteType"))
+        or _normalize_text(fundamentals.get("AssetType"))
+        or _normalize_text(profile.get("quoteType"))
+        or "ETF/Index"
+    )
+
+    trailing_pe = _first_numeric(fundamentals, "TrailingPE")
+    forward_pe = _first_numeric(fundamentals, "ForwardPE")
+    price_to_book = _first_numeric(fundamentals, "PriceToBookRatio", "PriceToBookRatioTTM", "PriceToBook")
+    ev_to_ebitda = _first_numeric(fundamentals, "EVToEBITDA")
+    beta = _clamp(_first_numeric(fundamentals, "Beta") or 1.0, 0.7, 2.0)
+    risk_free_rate = _get_current_risk_free_rate()
+    market_risk_premium = _get_market_risk_premium()
+
+    price_targets = (analyst_recommendations.get("price_targets") or {}) if isinstance(analyst_recommendations, dict) else {}
+    target_low = _safe_float(price_targets.get("low"))
+    target_avg = _safe_float(price_targets.get("average"))
+    target_high = _safe_float(price_targets.get("high"))
+
+    methods: Dict[str, Dict[str, float]] = {}
+    method_weights: Dict[str, float] = {}
+
+    if forward_pe or trailing_pe:
+        base_pe = forward_pe or trailing_pe or 18.0
+        fair_pe = 18.0 if risk_free_rate >= 0.04 else 20.0
+        ratio = fair_pe / max(base_pe, 1.0)
+        pe_base = max(current_price * ratio, 0.01)
+        methods["P/E Regime"] = {
+            "bear": max(pe_base * 0.90, 0.01),
+            "base": pe_base,
+            "bull": max(pe_base * 1.10, 0.01),
+        }
+        method_weights["P/E Regime"] = 1.0 + (0.15 if forward_pe else 0.0)
+
+    if price_to_book:
+        fair_pb = 3.0 if beta > 1.1 else 2.4
+        ratio = fair_pb / max(price_to_book, 0.1)
+        pb_base = max(current_price * ratio, 0.01)
+        methods["P/B Regime"] = {
+            "bear": max(pb_base * 0.92, 0.01),
+            "base": pb_base,
+            "bull": max(pb_base * 1.08, 0.01),
+        }
+        method_weights["P/B Regime"] = 0.8
+
+    if ev_to_ebitda:
+        fair_ev_ebitda = 13.0 if risk_free_rate >= 0.04 else 15.0
+        ratio = fair_ev_ebitda / max(ev_to_ebitda, 1.0)
+        ev_base = max(current_price * ratio, 0.01)
+        methods["EV/EBITDA Regime"] = {
+            "bear": max(ev_base * 0.90, 0.01),
+            "base": ev_base,
+            "bull": max(ev_base * 1.10, 0.01),
+        }
+        method_weights["EV/EBITDA Regime"] = 0.9
+
+    if target_avg:
+        methods["Market Target"] = {
+            "bear": max(target_low or (target_avg * 0.92), 0.01),
+            "base": max(target_avg, 0.01),
+            "bull": max(target_high or (target_avg * 1.08), 0.01),
+        }
+        method_weights["Market Target"] = 0.7
+
+    if not methods:
+        methods["Price Regime"] = {
+            "bear": current_price * 0.92,
+            "base": current_price,
+            "bull": current_price * 1.08,
+        }
+        method_weights["Price Regime"] = 1.0
+
+    total_weight = sum(method_weights.values()) or 1.0
+    normalized_weights = {method: weight / total_weight for method, weight in method_weights.items()}
+
+    rows = []
+    for method_name, scenarios in methods.items():
+        implied_value = sum(
+            float(scenarios[scenario]) * float(DEFAULT_SCENARIO_WEIGHTS[scenario])
+            for scenario in ("bear", "base", "bull")
+        )
+        rows.append({
+            "method": method_name,
+            "bear": float(scenarios["bear"]),
+            "base": float(scenarios["base"]),
+            "bull": float(scenarios["bull"]),
+            "weight": float(normalized_weights[method_name]),
+            "implied_value": implied_value,
+        })
+
+    weighted_avg = {
+        "bear": sum(row["bear"] * row["weight"] for row in rows),
+        "base": sum(row["base"] * row["weight"] for row in rows),
+        "bull": sum(row["bull"] * row["weight"] for row in rows),
+        "weight": sum(row["weight"] for row in rows),
+        "implied_value": sum(row["implied_value"] * row["weight"] for row in rows),
+    }
+    valuation_summary = {
+        "method_weights": normalized_weights,
+        "scenario_weights": DEFAULT_SCENARIO_WEIGHTS,
+        "rows": rows,
+        "weighted_avg": weighted_avg,
+    }
+
+    fair_value_bear = weighted_avg["bear"]
+    fair_value_base = weighted_avg["base"]
+    fair_value_bull = weighted_avg["bull"]
+    current_discount_pct = ((fair_value_base - current_price) / fair_value_base * 100.0) if fair_value_base > 0 else 0.0
+
+    base_values = [row["base"] for row in rows]
+    dispersion = (pstdev(base_values) / max(sum(base_values) / len(base_values), 1e-9)) if len(base_values) >= 2 else 0.0
+    valuation_conviction = "high" if dispersion < 0.10 else "medium" if dispersion < 0.20 else "low"
+    valuation_score = _deterministic_score(current_discount_pct, valuation_conviction)
+
+    valuation_bridge = {
+        "current_price": current_price,
+        "growth_premium": 0.0,
+        "multiple_expansion": max(fair_value_base - current_price, 0.0),
+        "risk_discount": max(current_price - fair_value_base, 0.0),
+        "fair_value": fair_value_base,
+    }
+    valuation_sensitivity = {
+        "fcf_growth_rate": {"delta": 0.0, "low": fair_value_base, "high": fair_value_base},
+        "wacc": {
+            "delta": round(0.005 + (0.005 * abs(beta - 1.0)), 4),
+            "low": fair_value_base * 0.97,
+            "high": fair_value_base * 1.03,
+        },
+        "terminal_growth": {"delta": 0.0, "low": fair_value_base, "high": fair_value_base},
+        "exit_multiple": {"delta": 0.0, "low": fair_value_bear, "high": fair_value_bull},
+    }
+
+    key_assumptions = [
+        f"Instrument type: {quote_type} - aggregate valuation regime analysis used instead of single-company intrinsic DCF",
+        f"Rates context: risk-free {risk_free_rate*100:.2f}%, market risk premium {market_risk_premium*100:.2f}%",
+        f"Method weights: " + ", ".join(f"{method} {normalized_weights[method]*100:.1f}%" for method in normalized_weights),
+    ]
+    if forward_pe or trailing_pe:
+        key_assumptions.append(
+            f"P/E inputs: trailing {trailing_pe:.2f}x, forward {forward_pe:.2f}x; fair band anchored near {'18.0x' if risk_free_rate >= 0.04 else '20.0x'}"
+            if trailing_pe is not None and forward_pe is not None
+            else f"P/E input: {(forward_pe if forward_pe is not None else trailing_pe):.2f}x"
+        )
+    if price_to_book:
+        key_assumptions.append(f"Price/book input: {price_to_book:.2f}x")
+    if ev_to_ebitda:
+        key_assumptions.append(f"EV/EBITDA input: {ev_to_ebitda:.2f}x")
+    if target_avg:
+        key_assumptions.append(
+            f"Analyst target context: low {target_low:.2f}, average {target_avg:.2f}, high {target_high:.2f}"
+            if target_low is not None and target_high is not None
+            else f"Analyst target context: average {target_avg:.2f}"
+        )
+
+    return {
+        "ticker": ticker.upper(),
+        "instrument_type": quote_type,
+        "instrument_name": name,
+        "current_price": current_price,
+        "dcf": {"bear": 0.0, "base": 0.0, "bull": 0.0},
+        "pe_comps": methods.get("P/E Regime", methods.get("Price Regime", {"bear": 0.0, "base": 0.0, "bull": 0.0})),
+        "ev_ebitda": methods.get("EV/EBITDA Regime", methods.get("Market Target", {"bear": 0.0, "base": 0.0, "bull": 0.0})),
+        "valuation_summary": valuation_summary,
+        "fair_value_bear": fair_value_bear,
+        "fair_value_base": fair_value_base,
+        "fair_value_bull": fair_value_bull,
+        "current_discount_pct": current_discount_pct,
+        "valuation_score": valuation_score,
+        "valuation_conviction": valuation_conviction,
+        "valuation_bridge": valuation_bridge,
+        "valuation_sensitivity": valuation_sensitivity,
+        "valuation_key_assumptions": key_assumptions,
+        "inputs": {
+            "quote_type": quote_type,
+            "trailing_pe": trailing_pe,
+            "forward_pe": forward_pe,
+            "price_to_book": price_to_book,
+            "ev_to_ebitda": ev_to_ebitda,
+            "beta": beta,
+            "analyst_price_targets": {"low": target_low, "average": target_avg, "high": target_high},
+            "valuation_mode": "index_etf_relative",
+        },
+    }
 
 
 def _build_valuation_bridge(
@@ -965,6 +1211,14 @@ def calculate_multi_method_valuation_data(
     statements_payload: Dict[str, Any],
     analyst_recommendations: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    if _is_index_or_etf(fundamentals):
+        return _build_index_etf_valuation(
+            ticker=ticker,
+            current_price=current_price,
+            fundamentals=fundamentals,
+            analyst_recommendations=analyst_recommendations,
+        )
+
     balance_sheet_annual = _statement_reports(statements_payload, "balance_sheet", "annualReports")
     balance_sheet_quarterly = _statement_reports(statements_payload, "balance_sheet", "quarterlyReports")
     cashflow_annual = _statement_reports(statements_payload, "cashflow", "annualReports")
