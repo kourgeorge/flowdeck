@@ -106,6 +106,25 @@ export interface ReportData {
   current_discount_pct?: number | null;
   valuation_conviction?: string | null;
   valuation_key_assumptions?: string[] | null;
+  valuation_summary?: {
+    method_weights?: Record<string, number> | null;
+    scenario_weights?: Record<string, number> | null;
+    rows?: Array<{
+      method: string;
+      bear: number;
+      base: number;
+      bull: number;
+      weight: number;
+      implied_value: number;
+    }> | null;
+    weighted_avg?: {
+      bear: number;
+      base: number;
+      bull: number;
+      weight: number;
+      implied_value: number;
+    } | null;
+  } | null;
   valuation_bridge?: {
     current_price?: number | null;
     growth_premium?: number | null;
