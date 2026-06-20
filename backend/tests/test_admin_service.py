@@ -17,7 +17,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from database import Base
 from models.db_models import Execution, Report, User
-from services.admin_service import build_analysis_reports_zip
+from services.admin_service import (
+    CannotDeleteAdminError,
+    build_analysis_reports_zip,
+    delete_user,
+)
 
 
 class TestAdminService(unittest.TestCase):
@@ -26,7 +30,15 @@ class TestAdminService(unittest.TestCase):
         self.SessionLocal = sessionmaker(bind=self.engine)
         Base.metadata.create_all(bind=self.engine)
         self.db = self.SessionLocal()
-        self.db.add(User(id=1, email="admin@example.com", hashed_password="x", token_balance=1000))
+        self.db.add(
+            User(
+                id=1,
+                email="admin@example.com",
+                hashed_password="x",
+                token_balance=1000,
+                is_admin=True,
+            )
+        )
         self.db.add(
             Execution(
                 id=42,
@@ -99,6 +111,32 @@ class TestAdminService(unittest.TestCase):
             self.assertEqual(manifest["analysis_run_id"], 42)
             self.assertEqual(manifest["ticker"], "AAPL")
             self.assertEqual(manifest["report_count"], 2)
+
+    def test_delete_user_refuses_admin_accounts(self) -> None:
+        with self.assertRaises(CannotDeleteAdminError):
+            delete_user(self.db, 1)
+
+        admin = self.db.query(User).filter(User.id == 1).first()
+        self.assertIsNotNone(admin)
+        self.assertTrue(admin.is_admin)
+
+    def test_delete_user_allows_non_admin_accounts(self) -> None:
+        self.db.add(
+            User(
+                id=2,
+                email="regular@example.com",
+                hashed_password="x",
+                token_balance=1000,
+                is_admin=False,
+            )
+        )
+        self.db.commit()
+
+        self.assertTrue(delete_user(self.db, 2))
+        self.assertIsNone(self.db.query(User).filter(User.id == 2).first())
+
+    def test_delete_user_returns_false_for_missing_user(self) -> None:
+        self.assertFalse(delete_user(self.db, 999))
 
 
 if __name__ == "__main__":
