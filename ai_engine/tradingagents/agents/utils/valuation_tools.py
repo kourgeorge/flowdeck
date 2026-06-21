@@ -7,6 +7,7 @@ from typing import Annotated, Optional, Dict, Any, List
 import json
 import logging
 import math
+import re
 from pathlib import Path
 from statistics import median, pstdev
 
@@ -60,17 +61,26 @@ _EXCLUDED_NAME_KEYWORDS = (
 _INDEX_ETF_NAME_KEYWORDS = (
     " ETF",
     " ETN",
-    " INDEX",
     " INDEX FUND",
-    " TRUST",
-    " FUND",
+    " MUTUAL FUND",
+    " EXCHANGE TRADED FUND",
     " SPDR",
     " ISHARES",
-    " VANGUARD",
-    " INVESCO",
     " PROSHARES",
     " DIREXION",
 )
+
+_INDEX_ETF_FIELD_VALUES = {
+    "ETF",
+    "ETN",
+    "INDEX",
+    "INDEX FUND",
+    "MUTUAL FUND",
+    "MUTUALFUND",
+    "EXCHANGE TRADED FUND",
+    "EXCHANGETRADED FUND",
+    "EXCHANGETRADEDFUND",
+}
 
 
 def _weighted_base_value(
@@ -101,6 +111,13 @@ def _normalize_text(value: Any) -> str:
 
 def _normalize_upper(value: Any) -> str:
     return _normalize_text(value).upper()
+
+
+def _contains_keyword_phrase(text: str, phrases: tuple[str, ...]) -> bool:
+    if not text:
+        return False
+    padded = f" {text} "
+    return any(re.search(rf"(?<![A-Z0-9]){re.escape(phrase.strip())}(?![A-Z0-9])", padded) for phrase in phrases)
 
 
 def _is_candidate_ticker_allowed(ticker: str, name: str) -> bool:
@@ -226,9 +243,13 @@ def _is_index_or_etf(fundamentals: Dict[str, Any]) -> bool:
         profile.get("instrumentType"),
         profile.get("category"),
     ]
-    normalized_fields = " ".join(_normalize_upper(value) for value in candidates if value)
-    if any(keyword.strip() in normalized_fields for keyword in ("ETF", "ETN", "INDEX", "MUTUAL FUND", "FUND")):
-        return True
+    for value in candidates:
+        normalized = _normalize_upper(value)
+        if not normalized:
+            continue
+        compact = normalized.replace(" ", "")
+        if normalized in _INDEX_ETF_FIELD_VALUES or compact in _INDEX_ETF_FIELD_VALUES:
+            return True
 
     name_candidates = [
         fundamentals.get("Name"),
@@ -238,7 +259,7 @@ def _is_index_or_etf(fundamentals: Dict[str, Any]) -> bool:
         profile.get("shortName"),
     ]
     normalized_name = " ".join(_normalize_upper(value) for value in name_candidates if value)
-    return any(keyword in normalized_name for keyword in _INDEX_ETF_NAME_KEYWORDS)
+    return _contains_keyword_phrase(normalized_name, _INDEX_ETF_NAME_KEYWORDS)
 
 
 def _build_index_etf_valuation(

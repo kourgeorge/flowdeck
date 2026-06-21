@@ -202,6 +202,68 @@ class TestValuationSummary(unittest.TestCase):
             places=6,
         )
 
+    def test_trust_named_equity_uses_single_company_valuation(self):
+        fundamentals = {
+            "Name": "Digital Realty Trust, Inc.",
+            "QuoteType": "EQUITY",
+            "Sector": "Real Estate",
+            "Industry": "REIT - Specialty",
+            "MarketCapitalization": 50_000_000_000,
+            "EnterpriseValue": 68_000_000_000,
+            "TrailingPE": 45.0,
+            "ForwardPE": 38.0,
+            "EVToEBITDA": 24.0,
+            "EBITDA": 2_800_000_000,
+            "EPS": 3.0,
+            "Beta": 0.9,
+            "QuarterlyRevenueGrowthYOY": 0.08,
+            "QuarterlyEarningsGrowthYOY": 0.05,
+            "SharesOutstanding": 310_000_000,
+        }
+        statements = {
+            "statements": {
+                "balance_sheet": {
+                    "data": {
+                        "annualReports": [
+                            {"fiscalDateEnding": "2025-12-31", "totalDebt": 18_000_000_000, "cashAndCashEquivalents": 500_000_000},
+                            {"fiscalDateEnding": "2024-12-31", "totalDebt": 16_000_000_000, "cashAndCashEquivalents": 450_000_000},
+                        ],
+                        "quarterlyReports": [],
+                    }
+                },
+                "cashflow": {
+                    "data": {
+                        "annualReports": [
+                            {"fiscalDateEnding": "2025-12-31", "freeCashFlow": 1_600_000_000, "operatingCashFlow": 3_000_000_000, "capitalExpenditure": -1_400_000_000},
+                            {"fiscalDateEnding": "2024-12-31", "freeCashFlow": 1_450_000_000, "operatingCashFlow": 2_700_000_000, "capitalExpenditure": -1_250_000_000},
+                        ],
+                        "quarterlyReports": [],
+                    }
+                },
+                "income_statement": {
+                    "data": {
+                        "annualReports": [
+                            {"fiscalDateEnding": "2025-12-31", "totalRevenue": 5_800_000_000, "netIncome": 900_000_000, "interestExpense": 650_000_000, "taxProvision": 50_000_000, "pretaxIncome": 950_000_000},
+                            {"fiscalDateEnding": "2024-12-31", "totalRevenue": 5_400_000_000, "netIncome": 820_000_000, "interestExpense": 600_000_000, "taxProvision": 45_000_000, "pretaxIncome": 865_000_000},
+                        ],
+                        "quarterlyReports": [],
+                    }
+                },
+            }
+        }
+
+        result = calculate_multi_method_valuation_data(
+            ticker="DLR",
+            current_price=165.0,
+            fundamentals=fundamentals,
+            statements_payload=statements,
+            analyst_recommendations=None,
+        )
+
+        self.assertGreater(result["dcf"]["base"], 0.0)
+        self.assertIn("DCF", result["valuation_summary"]["method_weights"])
+        self.assertNotIn("P/E Regime", result["valuation_summary"]["method_weights"])
+
 
     def test_get_peer_comparables_selects_real_peers_and_computes_averages(self):
         universe = [
