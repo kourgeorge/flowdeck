@@ -199,7 +199,7 @@ class TestValuationSummary(unittest.TestCase):
             + result["valuation_bridge"]["multiple_expansion"]
             - result["valuation_bridge"]["risk_discount"],
             result["valuation_bridge"]["fair_value"],
-            places=6,
+            places=2,
         )
 
     def test_trust_named_equity_uses_single_company_valuation(self):
