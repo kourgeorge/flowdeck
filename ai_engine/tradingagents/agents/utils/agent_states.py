@@ -170,6 +170,12 @@ class AgentState(TypedDict):
     current_discount_pct: Annotated[Optional[float], "Percentage discount/premium vs base fair value (positive=discount, negative=premium)"]
     valuation_conviction: Annotated[Optional[str], "Valuation conviction level: high, medium, or low"]
     valuation_key_assumptions: Annotated[Optional[List[str]], "Top 3-5 critical assumptions driving the valuation"]
+    valuation_summary: Annotated[Optional[Dict[str, Any]], "Deterministic valuation summary table"]
+    valuation_bridge: Annotated[Optional[Dict[str, Any]], "Bridge from current price to fair value"]
+    valuation_sensitivity: Annotated[Optional[Dict[str, Any]], "Sensitivity ranges for key valuation drivers"]
+    dcf: Annotated[Optional[Dict[str, Any]], "DCF fair value outputs by scenario"]
+    pe_comps: Annotated[Optional[Dict[str, Any]], "P/E comps fair value outputs by scenario"]
+    ev_ebitda: Annotated[Optional[Dict[str, Any]], "EV/EBITDA fair value outputs by scenario"]
 
     # researcher team discussion step
     investment_debate_state: Annotated[

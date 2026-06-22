@@ -368,12 +368,14 @@ def record_view(execution_id: int, viewer_id: int, db: Session) -> bool:
     return True
 
 
-def delete_execution(execution_id: int, db: Session) -> None:
+def delete_execution(execution_id: int, db: Session) -> bool:
     """Remove Execution without refunding (e.g. admin race when start_analysis returned existing=True)."""
     ex = db.query(Execution).filter(Execution.id == execution_id).first()
     if ex:
         db.delete(ex)
         db.commit()
+        return True
+    return False
 
 
 def refund_for_execution(user_id: int, execution_id: int, db: Session) -> None:
