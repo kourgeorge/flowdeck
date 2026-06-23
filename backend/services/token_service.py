@@ -643,7 +643,7 @@ def deduct_for_chat(
     
     # Check balance from ledger
     balance = get_balance_from_ledger(user_id, db)
-    if balance < 1:
+    if balance < platform_tokens:
         return False
     
     try:

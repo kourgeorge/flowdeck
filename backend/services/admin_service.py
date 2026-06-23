@@ -14,6 +14,7 @@ from config import RESULTS_DIR
 from data_layer import get_data_gateway
 from models.db_models import Execution, Report, ReportView, Subscription, User
 from services.data_cache import get_cached_batch
+from services.user_deletion_service import delete_user_and_owned_data
 
 
 def get_stats(db: Session) -> dict:
@@ -60,15 +61,7 @@ def get_user(db: Session, user_id: int) -> Optional[User]:
 
 def delete_user(db: Session, user_id: int) -> bool:
     """Delete a user by id. Returns True if user was found and deleted, False if not found."""
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        return False
-    
-    # The User model has cascade="all, delete-orphan" relationships, so related records
-    # (subscriptions, profile, etc.) will be automatically deleted
-    db.delete(user)
-    db.commit()
-    return True
+    return delete_user_and_owned_data(db, user_id)
 
 
 def list_users(

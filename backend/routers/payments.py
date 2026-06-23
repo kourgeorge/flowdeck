@@ -44,8 +44,12 @@ async def execute_payment(
 ):
     """Execute PayPal payment and credit tokens."""
     try:
-        result = paypal_service.execute_payment(payment_id, payer_id, db)
+        result = paypal_service.execute_payment(payment_id, payer_id, current_user.id, db)
         return result
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to execute payment: {str(e)}")
 

@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from database import Base
-from models.db_models import ChatMessage, ChatSession, ChatTurn, User
+from models.db_models import ChatMessage, ChatSession, ChatTurn, Usage, User
 from services.chat_turn_service import ChatTurnService
 
 
@@ -22,6 +22,12 @@ class _FakeChatService:
         yield 'data: {"type":"token","content":"Hello"}\n\n'
         yield 'data: {"type":"token","content":" world"}\n\n'
         yield f'data: {json.dumps({"type": "done", "tokens_used": 12, "tools_called": 1, "follow_up_questions": ["Compare peers?"], "llm_usage": {"total_tokens": 12, "cost_usd": 0.02}})}\n\n'
+
+
+class _ExpensiveChatService:
+    def chat_stream(self, messages, user_id=None, db=None, context=None):
+        yield 'data: {"type":"token","content":"Expensive answer"}\n\n'
+        yield f'data: {json.dumps({"type": "done", "tokens_used": 20000, "tools_called": 0, "llm_usage": {"total_tokens": 20000}})}\n\n'
 
 
 class TestChatTurnService(unittest.TestCase):
@@ -89,6 +95,48 @@ class TestChatTurnService(unittest.TestCase):
         self.assertEqual(saved_messages[1].role, "assistant")
         self.assertEqual(saved_messages[1].content, "Hello world")
         self.assertEqual(saved_messages[1].tools_called, 1)
+        db.close()
+
+    def test_run_turn_sync_fails_when_chat_charge_cannot_be_deducted(self) -> None:
+        db = self.SessionLocal()
+        db.add(
+            Usage(
+                user_id=1,
+                amount=1,
+                balance_after=1,
+                transaction_type="initial_balance",
+                description="Low balance",
+            )
+        )
+        db.commit()
+        db.close()
+
+        with patch("services.chat_turn_service.SessionLocal", self.SessionLocal):
+            turn_id, session_id, messages = self.service.prepare_turn(
+                user_id=1,
+                body_messages=[{"role": "user", "content": "Write a long report"}],
+                session_id=None,
+            )
+
+            with patch("services.chat_turn_service.get_chat_service", return_value=_ExpensiveChatService()):
+                result = self.service.run_turn_sync(
+                    turn_id=turn_id,
+                    session_id=session_id,
+                    user_id=1,
+                    messages=messages,
+                    context=None,
+                )
+
+        db = self.SessionLocal()
+        turn = db.get(ChatTurn, turn_id)
+        saved_messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).all()
+        charges = db.query(Usage).filter(Usage.transaction_type == "chat_cost").all()
+
+        self.assertEqual(result["type"], "error")
+        self.assertEqual(turn.status, "failed")
+        self.assertEqual(turn.error_message, "Insufficient token balance")
+        self.assertEqual(len(saved_messages), 1)
+        self.assertEqual(charges, [])
         db.close()
 
 

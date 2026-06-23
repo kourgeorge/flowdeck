@@ -255,7 +255,7 @@ class ChatTurnService:
         )
 
         try:
-            token_service.deduct_for_chat(
+            deducted = token_service.deduct_for_chat(
                 user_id,
                 tokens_used,
                 db,
@@ -267,6 +267,11 @@ class ChatTurnService:
             )
         except Exception:
             logger.warning("Failed to deduct chat tokens for user_id=%s", user_id, exc_info=True)
+            deducted = False
+
+        if not deducted:
+            db.rollback()
+            return self._fail_turn(db, turn_id, "Insufficient token balance")
 
         update_session_after_messages(db, session_id)
         self._set_turn_state(

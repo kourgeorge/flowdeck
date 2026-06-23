@@ -14,6 +14,7 @@ from config import MAJOR_TICKERS
 from models.db_models import User
 from services.email_service import send_welcome_email
 from services.subscription_service import subscribe_many
+from services.user_deletion_service import delete_user_and_owned_data
 from services.user_profile_service import ensure_profile_exists
 
 
@@ -95,8 +96,7 @@ def delete_account(user: User, password: Optional[str], db: Session) -> None:
             raise AuthError(400, "Password required for account deletion")
         if not verify_password(password, user.hashed_password):
             raise AuthError(401, "Invalid password")
-    db.delete(user)
-    db.commit()
+    delete_user_and_owned_data(db, user.id)
 
 
 def get_google_auth_url(client_id: str, redirect_uri: str, state: Optional[str] = None) -> str:

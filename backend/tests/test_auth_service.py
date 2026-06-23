@@ -12,8 +12,8 @@ from sqlalchemy.orm import sessionmaker
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from database import Base
-from models.db_models import Subscription, User, UserProfile
-from services.auth_service import DEFAULT_SIGNUP_TICKERS, google_callback, register
+from models.db_models import ChatMessage, ChatSession, Subscription, User, UserProfile
+from services.auth_service import DEFAULT_SIGNUP_TICKERS, delete_account, google_callback, register
 
 
 class _FakeResponse:
@@ -116,6 +116,21 @@ class TestAuthService(unittest.TestCase):
         self.assertEqual([sub.ticker for sub in subscriptions], sorted(DEFAULT_SIGNUP_TICKERS))
         self.assertTrue(all(sub.email_updates is False for sub in subscriptions))
         mock_welcome.assert_called_once_with("googleuser@example.com")
+
+    def test_delete_account_removes_chat_data_without_database_cascades(self) -> None:
+        with patch("services.auth_service.send_welcome_email"):
+            _, user_id, _ = register("delete-me@example.com", "secret123", self.db)
+        user = self.db.get(User, user_id)
+        self.assertIsNotNone(user)
+        self.db.add(ChatSession(id=100, user_id=user_id, title="Delete me"))
+        self.db.add(ChatMessage(id=1000, session_id=100, role="user", content="hello", sort_order=1))
+        self.db.commit()
+
+        delete_account(user, "secret123", self.db)
+
+        self.assertIsNone(self.db.get(User, user_id))
+        self.assertIsNone(self.db.get(ChatSession, 100))
+        self.assertIsNone(self.db.get(ChatMessage, 1000))
 
 
 if __name__ == "__main__":
