@@ -188,8 +188,9 @@ class TestAdminService(unittest.TestCase):
         session = ChatSession(user_id=victim.id, title="Victim chat")
         self.db.add(session)
         self.db.flush()
+        session_id = session.id
         message = ChatMessage(
-            session_id=session.id,
+            session_id=session_id,
             role="user",
             content="hello",
             sort_order=1,
@@ -215,7 +216,7 @@ class TestAdminService(unittest.TestCase):
         self.assertEqual(self.db.query(Usage).filter(Usage.user_id == victim.id).count(), 0)
         self.assertEqual(self.db.query(UserSchedule).filter(UserSchedule.user_id == victim.id).count(), 0)
         self.assertEqual(self.db.query(ChatSession).filter(ChatSession.user_id == victim.id).count(), 0)
-        self.assertEqual(self.db.query(ChatMessage).filter(ChatMessage.session_id == session.id).count(), 0)
+        self.assertEqual(self.db.query(ChatMessage).filter(ChatMessage.session_id == session_id).count(), 0)
         self.assertEqual(self.db.query(ChatTurn).filter(ChatTurn.user_id == victim.id).count(), 0)
         self.assertEqual(self.db.query(Execution).filter(Execution.creator_id == victim.id).count(), 0)
         self.assertEqual(self.db.query(Report).filter(Report.execution_id == 43).count(), 0)

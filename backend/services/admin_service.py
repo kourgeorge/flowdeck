@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from config import RESULTS_DIR
@@ -84,8 +84,8 @@ def delete_user(db: Session, user_id: int) -> bool:
     if user.is_admin:
         raise AdminUserDeletionError("Admin accounts cannot be deleted")
 
-    execution_ids = db.query(Execution.id).filter(Execution.creator_id == user_id).subquery()
-    session_ids = db.query(ChatSession.id).filter(ChatSession.user_id == user_id).subquery()
+    execution_ids = select(Execution.id).where(Execution.creator_id == user_id)
+    session_ids = select(ChatSession.id).where(ChatSession.user_id == user_id)
 
     db.query(ChatTurn).filter(
         or_(
