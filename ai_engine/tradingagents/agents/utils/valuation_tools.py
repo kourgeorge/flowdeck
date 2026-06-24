@@ -62,8 +62,6 @@ _INDEX_ETF_NAME_KEYWORDS = (
     " ETN",
     " INDEX",
     " INDEX FUND",
-    " TRUST",
-    " FUND",
     " SPDR",
     " ISHARES",
     " VANGUARD",
@@ -213,21 +211,29 @@ def _average_metric(entries: list[Dict[str, Any]], metric_name: str) -> Optional
 
 def _is_index_or_etf(fundamentals: Dict[str, Any]) -> bool:
     profile = _extract_company_profile(fundamentals)
-    candidates = [
+    type_candidates = [
         fundamentals.get("QuoteType"),
         fundamentals.get("AssetType"),
         fundamentals.get("SecurityType"),
         fundamentals.get("InstrumentType"),
-        fundamentals.get("Category"),
-        fundamentals.get("FundFamily"),
         profile.get("quoteType"),
         profile.get("assetType"),
         profile.get("securityType"),
         profile.get("instrumentType"),
+    ]
+    normalized_type_fields = " ".join(_normalize_upper(value) for value in type_candidates if value)
+    if any(keyword in normalized_type_fields for keyword in ("ETF", "ETN", "INDEX", "MUTUAL FUND", "MUTUALFUND", "FUND")):
+        return True
+    if any(keyword in normalized_type_fields for keyword in ("EQUITY", "COMMON STOCK", "COMMON SHARE", "ORDINARY SHARE")):
+        return False
+
+    fund_metadata_candidates = [
+        fundamentals.get("Category"),
+        fundamentals.get("FundFamily"),
         profile.get("category"),
     ]
-    normalized_fields = " ".join(_normalize_upper(value) for value in candidates if value)
-    if any(keyword.strip() in normalized_fields for keyword in ("ETF", "ETN", "INDEX", "MUTUAL FUND", "FUND")):
+    normalized_fund_metadata = " ".join(_normalize_upper(value) for value in fund_metadata_candidates if value)
+    if any(keyword in normalized_fund_metadata for keyword in ("ETF", "ETN", "INDEX", "MUTUAL FUND", "MUTUALFUND", "FUND")):
         return True
 
     name_candidates = [

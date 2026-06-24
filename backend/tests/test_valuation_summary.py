@@ -11,6 +11,7 @@ from ai_engine.tradingagents.agents.analysts.valuation_analyst import (
     ValuationSummaryTable,
 )
 from ai_engine.tradingagents.agents.utils.valuation_tools import (
+    _is_index_or_etf,
     calculate_multi_method_valuation_data,
     calculate_valuation_summary,
 )
@@ -201,6 +202,32 @@ class TestValuationSummary(unittest.TestCase):
             result["valuation_bridge"]["fair_value"],
             places=6,
         )
+
+    def test_equity_trust_name_is_not_treated_as_etf(self):
+        fundamentals = {
+            "QuoteType": "EQUITY",
+            "Name": "Digital Realty Trust, Inc.",
+            "company_info": {
+                "quoteType": "EQUITY",
+                "longName": "Digital Realty Trust, Inc.",
+                "sector": "Real Estate",
+                "industry": "REIT - Specialty",
+            },
+        }
+
+        self.assertFalse(_is_index_or_etf(fundamentals))
+
+    def test_known_etf_trust_name_is_treated_as_etf(self):
+        fundamentals = {
+            "QuoteType": "ETF",
+            "Name": "SPDR S&P 500 ETF Trust",
+            "company_info": {
+                "quoteType": "ETF",
+                "longName": "SPDR S&P 500 ETF Trust",
+            },
+        }
+
+        self.assertTrue(_is_index_or_etf(fundamentals))
 
 
     def test_get_peer_comparables_selects_real_peers_and_computes_averages(self):
