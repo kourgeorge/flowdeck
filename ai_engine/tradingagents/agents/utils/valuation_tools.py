@@ -470,12 +470,13 @@ def _build_valuation_bridge(
 
     # Handle overvalued case (negative gap)
     if total_gap <= 0:
+        risk_discount = round(abs(total_gap), 2)
         return {
             "current_price": current_price,
             "growth_premium": 0.0,
             "multiple_expansion": 0.0,
-            "risk_discount": abs(total_gap),  # Premium being paid
-            "fair_value": fair_value_base,
+            "risk_discount": risk_discount,  # Premium being paid
+            "fair_value": current_price - risk_discount,
         }
 
     # Calculate actual contributions from each method
@@ -527,12 +528,16 @@ def _build_valuation_bridge(
             growth_premium += shortfall * 0.5
             multiple_expansion += shortfall * 0.5
 
+    growth_premium = round(growth_premium, 2)
+    multiple_expansion = round(multiple_expansion, 2)
+    risk_discount = round(risk_discount, 2)
+
     return {
         "current_price": current_price,
-        "growth_premium": round(growth_premium, 2),
-        "multiple_expansion": round(multiple_expansion, 2),
-        "risk_discount": round(risk_discount, 2),
-        "fair_value": fair_value_base,
+        "growth_premium": growth_premium,
+        "multiple_expansion": multiple_expansion,
+        "risk_discount": risk_discount,
+        "fair_value": current_price + growth_premium + multiple_expansion - risk_discount,
     }
 
 
