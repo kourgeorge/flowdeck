@@ -70,6 +70,45 @@ def _extract_confidence(*metas: object) -> Optional[float]:
     return None
 
 
+def _report_data_from_metadata(meta: dict) -> ReportData:
+    """Build the API report payload without dropping structured report metadata."""
+    return ReportData(
+        content=meta.get("content"),
+        score=meta.get("score"),
+        score_label=meta.get("score_label"),
+        key_takeaways=meta.get("key_takeaways") or [],
+        analysis_date=meta.get("analysis_date"),
+        generated_at=meta.get("generated_at"),
+        days_ago=meta.get("days_ago"),
+        models_used=meta.get("models_used"),
+        bull_viewpoint=meta.get("bull_viewpoint"),
+        bear_viewpoint=meta.get("bear_viewpoint"),
+        risky_viewpoint=meta.get("risky_viewpoint"),
+        safe_viewpoint=meta.get("safe_viewpoint"),
+        neutral_viewpoint=meta.get("neutral_viewpoint"),
+        tps_plan=meta.get("tps_plan"),
+        resources=meta.get("resources") or [],
+        agent_steps=meta.get("agent_steps") or [],
+        expected_return_pct=meta.get("expected_return_pct"),
+        bear_case_return_pct=meta.get("bear_case_return_pct"),
+        bull_case_return_pct=meta.get("bull_case_return_pct"),
+        current_price=meta.get("current_price"),
+        currency=meta.get("currency"),
+        fair_value_bear=meta.get("fair_value_bear"),
+        fair_value_base=meta.get("fair_value_base"),
+        fair_value_bull=meta.get("fair_value_bull"),
+        current_discount_pct=meta.get("current_discount_pct"),
+        valuation_conviction=meta.get("valuation_conviction"),
+        valuation_key_assumptions=meta.get("valuation_key_assumptions"),
+        valuation_summary=meta.get("valuation_summary"),
+        valuation_bridge=meta.get("valuation_bridge"),
+        valuation_sensitivity=meta.get("valuation_sensitivity"),
+        dcf=meta.get("dcf"),
+        pe_comps=meta.get("pe_comps"),
+        ev_ebitda=meta.get("ev_ebitda"),
+    )
+
+
 def _get_ticker_widgets_sync(
     tickers: Optional[str],
     date: Optional[str],
@@ -347,29 +386,7 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
         latest_reports = gw.get_reports_for_run(latest_analysis_run_id)
         latest_reports_with_scores_raw = gw.get_reports_with_scores(latest_analysis_run_id)
         latest_reports_with_scores = {
-            k: ReportData(
-                content=v.get('content'),
-                score=v.get('score'),
-                score_label=v.get('score_label'),
-                key_takeaways=v.get('key_takeaways') or [],
-                analysis_date=v.get('analysis_date'),
-                generated_at=v.get('generated_at'),
-                days_ago=v.get('days_ago'),
-                models_used=v.get('models_used'),
-                bull_viewpoint=v.get('bull_viewpoint'),
-                bear_viewpoint=v.get('bear_viewpoint'),
-                risky_viewpoint=v.get('risky_viewpoint'),
-                safe_viewpoint=v.get('safe_viewpoint'),
-                neutral_viewpoint=v.get('neutral_viewpoint'),
-                tps_plan=v.get('tps_plan'),
-                resources=v.get('resources') or [],
-                agent_steps=v.get('agent_steps') or [],
-                expected_return_pct=v.get('expected_return_pct'),
-                bear_case_return_pct=v.get('bear_case_return_pct'),
-                bull_case_return_pct=v.get('bull_case_return_pct'),
-                current_price=v.get('current_price'),
-                currency=v.get('currency'),
-            )
+            k: _report_data_from_metadata(v)
             for k, v in latest_reports_with_scores_raw.items()
         }
         first_report = next(iter(latest_reports_with_scores_raw.values()), {})
@@ -493,29 +510,7 @@ async def get_ticker_reports_for_run(
         if not scores_raw:
             return None
         return {
-            k: ReportData(
-                content=v.get("content"),
-                score=v.get("score"),
-                score_label=v.get("score_label"),
-                key_takeaways=v.get("key_takeaways") or [],
-                analysis_date=v.get("analysis_date"),
-                generated_at=v.get("generated_at"),
-                days_ago=v.get("days_ago"),
-                models_used=v.get("models_used"),
-                bull_viewpoint=v.get("bull_viewpoint"),
-                bear_viewpoint=v.get("bear_viewpoint"),
-                risky_viewpoint=v.get("risky_viewpoint"),
-                safe_viewpoint=v.get("safe_viewpoint"),
-                neutral_viewpoint=v.get("neutral_viewpoint"),
-                tps_plan=v.get("tps_plan"),
-                resources=v.get("resources") or [],
-                agent_steps=v.get("agent_steps") or [],
-                expected_return_pct=v.get("expected_return_pct"),
-                bear_case_return_pct=v.get("bear_case_return_pct"),
-                bull_case_return_pct=v.get("bull_case_return_pct"),
-                current_price=v.get("current_price"),
-                currency=v.get("currency"),
-            )
+            k: _report_data_from_metadata(v)
             for k, v in scores_raw.items()
         }
 
