@@ -28,6 +28,7 @@ class TestAdminService(unittest.TestCase):
         Base.metadata.create_all(bind=self.engine)
         self.db = self.SessionLocal()
         self.db.add(User(id=1, email="admin@example.com", hashed_password="x", token_balance=1000))
+        self.db.commit()
         self.db.add(
             Execution(
                 id=42,
@@ -39,6 +40,7 @@ class TestAdminService(unittest.TestCase):
                 created_at=datetime(2026, 4, 7, 12, 0, 0),
             )
         )
+        self.db.commit()
         self.db.add_all(
             [
                 Report(
