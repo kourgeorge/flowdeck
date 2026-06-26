@@ -211,12 +211,6 @@ async def run_scheduled_jobs() -> None:
                 if not _should_run_now(now_utc, schedule, default_tz):
                     continue
 
-                # Mark as executed IMMEDIATELY to prevent duplicate runs on the same tick
-                # or if the process crashes/fails. We update this timestamp before attempting
-                # the digest generation to ensure we don't retry on every scheduler tick.
-                schedule.last_executed_at = now_utc
-                db.commit()
-
                 tz_name = schedule.timezone or _get_default_timezone()
                 try:
                     tz = ZoneInfo(tz_name)
@@ -271,6 +265,9 @@ async def run_scheduled_jobs() -> None:
                 )
 
                 if execution_id:
+                    schedule.last_executed_at = now_utc
+                    db.commit()
+
                     ok = send_daily_digest_email_to_user(execution_id, user.email)
                     if ok:
                         processed_count += 1

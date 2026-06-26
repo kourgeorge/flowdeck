@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 # Default: flowdeck.db in backend directory
@@ -33,6 +33,21 @@ engine = create_engine(
     pool_recycle=3600,        # Recycle connections after 1 hour
     echo=os.environ.get("SQL_ECHO", "").lower() in ("true", "1", "yes"),
 )
+
+
+def _set_sqlite_pragma_foreign_keys(dbapi_connection, _connection_record) -> None:
+    """Enable SQLite foreign-key cascades for every pooled connection."""
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA foreign_keys=ON")
+    finally:
+        cursor.close()
+
+
+if DATABASE_URL.startswith("sqlite"):
+    event.listen(engine, "connect", _set_sqlite_pragma_foreign_keys)
+
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
