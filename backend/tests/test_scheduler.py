@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+import types
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -11,6 +12,15 @@ from sqlalchemy.pool import StaticPool
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+
+async def _placeholder_run_and_store_digest(*_args, **_kwargs):
+    raise AssertionError("run_and_store_digest should be patched by scheduler tests")
+
+
+_digest_service_stub = types.ModuleType("services.digest_service")
+_digest_service_stub.run_and_store_digest = _placeholder_run_and_store_digest
+sys.modules.setdefault("services.digest_service", _digest_service_stub)
 
 from database import Base
 from models.db_models import User, UserSchedule
