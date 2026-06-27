@@ -11,6 +11,7 @@ from ai_engine.tradingagents.agents.analysts.valuation_analyst import (
     ValuationSummaryTable,
 )
 from ai_engine.tradingagents.agents.utils.valuation_tools import (
+    _is_index_or_etf,
     calculate_multi_method_valuation_data,
     calculate_valuation_summary,
 )
@@ -74,6 +75,52 @@ class TestValuationSummary(unittest.TestCase):
         self.assertEqual(dumped["valuation_key_assumptions"], ["Revenue growth holds", "Margins expand"])
         self.assertEqual(len(dumped["valuation_summary"]["rows"]), 3)
         self.assertAlmostEqual(dumped["valuation_summary"]["weighted_avg"]["implied_value"], 50.55)
+
+    def test_structured_output_accepts_full_tool_assumption_list(self):
+        assumptions = [
+            "DCF projection period: 5 years",
+            "FCF growth: bear 3.0%, base 5.0%, bull 7.0%",
+            "WACC: bear 10.0%, base 9.0%, bull 8.0%",
+            "Terminal growth: bear 1.5%, base 2.5%, bull 3.0%",
+            "Forward EPS used for P/E comps: 5.00",
+            "Base EV/EBITDA multiple: 12.00x",
+            "Method weights: DCF 40.0%, P/E Comps 30.0%, EV/EBITDA 30.0%",
+            "Market-implied growth rate (reverse DCF): 4.5%",
+        ]
+        result = ValuationAnalysisOutput(
+            report="Valuation report body.",
+            valuation_score=7,
+            fair_value_bear=40.0,
+            fair_value_base=50.0,
+            fair_value_bull=60.0,
+            current_discount_pct=10.0,
+            valuation_conviction="medium",
+            valuation_key_assumptions=assumptions,
+            dcf=ValuationMethodScenario(bear=40.0, base=50.0, bull=60.0),
+            pe_comps=ValuationMethodScenario(bear=42.0, base=52.0, bull=62.0),
+            ev_ebitda=ValuationMethodScenario(bear=38.0, base=48.0, bull=58.0),
+            valuation_summary=ValuationSummaryTable(**calculate_valuation_summary(
+                dcf={"bear": 40.0, "base": 50.0, "bull": 60.0},
+                pe_comps={"bear": 42.0, "base": 52.0, "bull": 62.0},
+                ev_ebitda={"bear": 38.0, "base": 48.0, "bull": 58.0},
+            )),
+            valuation_bridge=ValuationBridge(
+                current_price=45.00,
+                growth_premium=6.00,
+                multiple_expansion=4.00,
+                risk_discount=5.00,
+                fair_value=50.00,
+            ),
+            valuation_sensitivity=ValuationSensitivity(
+                fcf_growth_rate=ValuationSensitivityRange(delta=0.02, low=47.0, high=53.0),
+                wacc=ValuationSensitivityRange(delta=0.01, low=46.0, high=54.0),
+                terminal_growth=ValuationSensitivityRange(delta=0.005, low=48.0, high=52.0),
+                exit_multiple=ValuationSensitivityRange(delta=2.0, low=49.0, high=51.0),
+            ),
+            key_takeaways=["Base case implies upside."],
+        )
+
+        self.assertEqual(result.valuation_key_assumptions, assumptions)
 
     def test_model_dump_uses_state_field_names(self):
         result = ValuationAnalysisOutput(
@@ -201,6 +248,26 @@ class TestValuationSummary(unittest.TestCase):
             result["valuation_bridge"]["fair_value"],
             places=6,
         )
+
+    def test_equity_trust_name_is_not_classified_as_index_or_etf(self):
+        fundamentals = {
+            "QuoteType": "EQUITY",
+            "Name": "Federal Realty Investment Trust",
+            "company_info": {
+                "quoteType": "EQUITY",
+                "longName": "Federal Realty Investment Trust",
+            },
+        }
+
+        self.assertFalse(_is_index_or_etf(fundamentals))
+
+    def test_explicit_etf_type_is_classified_as_index_or_etf(self):
+        fundamentals = {
+            "QuoteType": "ETF",
+            "Name": "SPDR S&P 500 ETF Trust",
+        }
+
+        self.assertTrue(_is_index_or_etf(fundamentals))
 
 
     def test_get_peer_comparables_selects_real_peers_and_computes_averages(self):
