@@ -357,7 +357,11 @@ def admin_delete_user(
     db: Session = Depends(get_db),
 ):
     """Delete a user account. Admin only. This action is irreversible."""
-    if not admin_service.delete_user(db, user_id):
+    try:
+        deleted = admin_service.delete_user(db, user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not deleted:
         raise HTTPException(status_code=404, detail="User not found")
     return {"ok": True, "id": user_id}
 
