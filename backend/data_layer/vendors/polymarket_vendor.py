@@ -371,11 +371,21 @@ def search_markets_by_keywords(
     """
     all_markets = []
     seen_ids = set()
-    
-    for keyword in keywords:
+
+    # The /events title= filter is case-sensitive, so expand each keyword with its
+    # uppercase variant to catch titles like "NVIDIA above $150" when searching "Nvidia".
+    expanded_keywords = []
+    seen_kw: set = set()
+    for kw in keywords:
+        for variant in (kw, kw.upper()):
+            if variant not in seen_kw:
+                seen_kw.add(variant)
+                expanded_keywords.append((variant, kw))  # (query_to_send, original_keyword)
+
+    for query, original_keyword in expanded_keywords:
         try:
             markets = fetch_markets(
-                query=keyword,
+                query=query,
                 category=category,
                 active=active,
                 limit=limit_per_keyword
@@ -387,11 +397,11 @@ def search_markets_by_keywords(
                 if market_id and market_id not in seen_ids:
                     seen_ids.add(market_id)
                     # Add search keyword for relevance tracking
-                    market['matched_keyword'] = keyword
+                    market['matched_keyword'] = original_keyword
                     all_markets.append(market)
                     
         except PolymarketAPIError as e:
-            logger.warning(f"Error searching for keyword '{keyword}': {e}")
+            logger.warning(f"Error searching for keyword '{query}': {e}")
             continue
     
     logger.info(f"Found {len(all_markets)} unique markets across {len(keywords)} keywords")
