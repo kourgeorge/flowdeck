@@ -179,46 +179,59 @@ def fetch_markets(
 ) -> List[Dict]:
     """
     Fetch markets from Polymarket API.
-    
-    Uses /events for browsing/searching markets.  Returns only open,
-    unresolved markets by checking both server-side active/closed flags
-    and per-market end_date so that old resolved markets never appear.
-    
+
+    Keyword searches go through /public-search (real full-text matching on
+    q=); browse-without-query uses /events.  The /events title= param does
+    NOT filter server-side — it silently returns the default event list — so
+    it must never be used for keyword search.  Returns only open, unresolved
+    markets by checking both server-side active/closed flags and per-market
+    end_date so that old resolved markets never appear.
+
     Args:
         query: Search query string
         category: Filter by category (not used)
         active: If True, only return active (unresolved) markets
         limit: Maximum number of markets to return
         offset: Pagination offset
-        
+
     Returns:
         List of market dictionaries extracted from events
-        
+
     Raises:
         PolymarketAPIError: On API errors
     """
     params: Dict[str, Any] = {}
 
-    # /events is the stable public endpoint — /public-search returns 403
-    url = f"{POLYMARKET_API_BASE_URL}/events"
-    params["limit"] = limit
-    params["offset"] = offset
-    if active:
-        params["active"] = "true"
-        params["closed"] = "false"
-        # Request newest events first so keyword matches return recent results
-        params["order"] = "startDate"
-        params["ascending"] = "false"
     if query:
-        params["title"] = query  # server-side keyword filter
+        # /public-search does case-insensitive full-text keyword matching and
+        # returns events (each with a 'markets' array) under an 'events' key.
+        url = f"{POLYMARKET_API_BASE_URL}/public-search"
+        params["q"] = query
+        params["limit_per_type"] = limit
+        if active:
+            params["events_status"] = "active"
+    else:
+        # No query → browse newest active events.
+        url = f"{POLYMARKET_API_BASE_URL}/events"
+        params["limit"] = limit
+        params["offset"] = offset
+        if active:
+            params["active"] = "true"
+            params["closed"] = "false"
+            params["order"] = "startDate"
+            params["ascending"] = "false"
 
     try:
         logger.info(f"Fetching Polymarket data: query={query}, url={url}")
         data = _make_request(url, params=params)
 
-        # /events returns a list directly or wrapped in 'data'
-        events = data if isinstance(data, list) else data.get('data', [])
-        logger.info(f"Found {len(events)} events from /events for query '{query}'")
+        # /public-search wraps events in {'events': [...]}, /events returns a
+        # bare list or {'data': [...]}.
+        if isinstance(data, list):
+            events = data
+        else:
+            events = data.get('events') or data.get('data') or []
+        logger.info(f"Found {len(events)} events for query '{query}'")
         
         # Extract markets from events and flatten
         all_markets = []
@@ -372,36 +385,28 @@ def search_markets_by_keywords(
     all_markets = []
     seen_ids = set()
 
-    # The /events title= filter is case-sensitive, so expand each keyword with its
-    # uppercase variant to catch titles like "NVIDIA above $150" when searching "Nvidia".
-    expanded_keywords = []
-    seen_kw: set = set()
-    for kw in keywords:
-        for variant in (kw, kw.upper()):
-            if variant not in seen_kw:
-                seen_kw.add(variant)
-                expanded_keywords.append((variant, kw))  # (query_to_send, original_keyword)
-
-    for query, original_keyword in expanded_keywords:
+    # /public-search matching is case-insensitive, so a single query per keyword
+    # is sufficient (no need to also search the uppercase variant).
+    for keyword in keywords:
         try:
             markets = fetch_markets(
-                query=query,
+                query=keyword,
                 category=category,
                 active=active,
                 limit=limit_per_keyword
             )
-            
+
             # Deduplicate by market ID
             for market in markets:
                 market_id = market.get('id')
                 if market_id and market_id not in seen_ids:
                     seen_ids.add(market_id)
                     # Add search keyword for relevance tracking
-                    market['matched_keyword'] = original_keyword
+                    market['matched_keyword'] = keyword
                     all_markets.append(market)
-                    
+
         except PolymarketAPIError as e:
-            logger.warning(f"Error searching for keyword '{query}': {e}")
+            logger.warning(f"Error searching for keyword '{keyword}': {e}")
             continue
     
     logger.info(f"Found {len(all_markets)} unique markets across {len(keywords)} keywords")
