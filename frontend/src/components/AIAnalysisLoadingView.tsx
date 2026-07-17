@@ -2,8 +2,7 @@ import type { AnalysisLiveActivity, AnalysisTraceStep } from '../services/types'
 
 const ALL_AGENTS = [
   'Market Analyst',
-  'Social Analyst',
-  'News Analyst',
+  'News & Sentiment Analyst',
   'Fundamentals Analyst',
   'Technical Analyst',
   'SEC Analyst',
@@ -72,7 +71,13 @@ export default function AIAnalysisLoadingView({
     : [];
   const activeAgentSet = new Set(activeAgents);
   const completedCount = Object.values(agentStatuses || {}).filter((status) => status === 'completed').length;
-  const pendingCount = ALL_AGENTS.length - completedCount - activeAgents.length;
+  // Show only the agents that are actually part of this run. The backend seeds
+  // agentStatuses with just the relevant agents (e.g. SEC/Fundamentals analysts are
+  // excluded for ETFs), so derive the chip list from it and keep the canonical order.
+  const displayAgents = agentStatuses && Object.keys(agentStatuses).length > 0
+    ? ALL_AGENTS.filter((agent) => agent in agentStatuses)
+    : ALL_AGENTS;
+  const pendingCount = displayAgents.length - completedCount - activeAgents.length;
   
   // Use live trace if available (shows complete tool sequence), otherwise fall back to activities
   const displayItems = liveTrace && liveTrace.length > 0
@@ -145,7 +150,7 @@ export default function AIAnalysisLoadingView({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-          {ALL_AGENTS.map((agent, index) => {
+          {displayAgents.map((agent, index) => {
             const status = agentStatuses?.[agent] || 'pending';
             const isActive = activeAgentSet.has(agent);
             const isCompleted = status === 'completed';
@@ -163,7 +168,7 @@ export default function AIAnalysisLoadingView({
                 >
                   {agent}
                 </div>
-                {index < ALL_AGENTS.length - 1 && (
+                {index < displayAgents.length - 1 && (
                   <svg
                     className={`h-4 w-4 shrink-0 ${isCompleted ? 'text-emerald-400/50' : 'text-slate-700'}`}
                     fill="none"

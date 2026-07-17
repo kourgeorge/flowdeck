@@ -87,7 +87,6 @@ def _normalize_takeaway_list(val) -> list:
 _REPORT_TO_STATE_TAKEAWAYS_KEY = {
     "market_report": "market_key_takeaways",
     "sentiment_report": "sentiment_key_takeaways",
-    "news_report": "news_key_takeaways",
     "fundamentals_report": "fundamentals_key_takeaways",
     "technical_report": "technical_key_takeaways",
     "sec_report": "sec_key_takeaways",
@@ -477,7 +476,7 @@ class AnalysisService:
 
             # Default analysts if not provided (social = sentiment/social media analyst)
             if analysts is None:
-                analysts = ["market", "social", "news", "fundamentals", "technical", "sec", "valuation"]
+                analysts = ["market", "social", "fundamentals", "technical", "sec", "valuation"]
             # Exclude SEC analyst when no SEC EDGAR data exists for this ticker
             if "sec" in analysts and not _has_sec_data(ticker):
                 analysts = [a for a in analysts if a != "sec"]
@@ -525,36 +524,37 @@ class AnalysisService:
             log_file = results_dir / "message_tool.log"
             log_file.touch(exist_ok=True)
             
-            # Initialize agent statuses
-            agent_statuses = {
-                "Market Analyst": "pending",
-                "Social Analyst": "pending",
-                "News Analyst": "pending",
-                "Fundamentals Analyst": "pending",
-                "Technical Analyst": "pending",
-                "SEC Analyst": "pending",
-                "Valuation Analyst": "pending",
-                "Bull Researcher": "pending",
-                "Bear Researcher": "pending",
-                "Research Manager": "pending",
-                "Trader": "pending",
-                "Risky Analyst": "pending",
-                "Neutral Analyst": "pending",
-                "Safe Analyst": "pending",
-                "Portfolio Manager": "pending",
-            }
-            
-            # Set analyst statuses based on parallel execution mode
+            # Map analyst keys to their display names.
             analyst_status_map = {
                 "market": "Market Analyst",
-                "social": "Social Analyst",
-                "news": "News Analyst",
+                "social": "News & Sentiment Analyst",
                 "fundamentals": "Fundamentals Analyst",
                 "technical": "Technical Analyst",
                 "sec": "SEC Analyst",
                 "valuation": "Valuation Analyst",
             }
-            
+
+            # Initialize agent statuses. Only include analysts actually selected for
+            # this ticker (e.g. SEC/fundamentals are excluded for ETFs like QQQ) so the
+            # UI shows only relevant agents instead of leaving them as "pending" chips.
+            # Downstream agents (research/trading/risk/portfolio) always run.
+            agent_statuses = {}
+            for analyst_key in analysts:
+                agent_name = analyst_status_map.get(analyst_key)
+                if agent_name:
+                    agent_statuses[agent_name] = "pending"
+            for agent_name in (
+                "Bull Researcher",
+                "Bear Researcher",
+                "Research Manager",
+                "Trader",
+                "Risky Analyst",
+                "Safe Analyst",
+                "Neutral Analyst",
+                "Portfolio Manager",
+            ):
+                agent_statuses[agent_name] = "pending"
+
             # Check if parallel execution is enabled (default: True)
             parallel_analysts = config.get("parallel_analysts", True)
             
@@ -808,7 +808,6 @@ class AnalysisService:
             analyst_to_report_key = {
                 "market": "market_report",
                 "social": "sentiment_report",
-                "news": "news_report",
                 "fundamentals": "fundamentals_report",
                 "technical": "technical_report",
                 "sec": "sec_report",
@@ -817,7 +816,6 @@ class AnalysisService:
             report_key_to_analyst = {
                 "market_report": "market",
                 "sentiment_report": "social",
-                "news_report": "news",
                 "fundamentals_report": "fundamentals",
                 "technical_report": "technical",
                 "sec_report": "sec",
@@ -825,8 +823,7 @@ class AnalysisService:
             }
             analyst_status_map_run = {
                 "market": "Market Analyst",
-                "social": "Social Analyst",
-                "news": "News Analyst",
+                "social": "News & Sentiment Analyst",
                 "fundamentals": "Fundamentals Analyst",
                 "technical": "Technical Analyst",
                 "sec": "SEC Analyst",
@@ -899,8 +896,7 @@ class AnalysisService:
                 # Update reports and agent status
                 _reports = [
                     ("market_report", "market_report", "market_score", "Market Score", "Market Analyst"),
-                    ("sentiment_report", "sentiment_report", "sentiment_score", "Sentiment Score", "Social Analyst"),
-                    ("news_report", "news_report", "news_score", "News Score", "News Analyst"),
+                    ("sentiment_report", "sentiment_report", "sentiment_score", "Sentiment Score", "News & Sentiment Analyst"),
                     ("fundamentals_report", "fundamentals_report", "fundamentals_score", "Fundamentals Score", "Fundamentals Analyst"),
                     ("technical_report", "technical_report", "technical_score", "Technical Score", "Technical Analyst"),
                     ("sec_report", "sec_report", "sec_score", "SEC Score", "SEC Analyst"),
@@ -1386,7 +1382,7 @@ class AnalysisService:
     
     # Fixed pipeline order for deriving current_agent when missing (deterministic on refresh).
     _AGENT_PIPELINE_ORDER = (
-        "Market Analyst", "Social Analyst", "News Analyst", "Fundamentals Analyst",
+        "Market Analyst", "News & Sentiment Analyst", "Fundamentals Analyst",
         "Technical Analyst", "SEC Analyst",
         "Bull Researcher", "Bear Researcher", "Research Manager",
         "Trader",
