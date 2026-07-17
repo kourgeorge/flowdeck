@@ -133,6 +133,43 @@ def _make_request(
         raise PolymarketAPIError(f"Unexpected error: {e}")
 
 
+def _is_market_open(market: Dict) -> bool:
+    """
+    Return True if the market is currently open/unresolved.
+
+    Checks the per-market active/closed/archived flags and, crucially,
+    the end_date field — a market whose end_date is in the past is resolved
+    even if the API still returns it with active=true in a keyword search.
+    """
+    # Explicit closed/archived flags take priority
+    if market.get('closed') is True or market.get('archived') is True:
+        return False
+    if market.get('active') is False:
+        return False
+
+    # Check end_date: reject markets that ended before today
+    from datetime import timezone as _tz
+    now_naive = datetime.now(_tz.utc).replace(tzinfo=None)
+    for key in ('endDate', 'end_date', 'end_date_iso', 'endDateIso'):
+        raw = market.get(key)
+        if not raw:
+            continue
+        try:
+            # Strip trailing Z / timezone info for naive UTC comparison
+            clean = str(raw).replace('Z', '').split('+')[0].strip()
+            # Support "2025-07-01T00:00:00" and "2025-07-01" formats
+            if 'T' in clean:
+                end_dt = datetime.strptime(clean[:19], '%Y-%m-%dT%H:%M:%S')
+            else:
+                end_dt = datetime.strptime(clean[:10], '%Y-%m-%d')
+            if end_dt < now_naive:
+                return False
+        except (ValueError, TypeError):
+            pass  # Unparseable date — don't reject on that alone
+
+    return True
+
+
 def fetch_markets(
     query: Optional[str] = None,
     category: Optional[str] = None,
@@ -143,8 +180,9 @@ def fetch_markets(
     """
     Fetch markets from Polymarket API.
     
-    Uses /public-search for keyword queries (with correct 'q' parameter),
-    /events for browsing all markets.
+    Uses /events for browsing/searching markets.  Returns only open,
+    unresolved markets by checking both server-side active/closed flags
+    and per-market end_date so that old resolved markets never appear.
     
     Args:
         query: Search query string
@@ -160,37 +198,27 @@ def fetch_markets(
         PolymarketAPIError: On API errors
     """
     params: Dict[str, Any] = {}
-    
+
+    # /events is the stable public endpoint — /public-search returns 403
+    url = f"{POLYMARKET_API_BASE_URL}/events"
+    params["limit"] = limit
+    params["offset"] = offset
+    if active:
+        params["active"] = "true"
+        params["closed"] = "false"
+        # Request newest events first so keyword matches return recent results
+        params["order"] = "startDate"
+        params["ascending"] = "false"
     if query:
-        # Use /public-search with correct parameters
-        url = f"{POLYMARKET_API_BASE_URL}/public-search"
-        params["q"] = query  # Correct parameter name is 'q', not 'query'
-        params["limit_per_type"] = min(limit, 20)  # Limit per type (events, markets, etc.)
-        params["page"] = offset // limit  # Convert offset to page number
-        params["search_tags"] = "true"
-        params["search_profiles"] = "false"  # Don't search profiles
-    else:
-        # Use /events for browsing all markets
-        url = f"{POLYMARKET_API_BASE_URL}/events"
-        params["limit"] = limit
-        params["offset"] = offset
-        if active:
-            params["active"] = "true"
-            params["closed"] = "false"
-    
+        params["title"] = query  # server-side keyword filter
+
     try:
         logger.info(f"Fetching Polymarket data: query={query}, url={url}")
         data = _make_request(url, params=params)
-        
-        # Handle different response formats
-        if query:
-            # /public-search returns: {"events": [...], "markets": [...], "tags": [...]}
-            events = data.get('events', [])
-            logger.info(f"Found {len(events)} events from /public-search for query '{query}'")
-        else:
-            # /events returns list directly or wrapped in 'data'
-            events = data if isinstance(data, list) else data.get('data', [])
-            logger.info(f"Found {len(events)} events from /events")
+
+        # /events returns a list directly or wrapped in 'data'
+        events = data if isinstance(data, list) else data.get('data', [])
+        logger.info(f"Found {len(events)} events from /events for query '{query}'")
         
         # Extract markets from events and flatten
         all_markets = []
@@ -211,26 +239,29 @@ def fetch_markets(
                 if not isinstance(market, dict):
                     logger.warning(f"Skipping non-dict market: {type(market)}")
                     continue
-                
-                # Debug: Log first market structure to understand data format
-                if idx == 0 and len(all_markets) == 0:
-                    logger.info(f"Sample market keys: {list(market.keys())}")
-                    if 'outcomePrices' in market:
-                        logger.info(f"outcomePrices: {market.get('outcomePrices')}")
-                    if 'outcomes' in market:
-                        logger.info(f"outcomes: {market.get('outcomes')}")
-                    if 'price' in market:
-                        logger.info(f"price: {market.get('price')}")
-                    
+
                 # Add event-level data to market for context
                 market['event_title'] = event.get('title', '')
                 market['event_slug'] = event.get('slug', '')
                 market['event_description'] = event.get('description', '')
+                # Use event end date as fallback for per-market end date
+                for date_key in ('endDate', 'end_date'):
+                    if not market.get(date_key) and event.get(date_key):
+                        market[date_key] = event[date_key]
                 # Use event volume if market volume not available
                 if not market.get('volume'):
                     market['volume'] = event.get('volume', 0)
                 if not market.get('liquidity'):
                     market['liquidity'] = event.get('liquidity', 0)
+
+                # Skip resolved/closed markets — check per-market flags and end_date
+                if active and not _is_market_open(market):
+                    continue
+
+                # Debug: Log first accepted market structure
+                if idx == 0 and len(all_markets) == 0:
+                    logger.info(f"Sample market keys: {list(market.keys())}")
+
                 all_markets.append(market)
         
         # Filter by volume and liquidity thresholds
