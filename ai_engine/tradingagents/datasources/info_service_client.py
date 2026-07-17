@@ -482,6 +482,34 @@ def get_insider_sentiment(
     return str(data)
 
 
+def get_polymarket_sentiment(ticker: str, base_url: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """
+    Fetch aggregated Polymarket prediction-market sentiment for a ticker from info service.
+
+    Calls GET /api/polymarket/ticker/{ticker}. Returns the aggregated dict:
+        {
+            "ticker": str,
+            "overall_sentiment": float,   # 0 (bearish) .. 0.5 (neutral) .. 1 (bullish)
+            "confidence": float,          # 0..1, higher = more trading volume
+            "trend": str,                 # "bullish" | "neutral" | "bearish"
+            "narratives": dict,
+            "top_markets": list[dict],    # question, probability, change_24h, volume, url, ...
+            "market_count": int,
+            "last_updated": str,
+            "error": str | None,
+        }
+    Returns None if the service is not configured or the request fails.
+    """
+    base_url = base_url or _get_info_service_base_url()
+    if not base_url:
+        return None
+    try:
+        data = _get(None, base_url, f"/api/polymarket/ticker/{ticker.upper()}", timeout=90)
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
 def get_market_rates(base_url: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """
     Fetch current market rates (treasury yields, risk-free rate) from info service.

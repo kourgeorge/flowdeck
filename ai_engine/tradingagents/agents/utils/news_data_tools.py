@@ -7,8 +7,71 @@ from ...datasources.info_service_client import (
     get_global_news as get_global_news_via_service,
     get_insider_sentiment as get_insider_sentiment_via_service,
     get_insider_transactions as get_insider_transactions_via_service,
+    get_polymarket_sentiment as get_polymarket_sentiment_via_service,
     require_info_service,
 )
+
+
+def _format_polymarket_sentiment(ticker: str, data: Optional[dict]) -> str:
+    """Format the aggregated Polymarket sentiment dict into a readable summary for the LLM."""
+    if not data:
+        return (
+            f"No Polymarket prediction-market data available for {ticker.upper()} "
+            "(service unavailable or no relevant markets)."
+        )
+
+    error = data.get("error")
+    top_markets = data.get("top_markets") or []
+    market_count = data.get("market_count", 0)
+
+    if error and not top_markets:
+        return (
+            f"No relevant Polymarket prediction markets found for {ticker.upper()}: {error}. "
+            "Treat prediction-market signal as neutral / unavailable."
+        )
+
+    overall = data.get("overall_sentiment", 0.5)
+    confidence = data.get("confidence", 0.0)
+    trend = data.get("trend", "neutral")
+
+    lines = [
+        f"# Polymarket prediction-market sentiment for {ticker.upper()}",
+        "",
+        f"- Overall sentiment: {overall:.2f} on a 0 (bearish) .. 0.5 (neutral) .. 1 (bullish) scale",
+        f"- Trend: {trend}",
+        f"- Confidence: {confidence:.2f} (0..1; driven by trading volume — low volume = weak signal)",
+        f"- Relevant markets found: {market_count}",
+        "",
+        "Prediction markets aggregate real-money bets and are a forward-looking, "
+        "crowd-sourced signal that complements social/Reddit chatter.",
+        "",
+    ]
+
+    if top_markets:
+        lines.append("## Top relevant markets")
+        for m in top_markets[:15]:
+            question = (m.get("question") or m.get("event_title") or "").strip()
+            if not question:
+                continue
+            prob = m.get("probability")
+            change = m.get("change_24h")
+            volume = m.get("volume")
+            end_date = m.get("end_date") or ""
+            parts = []
+            if isinstance(prob, (int, float)):
+                parts.append(f"prob={prob * 100:.0f}%")
+            if isinstance(change, (int, float)):
+                parts.append(f"24h Δ={change * 100:+.1f}pp")
+            if isinstance(volume, (int, float)) and volume:
+                parts.append(f"vol=${volume:,.0f}")
+            if end_date:
+                parts.append(f"ends {str(end_date)[:10]}")
+            meta = ", ".join(parts)
+            lines.append(f"- {question}" + (f" ({meta})" if meta else ""))
+    else:
+        lines.append("No individual markets to display.")
+
+    return "\n".join(lines)
 
 
 @tool
@@ -49,6 +112,31 @@ def get_reddit_company_social(
     """
     require_info_service()
     return get_reddit_company_social_via_service(ticker, start_date, end_date, search_terms)
+
+
+@tool
+def get_polymarket_sentiment(
+    ticker: Annotated[str, "Ticker symbol"],
+) -> str:
+    """
+    Retrieve aggregated Polymarket prediction-market sentiment for a company/ticker.
+
+    Polymarket is a prediction market where people bet real money on future outcomes,
+    so the implied probabilities are a forward-looking, crowd-sourced sentiment signal that
+    complements social-media discussion. The backend maps the ticker to relevant market
+    narratives (company events, sector/industry, macro factors), scores markets by relevance,
+    and aggregates them into an overall sentiment.
+
+    Returns a formatted summary with:
+      - Overall sentiment on a 0 (bearish) .. 0.5 (neutral) .. 1 (bullish) scale
+      - Trend (bullish / neutral / bearish) and confidence (volume-driven; low volume = weak signal)
+      - The most relevant individual markets with implied probability, 24h change, and volume
+
+    Requires INFO_SERVICE_URL (backend). Agents work only with the backend.
+    """
+    require_info_service()
+    data = get_polymarket_sentiment_via_service(ticker)
+    return _format_polymarket_sentiment(ticker, data)
 
 
 @tool

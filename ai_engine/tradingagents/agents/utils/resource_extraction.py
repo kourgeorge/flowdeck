@@ -33,6 +33,14 @@ def extract_resources_from_tool(
         resources = _resources_from_edgar_filing_content(result, ticker)
     elif tool_name == "get_reddit_company_social":
         resources = _resources_from_reddit(args)
+    elif tool_name == "get_polymarket_sentiment":
+        if ticker:
+            resources = [{
+                "type": "polymarket",
+                "ticker": ticker,
+                "url": f"https://polymarket.com/search?q={ticker}",
+                "description": f"Polymarket prediction-market sentiment for {ticker}",
+            }]
     elif tool_name in ("get_fundamentals", "get_balance_sheet", "get_cashflow", "get_income_statement"):
         if ticker:
             resources = [{"type": "fundamentals", "ticker": ticker, "description": f"Financial data for {ticker}"}]
