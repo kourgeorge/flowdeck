@@ -2,6 +2,7 @@
 
 import logging
 import os
+import signal
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -81,8 +82,22 @@ async def lifespan(app: FastAPI):
             if scheduler is None:
                 from apscheduler.schedulers.background import BackgroundScheduler
                 scheduler = BackgroundScheduler()
+            # Hard timeout (seconds) for each cache refresh job.  Movers regularly
+            # takes 45–95 s; give it a generous 4-minute ceiling so it can never
+            # hold the APScheduler slot across a full 5-minute interval cycle.
+            _REFRESH_TIMEOUT = int(os.environ.get("MARKET_CACHE_REFRESH_TIMEOUT", "240"))
+
             def _run_refresh(fn: str) -> None:
                 started_at = time.monotonic()
+
+                def _timeout_handler(signum, frame):
+                    raise TimeoutError(f"Market cache refresh '{fn}' exceeded {_REFRESH_TIMEOUT}s timeout")
+
+                # SIGALRM is Unix-only; guard for safety
+                use_alarm = hasattr(signal, "SIGALRM")
+                if use_alarm:
+                    old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+                    signal.alarm(_REFRESH_TIMEOUT)
                 try:
                     from data_layer import get_data_gateway
                     gateway = get_data_gateway()
@@ -97,17 +112,33 @@ async def lifespan(app: FastAPI):
                         fn,
                         time.monotonic() - started_at,
                     )
+                except TimeoutError:
+                    logger.error(
+                        "Market cache refresh (%s) killed after %ss timeout (elapsed: %.1fs)",
+                        fn,
+                        _REFRESH_TIMEOUT,
+                        time.monotonic() - started_at,
+                    )
                 except Exception:
                     logger.exception("Market cache refresh (%s) failed", fn)
-                    raise
+                finally:
+                    if use_alarm:
+                        signal.alarm(0)
+                        signal.signal(signal.SIGALRM, old_handler)
 
             refresh_base = datetime.now()
+            _JOB_KWARGS = dict(
+                coalesce=True,           # collapse missed runs into one instead of stacking
+                max_instances=1,         # never run the same job concurrently
+                misfire_grace_time=60,   # drop a run if it missed its slot by >60 s
+            )
             scheduler.add_job(
                 partial(_run_refresh, "refresh_market_overview_cache"),
                 "interval",
                 minutes=5,
                 id="market_overview_refresh",
                 next_run_time=refresh_base,
+                **_JOB_KWARGS,
             )
             scheduler.add_job(
                 partial(_run_refresh, "refresh_market_movers_cache"),
@@ -115,6 +146,7 @@ async def lifespan(app: FastAPI):
                 minutes=5,
                 id="market_movers_refresh",
                 next_run_time=refresh_base + timedelta(minutes=1),
+                **_JOB_KWARGS,
             )
             scheduler.add_job(
                 partial(_run_refresh, "refresh_homepage_widgets_cache"),
@@ -122,6 +154,7 @@ async def lifespan(app: FastAPI):
                 minutes=5,
                 id="homepage_widgets_refresh",
                 next_run_time=refresh_base + timedelta(minutes=2),
+                **_JOB_KWARGS,
             )
             if not scheduler.running:
                 scheduler.start()
