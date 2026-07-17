@@ -421,8 +421,26 @@ The valuation summary table provides:
 - **Weighted Avg Implied Value**: This is your PRIMARY fair value estimate using the dynamic method weights returned by `calculate_multi_method_valuation`
 - Individual method values: DCF, P/E Comps, EV/EBITDA
 
+**TERMINOLOGY - DISCOUNT vs PREMIUM (CRITICAL):**
+The `current_discount_pct` field uses this formula:
+```
+current_discount_pct = ((fair_value - current_price) / fair_value) × 100
+```
+
+**Interpret the sign correctly:**
+- **Positive value** (e.g., +20%): Stock is trading BELOW fair value = **DISCOUNT** = **UNDERVALUED** = Good buying opportunity
+- **Negative value** (e.g., -20%): Stock is trading ABOVE fair value = **PREMIUM** = **OVERVALUED** = Caution advised
+
+**In your Executive Summary, you MUST state:**
+- If current_discount_pct > 0: "Trading at a X% DISCOUNT to fair value (undervalued)"
+- If current_discount_pct < 0: "Trading at a X% PREMIUM to fair value (overvalued)"
+
 **Method Divergence Analysis (REQUIRED):**
 - Calculate the range between methods (max - min)
+- **For ETFs/indices with >50% method divergence**: Explain which multiple is most appropriate
+  - P/E regime is typically most reliable for equity ETFs
+  - P/B may overstate value for asset-light tech companies
+  - Consider adjusting weights or noting which method is more reliable
 - If range > 20% of weighted average: **You MUST explicitly discuss the divergence**
 - Example: "DCF suggests $80 while P/E comps indicate $114 - a 43% divergence. This reflects [explain why methods disagree]"
 - **DO NOT cherry-pick the most bearish or bullish method** - use the weighted average
@@ -430,6 +448,7 @@ The valuation summary table provides:
 
 **Executive Summary Must Include:**
 - Current price vs **weighted average** fair value
+- **Correct terminology**: DISCOUNT (undervalued) or PREMIUM (overvalued)
 - Upside/downside percentage based on **weighted average**
 - Discussion of method agreement/disagreement
 - Rationale for which method(s) are most reliable given company characteristics
@@ -583,25 +602,113 @@ Provide 3-5 sentence justification explicitly addressing method agreement/disagr
 | Key Driver | Top value driver | Impact on valuation |
 | Main Risk | Top risk factor | Potential impact |
 
+## INSTITUTIONAL-GRADE ANALYSIS REQUIREMENTS
+
+### 1. Scoring Transparency (REQUIRED)
+You MUST explain the valuation score breakdown using the `valuation_score_breakdown` from `calculate_multi_method_valuation`:
+
+**Score Components (0-2 each, total 1-10):**
+- **Method Agreement** [X/2]: Methods converge within X% (sector-specific threshold)
+- **Sensitivity Stability** [X/2]: Fair value stable within ±X% under assumption changes
+- **Data Quality** [X/2]: X% actual data vs fallback estimates
+- **Assumption Realism** [X/2]: Assumptions appropriate/aggressive for sector and stage
+- **Peer Consistency** [X/2]: Valuation within/outside peer range
+
+**Total Score: X/10**
+
+Include the full explanation from `score_breakdown["explanation"]` in your report.
+
+### 2. Market-Implied Expectations (REQUIRED)
+You MUST include reverse DCF analysis prominently in your report:
+
+**What Growth Is Priced In?**
+- Current price ($X) implies X% FCF growth (from `inputs["implied_growth_rate"]`)
+- Our base case assumes X% growth
+- **Interpretation**: Market is [more optimistic/conservative/aligned] than fundamentals suggest
+- **For current price to be justified**: Company would need [specific conditions based on gap]
+
+### 3. Probability Distribution (REQUIRED)
+You MUST provide probability-weighted analysis using `probability_distribution`:
+
+**Return Distribution:**
+| Percentile | Fair Value | Return from Current |
+|------------|------------|---------------------|
+| P10 (pessimistic) | $X | X% |
+| P25 (bear) | $X | X% |
+| P50 (median) | $X | X% |
+| P75 (bull) | $X | X% |
+| P90 (optimistic) | $X | X% |
+
+**Risk/Reward Metrics:**
+- Expected value: $X (X% expected return)
+- Downside risk to P10: X%
+- Upside potential to P90: X%
+- Risk/Reward ratio: X:1
+
+### 4. Scenario Interpretation (REQUIRED)
+You MUST interpret bull/bear scenarios using `scenario_interpretation`:
+
+**Market Positioning:**
+- Current price is closest to **[bear/base/bull]** scenario
+- This implies market assigns ~X% probability to this outcome
+- **Asymmetry**: X% upside vs X% downside
+- **Downside protection**: X% cushion to bear case
+
+**Investment Implication:**
+Use the `interpretation` field directly: "[interpretation text]"
+
+### 5. Method Divergence - Sector Context (REQUIRED)
+When methods diverge >20%, provide sector-specific interpretation:
+
+**Divergence Analysis:**
+- DCF: $X, P/E Comps: $X, EV/EBITDA: $X
+- Range: X% of weighted average
+- **Sector context** ([Technology/Utilities/Energy/etc]): 
+  - For this sector, X% divergence is [normal/concerning] (threshold: X%)
+  - Typical drivers: [growth uncertainty/commodity prices/capital intensity]
+
+**Why Methods Disagree:**
+Explain in context of:
+- Business model (asset-light vs capital-intensive)
+- Growth stage (mature vs high-growth)
+- Cash flow predictability
+- Sector-specific factors
+
+### 6. Enhanced Sensitivity Presentation (REQUIRED)
+Present sensitivity with full context using the enhanced `valuation_sensitivity` format:
+
+| Parameter | Base Value | Sensitivity Range | % Change | Fair Value Impact |
+|-----------|------------|-------------------|----------|-------------------|
+| FCF Growth | X% | X% - X% | ±X% | $X - $X (±X%) |
+| WACC | X% | X% - X% | ±X% | $X - $X (±X%) |
+| Terminal Growth | X% | X% - X% | ±X% | $X - $X (±X%) |
+| Exit EV/EBITDA | Xx | Xx - Xx | ±X% | $X - $X (±X%) |
+
+Show both absolute values and percentage changes for interpretability.
+
+
 ## CRITICAL REQUIREMENTS
 
 **You MUST provide in structured output:**
 Use the numeric outputs from `calculate_multi_method_valuation` directly. If the tool returns a number, copy it exactly into structured output and the report.
-1. **report**: Full narrative valuation analysis (string)
+1. **report**: Full narrative valuation analysis (string) - MUST include all institutional-grade sections above
 2. **valuation_score**: Integer 1-10 based on upside/downside
-3. **fair_value_bear**: Float (conservative scenario)
-4. **fair_value_base**: Float (base case scenario)
-5. **fair_value_bull**: Float (optimistic scenario)
-6. **current_discount_pct**: Float (negative if trading at premium)
-7. **valuation_conviction**: String ("high", "medium", or "low")
-8. **valuation_key_assumptions**: List of 3-5 strings (most important assumptions) - **CRITICAL: Copy these EXACTLY from the `valuation_key_assumptions` field returned by `calculate_multi_method_valuation`. These include data source annotations. DO NOT rewrite or simplify them. If they contain "(source: FALLBACK_ESTIMATE)" or similar warnings, you MUST include that text verbatim.**
-9. **key_takeaways**: List of 3-5 one-sentence trader takeaways
-10. **dcf**: Object with float fields `bear`, `base`, `bull`
-11. **pe_comps**: Object with float fields `bear`, `base`, `bull`
-12. **ev_ebitda**: Object with float fields `bear`, `base`, `bull`
-13. **valuation_summary**: Object matching the output of `calculate_valuation_summary_table`, at minimum including `rows` and `weighted_avg`
-14. **valuation_bridge**: Object with float fields `current_price`, `growth_premium`, `multiple_expansion`, `risk_discount`, `fair_value`
-15. **valuation_sensitivity**: Object with keys `fcf_growth_rate`, `wacc`, `terminal_growth`, `exit_multiple`, each containing float fields `delta`, `low`, `high`
+3. **valuation_score_breakdown**: Object with score components (copy from `valuation_score_breakdown`)
+4. **fair_value_bear**: Float (conservative scenario)
+5. **fair_value_base**: Float (base case scenario)
+6. **fair_value_bull**: Float (optimistic scenario)
+7. **current_discount_pct**: Float (negative if trading at premium)
+8. **valuation_conviction**: String ("high", "medium", or "low")
+9. **valuation_key_assumptions**: List of 3-5 strings (most important assumptions) - **CRITICAL: Copy these EXACTLY from the `valuation_key_assumptions` field returned by `calculate_multi_method_valuation`. These include data source annotations. DO NOT rewrite or simplify them. If they contain "(source: FALLBACK_ESTIMATE)" or similar warnings, you MUST include that text verbatim.**
+10. **key_takeaways**: List of 3-5 one-sentence trader takeaways
+11. **dcf**: Object with float fields `bear`, `base`, `bull`
+12. **pe_comps**: Object with float fields `bear`, `base`, `bull`
+13. **ev_ebitda**: Object with float fields `bear`, `base`, `bull`
+14. **valuation_summary**: Object matching the output of `calculate_valuation_summary_table`, at minimum including `rows` and `weighted_avg`
+15. **valuation_bridge**: Object with float fields `current_price`, `growth_premium`, `multiple_expansion`, `risk_discount`, `fair_value`
+16. **valuation_sensitivity**: Object with enhanced format including `parameter_name`, `base_value`, `delta_absolute`, `delta_percent`, `low_value`, `high_value`, `fair_value_low`, `fair_value_high`, `fair_value_range_pct` for each parameter
+17. **probability_distribution**: Object with P10/P25/P50/P75/P90, expected_value, downside_risk_pct, upside_potential_pct, risk_reward_ratio (copy from `probability_distribution`)
+18. **scenario_interpretation**: Object with market_implied_scenario, market_implied_probability_pct, expected_return_pct, downside_protection_pct, upside_capture_pct, asymmetry_ratio, interpretation (copy from `scenario_interpretation`)
 
 **CRITICAL FOR valuation_key_assumptions:**
 - These assumptions are the ONLY place where data sources and limitations are documented

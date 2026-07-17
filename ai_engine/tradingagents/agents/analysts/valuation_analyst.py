@@ -31,10 +31,45 @@ from .prompts import build_valuation_analyst_prompt
 logger = logging.getLogger(__name__)
 
 
+class ValuationScoreBreakdown(BaseModel):
+    """Explicit breakdown of valuation score components."""
+    method_agreement: float = Field(ge=0, le=2, description="Score for method convergence (0-2)")
+    sensitivity_stability: float = Field(ge=0, le=2, description="Score for low sensitivity to assumptions (0-2)")
+    data_quality: float = Field(ge=0, le=2, description="Score for data availability and quality (0-2)")
+    assumption_realism: float = Field(ge=0, le=2, description="Score for sector-appropriate assumptions (0-2)")
+    peer_consistency: float = Field(ge=0, le=2, description="Score for consistency with peer valuations (0-2)")
+    total_score: int = Field(ge=1, le=10, description="Sum of component scores (1-10)")
+    explanation: str = Field(description="Detailed explanation of score components")
+
+
 class ValuationMethodScenario(BaseModel):
     bear: float = Field(description="Bear-case fair value per share for this method")
     base: float = Field(description="Base-case fair value per share for this method")
     bull: float = Field(description="Bull-case fair value per share for this method")
+
+
+class ValuationProbabilityDistribution(BaseModel):
+    """Probability-weighted return distribution for institutional analysis."""
+    p10: float = Field(description="10th percentile outcome (pessimistic)")
+    p25: float = Field(description="25th percentile (bear case)")
+    p50: float = Field(description="50th percentile (median/base case)")
+    p75: float = Field(description="75th percentile (bull case)")
+    p90: float = Field(description="90th percentile (optimistic)")
+    expected_value: float = Field(description="Probability-weighted expected value")
+    downside_risk_pct: float = Field(description="Distance from current to P10 (%)")
+    upside_potential_pct: float = Field(description="Distance from current to P90 (%)")
+    risk_reward_ratio: float = Field(description="Upside/Downside ratio")
+
+
+class ScenarioInterpretation(BaseModel):
+    """Bull vs bear scenario interpretation with market expectations."""
+    market_implied_scenario: str = Field(description="Which scenario (bear/base/bull) is market pricing")
+    market_implied_probability_pct: float = Field(description="Implied probability of that scenario (%)")
+    expected_return_pct: float = Field(description="Probability-weighted expected return (%)")
+    downside_protection_pct: float = Field(description="Cushion to bear case (%)")
+    upside_capture_pct: float = Field(description="Potential to bull case (%)")
+    asymmetry_ratio: float = Field(description="Upside/downside ratio")
+    interpretation: str = Field(description="What this means for investors")
 
 
 class ValuationSummaryRow(BaseModel):
@@ -70,9 +105,15 @@ class ValuationBridge(BaseModel):
 
 
 class ValuationSensitivityRange(BaseModel):
-    delta: float = Field(description="Sensitivity change applied to the driver")
-    low: float = Field(description="Lower bound fair value under this sensitivity")
-    high: float = Field(description="Upper bound fair value under this sensitivity")
+    parameter_name: str = Field(description="Name of the parameter being varied")
+    base_value: float = Field(description="Base case value of the parameter")
+    delta_absolute: float = Field(description="Absolute change applied (±)")
+    delta_percent: float = Field(description="Percentage change applied (±%)")
+    low_value: float = Field(description="Lower bound parameter value")
+    high_value: float = Field(description="Upper bound parameter value")
+    fair_value_low: float = Field(description="Fair value at low parameter value")
+    fair_value_high: float = Field(description="Fair value at high parameter value")
+    fair_value_range_pct: float = Field(description="Fair value range as % of base")
 
 
 class ValuationSensitivity(BaseModel):
@@ -97,6 +138,9 @@ class ValuationAnalysisOutput(BaseModel):
             "6-7: Undervalued (10-25% upside), "
             "8-10: Significantly undervalued (>25% upside)"
         )
+    )
+    valuation_score_breakdown: ValuationScoreBreakdown = Field(
+        description="Explicit breakdown of valuation score components for transparency"
     )
     fair_value_bear: float = Field(
         description="Conservative fair value estimate (bear case scenario)"
@@ -144,6 +188,12 @@ class ValuationAnalysisOutput(BaseModel):
     )
     valuation_sensitivity: ValuationSensitivity = Field(
         description="Deterministic sensitivity analysis ranges"
+    )
+    probability_distribution: ValuationProbabilityDistribution = Field(
+        description="Probability-weighted return distribution (P10/P50/P90) for institutional analysis"
+    )
+    scenario_interpretation: ScenarioInterpretation = Field(
+        description="Bull vs bear scenario interpretation with market-implied expectations"
     )
     key_takeaways: List[str] = analyst_key_takeaways_field()
 

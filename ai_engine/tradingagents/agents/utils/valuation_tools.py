@@ -71,6 +71,24 @@ _INDEX_ETF_NAME_KEYWORDS = (
     " PROSHARES",
     " DIREXION",
 )
+# Sector-specific divergence thresholds for method agreement scoring
+SECTOR_DIVERGENCE_THRESHOLDS = {
+    "Technology": {"high": 0.25, "medium": 0.40},  # Higher tolerance for tech
+    "Communication Services": {"high": 0.25, "medium": 0.40},
+    "Consumer Cyclical": {"high": 0.20, "medium": 0.35},
+    "Consumer Defensive": {"high": 0.15, "medium": 0.25},
+    "Healthcare": {"high": 0.20, "medium": 0.35},
+    "Financial Services": {"high": 0.15, "medium": 0.25},
+    "Financial": {"high": 0.15, "medium": 0.25},
+    "Industrials": {"high": 0.18, "medium": 0.30},
+    "Basic Materials": {"high": 0.25, "medium": 0.40},
+    "Energy": {"high": 0.30, "medium": 0.50},  # Cyclical = high variance
+    "Utilities": {"high": 0.10, "medium": 0.20},  # Low tolerance for utilities
+    "Real Estate": {"high": 0.15, "medium": 0.25},
+    # Default for unknown sectors
+    "default": {"high": 0.20, "medium": 0.35},
+}
+
 
 
 def _weighted_base_value(
@@ -368,7 +386,25 @@ def _build_index_etf_valuation(
 
     base_values = [row["base"] for row in rows]
     dispersion = (pstdev(base_values) / max(sum(base_values) / len(base_values), 1e-9)) if len(base_values) >= 2 else 0.0
-    valuation_conviction = "high" if dispersion < 0.10 else "medium" if dispersion < 0.20 else "low"
+    
+    # For ETFs with extreme method divergence (>50%), automatically reduce conviction
+    if len(base_values) >= 2:
+        max_val = max(base_values)
+        min_val = min(base_values)
+        method_divergence_pct = ((max_val - min_val) / fair_value_base * 100.0) if fair_value_base > 0 else 0.0
+        
+        if method_divergence_pct > 50:
+            # Extreme divergence - force low conviction
+            valuation_conviction = "low"
+        elif dispersion < 0.10:
+            valuation_conviction = "high"
+        elif dispersion < 0.20:
+            valuation_conviction = "medium"
+        else:
+            valuation_conviction = "low"
+    else:
+        valuation_conviction = "high" if dispersion < 0.10 else "medium" if dispersion < 0.20 else "low"
+    
     valuation_score = _deterministic_score(current_discount_pct, valuation_conviction)
 
     valuation_bridge = {
@@ -546,7 +582,7 @@ def _build_sensitivity_analysis(
     beta: float = 1.0,
     growth_samples: Optional[list] = None,
     method_weights: Optional[Dict[str, float]] = None,
-) -> Dict[str, Dict[str, float]]:
+) -> Dict[str, Dict[str, Any]]:
     """
     Build sensitivity analysis with dynamic deltas based on actual uncertainty.
     
@@ -630,26 +666,63 @@ def _build_sensitivity_analysis(
     exit_low_ev = max((((ebitda * (base_ev_multiple - exit_multiple_delta)) - net_debt) / shares_outstanding), 0.01)
     exit_high_ev = max((((ebitda * (base_ev_multiple + exit_multiple_delta)) - net_debt) / shares_outstanding), 0.01)
 
+    # Calculate fair value ranges
+    fcf_fv_low = min(weighted_from_dcf(fcf_low), weighted_from_dcf(fcf_high))
+    fcf_fv_high = max(weighted_from_dcf(fcf_low), weighted_from_dcf(fcf_high))
+    wacc_fv_low = min(weighted_from_dcf(wacc_high), weighted_from_dcf(wacc_low))
+    wacc_fv_high = max(weighted_from_dcf(wacc_high), weighted_from_dcf(wacc_low))
+    tg_fv_low = min(weighted_from_dcf(tg_low), weighted_from_dcf(tg_high))
+    tg_fv_high = max(weighted_from_dcf(tg_low), weighted_from_dcf(tg_high))
+    exit_fv_low = _weighted_base_value(dcf_base, pe_comps_base, exit_low_ev, method_weights)
+    exit_fv_high = _weighted_base_value(dcf_base, pe_comps_base, exit_high_ev, method_weights)
+    
+    # Calculate base fair value for percentage calculations
+    base_fv = _weighted_base_value(dcf_base, pe_comps_base, ev_ebitda_base, method_weights)
+    
     return {
         "fcf_growth_rate": {
-            "delta": round(growth_delta, 4),
-            "low": min(weighted_from_dcf(fcf_low), weighted_from_dcf(fcf_high)),
-            "high": max(weighted_from_dcf(fcf_low), weighted_from_dcf(fcf_high)),
+            "parameter_name": "FCF Growth Rate",
+            "base_value": round(base_growth, 4),
+            "delta_absolute": round(growth_delta, 4),
+            "delta_percent": round((growth_delta / base_growth * 100) if base_growth != 0 else 0, 2),
+            "low_value": round(base_growth - growth_delta, 4),
+            "high_value": round(base_growth + growth_delta, 4),
+            "fair_value_low": round(fcf_fv_low, 2),
+            "fair_value_high": round(fcf_fv_high, 2),
+            "fair_value_range_pct": round(((fcf_fv_high - fcf_fv_low) / base_fv * 100) if base_fv > 0 else 0, 2),
         },
         "wacc": {
-            "delta": round(wacc_delta, 4),
-            "low": min(weighted_from_dcf(wacc_high), weighted_from_dcf(wacc_low)),
-            "high": max(weighted_from_dcf(wacc_high), weighted_from_dcf(wacc_low)),
+            "parameter_name": "WACC",
+            "base_value": round(wacc_base, 4),
+            "delta_absolute": round(wacc_delta, 4),
+            "delta_percent": round((wacc_delta / wacc_base * 100) if wacc_base != 0 else 0, 2),
+            "low_value": round(wacc_base - wacc_delta, 4),
+            "high_value": round(wacc_base + wacc_delta, 4),
+            "fair_value_low": round(wacc_fv_low, 2),
+            "fair_value_high": round(wacc_fv_high, 2),
+            "fair_value_range_pct": round(((wacc_fv_high - wacc_fv_low) / base_fv * 100) if base_fv > 0 else 0, 2),
         },
         "terminal_growth": {
-            "delta": round(terminal_delta, 4),
-            "low": min(weighted_from_dcf(tg_low), weighted_from_dcf(tg_high)),
-            "high": max(weighted_from_dcf(tg_low), weighted_from_dcf(tg_high)),
+            "parameter_name": "Terminal Growth Rate",
+            "base_value": round(terminal_growth_base, 4),
+            "delta_absolute": round(terminal_delta, 4),
+            "delta_percent": round((terminal_delta / terminal_growth_base * 100) if terminal_growth_base != 0 else 0, 2),
+            "low_value": round(terminal_growth_base - terminal_delta, 4),
+            "high_value": round(terminal_growth_base + terminal_delta, 4),
+            "fair_value_low": round(tg_fv_low, 2),
+            "fair_value_high": round(tg_fv_high, 2),
+            "fair_value_range_pct": round(((tg_fv_high - tg_fv_low) / base_fv * 100) if base_fv > 0 else 0, 2),
         },
         "exit_multiple": {
-            "delta": round(exit_multiple_delta, 2),
-            "low": _weighted_base_value(dcf_base, pe_comps_base, exit_low_ev, method_weights),
-            "high": _weighted_base_value(dcf_base, pe_comps_base, exit_high_ev, method_weights),
+            "parameter_name": "Exit EV/EBITDA Multiple",
+            "base_value": round(base_ev_multiple, 2),
+            "delta_absolute": round(exit_multiple_delta, 2),
+            "delta_percent": round((exit_multiple_delta / base_ev_multiple * 100) if base_ev_multiple != 0 else 0, 2),
+            "low_value": round(base_ev_multiple - exit_multiple_delta, 2),
+            "high_value": round(base_ev_multiple + exit_multiple_delta, 2),
+            "fair_value_low": round(exit_fv_low, 2),
+            "fair_value_high": round(exit_fv_high, 2),
+            "fair_value_range_pct": round(((exit_fv_high - exit_fv_low) / base_fv * 100) if base_fv > 0 else 0, 2),
         },
     }
 
@@ -965,7 +1038,274 @@ def _discounted_cash_flow_value(
     # This prevents unrealistic valuations below $1 while still showing
     # when a company is overvalued (negative equity value becomes $1)
     per_share_value = equity_value / shares_outstanding
-    return max(per_share_value, 1.00)
+    return max(per_share_value, 1.0)
+
+def _calculate_score_components(
+    current_discount_pct: float,
+    method_dispersion: float,
+    sensitivity_range_pct: float,
+    data_quality_score: float,
+    sector: Optional[str],
+    peer_deviation: Optional[float] = None,
+) -> Dict[str, Any]:
+    """
+    Calculate valuation score with explicit component breakdown for transparency.
+    
+    Args:
+        current_discount_pct: Discount/premium to fair value
+        method_dispersion: Coefficient of variation between methods
+        sensitivity_range_pct: Fair value range from sensitivity analysis (%)
+        data_quality_score: 0-1 score for data availability (1 = all actual, 0 = all fallback)
+        sector: Company sector for context-aware thresholds
+        peer_deviation: Standard deviations from peer average (optional)
+    
+    Returns:
+        Dict with component scores (0-2 each), total (1-10), and explanation
+    """
+    # Get sector-specific thresholds
+    thresholds = SECTOR_DIVERGENCE_THRESHOLDS.get(sector or "default", SECTOR_DIVERGENCE_THRESHOLDS["default"])
+    
+    # 1. Method Agreement (0-2): How well do valuation methods converge?
+    if method_dispersion < thresholds["high"]:
+        method_agreement = 2.0
+        method_desc = "excellent convergence"
+    elif method_dispersion < thresholds["medium"]:
+        method_agreement = 1.0
+        method_desc = "moderate divergence"
+    else:
+        method_agreement = 0.0
+        method_desc = "significant divergence"
+    
+    # 2. Sensitivity Stability (0-2): How stable is valuation to assumption changes?
+    if sensitivity_range_pct < 10:
+        sensitivity_stability = 2.0
+        sensitivity_desc = "low sensitivity"
+    elif sensitivity_range_pct < 20:
+        sensitivity_stability = 1.0
+        sensitivity_desc = "moderate sensitivity"
+    else:
+        sensitivity_stability = 0.0
+        sensitivity_desc = "high sensitivity"
+    
+    # 3. Data Quality (0-2): How much actual vs fallback data?
+    if data_quality_score >= 0.9:
+        data_quality = 2.0
+        data_desc = "high-quality actual data"
+    elif data_quality_score >= 0.7:
+        data_quality = 1.0
+        data_desc = "mix of actual and estimated data"
+    else:
+        data_quality = 0.0
+        data_desc = "significant data gaps"
+    
+    # 4. Assumption Realism (0-2): Are assumptions appropriate for sector/stage?
+    # Based on discount/premium magnitude - extreme values suggest unrealistic assumptions
+    abs_discount = abs(current_discount_pct)
+    if abs_discount < 30:
+        assumption_realism = 2.0
+        assumption_desc = "realistic assumptions"
+    elif abs_discount < 50:
+        assumption_realism = 1.0
+        assumption_desc = "somewhat aggressive assumptions"
+    else:
+        assumption_realism = 0.0
+        assumption_desc = "potentially unrealistic assumptions"
+    
+    # 5. Peer Consistency (0-2): How does valuation compare to peers?
+    if peer_deviation is not None:
+        if abs(peer_deviation) < 1.0:
+            peer_consistency = 2.0
+            peer_desc = "consistent with peers"
+        elif abs(peer_deviation) < 2.0:
+            peer_consistency = 1.0
+            peer_desc = "moderate deviation from peers"
+        else:
+            peer_consistency = 0.0
+            peer_desc = "significant outlier vs peers"
+    else:
+        # No peer data available - use neutral score
+        peer_consistency = 1.0
+        peer_desc = "peer data unavailable"
+    
+    # Calculate total score (round to nearest integer, min 1, max 10)
+    total_raw = method_agreement + sensitivity_stability + data_quality + assumption_realism + peer_consistency
+    total_score = max(1, min(10, round(total_raw)))
+    
+    # Build explanation
+    explanation = (
+        f"Method Agreement: {method_agreement}/2 ({method_desc}, {method_dispersion*100:.1f}% dispersion vs {thresholds['high']*100:.0f}% threshold for {sector or 'default'}). "
+        f"Sensitivity: {sensitivity_stability}/2 ({sensitivity_desc}, ±{sensitivity_range_pct:.1f}%). "
+        f"Data Quality: {data_quality}/2 ({data_desc}, {data_quality_score*100:.0f}% actual). "
+        f"Assumptions: {assumption_realism}/2 ({assumption_desc}, {abs_discount:.1f}% from current). "
+        f"Peer Consistency: {peer_consistency}/2 ({peer_desc})."
+    )
+    
+    return {
+        "method_agreement": method_agreement,
+        "sensitivity_stability": sensitivity_stability,
+        "data_quality": data_quality,
+        "assumption_realism": assumption_realism,
+        "peer_consistency": peer_consistency,
+        "total_score": total_score,
+        "explanation": explanation,
+    }
+
+
+def _calculate_probability_distribution(
+    current_price: float,
+    bear: float,
+    base: float,
+    bull: float,
+    sensitivity_low: float,
+    sensitivity_high: float,
+) -> Dict[str, Any]:
+    """
+    Generate probability distribution from scenarios and sensitivity for institutional analysis.
+    
+    Assumes triangular distribution:
+    - P10 = bear - sensitivity cushion
+    - P25 = bear
+    - P50 = base
+    - P75 = bull
+    - P90 = bull + sensitivity cushion
+    
+    Args:
+        current_price: Current market price
+        bear: Bear case fair value
+        base: Base case fair value
+        bull: Bull case fair value
+        sensitivity_low: Lowest fair value from sensitivity analysis
+        sensitivity_high: Highest fair value from sensitivity analysis
+    
+    Returns:
+        Dict with P10/P25/P50/P75/P90, expected value, risk/reward metrics
+    """
+    # Calculate percentiles using triangular distribution
+    p10 = min(bear, sensitivity_low)
+    p25 = bear
+    p50 = base
+    p75 = bull
+    p90 = max(bull, sensitivity_high)
+    
+    # Calculate probability-weighted expected value
+    # Using triangular distribution weights: P10(10%), P25(15%), P50(50%), P75(15%), P90(10%)
+    expected_value = (0.10 * p10 + 0.15 * p25 + 0.50 * p50 + 0.15 * p75 + 0.10 * p90)
+    
+    # Calculate risk/reward metrics
+    downside_risk_pct = ((current_price - p10) / current_price * 100) if current_price > 0 else 0
+    upside_potential_pct = ((p90 - current_price) / current_price * 100) if current_price > 0 else 0
+    risk_reward_ratio = (upside_potential_pct / downside_risk_pct) if downside_risk_pct > 0 else 0
+    
+    return {
+        "p10": p10,
+        "p25": p25,
+        "p50": p50,
+        "p75": p75,
+        "p90": p90,
+        "expected_value": expected_value,
+        "downside_risk_pct": downside_risk_pct,
+        "upside_potential_pct": upside_potential_pct,
+        "risk_reward_ratio": risk_reward_ratio,
+    }
+
+
+def _interpret_scenarios(
+    current_price: float,
+    bear: float,
+    base: float,
+    bull: float,
+    implied_growth: Optional[float],
+    base_growth: float,
+) -> Dict[str, Any]:
+    """
+    Interpret bull/bear scenarios with market-implied expectations.
+    
+    Determines:
+    - Which scenario market is pricing (closest to current price)
+    - Probability-weighted expected return
+    - Asymmetry (upside vs downside)
+    - Downside protection
+    
+    Args:
+        current_price: Current market price
+        bear: Bear case fair value
+        base: Base case fair value
+        bull: Bull case fair value
+        implied_growth: Market-implied growth rate from reverse DCF
+        base_growth: Base case growth assumption
+    
+    Returns:
+        Dict with scenario interpretation and investment implications
+    """
+    # Determine which scenario market is pricing
+    distances = {
+        "bear": abs(current_price - bear),
+        "base": abs(current_price - base),
+        "bull": abs(current_price - bull),
+    }
+    market_implied_scenario = min(distances.keys(), key=lambda k: distances[k])
+    
+    # Calculate implied probability (inverse distance weighting)
+    total_distance = sum(distances.values())
+    if total_distance > 0:
+        market_implied_probability_pct = (1 - distances[market_implied_scenario] / total_distance) * 100
+    else:
+        market_implied_probability_pct = 33.3
+    
+    # Calculate expected return using scenario probabilities (25/50/25)
+    expected_return_pct = (
+        0.25 * ((bear - current_price) / current_price * 100) +
+        0.50 * ((base - current_price) / current_price * 100) +
+        0.25 * ((bull - current_price) / current_price * 100)
+    ) if current_price > 0 else 0
+    
+    # Calculate downside protection and upside capture
+    downside_protection_pct = ((current_price - bear) / current_price * 100) if current_price > 0 else 0
+    upside_capture_pct = ((bull - current_price) / current_price * 100) if current_price > 0 else 0
+    
+    # Calculate asymmetry ratio
+    asymmetry_ratio = (upside_capture_pct / abs(downside_protection_pct)) if downside_protection_pct != 0 else 0
+    
+    # Build interpretation
+    if market_implied_scenario == "bear":
+        scenario_desc = "Market is pricing in the bear case, suggesting pessimism or risk aversion"
+    elif market_implied_scenario == "bull":
+        scenario_desc = "Market is pricing in the bull case, suggesting optimism or high growth expectations"
+    else:
+        scenario_desc = "Market is pricing close to base case, suggesting balanced expectations"
+    
+    if implied_growth is not None and base_growth is not None:
+        growth_comparison = implied_growth - base_growth
+        if abs(growth_comparison) < 0.02:  # Within 2%
+            growth_desc = f"Market-implied growth ({implied_growth*100:.1f}%) aligns with base case assumptions"
+        elif growth_comparison > 0:
+            growth_desc = f"Market expects higher growth ({implied_growth*100:.1f}%) than base case ({base_growth*100:.1f}%)"
+        else:
+            growth_desc = f"Market is more conservative ({implied_growth*100:.1f}%) than base case ({base_growth*100:.1f}%)"
+    else:
+        growth_desc = "Market-implied growth not available"
+    
+    # Risk/reward assessment
+    if asymmetry_ratio > 2.0:
+        risk_reward_desc = "Favorable risk/reward with significant upside potential"
+    elif asymmetry_ratio > 1.0:
+        risk_reward_desc = "Positive risk/reward with moderate upside"
+    elif asymmetry_ratio > 0.5:
+        risk_reward_desc = "Balanced risk/reward profile"
+    else:
+        risk_reward_desc = "Unfavorable risk/reward with limited upside"
+    
+    interpretation = f"{scenario_desc}. {growth_desc}. {risk_reward_desc}."
+    
+    return {
+        "market_implied_scenario": market_implied_scenario,
+        "market_implied_probability_pct": market_implied_probability_pct,
+        "expected_return_pct": expected_return_pct,
+        "downside_protection_pct": downside_protection_pct,
+        "upside_capture_pct": upside_capture_pct,
+        "asymmetry_ratio": asymmetry_ratio,
+        "interpretation": interpretation,
+    }
 
 
 def _deterministic_score(current_discount_pct: float, conviction: str = "medium") -> int:
@@ -974,26 +1314,33 @@ def _deterministic_score(current_discount_pct: float, conviction: str = "medium"
     
     Args:
         current_discount_pct: Percentage discount (positive) or premium (negative)
+            Formula: ((fair_value - current_price) / fair_value) × 100
+            - Positive value: Trading BELOW fair value (discount/undervalued) = Good opportunity
+            - Negative value: Trading ABOVE fair value (premium/overvalued) = Caution
         conviction: Conviction level ("high", "medium", "low")
     
     Returns:
-        Score from 1-10
+        Score from 1-10 where:
+        - 1-3: Significantly overvalued (>20% premium to fair value)
+        - 4-5: Fairly valued to slightly overvalued (±10% of fair value)
+        - 6-7: Undervalued (10-25% discount to fair value)
+        - 8-10: Significantly undervalued (>25% discount to fair value)
     """
     # Base score from discount/premium
     if current_discount_pct >= 40:
-        base = 10
+        base = 10  # Deep discount - excellent value
     elif current_discount_pct >= 25:
-        base = 8
+        base = 8   # Significant discount - good value
     elif current_discount_pct >= 10:
-        base = 7
+        base = 7   # Moderate discount - undervalued
     elif current_discount_pct >= 0:
-        base = 6
+        base = 6   # Slight discount - fair value
     elif current_discount_pct >= -10:
-        base = 5
+        base = 5   # Slight premium - fairly valued
     elif current_discount_pct >= -20:
-        base = 3
+        base = 3   # Moderate premium - overvalued
     else:
-        base = 1
+        base = 1   # Significant premium - significantly overvalued
     
     # Adjust for conviction level
     if conviction == "low":
@@ -1014,8 +1361,10 @@ def _get_current_risk_free_rate() -> float:
     try:
         from ...datasources.info_service_client import get_market_rates
         rates = get_market_rates()
-        if rates and rates.get("risk_free_rate"):
-            return float(rates["risk_free_rate"])
+        if rates:
+            risk_free_rate = rates.get("risk_free_rate")
+            if risk_free_rate is not None:
+                return float(risk_free_rate)
     except Exception:
         pass
     # Fallback to reasonable default (will be logged by service)
@@ -1033,8 +1382,10 @@ def _get_market_risk_premium() -> float:
     try:
         from ...datasources.info_service_client import get_market_rates
         rates = get_market_rates()
-        if rates and rates.get("market_risk_premium"):
-            return float(rates["market_risk_premium"])
+        if rates:
+            market_risk_premium = rates.get("market_risk_premium")
+            if market_risk_premium is not None:
+                return float(market_risk_premium)
     except Exception:
         pass
     # Fallback to historical average
@@ -1232,11 +1583,13 @@ def calculate_multi_method_valuation_data(
 
     # Extract FCF and its components for negative cash flow analysis
     current_fcf = _latest_numeric(cashflow_annual, "freeCashFlow")
-    operating_cf = _latest_numeric(cashflow_annual, "operatingCashFlow") or 0.0
-    capex = abs(_latest_numeric(cashflow_annual, "capitalExpenditure") or 0.0)
+    operating_cf_raw = _latest_numeric(cashflow_annual, "operatingCashFlow")
+    operating_cf = operating_cf_raw if operating_cf_raw is not None else 0.0
+    capex_raw = _latest_numeric(cashflow_annual, "capitalExpenditure")
+    capex = abs(capex_raw) if capex_raw is not None else 0.0
     
     if current_fcf is None:
-        if operating_cf is not None:
+        if operating_cf_raw is not None:
             current_fcf = operating_cf - capex
     if current_fcf is None:
         quarterly_fcf = _sum_latest(cashflow_quarterly, "freeCashFlow", count=4)
@@ -1247,6 +1600,9 @@ def calculate_multi_method_valuation_data(
         profit_margin = _first_numeric(fundamentals, "ProfitMargin") or 0.15
         current_fcf = revenue_ttm * profit_margin * 0.9
     
+    # Ensure current_fcf is never None before converting to float
+    if current_fcf is None:
+        current_fcf = 0.0
     current_fcf = float(current_fcf)
     revenue_ttm = _first_numeric(fundamentals, "RevenueTTM") or _latest_numeric(income_annual, "totalRevenue") or 0.0
     
@@ -1342,7 +1698,10 @@ def calculate_multi_method_valuation_data(
     income_tax = abs(_latest_numeric(income_annual, "taxProvision", "incomeTaxExpense") or 0.0)
     tax_rate = _clamp((income_tax / pretax_income) if pretax_income > 0 else 0.15, 0.10, 0.25)
     cost_of_debt = _clamp((interest_expense / total_debt) if total_debt > 0 and interest_expense > 0 else 0.05, 0.03, 0.09)
-    market_cap = _first_numeric(fundamentals, "MarketCapitalization") or (current_price * shares_outstanding)
+    market_cap = _first_numeric(fundamentals, "MarketCapitalization")
+    if market_cap is None:
+        market_cap = current_price * shares_outstanding
+    market_cap = max(market_cap or 1.0, 1.0)  # Ensure market_cap is never None or zero
     debt_weight = _clamp(total_debt / max(total_debt + market_cap, 1.0), 0.0, 0.35)
     wacc_base = _clamp((1 - debt_weight) * cost_of_equity + debt_weight * cost_of_debt * (1 - tax_rate), 0.08, 0.13)
     wacc_bear = _clamp(wacc_base + 0.01, 0.09, 0.14)
@@ -1400,8 +1759,10 @@ def calculate_multi_method_valuation_data(
     implied_target_pe_avg = (target_avg / forward_eps) if target_avg and target_avg > 0 else None
     implied_target_pe_high = (target_high / forward_eps) if target_high and target_high > 0 else None
     base_pe = median([v for v in [forward_pe, trailing_pe, implied_target_pe_avg] if v is not None]) if any(v is not None for v in [forward_pe, trailing_pe, implied_target_pe_avg]) else 20.0
-    bear_pe = median([v for v in [base_pe * 0.85, implied_target_pe_low] if v is not None])
-    bull_pe = median([v for v in [base_pe * 1.15, implied_target_pe_high] if v is not None])
+    bear_pe_values = [v for v in [base_pe * 0.85, implied_target_pe_low] if v is not None]
+    bear_pe = median(bear_pe_values) if bear_pe_values else base_pe * 0.85
+    bull_pe_values = [v for v in [base_pe * 1.15, implied_target_pe_high] if v is not None]
+    bull_pe = median(bull_pe_values) if bull_pe_values else base_pe * 1.15
     pe_comps = {
         "bear": max(forward_eps * bear_pe, 0.01),
         "base": max(forward_eps * base_pe, 0.01),
@@ -1419,9 +1780,12 @@ def calculate_multi_method_valuation_data(
     implied_ev_mult_low = ((target_low * shares_outstanding + net_debt) / ebitda) if target_low and ebitda > 0 else None
     implied_ev_mult_avg = ((target_avg * shares_outstanding + net_debt) / ebitda) if target_avg and ebitda > 0 else None
     implied_ev_mult_high = ((target_high * shares_outstanding + net_debt) / ebitda) if target_high and ebitda > 0 else None
-    base_ev_mult = median([v for v in [current_ev_to_ebitda, implied_ev_mult_avg] if v is not None])
-    bear_ev_mult = median([v for v in [base_ev_mult * 0.85, implied_ev_mult_low] if v is not None])
-    bull_ev_mult = median([v for v in [base_ev_mult * 1.15, implied_ev_mult_high] if v is not None])
+    base_ev_mult_values = [v for v in [current_ev_to_ebitda, implied_ev_mult_avg] if v is not None]
+    base_ev_mult = median(base_ev_mult_values) if base_ev_mult_values else current_ev_to_ebitda
+    bear_ev_mult_values = [v for v in [base_ev_mult * 0.85, implied_ev_mult_low] if v is not None]
+    bear_ev_mult = median(bear_ev_mult_values) if bear_ev_mult_values else base_ev_mult * 0.85
+    bull_ev_mult_values = [v for v in [base_ev_mult * 1.15, implied_ev_mult_high] if v is not None]
+    bull_ev_mult = median(bull_ev_mult_values) if bull_ev_mult_values else base_ev_mult * 1.15
     ev_ebitda = {
         "bear": max(((ebitda * bear_ev_mult) - net_debt) / shares_outstanding, 0.01),
         "base": max(((ebitda * base_ev_mult) - net_debt) / shares_outstanding, 0.01),
@@ -1512,6 +1876,92 @@ def calculate_multi_method_valuation_data(
         method_weights=method_weights,
     )
     
+    # Calculate sensitivity range for score components
+    try:
+        sensitivity_values = [
+            valuation_sensitivity["fcf_growth_rate"]["fair_value_low"],
+            valuation_sensitivity["fcf_growth_rate"]["fair_value_high"],
+            valuation_sensitivity["wacc"]["fair_value_low"],
+            valuation_sensitivity["wacc"]["fair_value_high"],
+            valuation_sensitivity["terminal_growth"]["fair_value_low"],
+            valuation_sensitivity["terminal_growth"]["fair_value_high"],
+            valuation_sensitivity["exit_multiple"]["fair_value_low"],
+            valuation_sensitivity["exit_multiple"]["fair_value_high"],
+        ]
+        sensitivity_range_pct = ((max(sensitivity_values) - min(sensitivity_values)) / fair_value_base * 100) if fair_value_base > 0 else 0
+    except (KeyError, TypeError, ValueError) as e:
+        logger.warning(f"{ticker}: Error calculating sensitivity range: {e}")
+        sensitivity_range_pct = 15.0  # Default fallback
+        sensitivity_values = [fair_value_bear, fair_value_bull]
+    
+    # Calculate score breakdown with explicit components
+    try:
+        score_breakdown = _calculate_score_components(
+            current_discount_pct=current_discount_pct,
+            method_dispersion=dispersion,
+            sensitivity_range_pct=sensitivity_range_pct,
+            data_quality_score=data_quality_score,
+            sector=sector,
+            peer_deviation=None,  # TODO: Add peer deviation calculation if peer data available
+        )
+    except Exception as e:
+        logger.warning(f"{ticker}: Error calculating score breakdown: {e}")
+        score_breakdown = {
+            "method_agreement": 1.0,
+            "sensitivity_stability": 1.0,
+            "data_quality": 1.0,
+            "assumption_realism": 1.0,
+            "peer_consistency": 1.0,
+            "total_score": valuation_score,
+            "explanation": f"Score breakdown calculation failed: {str(e)}. Using simplified score."
+        }
+    
+    # Calculate probability distribution (P10/P50/P90)
+    try:
+        probability_distribution = _calculate_probability_distribution(
+            current_price=current_price,
+            bear=fair_value_bear,
+            base=fair_value_base,
+            bull=fair_value_bull,
+            sensitivity_low=min(sensitivity_values) if sensitivity_values else fair_value_bear,
+            sensitivity_high=max(sensitivity_values) if sensitivity_values else fair_value_bull,
+        )
+    except Exception as e:
+        logger.warning(f"{ticker}: Error calculating probability distribution: {e}")
+        probability_distribution = {
+            "p10": fair_value_bear * 0.9,
+            "p25": fair_value_bear,
+            "p50": fair_value_base,
+            "p75": fair_value_bull,
+            "p90": fair_value_bull * 1.1,
+            "expected_value": fair_value_base,
+            "downside_risk_pct": ((current_price - fair_value_bear) / current_price * 100) if current_price > 0 else 0,
+            "upside_potential_pct": ((fair_value_bull - current_price) / current_price * 100) if current_price > 0 else 0,
+            "risk_reward_ratio": 1.0,
+        }
+    
+    # Interpret scenarios with market expectations
+    try:
+        scenario_interpretation = _interpret_scenarios(
+            current_price=current_price,
+            bear=fair_value_bear,
+            base=fair_value_base,
+            bull=fair_value_bull,
+            implied_growth=implied_growth,
+            base_growth=base_growth,
+        )
+    except Exception as e:
+        logger.warning(f"{ticker}: Error calculating scenario interpretation: {e}")
+        scenario_interpretation = {
+            "market_implied_scenario": "base",
+            "market_implied_probability_pct": 50.0,
+            "expected_return_pct": ((fair_value_base - current_price) / current_price * 100) if current_price > 0 else 0,
+            "downside_protection_pct": ((current_price - fair_value_bear) / current_price * 100) if current_price > 0 else 0,
+            "upside_capture_pct": ((fair_value_bull - current_price) / current_price * 100) if current_price > 0 else 0,
+            "asymmetry_ratio": 1.0,
+            "interpretation": f"Scenario interpretation calculation failed: {str(e)}. Using simplified analysis."
+        }
+    
     # Build key assumptions with data source transparency
     key_assumptions = [
         f"DCF projection period: {projection_years} years ({'high-growth' if is_high_growth else 'mature'} company)",
@@ -1554,9 +2004,12 @@ def calculate_multi_method_valuation_data(
         "fair_value_bull": fair_value_bull,
         "current_discount_pct": current_discount_pct,
         "valuation_score": valuation_score,
+        "valuation_score_breakdown": score_breakdown,
         "valuation_conviction": valuation_conviction,
         "valuation_bridge": valuation_bridge,
         "valuation_sensitivity": valuation_sensitivity,
+        "probability_distribution": probability_distribution,
+        "scenario_interpretation": scenario_interpretation,
         "valuation_key_assumptions": key_assumptions,
         "inputs": {
             "shares_outstanding": shares_outstanding,
@@ -1594,15 +2047,24 @@ def calculate_valuation_summary(
 
     rows = []
     for method_name, scenarios in methods.items():
+        # Ensure all scenario values are valid numbers
+        bear_val = scenarios.get("bear")
+        base_val = scenarios.get("base")
+        bull_val = scenarios.get("bull")
+        
+        if bear_val is None or base_val is None or bull_val is None:
+            # Skip methods with missing data
+            continue
+            
         implied_value = sum(
             float(scenarios[scenario]) * float(scenario_weights[scenario])
             for scenario in ("bear", "base", "bull")
         )
         rows.append({
             "method": method_name,
-            "bear": float(scenarios["bear"]),
-            "base": float(scenarios["base"]),
-            "bull": float(scenarios["bull"]),
+            "bear": float(bear_val),
+            "base": float(base_val),
+            "bull": float(bull_val),
             "weight": float(method_weights[method_name]),
             "implied_value": implied_value,
         })
