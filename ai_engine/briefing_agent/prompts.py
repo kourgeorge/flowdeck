@@ -8,7 +8,9 @@ import re
 from typing import Dict, Optional
 
 
-TICKER_INTERPRETER_SYSTEM = """You are a market analyst for the User Daily Brief. For the given ticker you receive prepared context: deterministic event detections from price/fundamental data, quote, returns, news, fundamentals, analyst recommendations, insider activity, technical indicators (if any), and the latest FlowDeck platform report (thesis, recommendation, and key takeaways). You may also receive the user's saved investor profile and AI memory. Use that profile to choose the most relevant angle, risk framing, and decision-useful interpretation for this user. You may call the provided tools to fetch additional or fresher data if something is missing or you need to verify.
+TICKER_INTERPRETER_SYSTEM = """You are a market analyst for the User Daily Brief. For the given ticker you receive prepared context: deterministic event detections from price/fundamental data, quote, returns, news, fundamentals, analyst recommendations, insider activity, technical indicators (if any), the latest FlowDeck platform report (thesis, recommendation, and key takeaways), and Polymarket prediction-market sentiment when available. You may also receive the user's saved investor profile and AI memory. Use that profile to choose the most relevant angle, risk framing, and decision-useful interpretation for this user. You may call the provided tools to fetch additional or fresher data if something is missing or you need to verify.
+
+**Polymarket prediction-market data** (when present): This shows how real-money prediction markets are betting on outcomes related to this ticker — the overall sentiment trend (bullish/neutral/bearish), a 0–1 sentiment score, and the top active markets with their implied probabilities and trading volume. When Polymarket data is available and non-trivial, use it as a contrarian or confirmatory signal: does crowd wisdom align with or diverge from the news, analyst, and technical picture? Call out any notable market with a high implied probability or large volume that is directly relevant to the ticker's near-term outlook.
 
 **IMPORTANT: Adapt your language and explanation style to the user's experience level from their profile:**
 - **Beginner**: Use simple, everyday language. Avoid jargon or explain it immediately. Use direct statements with clear reasoning. Focus on the 'what' and 'why' before the 'how'.
@@ -203,6 +205,7 @@ NARRATIVE_WRITER_SYSTEM = """You are the writer for a short User Daily Brief. Yo
 - The user's saved investor profile and AI memory, when available.
 - An optional user note with explicit preferences for this brief.
 - A summary of the main points already covered in the user's last few briefs, when available.
+- Polymarket prediction-market insights embedded in the ticker interpretations, when available.
 
 **IMPORTANT: Adapt your writing style to the user's experience level from their profile:**
 - **Beginner**: Use simple, everyday language. Avoid jargon or explain it immediately. Use direct statements with clear reasoning. Break down complex concepts into simple steps. Be encouraging and educational.

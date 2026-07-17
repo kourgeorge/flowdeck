@@ -136,6 +136,41 @@ def _format_ticker_context(ctx: DigestContext, ticker: str) -> str:
     share_url = (ctx.share_urls or {}).get(ticker)
     if share_url:
         lines.append(f"Report share URL (viewable without login): {share_url}")
+    pm = (getattr(ctx, "polymarket_sentiment", None) or {}).get(ticker)
+    if pm and not pm.get("error"):
+        trend = pm.get("trend", "neutral")
+        overall = pm.get("overall_sentiment")
+        confidence = pm.get("confidence")
+        market_count = pm.get("market_count", 0)
+        pm_parts = [f"trend={trend}"]
+        if overall is not None:
+            pm_parts.append(f"sentiment_score={overall:.2f}")
+        if confidence is not None:
+            pm_parts.append(f"confidence={confidence:.2f}")
+        if market_count:
+            pm_parts.append(f"markets_analysed={market_count}")
+        lines.append("Polymarket prediction-market: " + ", ".join(pm_parts))
+        top_markets = pm.get("top_markets") or []
+        if top_markets:
+            market_lines = []
+            for m in top_markets[:3]:
+                q = m.get("question") or m.get("title") or ""
+                prob = m.get("yes_probability") or m.get("probability")
+                vol = m.get("volume_usd") or m.get("volume")
+                mparts = []
+                if prob is not None:
+                    mparts.append(f"yes_prob={float(prob):.0%}")
+                if vol is not None:
+                    try:
+                        mparts.append(f"vol=${float(vol):,.0f}")
+                    except (TypeError, ValueError):
+                        pass
+                suffix = f" [{', '.join(mparts)}]" if mparts else ""
+                if q:
+                    market_lines.append(f"  - {q[:120]}{suffix}")
+            if market_lines:
+                lines.append("Top prediction markets:")
+                lines.extend(market_lines)
     si = (ctx.sector_industry or {}).get(ticker)
     if si:
         lines.append(f"Sector/industry: {si}")

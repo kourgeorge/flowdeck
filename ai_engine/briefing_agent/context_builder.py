@@ -298,6 +298,44 @@ def _quote_from_market_mover(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _fetch_polymarket_sentiment(
+    tickers: List[str],
+    company_batch: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Fetch Polymarket prediction-market sentiment for each ticker (best-effort).
+
+    Returns a dict: ticker -> sentiment payload (or empty dict on failure).
+    """
+    out: Dict[str, Any] = {}
+    if not tickers:
+        return out
+    try:
+        from services.polymarket_service import get_polymarket_service  # type: ignore[import-untyped]
+        svc = get_polymarket_service()
+    except Exception as exc:
+        logger.debug("Polymarket service unavailable for digest context: %s", exc)
+        return out
+
+    for ticker in tickers:
+        try:
+            info = (company_batch or {}).get(ticker) or {}
+            company_info: Optional[Dict[str, Any]] = None
+            if info:
+                company_info = {
+                    "name": info.get("name") or info.get("longName"),
+                    "sector": info.get("sector"),
+                    "industry": info.get("industry"),
+                }
+            sentiment = svc.get_ticker_sentiment(ticker, company_info=company_info)
+            # Only store if there's actually useful data (not a pure neutral/error response)
+            if sentiment and not sentiment.get("error"):
+                out[ticker] = sentiment
+        except Exception as exc:
+            logger.debug("Polymarket sentiment fetch failed for %s: %s", ticker, exc)
+    return out
+
+
 def build_digest_context(
     user_id: int,
     digest_date: str,
@@ -434,6 +472,8 @@ def build_digest_context(
         peer_tickers = {t: [] for t in priority_tickers}
         peer_quotes: Dict[str, Any] = {}
 
+        polymarket_sentiment = _fetch_polymarket_sentiment(priority_tickers, company_batch)
+
         logger.info("Digest: no portfolio tickers for user_id=%s", user_id)
         return DigestContext(
             tickers=[],
@@ -462,6 +502,7 @@ def build_digest_context(
             market_movers=market_movers,
             global_news=global_news,
             web_search_snippet=web_search_snippet,
+            polymarket_sentiment=polymarket_sentiment,
         )
 
     user_context_snapshot = _get_user_context_snapshot(user_id, db)
@@ -592,6 +633,8 @@ def build_digest_context(
     peer_quotes_raw = fetcher.get_quotes_batch(all_peers) if all_peers else {}
     peer_quotes: Dict[str, Any] = dict(peer_quotes_raw or {})
 
+    polymarket_sentiment = _fetch_polymarket_sentiment(priority_tickers, company_batch)
+
     return DigestContext(
         tickers=tickers,
         user_context_snapshot=user_context_snapshot,
@@ -619,4 +662,5 @@ def build_digest_context(
         market_movers=market_movers,
         global_news=global_news,
         web_search_snippet=web_search_snippet,
+        polymarket_sentiment=polymarket_sentiment,
     )

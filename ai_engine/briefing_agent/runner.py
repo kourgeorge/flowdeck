@@ -190,6 +190,7 @@ def _build_ticker_resource_snapshot(ctx: Any, ticker: str) -> Dict[str, Any]:
         "share_url": (getattr(ctx, "share_urls", {}) or {}).get(ticker),
         "sector_industry": (getattr(ctx, "sector_industry", {}) or {}).get(ticker),
         "peer_context": peer_rows,
+        "polymarket_sentiment": (getattr(ctx, "polymarket_sentiment", {}) or {}).get(ticker),
     }
 
 
