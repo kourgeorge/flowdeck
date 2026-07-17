@@ -15,6 +15,14 @@
     "market_cap": 15939235840,
     "quote_type": "EQUITY"
   },
+  "AAC": {
+    "ticker": "AAC",
+    "name": "AAC",
+    "sector": null,
+    "industry": null,
+    "market_cap": null,
+    "quote_type": "NONE"
+  },
   "AAOI": {
     "ticker": "AAOI",
     "name": "Applied Optoelectronics, Inc.",
@@ -2013,6 +2021,14 @@
     "sector": "Healthcare",
     "industry": "Medical Instruments & Supplies",
     "market_cap": 1157526144,
+    "quote_type": "EQUITY"
+  },
+  "AZUL": {
+    "ticker": "AZUL",
+    "name": "Azul S.A.",
+    "sector": "Industrials",
+    "industry": "Airlines",
+    "market_cap": 1566859136,
     "quote_type": "EQUITY"
   },
   "BA": {
