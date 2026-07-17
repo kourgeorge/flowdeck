@@ -8,7 +8,6 @@ import type {
   SimilarTicker,
   TickerPageData,
   SimilarTickersResponse,
-  ReportData,
 } from '../services/types';
 import { useQuoteRefresh } from '../hooks/useQuoteRefresh';
 import { useAuth } from '../contexts/AuthContext';
@@ -1345,11 +1344,6 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const currentReportContent = currentReportData?.content || (selectedReport ? activeReportsRaw?.[selectedReport] : null);
   const currentReportScore = currentReportData?.score;
   const currentReportScoreLabel = currentReportData?.score_label;
-  const activeValuationReport: ReportData | null = activeReportsSource?.valuation_report ?? null;
-  const valuationSummary = activeValuationReport?.valuation_summary ?? null;
-  const valuationRows = valuationSummary?.rows ?? [];
-  const valuationWeightedAvg = valuationSummary?.weighted_avg ?? null;
-  const valuationMethodWeights = valuationSummary?.method_weights ?? null;
   const reportScores: Record<string, { score: number | null; score_label: string | null }> = {};
   if (activeReportsSource) Object.entries(activeReportsSource).forEach(([k, v]) => { reportScores[k] = { score: v.score, score_label: v.score_label }; });
   const activeRecommendation = selectedRunId != null && stockData.historical_analyses
@@ -1950,33 +1944,60 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                           </tr>
                         </thead>
                         <tbody>
-                          {visibleSimilarStocks.map((similar) => (
-                            <tr
-                              key={similar.ticker}
-                              onClick={() => navigate(`/tickers/${similar.ticker}`)}
-                              className="border-t border-gray-700/80 hover:bg-gray-700/30 cursor-pointer"
-                            >
-                              <td className="px-3 py-2 text-blue-300 font-semibold">{similar.ticker}</td>
-                              <td className="px-3 py-2 text-white max-w-[220px] truncate" title={similar.name}>{similar.name}</td>
-                              <td className="px-3 py-2 text-white">{formatNumber(similar.current_price, 2)}</td>
-                              <td className={`px-3 py-2 ${similar.change_percent == null ? 'text-gray-400' : similar.change_percent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                {formatSignedPercent(similar.change_percent)}
-                              </td>
-                              <td className="px-3 py-2 text-gray-200">{formatNumber(similar.market_cap, 2)}</td>
-                              <td className="px-3 py-2 text-gray-200">{formatNumber(similar.revenue, 2)}</td>
-                              <td className="px-3 py-2 text-gray-200">{formatNumber(similar.ebitda, 2)}</td>
-                              <td className="px-3 py-2 text-gray-200">{formatRatio(similar.trailing_pe)}</td>
-                              <td className="px-3 py-2 text-gray-200">{formatRatio(similar.trailing_eps)}</td>
-                              <td className="px-3 py-2 text-gray-200">{formatPercent(similar.profit_margin)}</td>
-                              <td className="px-3 py-2 text-gray-200">{formatRatio(similar.beta)}</td>
-                              <td className="px-3 py-2 text-gray-200">{formatPercent(similar.dividend_yield)}</td>
-                              <td className="px-3 py-2 text-gray-200">
-                                {similar.fifty_two_week_low != null || similar.fifty_two_week_high != null
-                                  ? `${formatNumber(similar.fifty_two_week_low, 2)} - ${formatNumber(similar.fifty_two_week_high, 2)}`
-                                  : 'N/A'}
-                              </td>
-                            </tr>
-                          ))}
+                           {/* Pinned current stock row — always visible regardless of page */}
+                           <tr className="bg-blue-900/25 border-t border-blue-700/50">
+                             <td className="px-3 py-2 font-semibold text-blue-300">
+                               <span className="inline-flex items-center gap-1.5">
+                                 {ticker}
+                                 <span className="text-[10px] font-medium bg-blue-600/70 text-blue-100 px-1.5 py-0.5 rounded">You</span>
+                               </span>
+                             </td>
+                             <td className="px-3 py-2 text-white max-w-[220px] truncate" title={companyInfo?.name ?? ticker}>{companyInfo?.name ?? ticker}</td>
+                             <td className="px-3 py-2 text-white">{formatNumber(quote?.current_price, 2)}</td>
+                             <td className={`px-3 py-2 ${quote?.daily_change_percent == null ? 'text-gray-400' : quote.daily_change_percent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                               {formatSignedPercent(quote?.daily_change_percent)}
+                             </td>
+                             <td className="px-3 py-2 text-gray-200">{formatNumber(extendedInfo?.market_cap, 2)}</td>
+                             <td className="px-3 py-2 text-gray-200">{formatNumber(extendedInfo?.revenue, 2)}</td>
+                             <td className="px-3 py-2 text-gray-200">{formatNumber(extendedInfo?.ebitda, 2)}</td>
+                             <td className="px-3 py-2 text-gray-200">{formatRatio(extendedInfo?.pe_ratio)}</td>
+                             <td className="px-3 py-2 text-gray-200">{formatRatio(extendedInfo?.trailing_eps)}</td>
+                             <td className="px-3 py-2 text-gray-200">{formatPercent(extendedInfo?.profit_margin)}</td>
+                             <td className="px-3 py-2 text-gray-200">{formatRatio(extendedInfo?.beta)}</td>
+                             <td className="px-3 py-2 text-gray-200">{formatPercent(extendedInfo?.dividend_yield)}</td>
+                             <td className="px-3 py-2 text-gray-200">
+                               {quote?.fifty_two_week_low != null || quote?.fifty_two_week_high != null
+                                 ? `${formatNumber(quote?.fifty_two_week_low, 2)} - ${formatNumber(quote?.fifty_two_week_high, 2)}`
+                                 : 'N/A'}
+                             </td>
+                           </tr>
+                           {visibleSimilarStocks.map((similar) => (
+                             <tr
+                               key={similar.ticker}
+                               onClick={() => navigate(`/tickers/${similar.ticker}`)}
+                               className="border-t border-gray-700/80 hover:bg-gray-700/30 cursor-pointer"
+                             >
+                               <td className="px-3 py-2 text-blue-300 font-semibold">{similar.ticker}</td>
+                               <td className="px-3 py-2 text-white max-w-[220px] truncate" title={similar.name}>{similar.name}</td>
+                               <td className="px-3 py-2 text-white">{formatNumber(similar.current_price, 2)}</td>
+                               <td className={`px-3 py-2 ${similar.change_percent == null ? 'text-gray-400' : similar.change_percent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                 {formatSignedPercent(similar.change_percent)}
+                               </td>
+                               <td className="px-3 py-2 text-gray-200">{formatNumber(similar.market_cap, 2)}</td>
+                               <td className="px-3 py-2 text-gray-200">{formatNumber(similar.revenue, 2)}</td>
+                               <td className="px-3 py-2 text-gray-200">{formatNumber(similar.ebitda, 2)}</td>
+                               <td className="px-3 py-2 text-gray-200">{formatRatio(similar.trailing_pe)}</td>
+                               <td className="px-3 py-2 text-gray-200">{formatRatio(similar.trailing_eps)}</td>
+                               <td className="px-3 py-2 text-gray-200">{formatPercent(similar.profit_margin)}</td>
+                               <td className="px-3 py-2 text-gray-200">{formatRatio(similar.beta)}</td>
+                               <td className="px-3 py-2 text-gray-200">{formatPercent(similar.dividend_yield)}</td>
+                               <td className="px-3 py-2 text-gray-200">
+                                 {similar.fifty_two_week_low != null || similar.fifty_two_week_high != null
+                                   ? `${formatNumber(similar.fifty_two_week_low, 2)} - ${formatNumber(similar.fifty_two_week_high, 2)}`
+                                   : 'N/A'}
+                               </td>
+                             </tr>
+                           ))}
                         </tbody>
                       </table>
                     </div>
