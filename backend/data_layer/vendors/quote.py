@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import logging
 import math
+import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional, TypeVar
 
 import pandas as pd
 import yfinance as yf
@@ -18,6 +19,45 @@ import yfinance as yf
 from models.schemas import TickerQuote
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Retry helper for transient Yahoo Finance errors (HTTP 500 / 503)
+# ---------------------------------------------------------------------------
+_T = TypeVar("_T")
+
+# Status codes that are transient and worth retrying
+_TRANSIENT_HTTP_CODES = (500, 503)
+_RETRY_ATTEMPTS = 3
+_RETRY_BASE_DELAY = 2.0  # seconds; doubles each attempt (2, 4, 8)
+
+
+def _is_transient_http_error(exc: Exception) -> bool:
+    """Return True if the exception is a transient Yahoo HTTP 500 or 503."""
+    msg = str(exc)
+    return any(f"HTTP Error {code}" in msg for code in _TRANSIENT_HTTP_CODES)
+
+
+def _yf_with_retry(fn: Callable[[], _T]) -> _T:
+    """
+    Call fn() and retry up to _RETRY_ATTEMPTS times on transient HTTP 500/503.
+    On permanent errors (404, timeout, etc.) raises immediately.
+    """
+    last_exc: Optional[Exception] = None
+    for attempt in range(1, _RETRY_ATTEMPTS + 1):
+        try:
+            return fn()
+        except Exception as exc:
+            if _is_transient_http_error(exc):
+                delay = _RETRY_BASE_DELAY * (2 ** (attempt - 1))
+                logger.warning(
+                    "Yahoo transient error (attempt %d/%d): %s — retrying in %.0fs",
+                    attempt, _RETRY_ATTEMPTS, exc, delay,
+                )
+                last_exc = exc
+                time.sleep(delay)
+            else:
+                raise
+    raise last_exc  # type: ignore[misc]
 
 _RANGE_EXECUTOR: Optional[ThreadPoolExecutor] = None
 _RANGE_BATCH_TIMEOUT_SEC = 28
@@ -138,7 +178,7 @@ def _get_quote_yfinance(ticker: str) -> Optional[TickerQuote]:
     logger.info("Fetching quote from Yahoo (yfinance) for %s", ticker)
     try:
         ticker_obj = yf.Ticker(ticker)
-        info = ticker_obj.info
+        info = _yf_with_retry(lambda: ticker_obj.info)
         fast_info = ticker_obj.fast_info
         if info is None:
             info = {}
@@ -323,7 +363,7 @@ def _get_quotes_batch_yfinance(tickers: List[str]) -> Dict[str, Optional[TickerQ
     tickers = [t.upper() for t in tickers]
     results: Dict[str, Optional[TickerQuote]] = {t: None for t in tickers}
     try:
-        data = yf.download(
+        data = _yf_with_retry(lambda: yf.download(
             tickers,
             period="5d",
             interval="1d",
@@ -332,7 +372,7 @@ def _get_quotes_batch_yfinance(tickers: List[str]) -> Dict[str, Optional[TickerQ
             prepost=False,
             threads=True,
             progress=False,
-        )
+        ))
         if data is None or data.empty or not hasattr(data, "columns"):
             return results
         for t in tickers:
@@ -432,7 +472,7 @@ def _get_quotes_batch_with_range_yfinance(
     executor = _get_range_executor()
 
     def _download_chunk(chunk_tickers: List[str], period_str: str) -> Optional[pd.DataFrame]:
-        out = yf.download(
+        out = _yf_with_retry(lambda: yf.download(
             chunk_tickers,
             period=period_str,
             interval="1d",
@@ -441,7 +481,7 @@ def _get_quotes_batch_with_range_yfinance(
             prepost=False,
             threads=True,
             progress=False,
-        )
+        ))
         return out if out is not None and not (isinstance(out, pd.DataFrame) and out.empty) else None
 
     for i in range(0, len(tickers), 25):
