@@ -1,10 +1,12 @@
 """SEC/Regulatory analyst: analyzes EDGAR filing content with file exploration capabilities."""
 
-from typing import List
+import logging
+from typing import Any, Dict, List
 
 from pydantic import BaseModel, Field
 
 from ..utils.edgar_tools import get_edgar_filing_content
+from ..utils.fundamental_data_tools import is_etf_or_index
 from ..utils.sec_explorer_tools import (
     grep_sec_filing,
     read_sec_section,
@@ -15,6 +17,15 @@ from ..utils.sec_explorer_tools import (
 from .self_contained_analyst import create_self_contained_analyst
 from .output_schema import analyst_key_takeaways_field
 from .prompts import build_sec_analyst_prompt
+
+logger = logging.getLogger(__name__)
+
+_NOT_APPLICABLE_REPORT = (
+    "## SEC Analysis — Not Applicable\n\n"
+    "This ticker is an ETF, index fund, or similar non-company instrument. "
+    "SEC/EDGAR filing analysis is only meaningful for individual companies that file "
+    "10-K/10-Q reports, and has been skipped for this asset."
+)
 
 
 class SecAnalysisOutput(BaseModel):
@@ -31,7 +42,7 @@ class SecAnalysisOutput(BaseModel):
 
 def create_sec_analyst(llm):
     """Create SEC analyst with file exploration tools (like a coding agent exploring files)."""
-    return create_self_contained_analyst(
+    inner = create_self_contained_analyst(
         llm=llm,
         tools=[
             get_edgar_filing_content, # Primary: LLM extraction (original tool)
@@ -48,3 +59,20 @@ def create_sec_analyst(llm):
         agent_name="SEC Analyst",
         max_iterations=8,  # Increased for exploration
     )
+
+    def analyst_node(state: Dict[str, Any]) -> Dict[str, Any]:
+        ticker = state.get("company_of_interest", "")
+        if is_etf_or_index(ticker):
+            logger.info("SEC Analyst: skipping ETF/index %s", ticker)
+            return {
+                "sec_report": _NOT_APPLICABLE_REPORT,
+                "sec_score": None,
+                "sec_key_takeaways": [],
+                "report_usage": {"sec_report": {}},
+                "report_resources": [],
+                "report_resources_by_report": {"sec_report": []},
+                "report_steps_by_report": {"sec_report": []},
+            }
+        return inner(state)
+
+    return analyst_node

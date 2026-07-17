@@ -9,6 +9,79 @@ from ...datasources.info_service_client import (
     require_info_service,
 )
 
+_INDEX_ETF_QUOTE_TYPES = frozenset({"ETF", "ETN", "INDEX", "MUTUALFUND", "FUND"})
+_INDEX_ETF_NAME_KEYWORDS = (
+    " ETF",
+    " ETN",
+    " INDEX",
+    " INDEX FUND",
+    " TRUST",
+    " FUND",
+    " SPDR",
+    " ISHARES",
+    " VANGUARD",
+    " INVESCO",
+    " PROSHARES",
+    " DIREXION",
+)
+
+
+def is_etf_or_index(ticker: str) -> bool:
+    """Return True if *ticker* is an ETF, index fund, or similar non-company instrument.
+
+    Fetches fundamentals from the info service and inspects QuoteType / AssetType fields
+    plus name keywords — the same heuristic used by the valuation tools.
+    Falls back to False when the info service is unavailable or returns no data.
+    """
+    try:
+        raw = get_fundamentals_via_service(ticker)
+        if not raw:
+            return False
+        fundamentals: dict = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return False
+
+    def _upper(v) -> str:
+        return str(v).upper().strip() if v else ""
+
+    profile: dict = {}
+    for key in ("CompanyProfile", "profile", "companyProfile", "AssetProfile"):
+        val = fundamentals.get(key)
+        if isinstance(val, dict):
+            profile = val
+            break
+
+    # Check quote-type / asset-type fields
+    type_fields = [
+        fundamentals.get("QuoteType"),
+        fundamentals.get("AssetType"),
+        fundamentals.get("SecurityType"),
+        fundamentals.get("InstrumentType"),
+        fundamentals.get("Category"),
+        fundamentals.get("FundFamily"),
+        profile.get("quoteType"),
+        profile.get("assetType"),
+        profile.get("securityType"),
+        profile.get("instrumentType"),
+        profile.get("category"),
+    ]
+    normalized_types = " ".join(_upper(v) for v in type_fields if v)
+    for keyword in _INDEX_ETF_QUOTE_TYPES:
+        if keyword in normalized_types.split() or keyword in normalized_types:
+            return True
+
+    # Fall back to name-based check
+    name_fields = [
+        fundamentals.get("Name"),
+        fundamentals.get("name"),
+        profile.get("name"),
+        profile.get("longName"),
+        profile.get("shortName"),
+    ]
+    normalized_name = " ".join(_upper(v) for v in name_fields if v)
+    return any(kw in normalized_name for kw in _INDEX_ETF_NAME_KEYWORDS)
+
+
 
 def _statement_to_str(statements: dict, key: str) -> str:
     """Extract one statement from info service response and return as string."""
