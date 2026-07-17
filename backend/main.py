@@ -3,6 +3,7 @@
 import logging
 import os
 import signal
+import threading
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -94,8 +95,11 @@ async def lifespan(app: FastAPI):
                 def _timeout_handler(signum, frame):
                     raise TimeoutError(f"Market cache refresh '{fn}' exceeded {_REFRESH_TIMEOUT}s timeout")
 
-                # SIGALRM is Unix-only; guard for safety
-                use_alarm = hasattr(signal, "SIGALRM")
+                # SIGALRM is Unix-only and only works on the main thread
+                use_alarm = (
+                    hasattr(signal, "SIGALRM")
+                    and threading.current_thread() is threading.main_thread()
+                )
                 if use_alarm:
                     old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
                     signal.alarm(_REFRESH_TIMEOUT)
