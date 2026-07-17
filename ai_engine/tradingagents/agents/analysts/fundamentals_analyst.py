@@ -1,19 +1,26 @@
 import logging
-from typing import List
+from typing import Any, Dict, List
 
 from pydantic import BaseModel, Field
 from ..utils.agent_utils import (
-    get_events,
     get_fundamentals,
     get_balance_sheet,
     get_cashflow,
     get_income_statement,
 )
+from ..utils.fundamental_data_tools import is_etf_or_index
 from .self_contained_analyst import create_self_contained_analyst
 from .output_schema import analyst_key_takeaways_field
 from .prompts import build_fundamentals_analyst_prompt
 
 logger = logging.getLogger(__name__)
+
+_NOT_APPLICABLE_REPORT = (
+    "## Fundamentals Analysis — Not Applicable\n\n"
+    "This ticker is an ETF, index fund, or similar non-company instrument. "
+    "Fundamentals analysis (balance sheet, income statement, cash flow, company profile) "
+    "is only meaningful for individual companies and has been skipped."
+)
 
 
 class FundamentalsAnalysisOutput(BaseModel):
@@ -30,10 +37,9 @@ class FundamentalsAnalysisOutput(BaseModel):
 
 def create_fundamentals_analyst(llm):
     """Create a self-contained fundamentals analyst that handles all tool calling internally."""
-    return create_self_contained_analyst(
+    inner = create_self_contained_analyst(
         llm=llm,
         tools=[
-            get_events,
             get_fundamentals,
             get_balance_sheet,
             get_cashflow,
@@ -46,3 +52,20 @@ def create_fundamentals_analyst(llm):
         agent_name="Fundamentals Analyst",
         max_iterations=5,
     )
+
+    def analyst_node(state: Dict[str, Any]) -> Dict[str, Any]:
+        ticker = state.get("company_of_interest", "")
+        if is_etf_or_index(ticker):
+            logger.info("Fundamentals Analyst: skipping ETF/index %s", ticker)
+            return {
+                "fundamentals_report": _NOT_APPLICABLE_REPORT,
+                "fundamentals_score": None,
+                "fundamentals_key_takeaways": [],
+                "report_usage": {"fundamentals_report": {}},
+                "report_resources": [],
+                "report_resources_by_report": {"fundamentals_report": []},
+                "report_steps_by_report": {"fundamentals_report": []},
+            }
+        return inner(state)
+
+    return analyst_node
