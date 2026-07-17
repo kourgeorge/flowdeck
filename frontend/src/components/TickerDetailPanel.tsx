@@ -50,7 +50,7 @@ interface StockDetailPanelProps {
   onSubscriptionChange?: () => void;
 }
 const REPORT_PROCESS_ORDER = [
-  'market_report','sentiment_report','news_report','technical_report',
+  'market_report','sentiment_report','technical_report',
   'fundamentals_report','sec_report','valuation_report','investment_plan','trader_investment_plan','final_trade_decision',
 ];
 const SIMILAR_STOCKS_PER_PAGE = 10;

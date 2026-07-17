@@ -16,7 +16,6 @@ def create_neutral_debator(llm):
 
         market_research_report = state["market_report"]
         sentiment_report = state["sentiment_report"]
-        news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
         sec_report = state.get("sec_report", "")
         technical_report = state.get("technical_report", "")
@@ -31,8 +30,7 @@ def create_neutral_debator(llm):
 Your task is to challenge both the Risky and Safe Analysts, pointing out where each perspective may be overly optimistic or overly cautious. Use insights from the following data sources to support a moderate, sustainable strategy to adjust the trader's decision:
 
 Market Research Report: {market_research_report}
-Social Media Sentiment Report: {sentiment_report}
-Latest World Affairs Report: {news_report}
+News & Sentiment Report: {sentiment_report}
 Company Fundamentals Report: {fundamentals_report}
 SEC / Regulatory Report: {sec_report if sec_report else "Not available"}
 Advanced Technical Report: {technical_report if technical_report else "Not available"}

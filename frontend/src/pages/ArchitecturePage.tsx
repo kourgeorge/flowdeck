@@ -37,23 +37,13 @@ const AGENT_CONTRACTS: AgentContract[] = [
   },
   {
     id: 'social-analyst',
-    name: 'Social Media Analyst',
-    kind: 'Analyst',
-    selectedByDefault: 'No (available)',
-    consumes: ['trade_date', 'company_of_interest', 'messages'],
-    tools: ['get_news'],
-    emits: ['messages', 'sentiment_report', 'sentiment_score'],
-    outputShape: analystOutputShape('sentiment_report', 'sentiment_score'),
-  },
-  {
-    id: 'news-analyst',
-    name: 'News Analyst',
+    name: 'News & Sentiment Analyst',
     kind: 'Analyst',
     selectedByDefault: 'Yes',
     consumes: ['trade_date', 'company_of_interest', 'messages'],
-    tools: ['get_news', 'get_global_news', 'get_insider_transactions'],
-    emits: ['messages', 'news_report', 'news_score'],
-    outputShape: analystOutputShape('news_report', 'news_score'),
+    tools: ['get_ticker_quote', 'get_events', 'get_news', 'get_global_news', 'get_insider_transactions', 'get_reddit_company_social', 'get_polymarket_sentiment'],
+    emits: ['messages', 'sentiment_report', 'sentiment_score'],
+    outputShape: analystOutputShape('sentiment_report', 'sentiment_score'),
   },
   {
     id: 'fundamentals-analyst',
@@ -100,7 +90,6 @@ const AGENT_CONTRACTS: AgentContract[] = [
     consumes: [
       'market_report',
       'sentiment_report',
-      'news_report',
       'fundamentals_report',
       'technical_report',
       'investment_debate_state',
@@ -124,7 +113,6 @@ const AGENT_CONTRACTS: AgentContract[] = [
     consumes: [
       'market_report',
       'sentiment_report',
-      'news_report',
       'fundamentals_report',
       'technical_report',
       'investment_debate_state',
@@ -149,7 +137,6 @@ const AGENT_CONTRACTS: AgentContract[] = [
       'investment_debate_state',
       'market_report',
       'sentiment_report',
-      'news_report',
       'fundamentals_report',
       'sec_report',
       'technical_report',
@@ -192,7 +179,6 @@ const AGENT_CONTRACTS: AgentContract[] = [
       'investment_plan',
       'market_report',
       'sentiment_report',
-      'news_report',
       'fundamentals_report',
     ],
     emits: ['messages', 'trader_investment_plan', 'trader_recommendation', 'sender'],
@@ -212,7 +198,6 @@ const AGENT_CONTRACTS: AgentContract[] = [
       'trader_investment_plan',
       'market_report',
       'sentiment_report',
-      'news_report',
       'fundamentals_report',
       'sec_report',
       'technical_report',
@@ -242,7 +227,6 @@ const AGENT_CONTRACTS: AgentContract[] = [
       'trader_investment_plan',
       'market_report',
       'sentiment_report',
-      'news_report',
       'fundamentals_report',
       'sec_report',
       'technical_report',
@@ -272,7 +256,6 @@ const AGENT_CONTRACTS: AgentContract[] = [
       'trader_investment_plan',
       'market_report',
       'sentiment_report',
-      'news_report',
       'fundamentals_report',
       'sec_report',
       'technical_report',
@@ -303,12 +286,10 @@ const AGENT_CONTRACTS: AgentContract[] = [
       'investment_plan',
       'market_report',
       'sentiment_report',
-      'news_report',
       'fundamentals_report',
       'sec_report',
       'market_score',
       'sentiment_score',
-      'news_score',
       'fundamentals_score',
       'sec_score',
       'technical_score',
@@ -356,11 +337,10 @@ const CONTRACT_PHASES: ContractPhase[] = [
     id: 'phase-1-analysts',
     title: 'Phase 1: Analyst Pipeline',
     description:
-      'Specialized analysts gather market, sentiment, news, fundamentals, technical, and SEC/regulatory evidence.',
+      'Specialized analysts gather market, news & sentiment, fundamentals, technical, and SEC/regulatory evidence.',
     agents: selectContracts([
       'market-analyst',
       'social-analyst',
-      'news-analyst',
       'fundamentals-analyst',
       'technical-analyst',
       'sec-analyst',
@@ -433,8 +413,6 @@ const FINAL_LOGGED_OUTPUT_SHAPE = {
   market_score: '<int | null>',
   sentiment_report: '<string>',
   sentiment_score: '<int | null>',
-  news_report: '<string>',
-  news_score: '<int | null>',
   fundamentals_report: '<string>',
   fundamentals_score: '<int | null>',
   sec_report: '<string>',
@@ -696,9 +674,7 @@ export default function ArchitecturePage() {
                   <FlowArrow />
                   <FlowNode title="Market Analyst" subtitle="score + report" tone="analyst" />
                   <FlowArrow />
-                  <FlowNode title="Social Analyst" subtitle="optional" tone="analyst" />
-                  <FlowArrow />
-                  <FlowNode title="News Analyst" subtitle="score + report" tone="analyst" />
+                  <FlowNode title="News & Sentiment Analyst" subtitle="score + report" tone="analyst" />
                   <FlowArrow />
                   <FlowNode title="Fundamentals Analyst" subtitle="score + report" tone="analyst" />
                   <FlowArrow />

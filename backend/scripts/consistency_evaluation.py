@@ -53,7 +53,6 @@ DEFAULT_TOP_3_TICKERS = ["IBM"]
 SCORE_KEYS = [
     "market_score",
     "sentiment_score",
-    "news_score",
     "fundamentals_score",
     "recommendation_score",
     "risk_score",
@@ -295,7 +294,7 @@ def main() -> None:
         tickers = DEFAULT_TOP_3_TICKERS.copy()
     analysts = [a.strip() for a in args.analysts.split(",") if a.strip()]
     if not analysts:
-        analysts = ["market", "news", "fundamentals"]
+        analysts = ["market", "social", "fundamentals"]
 
     config = DEFAULT_CONFIG.copy()
     config["max_debate_rounds"] = args.research_depth

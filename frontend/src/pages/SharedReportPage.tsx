@@ -16,7 +16,7 @@ import { LOGO_PATH } from '../config';
 import { parseReportDate } from '../utils/date';
 
 const REPORT_ORDER = [
-  'market_report', 'sentiment_report', 'news_report', 'technical_report',
+  'market_report', 'sentiment_report', 'technical_report',
   'fundamentals_report', 'sec_report', 'valuation_report', 'investment_plan', 'trader_investment_plan', 'final_trade_decision',
 ];
 const IMPORTANT_EVENT_LABELS: Record<string, string> = {

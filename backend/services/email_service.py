@@ -360,8 +360,8 @@ def _build_report_email_bodies(
                     elif isinstance(bv, str) and bv:
                         bear_view = [bv]
             
-            # Extract key takeaways/insights only from Market, News, and Fundamentals reports
-            if report_type in ("market_report", "news_report", "fundamentals_report"):
+            # Extract key takeaways/insights only from Market, News & Sentiment, and Fundamentals reports
+            if report_type in ("market_report", "sentiment_report", "fundamentals_report"):
                 if report_data.get("key_takeaways"):
                     takeaways = report_data.get("key_takeaways")
                     if isinstance(takeaways, list):

@@ -116,14 +116,9 @@ def _sample_scores() -> dict:
             "key_takeaways": ["Strong market momentum with broad participation", "Sector rotation favoring growth stocks"],
         },
         "sentiment_report": {
-            "score": 5.0,
+            "score": 6.0,
             "score_label": "Sentiment Score",
-            "key_takeaways": ["Mixed social sentiment with cautious optimism"],
-        },
-        "news_report": {
-            "score": 7.0,
-            "score_label": "News Score",
-            "key_takeaways": ["Positive earnings surprise exceeded expectations", "New product launch receiving favorable coverage"],
+            "key_takeaways": ["Positive earnings surprise exceeded expectations", "Mixed social sentiment with cautious optimism"],
         },
         "fundamentals_report": {
             "score": 3.0,

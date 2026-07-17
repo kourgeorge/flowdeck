@@ -52,7 +52,7 @@ def run_analyses_for_tickers(
     Records each new run in analysis_runs (using creator_id or system user).
     """
     if analysts is None:
-        analysts = ["market", "social", "news", "fundamentals", "technical", "sec", "valuation"]
+        analysts = ["market", "social", "fundamentals", "technical", "sec", "valuation"]
     if creator_id is None:
         creator_id = token_service.get_system_user_id(db)
     for ticker in tickers:
@@ -100,7 +100,7 @@ def run_sync(
         return {"date": analysis_date, "triggered": [], "skipped": skipped}
     analysis_service = AnalysisService(results_dir=RESULTS_DIR)
     if analysts is None:
-        analysts = ["market", "social", "news", "fundamentals", "technical", "sec", "valuation"]
+        analysts = ["market", "social", "fundamentals", "technical", "sec", "valuation"]
     db = SessionLocal()
     try:
         run_analyses_for_tickers(

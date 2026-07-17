@@ -83,7 +83,7 @@ class Report(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     execution_id = Column(Integer, ForeignKey("executions.id", ondelete="CASCADE"), nullable=False, index=True)
-    report_type = Column(String(64), nullable=False)  # market_report, news_report, daily_digest, etc.
+    report_type = Column(String(64), nullable=False)  # market_report, sentiment_report, daily_digest, etc.
     content = Column(Text, nullable=True)
     metadata_json = Column(Text, nullable=True)  # JSON: score, score_label, key_takeaways, etc.
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)

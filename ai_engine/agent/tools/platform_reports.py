@@ -27,7 +27,7 @@ _REPORT_LABELS = {
     "market_report": "Market Analysis",
     "fundamentals_report": "Fundamentals Analysis",
     "technical_report": "Technical Analysis",
-    "news_report": "News Analysis",
+    "sentiment_report": "News & Sentiment Analysis",
     "sec_report": "SEC Analysis",
     "valuation_report": "Valuation Analysis",
     "investment_plan": "Investment Plan",
@@ -40,7 +40,9 @@ _REPORT_ALIASES: dict[str, str] = {
     "fundamentals": "fundamentals_report",
     "fundamental": "fundamentals_report",
     "technical": "technical_report",
-    "news": "news_report",
+    "news": "sentiment_report",
+    "sentiment": "sentiment_report",
+    "social": "sentiment_report",
     "sec": "sec_report",
     "valuation": "valuation_report",
     "investment": "investment_plan",
@@ -69,7 +71,7 @@ _PLATFORM_REPORTS_SPEC = ToolSpec(
         "With report_type: returns the full content of that specific report. "
         "Available reports: Final Trade Decision (risk-adjusted recommendation), "
         "Investment Plan (bull vs bear researcher debate), Trader Plan, Market Analysis, "
-        "Fundamentals Analysis, Technical Analysis, News Analysis, SEC/Regulatory Analysis, "
+        "Fundamentals Analysis, Technical Analysis, News & Sentiment Analysis, SEC/Regulatory Analysis, "
         "and Valuation Analysis. "
         "Use report_type when the user asks to 'read', 'show', 'summarize', or 'deep dive' into a specific report. "
         "By default returns the LATEST report. Use the 'date' parameter to access historical reports — "
@@ -92,7 +94,7 @@ _PLATFORM_REPORTS_SPEC = ToolSpec(
                     "'market_report' (or 'market'), "
                     "'fundamentals_report' (or 'fundamentals'/'fundamental'), "
                     "'technical_report' (or 'technical'), "
-                    "'news_report' (or 'news'), "
+                    "'sentiment_report' (or 'news'/'sentiment'/'social'), "
                     "'sec_report' (or 'sec'). "
                     "'valuation_report' (or 'valuation'). "
                     "Omit or leave null to fetch all available reports."

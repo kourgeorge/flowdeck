@@ -605,7 +605,7 @@ def run_mission_control(
             returned_run_id, existing = app_services.get_analysis_service().start_analysis(
                 ticker=ticker,
                 analysis_date=date_str,
-                analysts=["market", "social", "news", "fundamentals", "technical", "sec", "valuation"],
+                analysts=["market", "social", "fundamentals", "technical", "sec", "valuation"],
                 research_depth=5,
                 llm_provider=llm_provider,
                 progress_callback=None,

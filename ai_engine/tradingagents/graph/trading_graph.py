@@ -52,7 +52,7 @@ class TradingAgentsGraph:
 
     def __init__(
         self,
-        selected_analysts=["market", "social", "news", "technical", "fundamentals", "valuation"],
+        selected_analysts=["market", "social", "technical", "fundamentals", "valuation"],
         debug=False,
         config: Dict[str, Any] = None,
     ):
@@ -217,8 +217,6 @@ class TradingAgentsGraph:
             "market_score": final_state.get("market_score"),
             "sentiment_report": final_state["sentiment_report"],
             "sentiment_score": final_state.get("sentiment_score"),
-            "news_report": final_state["news_report"],
-            "news_score": final_state.get("news_score"),
             "fundamentals_report": final_state["fundamentals_report"],
             "fundamentals_score": final_state.get("fundamentals_score"),
             "sec_report": final_state.get("sec_report", ""),

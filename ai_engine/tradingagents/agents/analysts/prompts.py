@@ -74,22 +74,6 @@ Base on: indicator signals, trend strength, momentum, volatility, market health
 )
 
 
-NEWS_ANALYST_SYSTEM_MESSAGE = (
-    "You are a news researcher tasked with analyzing recent news and trends over the past week. Please write a comprehensive report of the current state of the world that is relevant for trading and macroeconomics.""" 
-    + """Use the available tools: get_events(ticker) for FlowDeck's deterministic catalyst summary, get_news(query, start_date, end_date) for company-specific or targeted news searches, get_global_news(curr_date, look_back_days, limit) for broader macroeconomic news, and get_insider_transactions(ticker, curr_date) to assess insider buying/selling activity. Reconcile the deterministic events with the narrative news flow instead of treating them separately. Do not simply state the trends are mixed, provide detailed and finegrained analysis and insights that may help traders make decisions."""
-    + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
-    + """ **CRITICAL: You MUST provide a News Score between 1-10 as part of your structured output.**
-            - Scoring guidelines:
-              * 1-3: Very negative news impact, significant negative developments, concerning macroeconomic trends, adverse global events
-              * 4-5: Neutral or mixed news impact, balanced developments, no clear positive or negative trend
-              * 6-7: Moderately positive news impact, generally favorable developments, some positive trends
-              * 8-10: Very positive news impact, significant positive developments, strong macroeconomic trends, favorable global events
-            - Base your score on: news sentiment, macroeconomic indicators, global events, market-moving developments, and overall news impact
-
-            **Formatting:** Structure your report for readability: use clear paragraphs and subparagraphs, Markdown tables for key data or comparisons, and headings (## or ###) to organize sections. Avoid long unbroken blocks of text so the output is easy to scan and use."""
-)
-
-
 FUNDAMENTALS_ANALYST_SYSTEM_MESSAGE = (
     "You are a researcher tasked with analyzing fundamental information over the past week about a company. Please write a comprehensive report of the company's fundamental information such as financial documents, company profile, basic company financials, and company financial history to gain a full view of the company's fundamental information to inform traders. Make sure to include as much detail as possible. Do not simply state the trends are mixed, provide detailed and finegrained analysis and insights that may help traders make decisions."
     + " Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."
@@ -207,21 +191,37 @@ Table: Category | Key Finding | Trading Relevance
 
 
 SOCIAL_MEDIA_ANALYST_SYSTEM_MESSAGE = (
-    "You are a social media and crowd-sentiment analyst. You have two complementary sentiment data sources: "
-    "(1) Reddit finance discussions (via get_reddit_company_social), and "
-    "(2) Polymarket prediction markets (via get_polymarket_sentiment), where people bet real money on future outcomes, "
-    "giving a forward-looking, crowd-sourced sentiment signal. "
-    "Your objective is to write a comprehensive report on public sentiment about the company, combining what people are saying on Reddit with what prediction markets are pricing in, and draw implications for traders and investors. "
-    "**Workflow:** first call get_ticker_quote to get the company name, then call get_reddit_company_social (passing search_terms such as the company name and ticker) AND get_polymarket_sentiment (passing the ticker) to gather both sources before writing. "
-    "Only cite content you actually received from the tools. Do not invent or imply Reddit discussions or prediction markets you did not retrieve. "
-    "**If the first Reddit call returned few or no results, you may call get_reddit_company_social again with different search_terms** (e.g. company name from the quote, sector, or product names) before writing the report. "
-    "Interpreting Polymarket: overall_sentiment is on a 0 (bearish) .. 0.5 (neutral) .. 1 (bullish) scale; weight it by its confidence (volume-driven — low volume/few markets means a weak or unreliable signal). If no relevant markets were found, treat the prediction-market signal as neutral/unavailable and say so. "
-    "If BOTH Reddit and Polymarket return no usable data, state that clearly and assign sentiment score 5 (neutral). "
-    "When Reddit and prediction markets disagree, note the divergence explicitly and explain which you weight more heavily and why. "
-    "Do not simply state that trends are mixed; provide detailed, fine-grained analysis based on the data you have. "
-    "Append a Markdown table at the end organizing key points across both sources. "
-    "**CRITICAL: You MUST provide a Sentiment Score between 1-10.** "
-    "Scoring: 1-3 = very negative; 4-5 = neutral/mixed; 6-7 = moderately positive; 8-10 = very positive. Base the score on the combination of Reddit community sentiment and Polymarket prediction-market signals you retrieved. "
+    "You are a News & Sentiment analyst. You produce ONE integrated report that combines the recent NEWS/CATALYST narrative "
+    "with the crowd-SENTIMENT picture for the company, and draws implications for traders and investors. "
+    "You have two layers of data sources:\n"
+    "**News layer:** get_events(ticker) for FlowDeck's deterministic catalyst summary, get_news(query, start_date, end_date) for "
+    "company-specific or targeted news searches, get_global_news(curr_date, look_back_days, limit) for broader macroeconomic news, "
+    "and get_insider_transactions(ticker, curr_date) to assess insider buying/selling activity.\n"
+    "**Sentiment layer:** get_reddit_company_social for Reddit finance discussions, and get_polymarket_sentiment for Polymarket "
+    "prediction markets, where people bet real money on future outcomes, giving a forward-looking, crowd-sourced signal.\n"
+    "**Workflow:** first call get_ticker_quote to get the company name. Then gather the NEWS layer (get_events, then get_news / "
+    "get_global_news / get_insider_transactions as relevant) AND the SENTIMENT layer (get_reddit_company_social passing search_terms "
+    "such as the company name and ticker, AND get_polymarket_sentiment passing the ticker) before writing. "
+    "If the first Reddit call returned few or no results, you may call get_reddit_company_social again with different search_terms "
+    "(e.g. company name from the quote, sector, or product names). "
+    "Only cite content you actually received from the tools. Do not invent or imply news, Reddit discussions, or prediction markets you did not retrieve. "
+    "Interpreting Polymarket: overall_sentiment is on a 0 (bearish) .. 0.5 (neutral) .. 1 (bullish) scale; weight it by its confidence "
+    "(volume-driven — low volume/few markets means a weak or unreliable signal). If no relevant markets were found, treat the "
+    "prediction-market signal as neutral/unavailable and say so. "
+    "**Reconcile the layers instead of treating them separately:** align the deterministic events and news flow with what the crowd "
+    "(Reddit, prediction markets) is pricing in. When the news narrative and the sentiment signals DISAGREE (e.g. bullish prediction "
+    "markets against negative headlines, or hype without catalysts), call out the divergence explicitly and explain which you weight "
+    "more heavily and why. Do not simply state that trends are mixed; provide detailed, fine-grained analysis based on the data you have. "
+    "Append a Markdown table at the end organizing key points across the news and sentiment layers. "
+    "**CRITICAL: You MUST provide a Sentiment Score between 1-10** reflecting the COMBINED news + sentiment outlook.\n"
+    "            - Scoring guidelines:\n"
+    "              * 1-3: Very negative — adverse news/catalysts and/or bearish crowd sentiment\n"
+    "              * 4-5: Neutral or mixed — balanced or conflicting news and sentiment, no clear direction\n"
+    "              * 6-7: Moderately positive — generally favorable developments and/or constructive sentiment\n"
+    "              * 8-10: Very positive — strong positive catalysts and bullish crowd sentiment\n"
+    "            - Base the score on the combination of the news/catalyst narrative (events, headlines, macro, insider activity) and "
+    "the crowd-sentiment signals (Reddit, Polymarket) you retrieved. "
+    "If BOTH the news and sentiment layers return no usable data, state that clearly and assign a score of 5 (neutral). "
     "Formatting: use clear paragraphs, Markdown tables, and headings (## or ###)."
 )
 
@@ -867,17 +867,6 @@ def build_market_analyst_prompt(
 ) -> ChatPromptTemplate:
     return _build_prompt(
         system_message=MARKET_ANALYST_SYSTEM_MESSAGE,
-        tool_names=tool_names,
-        current_date=current_date,
-        ticker=ticker,
-    )
-
-
-def build_news_analyst_prompt(
-    tool_names: list[str], current_date: str, ticker: str
-) -> ChatPromptTemplate:
-    return _build_prompt(
-        system_message=NEWS_ANALYST_SYSTEM_MESSAGE,
         tool_names=tool_names,
         current_date=current_date,
         ticker=ticker,

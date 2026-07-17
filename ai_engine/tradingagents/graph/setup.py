@@ -41,7 +41,7 @@ class GraphSetup:
 
     def setup_graph(
         self,
-        selected_analysts=["market", "social", "news", "fundamentals"],
+        selected_analysts=["market", "social", "fundamentals"],
         *,
         parallel_analysts: bool = True,
     ):
@@ -50,8 +50,7 @@ class GraphSetup:
         Args:
             selected_analysts (list): List of analyst types to include. Options are:
                 - "market": Market analyst
-                - "social": Social media analyst
-                - "news": News analyst
+                - "social": News & Sentiment analyst (news/catalysts + crowd sentiment)
                 - "fundamentals": Fundamentals analyst
                 - "technical": Technical analyst (advanced pattern recognition)
                 - "sec": SEC/Regulatory analyst (EDGAR risk factors, MD&A, competition)
@@ -70,9 +69,6 @@ class GraphSetup:
 
         if "social" in selected_analysts:
             analyst_nodes["social"] = create_social_media_analyst(self.quick_thinking_llm)
-
-        if "news" in selected_analysts:
-            analyst_nodes["news"] = create_news_analyst(self.quick_thinking_llm)
 
         if "fundamentals" in selected_analysts:
             analyst_nodes["fundamentals"] = create_fundamentals_analyst(self.quick_thinking_llm)

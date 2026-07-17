@@ -202,12 +202,12 @@ def test_merge_report_resources_by_report_keeps_resources_scoped_to_report():
 
     merged = _merge_report_resources_by_report(
         {"market_report": market_resources},
-        {"news_report": news_resources},
+        {"sentiment_report": news_resources},
     )
 
-    assert set(merged.keys()) == {"market_report", "news_report"}
+    assert set(merged.keys()) == {"market_report", "sentiment_report"}
     assert merged["market_report"][0]["tool_name"] == "get_ticker_quote"
-    assert merged["news_report"][0]["tool_name"] == "get_news"
+    assert merged["sentiment_report"][0]["tool_name"] == "get_news"
 
 
 def test_merge_report_steps_by_report_appends_steps():
@@ -326,8 +326,7 @@ def test_research_debate_turn_persists_prompt_in_message_preview():
             "count": 0,
         },
         "market_report": "Market data",
-        "sentiment_report": "Sentiment data",
-        "news_report": "News data",
+        "sentiment_report": "News & sentiment data",
         "fundamentals_report": "Fundamentals data",
         "technical_report": "Technical data",
         "events_report": "Events data",

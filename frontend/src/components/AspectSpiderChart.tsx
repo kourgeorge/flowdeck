@@ -42,8 +42,7 @@ function roundedPolygonPath(
 const REPORT_LABELS: Record<string, string> = {
   fundamentals_report: 'Fundamentals',
   market_report: 'Market',
-  sentiment_report: 'Sentiment',
-  news_report: 'News',
+  sentiment_report: 'News & Sentiment',
   technical_report: 'Technical',
   sec_report: 'SEC',
   valuation_report: 'Valuation',
@@ -55,6 +54,7 @@ const REPORT_LABELS: Record<string, string> = {
 /** Radar axis labels: max 5 characters each */
 const SHORT_AXIS_LABELS: Record<string, string> = {
   Market: 'Mkt',
+  'News & Sentiment': 'N&S',
   Sentiment: 'Sent',
   News: 'News',
   Fundamentals: 'Fund',
@@ -83,7 +83,7 @@ export function formatReportKey(key: string): string {
 export function getAnalysisScoreEntries(scores: ReportScoreMap | null | undefined): [string, { score: number | null }][] {
   if (!scores || Object.keys(scores).length === 0) return [];
   const REPORT_ORDER = [
-    'market_report', 'sentiment_report', 'news_report', 'fundamentals_report', 'technical_report',
+    'market_report', 'sentiment_report', 'fundamentals_report', 'technical_report',
     'sec_report', 'valuation_report', 'investment_plan', 'final_trade_decision',
   ];
   return (Object.entries(scores) as [string, { score: number | null }][])
@@ -108,7 +108,7 @@ function getSpiderData(scoreEntries: [string, { score: number | null }][]) {
 }
 
 function calculateAverageAnalystScore(scoreEntries: [string, { score: number | null }][]): number | null {
-  const analystReports = ['market_report', 'news_report', 'fundamentals_report', 'technical_report', 'sec_report', 'valuation_report'];
+  const analystReports = ['market_report', 'sentiment_report', 'fundamentals_report', 'technical_report', 'sec_report', 'valuation_report'];
   const analystScores = scoreEntries
     .filter(([type]) => analystReports.includes(type))
     .map(([, data]) => data.score)

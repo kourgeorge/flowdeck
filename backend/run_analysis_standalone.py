@@ -50,7 +50,6 @@ def _normalize_takeaway_list(val) -> list:
 _REPORT_TO_STATE_TAKEAWAYS_KEY = {
     "market_report": "market_key_takeaways",
     "sentiment_report": "sentiment_key_takeaways",
-    "news_report": "news_key_takeaways",
     "fundamentals_report": "fundamentals_key_takeaways",
     "technical_report": "technical_key_takeaways",
     "sec_report": "sec_key_takeaways",
@@ -114,7 +113,7 @@ def main() -> None:
     analysis_date = args.analysis_date.strip()
     analysts = [a.strip() for a in args.analysts.split(",") if a.strip()]
     if not analysts:
-        analysts = ["market", "social", "news", "fundamentals", "technical", "sec", "valuation"]
+        analysts = ["market", "social", "fundamentals", "technical", "sec", "valuation"]
 
     os.environ["INFO_SERVICE_URL"] = args.info_service_url.strip().rstrip("/")
 
@@ -163,8 +162,7 @@ def main() -> None:
 
     agent_statuses = {
         "Market Analyst": "pending",
-        "Social Analyst": "pending",
-        "News Analyst": "pending",
+        "News & Sentiment Analyst": "pending",
         "Fundamentals Analyst": "pending",
         "Technical Analyst": "pending",
         "SEC Analyst": "pending",
@@ -179,8 +177,7 @@ def main() -> None:
     }
     analyst_status_map = {
         "market": "Market Analyst",
-        "social": "Social Analyst",
-        "news": "News Analyst",
+        "social": "News & Sentiment Analyst",
         "fundamentals": "Fundamentals Analyst",
         "technical": "Technical Analyst",
         "sec": "SEC Analyst",
@@ -316,7 +313,6 @@ def main() -> None:
             analyst_to_report_key = {
                 "market": "market_report",
                 "social": "sentiment_report",
-                "news": "news_report",
                 "fundamentals": "fundamentals_report",
                 "technical": "technical_report",
                 "sec": "sec_report",
@@ -346,8 +342,7 @@ def main() -> None:
 
                 _reports = [
                     ("market_report", "market_report", "market_score", "Market Score", "Market Analyst"),
-                    ("sentiment_report", "sentiment_report", "sentiment_score", "Sentiment Score", "Social Analyst"),
-                    ("news_report", "news_report", "news_score", "News Score", "News Analyst"),
+                    ("sentiment_report", "sentiment_report", "sentiment_score", "Sentiment Score", "News & Sentiment Analyst"),
                     ("fundamentals_report", "fundamentals_report", "fundamentals_score", "Fundamentals Score", "Fundamentals Analyst"),
                     ("technical_report", "technical_report", "technical_score", "Technical Score", "Technical Analyst"),
                     ("sec_report", "sec_report", "sec_score", "SEC Score", "SEC Analyst"),

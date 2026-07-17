@@ -97,7 +97,7 @@ const RECOMMENDATION_COLORS: Record<string, string> = {
 
 const SCORE_ORDER = [
   'market_report',
-  'news_report',
+  'sentiment_report',
   'fundamentals_report',
   'technical_report',
   'investment_plan',

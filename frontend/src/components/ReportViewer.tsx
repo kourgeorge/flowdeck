@@ -89,16 +89,10 @@ const REPORT_METADATA: Record<string, { title: string; contains: string; aspects
     methodology: 'First in the analysis chain. The Market Analyst uses historical price data and indicator values, selects relevant indicators, interprets their signals together, and writes a detailed narrative. The goal is fine-grained analysis that avoids redundancy and explains why each indicator matters for the current market.',
   },
   sentiment_report: {
-    title: 'Sentiment',
-    contains: 'An analysis of public sentiment, social media discussions, and company-specific news from the past week. Assigns a Sentiment Score (1–10).',
-    aspects: 'Social media posts and discussions, sentiment polarity (bullish vs bearish), recent company news, public perception, community engagement, and sentiment trends. All available sources are used to assess the overall tone around the security.',
-    methodology: 'Runs early in the chain. The Social Analyst gathers company-related news and social discussions, synthesizes what people are saying and feeling, and produces a report with an overall sentiment assessment.',
-  },
-  news_report: {
-    title: 'News',
-    contains: 'A report on the current state of the world relevant to trading and macroeconomics. Covers global economic trends, market-moving events, and company-specific news from the past week.',
-    aspects: 'Inflation and interest rates, supply chain issues, U.S. and global market performance, oil prices, geopolitical tensions, broader investor sentiment, and company-specific headlines. Focus is on how macro and company-level news may impact the security.',
-    methodology: 'Runs in the analyst chain. The News Analyst gathers company-specific news and broader macroeconomic headlines, synthesizes developments into a coherent narrative, and assesses their implications for the security.',
+    title: 'News & Sentiment',
+    contains: 'A combined analysis of recent news and catalysts together with crowd sentiment. Covers company-specific news, macroeconomic trends, insider activity, social media discussions, and prediction-market signals from the past week. Assigns a combined Sentiment Score (1–10).',
+    aspects: 'Deterministic catalyst events, company-specific and global/macroeconomic headlines, insider buying/selling, Reddit finance discussions, and Polymarket prediction-market pricing. The news narrative and crowd sentiment are reconciled, with divergences called out explicitly.',
+    methodology: 'Runs in the analyst chain. The News & Sentiment Analyst gathers the news/catalyst narrative (events, headlines, macro, insider transactions) and crowd-sentiment signals (Reddit, prediction markets), reconciles the two layers, and produces one integrated report with an overall assessment.',
   },
   fundamentals_report: {
     title: 'Fundamentals',

@@ -6,8 +6,7 @@ import TpsPlanCard from './TpsPlanCard';
 
 const REPORT_LABELS: Record<string, string> = {
   market_report: 'Market',
-  sentiment_report: 'Sentiment',
-  news_report: 'News',
+  sentiment_report: 'News & Sentiment',
   fundamentals_report: 'Fundamentals',
   sec_report: 'SEC',
   technical_report: 'Technical',
@@ -17,7 +16,7 @@ const REPORT_LABELS: Record<string, string> = {
   final_trade_decision: 'Risk Analysis',
 };
 
-const EVIDENCE_KEYS = ['market_report', 'sentiment_report', 'news_report', 'fundamentals_report', 'sec_report', 'technical_report', 'valuation_report'] as const;
+const EVIDENCE_KEYS = ['market_report', 'sentiment_report', 'fundamentals_report', 'sec_report', 'technical_report', 'valuation_report'] as const;
 const SYNTHESIS_KEYS = ['investment_plan', 'trader_investment_plan'] as const;
 const DECISION_KEYS = ['final_trade_decision'] as const;
 

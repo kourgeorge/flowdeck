@@ -47,7 +47,6 @@ def create_risk_manager(llm, memory):
         history = state["risk_debate_state"]["history"]
         risk_debate_state = state["risk_debate_state"]
         market_research_report = state["market_report"]
-        news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
         sentiment_report = state["sentiment_report"]
         sec_report = state.get("sec_report") or ""
@@ -57,7 +56,6 @@ def create_risk_manager(llm, memory):
         score_candidates = {
             "market_score": state.get("market_score"),
             "sentiment_score": state.get("sentiment_score"),
-            "news_score": state.get("news_score"),
             "fundamentals_score": state.get("fundamentals_score"),
             "sec_score": state.get("sec_score"),
             "technical_score": state.get("technical_score"),
@@ -81,7 +79,7 @@ def create_risk_manager(llm, memory):
             else "- No upstream aspect scores are available for this run."
         )
 
-        curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
+        curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{fundamentals_report}"
         if sec_report:
             curr_situation += f"\n\n{sec_report}"
         if events_report:
@@ -129,7 +127,7 @@ Deliverables:
   * 8-10: Very strong decision, high confidence, very clear risk assessment, strongly supported decision
 - Base your score on: clarity of risk signals, strength of risk arguments, confidence in decision, alignment of risk evidence, and overall conviction in risk management
 - Quantitative calibration rules:
-  * Consider every available score in this run: market, sentiment, news, fundamentals, SEC, technical, and recommendation.
+  * Consider every available score in this run: market, sentiment (news + crowd sentiment), fundamentals, SEC, technical, and recommendation.
   * Use the average score as your baseline anchor for risk_score.
   * Use score dispersion (standard deviation) as confidence penalty/boost:
     - std <= 1.0: signals are consistent; confidence can be stronger if debate evidence agrees.

@@ -144,14 +144,9 @@ class AgentState(TypedDict):
     market_report: Annotated[str, "Report from the Market Analyst"]
     market_score: Annotated[Optional[int], "Market analysis score from 1-10 indicating market performance outlook"]
     market_key_takeaways: Annotated[Optional[List[str]], "Structured key takeaways from market analyst (no post-hoc LLM extraction)"]
-    sentiment_report: Annotated[str, "Report from the Social Media Analyst"]
-    sentiment_score: Annotated[Optional[int], "Sentiment score from 1-10 indicating public sentiment and social media outlook"]
-    sentiment_key_takeaways: Annotated[Optional[List[str]], "Structured key takeaways from sentiment/social analyst"]
-    news_report: Annotated[
-        str, "Report from the News Researcher of current world affairs"
-    ]
-    news_score: Annotated[Optional[int], "News score from 1-10 indicating news impact outlook"]
-    news_key_takeaways: Annotated[Optional[List[str]], "Structured key takeaways from news analyst"]
+    sentiment_report: Annotated[str, "Report from the News & Sentiment Analyst (news/catalysts + crowd sentiment)"]
+    sentiment_score: Annotated[Optional[int], "Combined news & sentiment score from 1-10"]
+    sentiment_key_takeaways: Annotated[Optional[List[str]], "Structured key takeaways from the News & Sentiment analyst"]
     fundamentals_report: Annotated[str, "Report from the Fundamentals Researcher"]
     fundamentals_score: Annotated[Optional[int], "Fundamentals score from 1-10 indicating company financial health and fundamental strength"]
     fundamentals_key_takeaways: Annotated[Optional[List[str]], "Structured key takeaways from fundamentals analyst"]

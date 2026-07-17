@@ -15,12 +15,11 @@ def create_bull_researcher(llm, memory):
         current_response = investment_debate_state.get("current_response", "")
         market_research_report = state["market_report"]
         sentiment_report = state["sentiment_report"]
-        news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
         technical_report = state.get("technical_report", "")
         events_report = state.get("events_report", "")
 
-        curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
+        curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{fundamentals_report}"
         if technical_report:
             curr_situation += f"\n\n{technical_report}"
         if events_report:
@@ -42,8 +41,7 @@ Key points to focus on:
 
 Resources available:
 Market research report: {market_research_report}
-Social media sentiment report: {sentiment_report}
-Latest world affairs news: {news_report}
+News & sentiment report: {sentiment_report}
 Company fundamentals report: {fundamentals_report}
 {f"Advanced technical analysis report: {technical_report}" if technical_report else ""}
 {f"Deterministic event summary: {events_report}" if events_report else ""}

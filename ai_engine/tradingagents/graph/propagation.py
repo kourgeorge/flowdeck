@@ -44,8 +44,6 @@ class Propagator:
             "sec_score": None,
             "sentiment_report": "",
             "sentiment_score": None,
-            "news_report": "",
-            "news_score": None,
             "technical_report": "",
             "technical_score": None,
             "report_usage": {},
