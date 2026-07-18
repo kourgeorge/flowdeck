@@ -75,6 +75,7 @@ class Execution(Base):
 
     __table_args__ = (
         Index("idx_executions_type_subject", "execution_type", "subject_type", "subject_id"),
+        Index("idx_executions_created_at", "created_at"),
     )
 
 

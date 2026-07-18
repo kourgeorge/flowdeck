@@ -71,6 +71,9 @@ def init_db() -> None:
         conn.execute(text(
             "CREATE INDEX IF NOT EXISTS idx_reports_created_at ON reports (created_at)"
         ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_executions_created_at ON executions (created_at)"
+        ))
         conn.commit()
 
 

@@ -2,7 +2,6 @@
 
 import json
 import os
-import time
 from datetime import datetime, timedelta, timezone, date
 from typing import Any, Optional
 
@@ -284,9 +283,7 @@ def get_admin_stats(
     db: Session = Depends(get_db),
 ):
     """Dashboard summary: counts and recent activity."""
-    _t0 = time.perf_counter()
     stats = admin_service.get_stats(db)
-    print(f"[TIMING] GET /api/admin/stats — get_stats: {time.perf_counter()-_t0:.3f}s", flush=True)
     return AdminStatsResponse(**stats)
 
 
@@ -372,11 +369,7 @@ def get_admin_reports(
     limit: int = Query(50, ge=1, le=200),
 ):
     """Latest reports. Ordered by created_at desc."""
-    _t0 = time.perf_counter()
-    _t_auth = time.perf_counter()
-    print(f"[TIMING] GET /api/admin/reports — auth+db: {_t_auth-_t0:.3f}s", flush=True)
     items, total = admin_service.list_reports(db, limit)
-    print(f"[TIMING] GET /api/admin/reports — list_reports: {time.perf_counter()-_t_auth:.3f}s  total: {time.perf_counter()-_t0:.3f}s", flush=True)
     return AdminReportsResponse(
         reports=[AdminReportItem(**it) for it in items],
         total=total,
@@ -404,9 +397,7 @@ def get_admin_analyses(
     offset: int = Query(0, ge=0),
 ):
     """Recent analysis runs with creator email and sum of report tokens/cost."""
-    _t0 = time.perf_counter()
     items, total = admin_service.list_analyses(db, limit, offset)
-    print(f"[TIMING] GET /api/admin/analyses — list_analyses: {time.perf_counter()-_t0:.3f}s", flush=True)
     return AdminAnalysesResponse(
         analyses=[AdminAnalysisItem(**it) for it in items],
         total=total,
