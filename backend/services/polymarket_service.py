@@ -14,6 +14,7 @@ from functools import lru_cache
 from backend.data_layer.vendors import polymarket_vendor
 from backend.services import polymarket_narrative_mapper
 from backend.services import polymarket_relevance_scorer
+from backend.services import polymarket_keyword_generator
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ class PolymarketService:
         self.vendor = polymarket_vendor
         self.mapper = polymarket_narrative_mapper
         self.scorer = polymarket_relevance_scorer
+        self.keyword_generator = polymarket_keyword_generator
     
     def get_ticker_sentiment(
         self,
@@ -59,9 +61,11 @@ class PolymarketService:
         try:
             logger.info(f"Fetching Polymarket sentiment for {ticker}")
             
-            # Step 1: Map ticker to narratives
-            narratives = self.mapper.map_ticker_to_narratives(ticker, company_info)
-            logger.info(f"Generated {len(narratives)} narratives for {ticker}")
+            # Step 1: Generate search keywords (LLM-backed, deterministic fallback)
+            narratives = self.keyword_generator.generate_search_keywords(
+                ticker, company_info, limit=15
+            )
+            logger.info(f"Generated {len(narratives)} search keywords for {ticker}")
             
             # Step 2: Fetch markets for each narrative
             all_markets = self._fetch_markets_for_narratives(
@@ -453,9 +457,11 @@ class PolymarketService:
             List of formatted markets
         """
         try:
-            # Get narratives
-            narratives = self.mapper.map_ticker_to_narratives(ticker, company_info)
-            
+            # Generate search keywords (LLM-backed, deterministic fallback)
+            narratives = self.keyword_generator.generate_search_keywords(
+                ticker, company_info, limit=15
+            )
+
             # Fetch markets
             markets = self._fetch_markets_for_narratives(narratives[:10])
             

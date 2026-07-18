@@ -4,16 +4,31 @@ Polymarket API Router
 REST API endpoints for accessing Polymarket prediction market data.
 """
 
+import asyncio
 import logging
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 
 from auth import get_current_user_optional
+from data_layer import get_data_gateway
 from models.db_models import User
 from services.polymarket_service import get_polymarket_service
 
 logger = logging.getLogger(__name__)
+
+
+async def _fetch_company_info(ticker: str) -> Optional[dict]:
+    """
+    Fetch company profile (name, sector, industry, summary) for LLM keyword
+    generation.  Runs the blocking gateway call off the event loop and never
+    raises — returns None on failure so the endpoint degrades gracefully.
+    """
+    try:
+        return await asyncio.to_thread(get_data_gateway().get_company_info, ticker)
+    except Exception as e:
+        logger.warning(f"Could not fetch company info for {ticker}: {e}")
+        return None
 
 router = APIRouter(prefix="/api/polymarket", tags=["polymarket"])
 
@@ -90,11 +105,11 @@ async def get_ticker_predictions(
     """
     try:
         service = get_polymarket_service()
-        
-        # Get company info if available (would come from your existing services)
-        # For now, pass None and let the service work with just the ticker
-        company_info = None
-        
+
+        # Company info drives LLM keyword generation; None is tolerated (falls
+        # back to deterministic keywords).
+        company_info = await _fetch_company_info(ticker)
+
         result = service.get_ticker_sentiment(
             ticker=ticker,
             company_info=company_info,
@@ -130,10 +145,12 @@ async def get_relevant_markets(
     """
     try:
         service = get_polymarket_service()
-        
+
+        company_info = await _fetch_company_info(ticker)
+
         markets = service.get_relevant_markets(
             ticker=ticker,
-            company_info=None,
+            company_info=company_info,
             limit=limit
         )
         
