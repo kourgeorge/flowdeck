@@ -124,6 +124,7 @@ export default function AdminDashboardPage() {
   const [expandedSubscriptionUserIds, setExpandedSubscriptionUserIds] = useState<Set<number>>(new Set());
   const reportDetailsRef = useRef<Record<number, AdminReportDetail>>({});
   const reportDetailRequestRef = useRef(0);
+  const usersLoadedRef = useRef(false);
 
   // Sync URL -> tab state (reload / back restores tab)
   useEffect(() => {
@@ -520,26 +521,16 @@ export default function AdminDashboardPage() {
       setLoading(true);
       setError(null);
       try {
-        const [s, u, r, a, subs, vr] = await Promise.all([
+        const [s, r, a] = await Promise.all([
           adminApi.getStats(),
-          adminApi.getUsers(100, 0),
-          adminApi.getReports(200),
+          adminApi.getReports(50),
           adminApi.getAnalyses(50, 0),
-          adminApi.getSubscriptions(500, 0),
-          adminApi.getViewRuns(500),
         ]);
         setStats(s);
-        setUsers(u.users);
-        setUsersTotal(u.total);
         setReports(r.reports);
         setReportsTotal(r.total);
         setAnalyses(a.analyses);
         setAnalysesTotal(a.total);
-        setSubscriptions(subs.subscriptions);
-        setSubscriptionsTotal(subs.total);
-        setViewRuns(vr.runs);
-        setViewRunsTotal(vr.total_runs_with_views);
-        // Daily analyses and views would need API endpoints
         setDailyAnalyses([]);
         setDailyViews([]);
       } catch (err: unknown) {
@@ -555,6 +546,29 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     if (activeTab === 'mission-control') {
       void refreshMissionControl();
+      return;
+    }
+    if (activeTab === 'users' && !usersLoadedRef.current) {
+      usersLoadedRef.current = true;
+      const loadUsersTab = async () => {
+        try {
+          const [u, subs, vr] = await Promise.all([
+            adminApi.getUsers(100, 0),
+            adminApi.getSubscriptions(500, 0),
+            adminApi.getViewRuns(500),
+          ]);
+          setUsers(u.users);
+          setUsersTotal(u.total);
+          setSubscriptions(subs.subscriptions);
+          setSubscriptionsTotal(subs.total);
+          setViewRuns(vr.runs);
+          setViewRunsTotal(vr.total_runs_with_views);
+        } catch (err: unknown) {
+          const ax = err as { response?: { data?: { detail?: string } } };
+          setError(ax.response?.data?.detail ?? 'Failed to load users data');
+        }
+      };
+      void loadUsersTab();
       return;
     }
     if (activeTab === 'accuracy') {
