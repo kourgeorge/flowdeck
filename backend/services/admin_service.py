@@ -2,14 +2,10 @@
 
 import io
 import json
-import logging
-import time
 import zipfile
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
-
-_log = logging.getLogger(__name__)
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -22,46 +18,27 @@ from services.data_cache import get_cached_batch
 
 def get_stats(db: Session) -> dict:
     """Platform-wide stats for admin dashboard."""
-    _t0 = time.perf_counter()
     now = datetime.now(timezone.utc)
     t24 = now - timedelta(hours=24)
     t7d = now - timedelta(days=7)
 
     total_users = db.query(func.count(User.id)).scalar() or 0
-    _log.info("[TIMING] get_stats: total_users=%.3fs", time.perf_counter() - _t0)
-
     total_reports = db.query(func.count(Report.id)).scalar() or 0
-    _log.info("[TIMING] get_stats: total_reports=%.3fs", time.perf_counter() - _t0)
-
     total_analysis_runs = db.query(func.count(Execution.id)).scalar() or 0
-    _log.info("[TIMING] get_stats: total_analysis_runs=%.3fs", time.perf_counter() - _t0)
-
     total_report_views = db.query(func.count(ReportView.id)).scalar() or 0
-    _log.info("[TIMING] get_stats: total_report_views=%.3fs", time.perf_counter() - _t0)
-
     total_subscriptions = db.query(func.count(Subscription.id)).scalar() or 0
-    _log.info("[TIMING] get_stats: total_subscriptions=%.3fs", time.perf_counter() - _t0)
-
     analyses_last_24h = (
         db.query(func.count(Execution.id)).filter(Execution.created_at >= t24).scalar() or 0
     )
-    _log.info("[TIMING] get_stats: analyses_last_24h=%.3fs", time.perf_counter() - _t0)
-
     analyses_last_7d = (
         db.query(func.count(Execution.id)).filter(Execution.created_at >= t7d).scalar() or 0
     )
-    _log.info("[TIMING] get_stats: analyses_last_7d=%.3fs", time.perf_counter() - _t0)
-
     reports_last_24h = (
         db.query(func.count(Report.id)).filter(Report.created_at >= t24).scalar() or 0
     )
-    _log.info("[TIMING] get_stats: reports_last_24h=%.3fs", time.perf_counter() - _t0)
-
     reports_last_7d = (
         db.query(func.count(Report.id)).filter(Report.created_at >= t7d).scalar() or 0
     )
-    _log.info("[TIMING] get_stats: reports_last_7d=%.3fs", time.perf_counter() - _t0)
-    _log.info("[TIMING] get_stats: TOTAL=%.3fs", time.perf_counter() - _t0)
 
     return {
         "total_users": total_users,
@@ -130,37 +107,42 @@ def list_users(
 
 def list_reports(db: Session, limit: int) -> tuple[list[dict], int]:
     """Latest reports with execution id and subject_id. Returns (items, total)."""
-    _t0 = time.perf_counter()
     total = db.query(func.count(Report.id)).scalar() or 0
-    _log.info("[TIMING] list_reports: count query=%.3fs (total=%d)", time.perf_counter() - _t0, total)
+    # Select only the columns needed — deliberately excludes Report.content (large Text column)
     rows_with_run = (
-        db.query(Report, Execution.id, Execution.subject_id)
+        db.query(
+            Report.id,
+            Report.execution_id,
+            Report.report_type,
+            Report.metadata_json,
+            Report.created_at,
+            Execution.id.label("ex_id"),
+            Execution.subject_id,
+        )
         .outerjoin(Execution, Report.execution_id == Execution.id)
         .order_by(Report.created_at.desc())
         .limit(limit)
         .all()
     )
-    _log.info("[TIMING] list_reports: main query=%.3fs (%d rows)", time.perf_counter() - _t0, len(rows_with_run))
     items = []
-    for r, ex_id, subject_id in rows_with_run:
+    for r_id, _ex_fk, report_type, metadata_json, created_at, ex_id, subject_id in rows_with_run:
         meta = {}
-        if r.metadata_json:
+        if metadata_json:
             try:
-                meta = json.loads(r.metadata_json) or {}
+                meta = json.loads(metadata_json) or {}
             except Exception:
                 pass
         items.append({
-            "id": r.id,
+            "id": r_id,
             "ticker": subject_id or "",
             "analysis_run_id": ex_id or 0,
-            "report_type": r.report_type,
-            "created_at": r.created_at,
+            "report_type": report_type,
+            "created_at": created_at,
             "input_tokens": meta.get("input_tokens"),
             "output_tokens": meta.get("output_tokens"),
             "total_tokens": meta.get("total_tokens"),
             "cost_usd": meta.get("cost_usd"),
         })
-    _log.info("[TIMING] list_reports: TOTAL=%.3fs", time.perf_counter() - _t0)
     return items, total
 
 
@@ -283,9 +265,7 @@ def build_analysis_reports_zip(
 
 def list_analyses(db: Session, limit: int, offset: int) -> tuple[list[dict], int]:
     """Recent analysis runs with creator email and token/cost sums. Returns (items, total)."""
-    _t0 = time.perf_counter()
     total = db.query(func.count(Execution.id)).scalar() or 0
-    _log.info("[TIMING] list_analyses: count query=%.3fs (total=%d)", time.perf_counter() - _t0, total)
     rows = (
         db.query(Execution, User.email)
         .join(User, User.id == Execution.creator_id)
@@ -294,7 +274,6 @@ def list_analyses(db: Session, limit: int, offset: int) -> tuple[list[dict], int
         .limit(limit)
         .all()
     )
-    _log.info("[TIMING] list_analyses: executions query=%.3fs (%d rows)", time.perf_counter() - _t0, len(rows))
     ex_ids = [ex.id for ex, _ in rows]
     sums_by_ex: dict[int, tuple[int, int, float]] = {}
     if ex_ids:
@@ -303,7 +282,6 @@ def list_analyses(db: Session, limit: int, offset: int) -> tuple[list[dict], int
             .filter(Report.execution_id.in_(ex_ids))
             .all()
         )
-        _log.info("[TIMING] list_analyses: reports metadata query=%.3fs (%d reports)", time.perf_counter() - _t0, len(reports))
         for ex_id, meta_json in reports:
             if ex_id is None:
                 continue
@@ -343,7 +321,6 @@ def list_analyses(db: Session, limit: int, offset: int) -> tuple[list[dict], int
             "total_tokens": tot if tot else None,
             "cost_usd": round(cost, 6) if cost else None,
         })
-    _log.info("[TIMING] list_analyses: TOTAL=%.3fs", time.perf_counter() - _t0)
     return items, total
 
 
