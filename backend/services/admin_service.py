@@ -22,22 +22,26 @@ def get_stats(db: Session) -> dict:
     t24 = now - timedelta(hours=24)
     t7d = now - timedelta(days=7)
 
+    # Use indexed non-nullable columns for COUNT to avoid full table scans.
+    # Report.content is a large Text column — counting Report.id forces SQLite
+    # to page through every row. Counting an indexed NOT-NULL column uses the
+    # index instead.
     total_users = db.query(func.count(User.id)).scalar() or 0
-    total_reports = db.query(func.count(Report.id)).scalar() or 0
-    total_analysis_runs = db.query(func.count(Execution.id)).scalar() or 0
-    total_report_views = db.query(func.count(ReportView.id)).scalar() or 0
-    total_subscriptions = db.query(func.count(Subscription.id)).scalar() or 0
+    total_reports = db.query(func.count(Report.execution_id)).scalar() or 0
+    total_analysis_runs = db.query(func.count(Execution.status)).scalar() or 0
+    total_report_views = db.query(func.count(ReportView.execution_id)).scalar() or 0
+    total_subscriptions = db.query(func.count(Subscription.user_id)).scalar() or 0
     analyses_last_24h = (
-        db.query(func.count(Execution.id)).filter(Execution.created_at >= t24).scalar() or 0
+        db.query(func.count(Execution.status)).filter(Execution.created_at >= t24).scalar() or 0
     )
     analyses_last_7d = (
-        db.query(func.count(Execution.id)).filter(Execution.created_at >= t7d).scalar() or 0
+        db.query(func.count(Execution.status)).filter(Execution.created_at >= t7d).scalar() or 0
     )
     reports_last_24h = (
-        db.query(func.count(Report.id)).filter(Report.created_at >= t24).scalar() or 0
+        db.query(func.count(Report.execution_id)).filter(Report.created_at >= t24).scalar() or 0
     )
     reports_last_7d = (
-        db.query(func.count(Report.id)).filter(Report.created_at >= t7d).scalar() or 0
+        db.query(func.count(Report.execution_id)).filter(Report.created_at >= t7d).scalar() or 0
     )
 
     return {
@@ -107,7 +111,9 @@ def list_users(
 
 def list_reports(db: Session, limit: int) -> tuple[list[dict], int]:
     """Latest reports with execution id and subject_id. Returns (items, total)."""
-    total = db.query(func.count(Report.id)).scalar() or 0
+    # Count via the indexed execution_id (NOT NULL) — avoids a full table scan
+    # through the large content TEXT pages that COUNT(id) would trigger in SQLite.
+    total = db.query(func.count(Report.execution_id)).scalar() or 0
     # Select only the columns needed — deliberately excludes Report.content (large Text column)
     rows_with_run = (
         db.query(
@@ -265,7 +271,7 @@ def build_analysis_reports_zip(
 
 def list_analyses(db: Session, limit: int, offset: int) -> tuple[list[dict], int]:
     """Recent analysis runs with creator email and token/cost sums. Returns (items, total)."""
-    total = db.query(func.count(Execution.id)).scalar() or 0
+    total = db.query(func.count(Execution.status)).scalar() or 0
     rows = (
         db.query(Execution, User.email)
         .join(User, User.id == Execution.creator_id)
