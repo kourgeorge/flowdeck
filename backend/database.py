@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 # Default: flowdeck.db in backend directory
@@ -64,6 +64,14 @@ def init_db() -> None:
         UserSchedule,
     )
     Base.metadata.create_all(bind=engine)
+
+    # Ensure performance-critical indexes exist on the live DB.
+    # CREATE INDEX IF NOT EXISTS is idempotent — safe to run on every startup.
+    with engine.connect() as conn:
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_reports_created_at ON reports (created_at)"
+        ))
+        conn.commit()
 
 
 def get_db():
