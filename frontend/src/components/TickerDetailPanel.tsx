@@ -55,7 +55,7 @@ const REPORT_PROCESS_ORDER = [
 ];
 const SIMILAR_STOCKS_PER_PAGE = 10;
 
-const MAIN_TAB_IDS = ['overview', 'fundamentals', 'sec-filings', 'insider-transactions', 'news', 'events', 'prediction-markets', 'similar-stocks', 'ai-analysis'] as const;
+const MAIN_TAB_IDS = ['overview', 'fundamentals', 'sec-filings', 'insider-transactions', 'news', 'prediction-markets', 'events', 'similar-stocks', 'ai-analysis'] as const;
 type MainTabId = (typeof MAIN_TAB_IDS)[number];
 const DEFAULT_MAIN_TAB: MainTabId = 'ai-analysis';
 
@@ -1412,8 +1412,8 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                   ...(isUSCompany ? [{ id: 'sec-filings', label: 'SEC Filings' }] : []),
                   ...(hasInsiderTransactions ? [{ id: 'insider-transactions', label: 'Insider Transactions' }] : []),
                   { id: 'news', label: 'News' },
-                  { id: 'events', label: 'Events' },
                   { id: 'prediction-markets', label: 'Prediction Markets' },
+                  { id: 'events', label: 'Events' },
                   ...(hasSimilarStocks ? [{ id: 'similar-stocks', label: 'Similar Stocks' }] : []),
                   { id: 'ai-analysis', label: 'AI Analysis' },
                 ].map((tab) => {
