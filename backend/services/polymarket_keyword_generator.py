@@ -49,7 +49,8 @@ def generate_search_keywords(
     Args:
         ticker: Stock ticker symbol (e.g. "NVDA").
         company_info: Optional dict with keys name, sector, industry,
-            longBusinessSummary/description.
+            country, exchange, officers (list of {name, title} dicts),
+            and longBusinessSummary/description.
         limit: Maximum number of keywords to return.
 
     Returns:
@@ -138,6 +139,8 @@ def _generate_via_llm(
     name = info.get("name") or ticker_upper
     sector = info.get("sector") or "N/A"
     industry = info.get("industry") or "N/A"
+    country = info.get("country") or "N/A"
+    exchange = info.get("exchange") or "N/A"
     summary = (
         info.get("longBusinessSummary")
         or info.get("description")
@@ -147,6 +150,18 @@ def _generate_via_llm(
     if summary:
         summary = summary[:_MAX_SUMMARY_CHARS]
 
+    # Format current officers as "Name (Title)" lines so the LLM uses real,
+    # up-to-date management names instead of guessing from training data.
+    officers_raw = info.get("officers") or []
+    if officers_raw:
+        officers_str = "; ".join(
+            f"{o['name']} ({o['title']})"
+            for o in officers_raw
+            if o.get("name") and o.get("title")
+        )
+    else:
+        officers_str = "N/A"
+
     prompt = (
         "You generate search terms for finding prediction markets on Polymarket that are "
         "relevant to a public company's stock.\n\n"
@@ -154,6 +169,9 @@ def _generate_via_llm(
         f"Ticker: {ticker_upper}\n"
         f"Sector: {sector}\n"
         f"Industry: {industry}\n"
+        f"Country: {country}\n"
+        f"Exchange: {exchange}\n"
+        f"Current management: {officers_str}\n"
         f"Business summary: {summary or 'N/A'}\n\n"
         "Return short search phrases (1-3 words each) that are LIKELY TO APPEAR IN POLYMARKET "
         "MARKET TITLES and are specific enough to match this company rather than unrelated ones. "

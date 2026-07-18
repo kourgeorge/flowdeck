@@ -6,7 +6,7 @@ REST API endpoints for accessing Polymarket prediction market data.
 
 import asyncio
 import logging
-from typing import Optional
+from typing import Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 
@@ -20,12 +20,34 @@ logger = logging.getLogger(__name__)
 
 async def _fetch_company_info(ticker: str) -> Optional[dict]:
     """
-    Fetch company profile (name, sector, industry, summary) for LLM keyword
-    generation.  Runs the blocking gateway call off the event loop and never
-    raises — returns None on failure so the endpoint degrades gracefully.
+    Fetch company profile (name, sector, industry, country, exchange, summary,
+    and current officers) for LLM keyword generation.  Runs the blocking
+    gateway calls off the event loop and never raises — returns None on failure
+    so the endpoint degrades gracefully.
     """
     try:
-        return await asyncio.to_thread(get_data_gateway().get_company_info, ticker)
+        from data_layer.vendors.y_finance import get_company_officers
+        info, officers_data = await asyncio.gather(
+            asyncio.to_thread(get_data_gateway().get_company_info, ticker),
+            asyncio.to_thread(get_company_officers, ticker),
+            return_exceptions=True,
+        )
+        if isinstance(info, Exception):
+            logger.warning(f"Could not fetch company info for {ticker}: {info}")
+            return None
+        info_dict: Dict[str, Any] = info  # type: ignore[assignment]
+        # Merge current officers list (names + titles) into company_info so the
+        # LLM keyword generator uses real, up-to-date management rather than
+        # relying on its training-data knowledge of former executives.
+        if not isinstance(officers_data, Exception):
+            officers_dict: Dict[str, Any] = officers_data  # type: ignore[assignment]
+            officers = officers_dict.get("officers") or []
+            info_dict["officers"] = [
+                {"name": o["name"], "title": o["title"]}
+                for o in officers
+                if o.get("name") and o.get("title")
+            ]
+        return info_dict
     except Exception as e:
         logger.warning(f"Could not fetch company info for {ticker}: {e}")
         return None
@@ -72,6 +94,7 @@ class TickerSentimentResponse(BaseModel):
     top_markets: list[MarketResponse]
     last_updated: str
     market_count: int
+    search_keywords: list[str] = []
     error: Optional[str] = None
 
 
