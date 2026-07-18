@@ -167,7 +167,28 @@ interface PolymarketSentiment {
   top_markets: Market[];
   last_updated: string;
   market_count: number;
+  search_keywords?: string[];
   error?: string;
+}
+
+// Small reusable list of the keywords used to search Polymarket.
+function SearchKeywords({ keywords }: { keywords?: string[] }) {
+  if (!keywords || keywords.length === 0) return null;
+  return (
+    <div className="mt-4 pt-4 border-t border-gray-700">
+      <p className="text-xs text-gray-400 mb-2">Searched Polymarket for:</p>
+      <div className="flex flex-wrap gap-1.5">
+        {keywords.map((kw, idx) => (
+          <span
+            key={`${kw}-${idx}`}
+            className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-300 text-xs border border-purple-500/20"
+          >
+            {kw}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 interface PredictionMarketWidgetProps {
@@ -274,6 +295,7 @@ export default function PredictionMarketWidget({ ticker }: PredictionMarketWidge
         <div className="text-sm text-gray-400">
           No relevant prediction markets found for {ticker}
         </div>
+        <SearchKeywords keywords={data?.search_keywords} />
       </div>
     );
   }
@@ -372,6 +394,9 @@ export default function PredictionMarketWidget({ ticker }: PredictionMarketWidge
         <span>{data.market_count} markets analyzed</span>
         <span>Updated {new Date(data.last_updated).toLocaleTimeString()}</span>
       </div>
+
+      {/* Search keywords used to find these markets */}
+      <SearchKeywords keywords={data.search_keywords} />
     </div>
   );
 }

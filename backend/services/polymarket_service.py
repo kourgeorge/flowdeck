@@ -58,9 +58,10 @@ class PolymarketService:
             - last_updated: ISO timestamp
             - error: Optional error message if data unavailable
         """
+        narratives: List[str] = []
         try:
             logger.info(f"Fetching Polymarket sentiment for {ticker}")
-            
+
             # Step 1: Generate search keywords (LLM-backed, deterministic fallback)
             narratives = self.keyword_generator.generate_search_keywords(
                 ticker, company_info, limit=15
@@ -77,7 +78,8 @@ class PolymarketService:
             if not all_markets:
                 return self._create_neutral_response(
                     ticker,
-                    error="No relevant markets found"
+                    error="No relevant markets found",
+                    search_keywords=narratives
                 )
             
             # Step 3: Score and rank markets by relevance
@@ -94,7 +96,8 @@ class PolymarketService:
             if not scored_markets:
                 return self._create_neutral_response(
                     ticker,
-                    error="No markets met relevance threshold"
+                    error="No markets met relevance threshold",
+                    search_keywords=narratives
                 )
             
             # Step 4: Select top diverse markets
@@ -119,7 +122,8 @@ class PolymarketService:
                     for m in top_markets
                 ],
                 "last_updated": datetime.utcnow().isoformat() + "Z",
-                "market_count": len(scored_markets)
+                "market_count": len(scored_markets),
+                "search_keywords": narratives
             }
             
             logger.info(
@@ -133,7 +137,8 @@ class PolymarketService:
             logger.error(f"Polymarket API unavailable: {e}")
             return self._create_neutral_response(
                 ticker,
-                error="Polymarket data temporarily unavailable"
+                error="Polymarket data temporarily unavailable",
+                search_keywords=narratives
             )
         except Exception as e:
             import traceback
@@ -141,7 +146,8 @@ class PolymarketService:
             logger.error(f"Traceback: {traceback.format_exc()}")
             return self._create_neutral_response(
                 ticker,
-                error=f"Error: {str(e)}"
+                error=f"Error: {str(e)}",
+                search_keywords=narratives
             )
     
     def _fetch_markets_for_narratives(
@@ -411,15 +417,18 @@ class PolymarketService:
     def _create_neutral_response(
         self,
         ticker: str,
-        error: Optional[str] = None
+        error: Optional[str] = None,
+        search_keywords: Optional[List[str]] = None
     ) -> Dict:
         """
         Create neutral response when data is unavailable.
-        
+
         Args:
             ticker: Stock ticker
             error: Optional error message
-            
+            search_keywords: Keywords that were searched (surfaced in the UI so
+                users can see what was looked for even when no markets matched)
+
         Returns:
             Neutral sentiment response
         """
@@ -431,7 +440,8 @@ class PolymarketService:
             "narratives": {},
             "top_markets": [],
             "last_updated": datetime.utcnow().isoformat() + "Z",
-            "market_count": 0
+            "market_count": 0,
+            "search_keywords": search_keywords or []
         }
         
         if error:
