@@ -145,4 +145,101 @@ def read_sec_lines(
     explorer = _get_explorer(ticker)
     return explorer.get_lines(start, end)
 
+
+@tool
+def extract_competitors(
+    ticker: Annotated[str, "ticker symbol"],
+) -> str:
+    """
+    Mine the SEC filing for sentences that name or describe direct competitors.
+
+    Targets Item 1 Competition language: "We compete with ...",
+    "Our competitors include ...", "competitive landscape", etc.
+
+    Returns JSON with:
+      - total_matches (int)
+      - signals: list of {line_number, matched_line, context_before, context_after, signal_type}
+      - summary: human-readable count string
+
+    Use this when you need to identify named competitors, assess competitive
+    intensity, or evaluate the company's stated competitive position.
+    """
+    explorer = _get_explorer(ticker)
+    return explorer.extract_competitors()
+
+
+@tool
+def extract_tam_disclosures(
+    ticker: Annotated[str, "ticker symbol"],
+) -> str:
+    """
+    Mine the SEC filing for Total Addressable Market (TAM), Serviceable
+    Addressable Market (SAM), and CAGR disclosures.
+
+    Companies cite third-party market size estimates (Gartner, IDC, etc.)
+    inside Item 1 Business Overview. This tool finds those passages.
+
+    Returns JSON with:
+      - total_matches (int)
+      - signals: list of {line_number, matched_line, context_before, context_after,
+                          signal_type}  # "tam_label" | "dollar_market_size" | "cagr" | "market_opportunity"
+      - summary: human-readable count string
+
+    Use this when you need to assess the company's stated market opportunity,
+    growth potential, or industry size claims.
+    """
+    explorer = _get_explorer(ticker)
+    return explorer.extract_tam_disclosures()
+
+
+@tool
+def extract_customer_concentration(
+    ticker: Annotated[str, "ticker symbol"],
+) -> str:
+    """
+    Mine the SEC filing for customer and supplier concentration disclosures.
+
+    Under ASC 280, companies must disclose any customer exceeding 10% of
+    revenue. Sole-source supplier risk appears in risk factors.
+
+    Returns JSON with:
+      - total_matches (int)
+      - signals: list of {line_number, matched_line, context_before, context_after,
+                          signal_type}  # "customer_revenue_pct" | "major_customer" |
+                                        # "sole_supplier" | "supplier_concentration"
+      - summary: human-readable count string
+
+    Use this when you need to assess revenue concentration risk, customer
+    dependency, or supply-chain single-source vulnerabilities.
+    """
+    explorer = _get_explorer(ticker)
+    return explorer.extract_customer_concentration()
+
+
+@tool
+def extract_porter_signals(
+    ticker: Annotated[str, "ticker symbol"],
+) -> str:
+    """
+    Mine Item 1A Risk Factors for language that maps to Porter's Five Forces.
+
+    Each matched passage is tagged with the force it represents:
+      - rivalry        : pricing pressure, market share, intense competition
+      - new_entrants   : barriers to entry, capital requirements
+      - substitutes    : switching costs, alternative products/platforms
+      - buyer_power    : customer bargaining, volume discounts, churn
+      - supplier_power : sole-source supplier, raw material shortage
+
+    Returns JSON with:
+      - total_matches (int)
+      - by_force: dict keyed by force name, each containing a list of
+                  {line_number, matched_line, context_before, context_after, signal_type}
+      - summary: human-readable string listing active forces
+
+    Use this to synthesize a Porter's Five Forces analysis grounded in the
+    company's own disclosed risk language.
+    """
+    explorer = _get_explorer(ticker)
+    return explorer.extract_porter_signals()
+
 # Made with Bob

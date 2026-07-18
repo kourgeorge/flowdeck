@@ -13,6 +13,10 @@ from ..utils.sec_explorer_tools import (
     get_sec_toc,
     get_sec_stats,
     read_sec_lines,
+    extract_competitors,
+    extract_tam_disclosures,
+    extract_customer_concentration,
+    extract_porter_signals,
 )
 from .self_contained_analyst import create_self_contained_analyst
 from .output_schema import analyst_key_takeaways_field
@@ -41,23 +45,30 @@ class SecAnalysisOutput(BaseModel):
 
 
 def create_sec_analyst(llm):
-    """Create SEC analyst with file exploration tools (like a coding agent exploring files)."""
+    """Create SEC analyst with file exploration and intelligence-extraction tools."""
     inner = create_self_contained_analyst(
         llm=llm,
         tools=[
-            get_edgar_filing_content, # Primary: LLM extraction (original tool)
-            get_sec_toc,              # Optional: see structure (like ls)
-            get_sec_stats,            # Optional: overview (like wc)
-            grep_sec_filing,          # Optional: search (like grep)
-            read_sec_section,         # Optional: read section (like cat function)
-            read_sec_lines,           # Optional: read lines (like sed -n 'X,Yp')
+            # ── Primary ──────────────────────────────────────────────────
+            get_edgar_filing_content,       # LLM-extracted sections (MD&A, risk factors, competition)
+            # ── Intelligence extractors (deterministic regex, no LLM) ───
+            extract_competitors,            # Named competitor sentences from Item 1
+            extract_tam_disclosures,        # TAM/SAM/$Xbn/CAGR from Item 1 Business
+            extract_customer_concentration, # ASC 280 revenue concentration + sole-supplier risk
+            extract_porter_signals,         # Porter's Five Forces signals from Item 1A
+            # ── Low-level exploration (use when extractors miss detail) ─
+            get_sec_toc,                    # Filing table of contents (like ls)
+            get_sec_stats,                  # Word/char count, top terms (like wc)
+            grep_sec_filing,                # Ad-hoc regex search (like grep)
+            read_sec_section,               # Read a named section up to 20K chars
+            read_sec_lines,                 # Read a specific line range
         ],
         prompt_builder=build_sec_analyst_prompt,
         structured_output_class=SecAnalysisOutput,
         score_field="sec_score",
         report_field="sec_report",
         agent_name="SEC Analyst",
-        max_iterations=8,  # Increased for exploration
+        max_iterations=10,  # Increased: 4 extractors + edgar + synthesis headroom
     )
 
     def analyst_node(state: Dict[str, Any]) -> Dict[str, Any]:
