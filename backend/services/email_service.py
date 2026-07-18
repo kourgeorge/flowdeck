@@ -277,7 +277,7 @@ def _build_report_email_bodies(
     display_confidence = confidence
     # Backward compatibility: some callers/store metadata as normalized 0-1 confidence.
     if display_confidence is not None and 0 <= display_confidence <= 1:
-        display_confidence = display_confidence * 10
+        display_confidence = display_confidence * 5
 
     report_url = f"{_get_frontend_url()}/tickers/{ticker.upper()}"
     ticker_upper = ticker.upper()
@@ -286,7 +286,7 @@ def _build_report_email_bodies(
     if recommendation:
         summary_lines.append(f"Recommendation: {recommendation}")
     if display_confidence is not None:
-        summary_lines.append(f"Confidence: {display_confidence:.1f}/10")
+        summary_lines.append(f"Confidence: {display_confidence:.1f}/5")
     # Add scores to text body
     if scores:
         summary_lines.append("")
@@ -297,7 +297,7 @@ def _build_report_email_bodies(
             if score is not None or score_label:
                 display_name = report_type.replace("_", " ").title()
                 if score is not None:
-                    summary_lines.append(f"  • {display_name}: {score:.1f}/10" + (f" ({score_label})" if score_label else ""))
+                    summary_lines.append(f"  • {display_name}: {score:.1f}/5" + (f" ({score_label})" if score_label else ""))
                 elif score_label:
                     summary_lines.append(f"  • {display_name}: {score_label}")
     
@@ -331,9 +331,9 @@ def _build_report_email_bodies(
                     display_name = "Research"
                 # Color code based on score
                 score_color = "#64748b"  # default gray
-                if score >= 7:
+                if score >= 3.5:
                     score_color = "#1e40af"  # website dark-blue
-                elif score >= 5:
+                elif score >= 2.5:
                     score_color = "#1e40af"  # website dark-blue
                 else:
                     score_color = "#dc2626"  # red-600

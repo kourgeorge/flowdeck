@@ -47,17 +47,17 @@ def _normalize_confidence(value: object) -> Optional[float]:
 
 
 def _normalize_score_confidence(value: object) -> Optional[float]:
-    """Convert a 0-10 score to normalized confidence (0-1)."""
+    """Convert a 0-5 score to normalized confidence (0-1)."""
     if not isinstance(value, (int, float)):
         return None
     score = float(value)
-    if 0.0 <= score <= 10.0:
-        return score / 10.0
+    if 0.0 <= score <= 5.0:
+        return score / 5.0
     return None
 
 
 def _extract_confidence(*metas: object) -> Optional[float]:
-    """Pick first available confidence from metadata, with score/10 fallback."""
+    """Pick first available confidence from metadata, with score/5 fallback."""
     for meta in metas:
         if not isinstance(meta, dict):
             continue

@@ -67,7 +67,7 @@ def test_valuation_analyst():
     print("=" * 80)
     
     if valuation_report:
-        print(f"\n📊 Valuation Score: {valuation_score}/10")
+        print(f"\n📊 Valuation Score: {valuation_score}/5")
         print(f"💰 Fair Value (Bear): ${fair_value_bear}")
         print(f"💰 Fair Value (Base): ${fair_value_base}")
         print(f"💰 Fair Value (Bull): ${fair_value_bull}")

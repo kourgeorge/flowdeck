@@ -38,8 +38,8 @@ class SecAnalysisOutput(BaseModel):
         description="Comprehensive SEC/regulatory analysis report with targeted insights from filing exploration."
     )
     sec_score: int = Field(
-        ge=1, le=10,
-        description="SEC/regulatory score 1-10. 1-3: higher regulatory/filing risk or disclosure concerns; 8-10: lower concern, cleaner disclosures."
+        ge=1, le=5,
+        description="SEC/regulatory score 1-5. 1: higher regulatory/filing risk or disclosure concerns; 5: lower concern, cleaner disclosures."
     )
     key_takeaways: List[str] = analyst_key_takeaways_field()
 

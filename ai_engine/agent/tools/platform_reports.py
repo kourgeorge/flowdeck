@@ -299,7 +299,7 @@ def _fetch_platform_reports(
         lines.append(f"## {label}")
         score = rpt.get("score")
         if score is not None:
-            lines.append(f"Score: {score}/10")
+            lines.append(f"Score: {score}/5")
         summary = rpt.get("summary") or rpt.get("key_takeaways")
         if summary:
             if isinstance(summary, list):

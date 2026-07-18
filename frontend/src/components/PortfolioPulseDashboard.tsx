@@ -295,8 +295,8 @@ function getWidgetConfidence(widget: TickerWidget): number | null {
   // investment_plan (Research) is the authoritative score; final_trade_decision kept for historical runs.
   const finalDecision = widget.report_scores?.investment_plan?.score
     ?? widget.report_scores?.final_trade_decision?.score;
-  if (finalDecision != null && finalDecision >= 0 && finalDecision <= 10) {
-    return finalDecision / 10;
+  if (finalDecision != null && finalDecision >= 0 && finalDecision <= 5) {
+    return finalDecision / 5;
   }
   return null;
 }
@@ -305,7 +305,7 @@ function getCompositeSignalScore(widget: TickerWidget): number | null {
   const research = widget.report_scores?.investment_plan?.score ?? null;
   const finalDecision = widget.report_scores?.final_trade_decision?.score ?? null;
   const confidence = getWidgetConfidence(widget);
-  return average([research, finalDecision, confidence != null ? confidence * 10 : null]);
+  return average([research, finalDecision, confidence != null ? confidence * 5 : null]);
 }
 
 function getExcerpt(text: string, maxLength: number): string {
@@ -415,11 +415,11 @@ function ScoreFillLine({
     );
   }
 
-  const clamped = Math.max(0, Math.min(10, score));
+  const clamped = Math.max(0, Math.min(5, score));
   const barClass =
-    clamped >= 7
+    clamped >= 3.5
       ? 'bg-emerald-400'
-      : clamped >= 5
+      : clamped >= 2.5
         ? 'bg-amber-400'
         : 'bg-rose-400';
 
@@ -432,7 +432,7 @@ function ScoreFillLine({
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800">
         <div
           className={`h-full rounded-full ${barClass}`}
-          style={{ width: `${(clamped / 10) * 100}%` }}
+          style={{ width: `${(clamped / 5) * 100}%` }}
         />
       </div>
     </div>
@@ -1623,7 +1623,7 @@ export default function PortfolioPulseDashboard({
                       >
                         <p className="truncate text-[13px] font-semibold text-white">{row.ticker}</p>
                         <p className="text-right text-[11px] font-semibold text-white">
-                          {row.signalScore != null ? `${row.signalScore.toFixed(1)}/10` : '—'}
+                          {row.signalScore != null ? `${row.signalScore.toFixed(1)}/5` : '—'}
                         </p>
                         <span className={`inline-flex w-fit rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${badgeClassForRecommendation(row.recommendation)}`}>
                           {formatRecommendationLabel(row.recommendation)}

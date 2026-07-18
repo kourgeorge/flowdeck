@@ -119,17 +119,17 @@ function calculateAverageAnalystScore(scoreEntries: [string, { score: number | n
 
 function getRadarFillColor(avgScore: number | null): string {
   if (avgScore == null) return '#38bdf8';
-  if (avgScore <= 3) return '#f87171';
-  if (avgScore <= 6) return '#facc15';
-  if (avgScore <= 7) return '#38bdf8';
+  if (avgScore <= 1.5) return '#f87171';
+  if (avgScore <= 3) return '#facc15';
+  if (avgScore <= 3.5) return '#38bdf8';
   return '#4ade80';
 }
 
 export function getScoreColor(score: number | null | undefined): string {
   if (score == null) return 'text-gray-400';
-  if (score <= 3) return 'text-red-400';
-  if (score <= 5) return 'text-yellow-400';
-  if (score <= 7) return 'text-blue-400';
+  if (score <= 1.5) return 'text-red-400';
+  if (score <= 2.5) return 'text-yellow-400';
+  if (score <= 3.5) return 'text-blue-400';
   return 'text-green-400';
 }
 
@@ -168,8 +168,8 @@ export default function AspectSpiderChart({ scoreEntries, size = 80 }: AspectSpi
   );
 }
 
-const GRID_RINGS = 4;
-const SCORE_MAX = 10;
+const GRID_RINGS = 5;
+const SCORE_MAX = 5;
 
 interface PentagonalRadarProps {
   spiderData: { aspect: string; score: number }[];
@@ -326,7 +326,7 @@ function PentagonalRadar({ spiderData, radarColor, size }: PentagonalRadarProps)
           style={{ maxWidth: size }}
         >
           <span className="text-gray-300">{hoverEntry.aspect}: </span>
-          <span className="font-semibold text-white">{hoverEntry.score}/10</span>
+          <span className="font-semibold text-white">{hoverEntry.score}/5</span>
         </div>
       )}
     </div>

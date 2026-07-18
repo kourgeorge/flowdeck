@@ -1057,7 +1057,7 @@ class AnalysisService:
                     final_rec = chunk.get("recommendation") or chunk.get("trader_recommendation") or "HOLD"
                     meta = _build_report_json(content, rec_score, "Conviction Score", inv_takeaways,
                         recommendation=final_rec,
-                        confidence=(rec_score / 10.0) if rec_score is not None else None,
+                        confidence=(rec_score / 5.0) if rec_score is not None else None,
                         expected_return_pct=chunk.get("expected_return_pct"),
                         bear_case_return_pct=chunk.get("bear_case_return_pct"),
                         bull_case_return_pct=chunk.get("bull_case_return_pct"),
@@ -1075,7 +1075,7 @@ class AnalysisService:
                     inner["agent_steps"] = _get_report_agent_steps(chunk, "investment_plan")
                     _written_reports.add("investment_plan")
                     analysis_info["recommendation"] = final_rec
-                    analysis_info["confidence"] = (rec_score / 10.0) if rec_score is not None else None
+                    analysis_info["confidence"] = (rec_score / 5.0) if rec_score is not None else None
                     save_report(
                         analysis_info["analysis_run_id"],
                         "investment_plan",

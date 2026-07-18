@@ -63,7 +63,7 @@ def main() -> None:
             if score is not None or score_label:
                 display = f"  • {report_type}: "
                 if score is not None:
-                    display += f"{score:.1f}/10"
+                    display += f"{score:.1f}/5"
                     if score_label:
                         display += f" ({score_label})"
                 elif score_label:

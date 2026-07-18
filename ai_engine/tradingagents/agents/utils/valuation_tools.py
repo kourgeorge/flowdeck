@@ -1060,7 +1060,7 @@ def _calculate_score_components(
         peer_deviation: Standard deviations from peer average (optional)
     
     Returns:
-        Dict with component scores (0-2 each), total (1-10), and explanation
+        Dict with component scores (0-2 each), total (1-5, rescaled from the 0-10 component sum), and explanation
     """
     # Get sector-specific thresholds
     thresholds = SECTOR_DIVERGENCE_THRESHOLDS.get(sector or "default", SECTOR_DIVERGENCE_THRESHOLDS["default"])
@@ -1127,9 +1127,10 @@ def _calculate_score_components(
         peer_consistency = 1.0
         peer_desc = "peer data unavailable"
     
-    # Calculate total score (round to nearest integer, min 1, max 10)
+    # Sum the five 0-2 components (raw 0-10), then rescale to the 1-5 score scale.
+    # Rescale mapping (paired halving): raw 1,2->1 3,4->2 5,6->3 7,8->4 9,10->5.
     total_raw = method_agreement + sensitivity_stability + data_quality + assumption_realism + peer_consistency
-    total_score = max(1, min(10, round(total_raw)))
+    total_score = max(1, min(5, (round(total_raw) + 1) // 2))
     
     # Build explanation
     explanation = (
@@ -1320,36 +1321,33 @@ def _deterministic_score(current_discount_pct: float, conviction: str = "medium"
         conviction: Conviction level ("high", "medium", "low")
     
     Returns:
-        Score from 1-10 where:
-        - 1-3: Significantly overvalued (>20% premium to fair value)
-        - 4-5: Fairly valued to slightly overvalued (±10% of fair value)
-        - 6-7: Undervalued (10-25% discount to fair value)
-        - 8-10: Significantly undervalued (>25% discount to fair value)
+        Score from 1-5 where:
+        - 1: Significantly overvalued (>20% premium to fair value)
+        - 2: Moderately overvalued (10-20% premium to fair value)
+        - 3: Fairly valued (±10% of fair value)
+        - 4: Undervalued (10-25% discount to fair value)
+        - 5: Significantly undervalued (>25% discount to fair value)
     """
     # Base score from discount/premium
-    if current_discount_pct >= 40:
-        base = 10  # Deep discount - excellent value
-    elif current_discount_pct >= 25:
-        base = 8   # Significant discount - good value
+    if current_discount_pct >= 25:
+        base = 5   # Significant discount - excellent value
     elif current_discount_pct >= 10:
-        base = 7   # Moderate discount - undervalued
-    elif current_discount_pct >= 0:
-        base = 6   # Slight discount - fair value
+        base = 4   # Moderate discount - undervalued
     elif current_discount_pct >= -10:
-        base = 5   # Slight premium - fairly valued
+        base = 3   # Fairly valued
     elif current_discount_pct >= -20:
-        base = 3   # Moderate premium - overvalued
+        base = 2   # Moderate premium - overvalued
     else:
         base = 1   # Significant premium - significantly overvalued
-    
+
     # Adjust for conviction level
     if conviction == "low":
         # Reduce score for low conviction (more uncertainty)
         base = max(base - 1, 1)
-    elif conviction == "high" and base >= 7:
+    elif conviction == "high" and base >= 4:
         # Boost high conviction opportunities (but not overvalued stocks)
-        base = min(base + 1, 10)
-    
+        base = min(base + 1, 5)
+
     return base
 
 

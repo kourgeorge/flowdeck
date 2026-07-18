@@ -81,8 +81,8 @@ function renderEventChips(widget: TickerWidgetType) {
 
 function getScoreCellTone(score: number | null) {
   if (score == null) return 'border-slate-600/40 bg-slate-500/8';
-  if (score >= 7) return 'border-emerald-400/18 bg-emerald-500/8';
-  if (score >= 5) return 'border-amber-400/18 bg-amber-500/8';
+  if (score >= 3.5) return 'border-emerald-400/18 bg-emerald-500/8';
+  if (score >= 2.5) return 'border-amber-400/18 bg-amber-500/8';
   return 'border-rose-400/18 bg-rose-500/8';
 }
 
@@ -131,7 +131,7 @@ export default function MajorStockWidgets({ widgets, tickerToName }: MajorStockW
                   <div className="flex items-center gap-2">
                     {averageScore != null ? (
                       <div className="rounded-sm border border-cyan-400/20 bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold tabular-nums text-cyan-100">
-                        {averageScore.toFixed(1)}/10
+                        {averageScore.toFixed(1)}/5
                       </div>
                     ) : null}
                     {getRecommendationBadge(widget.recommendation)}
@@ -161,7 +161,7 @@ export default function MajorStockWidgets({ widgets, tickerToName }: MajorStockW
                             {formatReportKey(reportType)}
                           </div>
                           <div className={`shrink-0 text-[12px] font-semibold tabular-nums ${getScoreColor(data.score)}`}>
-                            {data.score != null ? `${data.score}/10` : '—'}
+                            {data.score != null ? `${data.score}/5` : '—'}
                           </div>
                         </div>
                       ))}

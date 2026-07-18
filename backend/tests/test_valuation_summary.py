@@ -41,7 +41,7 @@ class TestValuationSummary(unittest.TestCase):
         )
         result = ValuationAnalysisOutput(
             report="Valuation report body.",
-            valuation_score=7,
+            valuation_score=4,
             fair_value_bear=40.0,
             fair_value_base=49.4,
             fair_value_bull=63.4,
@@ -78,7 +78,7 @@ class TestValuationSummary(unittest.TestCase):
     def test_model_dump_uses_state_field_names(self):
         result = ValuationAnalysisOutput(
             report="Report",
-            valuation_score=6,
+            valuation_score=3,
             fair_value_bear=40.0,
             fair_value_base=50.0,
             fair_value_bull=60.0,

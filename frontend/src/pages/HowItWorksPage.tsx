@@ -60,7 +60,7 @@ export default function HowItWorksPage() {
 
             <h3 className="text-base font-medium text-white mt-4 mb-2">Step 3 — Research manager decides</h3>
             <p className="mb-2">
-              After the debate, a <strong className="text-white">research manager</strong> weighs the bull, bear, and neutral arguments and produces the <strong className="text-white">investment plan</strong>: a summary view, the final recommendation—<strong className="text-white">BUY</strong>, <strong className="text-white">SELL</strong>, or <strong className="text-white">HOLD</strong>—a conviction score (1–10) reflecting how strongly the debate supports that direction, and where relevant an idea of expected return and downside. This is the authoritative call you see in the app: the BUY/SELL/HOLD is not the first answer the AI had—it is the result of analysts weighing evidence and debating every side.
+              After the debate, a <strong className="text-white">research manager</strong> weighs the bull, bear, and neutral arguments and produces the <strong className="text-white">investment plan</strong>: a summary view, the final recommendation—<strong className="text-white">BUY</strong>, <strong className="text-white">SELL</strong>, or <strong className="text-white">HOLD</strong>—a conviction score (1–5) reflecting how strongly the debate supports that direction, and where relevant an idea of expected return and downside. This is the authoritative call you see in the app: the BUY/SELL/HOLD is not the first answer the AI had—it is the result of analysts weighing evidence and debating every side.
             </p>
 
             <h3 className="text-base font-medium text-white mt-4 mb-2">Step 4 — Trader plan and TPS</h3>

@@ -131,7 +131,7 @@ def test_report_row_to_dict_includes_resources():
     class Row:
         content = ""
         metadata_json = json.dumps({
-            "score": 7,
+            "score": 4,
             "resources": [
                 {"type": "news", "url": "https://example.com", "title": "Test"},
             ],

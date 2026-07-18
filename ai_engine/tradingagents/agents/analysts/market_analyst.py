@@ -23,8 +23,8 @@ class MarketAnalysisOutput(BaseModel):
         description="Comprehensive market analysis report covering technical indicators, trends, and market conditions"
     )
     market_score: int = Field(
-        ge=1, le=10,
-        description="Market score from 1-10 indicating market performance outlook. 1-3: Very bearish market conditions, 4-5: Neutral/mixed market conditions, 6-7: Moderately bullish market conditions, 8-10: Very bullish market conditions"
+        ge=1, le=5,
+        description="Market score from 1-5 indicating market performance outlook. 1: Very bearish market conditions, 2: Mildly bearish, 3: Neutral/mixed market conditions, 4: Moderately bullish, 5: Very bullish market conditions"
     )
     key_takeaways: List[str] = analyst_key_takeaways_field()
 

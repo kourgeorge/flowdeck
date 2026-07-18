@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 # Top 3 companies by market cap / prominence (excluding SPY). Override with --tickers.
 DEFAULT_TOP_3_TICKERS = ["IBM"]
 
-# Score keys we collect from final state (numeric 1-10 or similar)
+# Score keys we collect from final state (numeric 1-5 or similar)
 SCORE_KEYS = [
     "market_score",
     "sentiment_score",

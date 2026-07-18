@@ -58,7 +58,7 @@ function getWidgetConfidence(widget: TickerWidgetType): number | null {
   // investment_plan (Research) is the authoritative score; final_trade_decision kept for historical runs.
   const finalScore = widget.report_scores?.investment_plan?.score
     ?? widget.report_scores?.final_trade_decision?.score;
-  if (finalScore != null && finalScore >= 0 && finalScore <= 10) return finalScore / 10;
+  if (finalScore != null && finalScore >= 0 && finalScore <= 5) return finalScore / 5;
   return null;
 }
 
@@ -182,7 +182,7 @@ export default function TickerListView({ widgets, tickerToName, scrollRef, onScr
                       ) : null}
                       {scoreEntries.map(([reportType, data]) => {
                         const label = formatReportKey(reportType);
-                        const value = data.score != null ? `${data.score}/10` : '—';
+                        const value = data.score != null ? `${data.score}/5` : '—';
                         return (
                           <div
                             key={reportType}

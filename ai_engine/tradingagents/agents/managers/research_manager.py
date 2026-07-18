@@ -14,8 +14,8 @@ class ResearchManagerOutput(BaseModel):
         description="Final actionable recommendation after weighing the debate: BUY, SELL, or HOLD."
     )
     recommendation_score: int = Field(
-        ge=1, le=10,
-        description="Directional conviction score from 1-10. 1-3: Very weak/low conviction, 4-5: Moderate conviction, 6-7: Strong conviction, 8-10: Very strong conviction"
+        ge=1, le=5,
+        description="Directional conviction score from 1-5. 1: Very weak/low conviction, 2: Weak conviction, 3: Moderate conviction, 4: Strong conviction, 5: Very strong conviction"
     )
     bull_summary: List[str] = Field(
         default_factory=list,
@@ -90,12 +90,13 @@ Take into account your past mistakes on similar situations. Use these insights t
 
 **Formatting:** Structure the investment plan for readability: use clear paragraphs and subparagraphs, Markdown tables for key data or comparisons (e.g. bull vs bear points, return scenarios), and headings (## or ###) to organize sections. Avoid long unbroken blocks of text so the output is well organized and easy to scan. 
 
-**CRITICAL: You MUST provide a Conviction Score between 1-10 as part of your structured output. This score measures how strongly and clearly the directional thesis (bullish, bearish, or hold) is supported by the debate — it is NOT a quality rating of the recommendation, but a measure of directional conviction.**
+**CRITICAL: You MUST provide a Conviction Score between 1-5 as part of your structured output. This score measures how strongly and clearly the directional thesis (bullish, bearish, or hold) is supported by the debate — it is NOT a quality rating of the recommendation, but a measure of directional conviction.**
 - Scoring guidelines:
-  * 1-3: Very weak directional conviction, highly mixed signals, unclear direction
-  * 4-5: Moderate directional conviction, balanced arguments, moderate clarity
-  * 6-7: Strong directional conviction, clear signals, well-supported thesis
-  * 8-10: Very strong directional conviction, very clear signals, strongly supported thesis
+  * 1: Very weak directional conviction, highly mixed signals, unclear direction
+  * 2: Weak directional conviction, mostly mixed signals
+  * 3: Moderate directional conviction, balanced arguments, moderate clarity
+  * 4: Strong directional conviction, clear signals, well-supported thesis
+  * 5: Very strong directional conviction, very clear signals, strongly supported thesis
 - Base your score on: clarity of signals, strength of arguments, confidence in directional stance, alignment of evidence, and overall conviction
 
 **CRITICAL: You MUST provide bull_summary, bear_summary, and neutral_summary as lists of 3-5 bullet points each:**

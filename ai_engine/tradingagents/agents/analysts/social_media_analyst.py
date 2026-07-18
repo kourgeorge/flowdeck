@@ -22,8 +22,8 @@ class SocialMediaAnalysisOutput(BaseModel):
         description="Comprehensive News & Sentiment report integrating recent news, catalysts, macroeconomic trends, and insider activity with crowd sentiment from Reddit discussions and Polymarket prediction markets"
     )
     sentiment_score: int = Field(
-        ge=1, le=10,
-        description="Combined news & sentiment score from 1-10. 1-3: Very negative news/sentiment, 4-5: Neutral/mixed, 6-7: Moderately positive, 8-10: Very positive"
+        ge=1, le=5,
+        description="Combined news & sentiment score from 1-5. 1: Very negative news/sentiment, 2: Mildly negative, 3: Neutral/mixed, 4: Moderately positive, 5: Very positive"
     )
     key_takeaways: List[str] = analyst_key_takeaways_field()
 

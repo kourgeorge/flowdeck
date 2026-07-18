@@ -45,7 +45,7 @@ class TestAdminService(unittest.TestCase):
                     execution_id=42,
                     report_type="market_report",
                     content="Database market report",
-                    metadata_json=json.dumps({"score": 8, "source": "db"}),
+                    metadata_json=json.dumps({"score": 4, "source": "db"}),
                     created_at=datetime(2026, 4, 7, 12, 1, 0),
                 ),
                 Report(

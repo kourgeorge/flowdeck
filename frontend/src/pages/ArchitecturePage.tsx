@@ -21,7 +21,7 @@ type ContractPhase = {
 const analystOutputShape = (reportField: string, scoreField: string) => ({
   messages: [{ type: 'AIMessage', content: `<${reportField}>` }],
   [reportField]: '<string>',
-  [scoreField]: '<int 1-10 | null>',
+  [scoreField]: '<int 1-5 | null>',
 });
 
 const AGENT_CONTRACTS: AgentContract[] = [
@@ -195,7 +195,7 @@ const AGENT_CONTRACTS: AgentContract[] = [
       },
       investment_plan: '<string>',
       recommendation: 'BUY | SELL | HOLD',
-      recommendation_score: '<int 1-10 | null>',
+      recommendation_score: '<int 1-5 | null>',
       bull_summary: ['<string>'],
       bear_summary: ['<string>'],
       neutral_summary: ['<string>'],

@@ -10,7 +10,7 @@ export interface TickerWidget {
   daily_change: number;
   daily_change_percent: number;
   recommendation: string | null;
-  /** AI confidence 0-1 (from risk_score/10); shown in list as Confidence */
+  /** AI confidence 0-1 (from score/5); shown in list as Confidence */
   confidence?: number | null;
   report_date: string | null;
   has_report: boolean;

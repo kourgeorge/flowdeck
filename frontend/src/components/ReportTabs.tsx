@@ -60,9 +60,9 @@ export default function ReportTabs({ availableReports, selectedReport, onSelectR
 
   const getScoreColor = (score: number | null): string => {
     if (score === null) return 'text-gray-400';
-    if (score <= 3) return 'text-red-400';
-    if (score <= 5) return 'text-yellow-400';
-    if (score <= 7) return 'text-blue-400';
+    if (score <= 1.5) return 'text-red-400';
+    if (score <= 2.5) return 'text-yellow-400';
+    if (score <= 3.5) return 'text-blue-400';
     return 'text-green-400';
   };
 
@@ -109,7 +109,7 @@ export default function ReportTabs({ availableReports, selectedReport, onSelectR
               <span>{formatReportName(reportType)}</span>
               {score !== null && score !== undefined && (
                 <span className={`text-xs font-bold ${getScoreColor(score)}`}>
-                  {score}/10
+                  {score}/5
                 </span>
               )}
             </button>

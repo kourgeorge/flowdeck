@@ -29,8 +29,8 @@ class FundamentalsAnalysisOutput(BaseModel):
         description="Comprehensive fundamentals analysis report covering financial statements, company profile, financial health, and company fundamentals"
     )
     fundamentals_score: int = Field(
-        ge=1, le=10,
-        description="Fundamentals score from 1-10 indicating company financial health and fundamental strength. 1-3: Very weak fundamentals, 4-5: Neutral/mixed fundamentals, 6-7: Moderately strong fundamentals, 8-10: Very strong fundamentals"
+        ge=1, le=5,
+        description="Fundamentals score from 1-5 indicating company financial health and fundamental strength. 1: Very weak fundamentals, 2: Weak/below-average fundamentals, 3: Neutral/mixed fundamentals, 4: Moderately strong fundamentals, 5: Very strong fundamentals"
     )
     key_takeaways: List[str] = analyst_key_takeaways_field()
 

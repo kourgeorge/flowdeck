@@ -111,32 +111,32 @@ Near-term upside depends on earnings resilience and rate expectations staying st
 def _sample_scores() -> dict:
     return {
         "market_report": {
-            "score": 8.0,
+            "score": 4.0,
             "score_label": "Market Score",
             "key_takeaways": ["Strong market momentum with broad participation", "Sector rotation favoring growth stocks"],
         },
         "sentiment_report": {
-            "score": 6.0,
+            "score": 3.0,
             "score_label": "Sentiment Score",
             "key_takeaways": ["Positive earnings surprise exceeded expectations", "Mixed social sentiment with cautious optimism"],
         },
         "fundamentals_report": {
-            "score": 3.0,
+            "score": 2.0,
             "score_label": "Fundamentals Score",
             "key_takeaways": ["Revenue growth remains healthy but margins under pressure"],
         },
         "technical_report": {
-            "score": 7.0,
+            "score": 4.0,
             "score_label": "Technical Score",
             "key_takeaways": ["Price action showing bullish momentum"],
         },
         "sec_report": {
-            "score": 5.0,
+            "score": 3.0,
             "score_label": "SEC Score",
             "key_takeaways": ["Recent filings show standard corporate activity"],
         },
         "investment_plan": {
-            "score": 6.0,
+            "score": 3.0,
             "score_label": "Conviction Score",
             "recommendation": "BUY",
             "confidence": 0.6,

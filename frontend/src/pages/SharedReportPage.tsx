@@ -420,7 +420,7 @@ export default function SharedReportPage() {
   // investment_plan (Research Manager) is the authoritative source; final_trade_decision kept for historical runs.
   const recommendation = (plan?.recommendation ?? ftd?.recommendation ?? tip?.recommendation) ?? null;
   const confidence = (plan?.confidence ?? ftd?.confidence ?? tip?.confidence) ?? null;
-  const normalizedConfidence = confidence != null && confidence <= 1 ? confidence : (confidence != null ? confidence / 10 : null);
+  const normalizedConfidence = confidence != null && confidence <= 1 ? confidence : (confidence != null ? confidence / 5 : null);
   const expectedPct = plan?.expected_return_pct ?? null;
   const bearPct = plan?.bear_case_return_pct ?? null;
   const bullPct = plan?.bull_case_return_pct ?? null;

@@ -38,7 +38,7 @@ class ValuationScoreBreakdown(BaseModel):
     data_quality: float = Field(ge=0, le=2, description="Score for data availability and quality (0-2)")
     assumption_realism: float = Field(ge=0, le=2, description="Score for sector-appropriate assumptions (0-2)")
     peer_consistency: float = Field(ge=0, le=2, description="Score for consistency with peer valuations (0-2)")
-    total_score: int = Field(ge=1, le=10, description="Sum of component scores (1-10)")
+    total_score: int = Field(ge=1, le=5, description="Final valuation score on the 1-5 scale (five 0-2 components summed to 0-10, then rescaled to 1-5)")
     explanation: str = Field(description="Detailed explanation of score components")
 
 
@@ -130,13 +130,14 @@ class ValuationAnalysisOutput(BaseModel):
         description="Comprehensive valuation analysis report covering multiple methods, scenarios, and sensitivity analysis"
     )
     valuation_score: int = Field(
-        ge=1, le=10,
+        ge=1, le=5,
         description=(
-            "Valuation score from 1-10 based on upside/downside to fair value. "
-            "1-3: Significantly overvalued (>20% downside), "
-            "4-5: Fairly valued (±10%), "
-            "6-7: Undervalued (10-25% upside), "
-            "8-10: Significantly undervalued (>25% upside)"
+            "Valuation score from 1-5 based on upside/downside to fair value. "
+            "1: Significantly overvalued (>20% downside), "
+            "2: Moderately overvalued (5-20% downside), "
+            "3: Fairly valued (±5%), "
+            "4: Undervalued (5-25% upside), "
+            "5: Significantly undervalued (>25% upside)"
         )
     )
     valuation_score_breakdown: ValuationScoreBreakdown = Field(

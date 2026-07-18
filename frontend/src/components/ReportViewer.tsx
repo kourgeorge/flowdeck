@@ -84,25 +84,25 @@ interface ReportViewerProps {
 const REPORT_METADATA: Record<string, { title: string; contains: string; aspects: string; methodology: string }> = {
   market_report: {
     title: 'Market',
-    contains: 'A technical analysis of price action, trends, and momentum. The report interprets multiple indicators, explains their signals in context, and concludes with a summary table and a Market Score (1–10).',
+    contains: 'A technical analysis of price action, trends, and momentum. The report interprets multiple indicators, explains their signals in context, and concludes with a summary table and a Market Score (1–5).',
     aspects: 'Up to 8 complementary indicators: 50-day SMA, 200-day SMA, 10-day EMA (trend); MACD, MACD Signal, MACD Histogram (momentum); RSI (overbought/oversold); Bollinger Bands; ATR (volatility); VWMA (volume-weighted). Each is analyzed for trend direction, momentum strength, and support/resistance implications.',
     methodology: 'First in the analysis chain. The Market Analyst uses historical price data and indicator values, selects relevant indicators, interprets their signals together, and writes a detailed narrative. The goal is fine-grained analysis that avoids redundancy and explains why each indicator matters for the current market.',
   },
   sentiment_report: {
     title: 'News & Sentiment',
-    contains: 'A combined analysis of recent news and catalysts together with crowd sentiment. Covers company-specific news, macroeconomic trends, insider activity, social media discussions, and prediction-market signals from the past week. Assigns a combined Sentiment Score (1–10).',
+    contains: 'A combined analysis of recent news and catalysts together with crowd sentiment. Covers company-specific news, macroeconomic trends, insider activity, social media discussions, and prediction-market signals from the past week. Assigns a combined Sentiment Score (1–5).',
     aspects: 'Deterministic catalyst events, company-specific and global/macroeconomic headlines, insider buying/selling, Reddit finance discussions, and Polymarket prediction-market pricing. The news narrative and crowd sentiment are reconciled, with divergences called out explicitly.',
     methodology: 'Runs in the analyst chain. The News & Sentiment Analyst gathers the news/catalyst narrative (events, headlines, macro, insider transactions) and crowd-sentiment signals (Reddit, prediction markets), reconciles the two layers, and produces one integrated report with an overall assessment.',
   },
   fundamentals_report: {
     title: 'Fundamentals',
-    contains: 'A view of the company\'s financial health: financial documents, company profile, and financial history. Assigns a Fundamentals Score (1–10).',
+    contains: 'A view of the company\'s financial health: financial documents, company profile, and financial history. Assigns a Fundamentals Score (1–5).',
     aspects: 'Company overview, balance sheet, cash flow, income statement, valuation ratios, 52-week range, moving averages, profitability trends, revenue growth, debt levels, and financial stability. When data is sparse (e.g. for indices), the report reflects what is available and any limitations.',
     methodology: 'Runs in the analyst chain. The Fundamentals Analyst reviews financial statements and key metrics, evaluates financial health and sustainability, and produces a report. For indices or thinly covered securities, the analysis is limited to available data.',
   },
   sec_report: {
     title: 'SEC / Regulatory',
-    contains: 'Analysis of SEC EDGAR filings (10-K/10-Q): risk factors, management\'s discussion and analysis (MD&A), and competition. Assigns an SEC Score (1–10) reflecting regulatory and disclosure risk.',
+    contains: 'Analysis of SEC EDGAR filings (10-K/10-Q): risk factors, management\'s discussion and analysis (MD&A), and competition. Assigns an SEC Score (1–5) reflecting regulatory and disclosure risk.',
     aspects: 'Risk Factors (Item 1A), Management\'s Discussion and Analysis (Item 7 or Part I Item 2), Competition subsection from Business (Item 1), and optionally legal proceedings and market risk disclosures. Focus is on implications for traders.',
     methodology: 'Runs in the analyst chain when the SEC analyst is selected. The backend fetches the filing from SEC EDGAR, extracts sections via LLM, and the SEC Analyst summarizes management, competition, and risk into a report. For non-US companies, no SEC content is available.',
   },
@@ -110,17 +110,17 @@ const REPORT_METADATA: Record<string, { title: string; contains: string; aspects
     title: 'Technical Analysis',
     contains: 'An advanced technical report on regime, support/resistance, and divergences. Provides actionable recommendations with specific price levels.',
     aspects: 'Divergence detection (bullish/bearish between price and RSI or MACD); regime detection (trending vs ranging, volatility level); support/resistance via price clustering, volume profile, recent highs/lows, and moving averages; entry/exit targets and stop-loss levels.',
-    methodology: 'Runs in the analyst chain when technical analysis is selected. The Technical Analyst follows a sequence: assess market regime, identify support and resistance, check for divergences, then synthesize findings into recommendations and a Technical Score (1–10).',
+    methodology: 'Runs in the analyst chain when technical analysis is selected. The Technical Analyst follows a sequence: assess market regime, identify support and resistance, check for divergences, then synthesize findings into recommendations and a Technical Score (1–5).',
   },
   valuation_report: {
     title: 'Valuation',
-    contains: 'A multi-method fair value analysis with scenario-based valuation ranges and an overall Valuation Score (1–10).',
+    contains: 'A multi-method fair value analysis with scenario-based valuation ranges and an overall Valuation Score (1–5).',
     aspects: 'DCF inputs, peer multiple comparisons, growth and discount-rate assumptions, bear/base/bull fair values, current premium or discount versus base fair value, and the key assumptions driving the estimate.',
     methodology: 'Runs in the analyst chain when valuation analysis is selected. The Valuation Analyst gathers quote, fundamentals, financial statements, peer comps, growth assumptions, and WACC inputs, then synthesizes them into a fair value range and narrative assessment.',
   },
   investment_plan: {
     title: 'Research',
-    contains: 'The authoritative investment recommendation (Buy/Sell/Hold) with rationale and strategic actions. Includes expected return ranges (base, bear, bull) and a Conviction Score (1–10). The Conviction Score reflects how strongly and clearly the directional thesis (bullish, bearish, or hold) is supported by the debate — it is not a quality rating of the recommendation itself, but a measure of how much conviction the Research Manager has in the directional call.',
+    contains: 'The authoritative investment recommendation (Buy/Sell/Hold) with rationale and strategic actions. Includes expected return ranges (base, bear, bull) and a Conviction Score (1–5). The Conviction Score reflects how strongly and clearly the directional thesis (bullish, bearish, or hold) is supported by the debate — it is not a quality rating of the recommendation itself, but a measure of how much conviction the Research Manager has in the directional call.',
     aspects: 'Summary of key points from the Bull, Bear, and Neutral researchers; which side the judge aligns with and why; strategic actions, position sizing, and monitoring; expected, bear-case, and bull-case percentage returns from current price over the investment horizon.',
     methodology: 'Produced after the Bull / Bear / Neutral debate. The three researchers take turns arguing, drawing on all prior reports. The Research Manager acts as judge, weighs all three perspectives, commits to the final Buy/Sell/Hold recommendation, and produces the investment plan with expected return scenarios. The Conviction Score is derived from the debate quality: clarity of signals, strength of arguments, and alignment of evidence.',
   },
@@ -132,7 +132,7 @@ const REPORT_METADATA: Record<string, { title: string; contains: string; aspects
   },
   final_trade_decision: {
     title: 'Risk & Confidence',
-    contains: 'A detailed risk analysis and refined trader plan. Includes a Risk Score (1–10) and key takeaways for traders. The Risk Score measures confidence in the quality and clarity of the risk assessment — not the direction of the trade. It is quantitatively anchored to the average and dispersion (standard deviation) of all upstream scores (market, sentiment, news, fundamentals, SEC, technical, and conviction), then adjusted based on the debate quality.',
+    contains: 'A detailed risk analysis and refined trader plan. Includes a Risk Score (1–5) and key takeaways for traders. The Risk Score measures confidence in the quality and clarity of the risk assessment — not the direction of the trade. It is quantitatively anchored to the average and dispersion (standard deviation) of all upstream scores (market, sentiment, news, fundamentals, SEC, technical, and conviction), then adjusted based on the debate quality.',
     aspects: 'Summary of the Risky, Neutral, and Safe analysts\' arguments; rationale for the risk assessment; refined plan incorporating risk insights; lessons from past decisions; 3–5 key takeaways; and the final BUY/SELL/HOLD recommendation shown in the UI.',
     methodology: 'Final step in the analysis. The Risky, Neutral, and Safe analysts debate the Trader\'s plan — each arguing for high-risk, balanced, or low-risk approaches using all prior reports. The Risk Judge weighs their arguments, computes a baseline from all upstream scores, penalises or boosts confidence based on score dispersion, and produces the final risk analysis plus final recommendation. This is the end of the pipeline.',
   },
@@ -703,17 +703,17 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
 
   const getScoreColor = (score: number | null | undefined): string => {
     if (score === null || score === undefined) return 'text-gray-400';
-    if (score <= 3) return 'text-red-400';
-    if (score <= 5) return 'text-yellow-400';
-    if (score <= 7) return 'text-blue-400';
+    if (score <= 1.5) return 'text-red-400';
+    if (score <= 2.5) return 'text-yellow-400';
+    if (score <= 3.5) return 'text-blue-400';
     return 'text-green-400';
   };
 
   const getScoreBgColor = (score: number | null | undefined): string => {
     if (score === null || score === undefined) return 'bg-gray-700';
-    if (score <= 3) return 'bg-red-500/20 border-red-500/50';
-    if (score <= 5) return 'bg-yellow-500/20 border-yellow-500/50';
-    if (score <= 7) return 'bg-blue-500/20 border-blue-500/50';
+    if (score <= 1.5) return 'bg-red-500/20 border-red-500/50';
+    if (score <= 2.5) return 'bg-yellow-500/20 border-yellow-500/50';
+    if (score <= 3.5) return 'bg-blue-500/20 border-blue-500/50';
     return 'bg-green-500/20 border-green-500/50';
   };
 
@@ -730,13 +730,13 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
                 {scoreLabel || 'Score'}
               </div>
               <div className={`text-3xl font-bold ${getScoreColor(score)}`}>
-                {score}/10
+                {score}/5
               </div>
             </div>
             <div className="text-right">
               <div className="text-xs text-gray-400 mb-1">Rating</div>
               <div className={`text-sm font-semibold ${getScoreColor(score)}`}>
-                {score <= 3 ? 'Poor' : score <= 5 ? 'Fair' : score <= 7 ? 'Good' : 'Excellent'}
+                {score <= 1.5 ? 'Poor' : score <= 2.5 ? 'Fair' : score <= 3.5 ? 'Good' : 'Excellent'}
               </div>
             </div>
           </div>

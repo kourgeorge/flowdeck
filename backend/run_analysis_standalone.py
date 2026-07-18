@@ -398,7 +398,7 @@ def main() -> None:
                     # Research Manager now emits the authoritative BUY/SELL/HOLD; conviction drives confidence.
                     rec_score = chunk.get("recommendation_score")
                     final_recommendation = chunk.get("recommendation") or chunk.get("trader_recommendation")
-                    final_confidence = (rec_score / 10.0) if rec_score is not None else None
+                    final_confidence = (rec_score / 5.0) if rec_score is not None else None
                     meta = _build_report_json(
                         content, rec_score, "Conviction Score", inv_takeaways,
                         recommendation=final_recommendation,

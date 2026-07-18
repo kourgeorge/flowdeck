@@ -100,7 +100,7 @@ class TickerWidget(BaseModel):
     daily_change: float
     daily_change_percent: float
     recommendation: Optional[str] = None  # "BUY", "SELL", "HOLD"
-    confidence: Optional[float] = None  # 0-1 from AI (risk_score/10)
+    confidence: Optional[float] = None  # 0-1 from AI (score/5)
     report_date: Optional[str] = None
     has_report: bool = False
     market_status: str = "UNKNOWN"

@@ -65,7 +65,7 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
     const label = REPORT_LABELS[reportKey] ?? reportKey.replace(/_/g, ' ');
     const score = data.score;
     const showScore = reportKey !== 'trader_investment_plan';
-    const scoreLabel = showScore && score != null ? `${score}/10` : '—';
+    const scoreLabel = showScore && score != null ? `${score}/5` : '—';
     const isSelected = selectedReportKey === reportKey;
     const allTakeaways = data.key_takeaways ?? [];
     const keyPoints = allTakeaways.slice(0, 1);

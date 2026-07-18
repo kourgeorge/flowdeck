@@ -21,8 +21,8 @@ class TechnicalAnalysisOutput(BaseModel):
         description="Comprehensive technical analysis report covering regime, support/resistance, divergences, and recommendations"
     )
     technical_score: int = Field(
-        ge=1, le=10,
-        description="Technical score from 1-10 indicating stock performance. 1-3: Strong bearish, 4-5: Neutral/weak bearish, 6-7: Moderate bullish, 8-10: Strong bullish"
+        ge=1, le=5,
+        description="Technical score from 1-5 indicating stock performance. 1: Strong bearish, 2: Weak bearish, 3: Neutral, 4: Moderate bullish, 5: Strong bullish"
     )
     key_takeaways: List[str] = analyst_key_takeaways_field()
 
