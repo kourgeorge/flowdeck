@@ -101,9 +101,16 @@ export default function AdminDashboardPage() {
     direction: 'desc',
   });
 
-  const filteredAnalyses = useMemo(
-    () =>
-      analyses.filter((a) => {
+  const filteredAnalyses = useMemo(() => {
+    // Running/failed runs float to the top so they stay visible; everything
+    // else keeps the incoming (newest-first) order via a stable sort.
+    const statusRank = (status: string) => {
+      if (status === 'running') return 0;
+      if (status === 'failed') return 1;
+      return 2;
+    };
+    return analyses
+      .filter((a) => {
         const tickerOk =
           !analysisTickerFilter ||
           a.ticker.toLowerCase().includes(analysisTickerFilter.trim().toLowerCase());
@@ -111,9 +118,11 @@ export default function AdminDashboardPage() {
           !analysisCreatorFilter ||
           a.creator_email.toLowerCase().includes(analysisCreatorFilter.trim().toLowerCase());
         return tickerOk && creatorOk;
-      }),
-    [analyses, analysisTickerFilter, analysisCreatorFilter],
-  );
+      })
+      .map((a, index) => ({ a, index }))
+      .sort((x, y) => statusRank(x.a.status) - statusRank(y.a.status) || x.index - y.index)
+      .map(({ a }) => a);
+  }, [analyses, analysisTickerFilter, analysisCreatorFilter]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
