@@ -36,8 +36,11 @@ def main() -> None:
         sys.exit(1)
     execution_id, latest_date = latest
     scores = report_service.get_reports_with_scores(execution_id)
-    # Prefer final_trade_decision, then trader_investment_plan for recommendation/confidence
-    final_meta = scores.get("final_trade_decision") or {}
+    # Prefer investment_plan (Research Manager), then final_trade_decision (historical),
+    # then trader_investment_plan for recommendation/confidence.
+    final_meta = scores.get("investment_plan") or {}
+    if not final_meta.get("recommendation"):
+        final_meta = scores.get("final_trade_decision") or {}
     if not final_meta.get("recommendation"):
         final_meta = scores.get("trader_investment_plan") or {}
     recommendation = final_meta.get("recommendation")

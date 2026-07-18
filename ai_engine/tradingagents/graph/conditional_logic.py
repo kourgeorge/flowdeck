@@ -50,24 +50,15 @@ class ConditionalLogic:
         return "complete"
 
     def should_continue_debate(self, state: AgentState) -> str:
-        """Determine if debate should continue."""
+        """Determine if the Bull/Bear/Neutral debate should continue."""
 
         if (
-            state["investment_debate_state"]["count"] >= 2 * self.max_debate_rounds
-        ):  # 3 rounds of back-and-forth between 2 agents
+            state["investment_debate_state"]["count"] >= 3 * self.max_debate_rounds
+        ):  # one round = one turn each for Bull, Bear, Neutral
             return "Research Manager"
-        if state["investment_debate_state"]["current_response"].startswith("Bull"):
+        latest_speaker = state["investment_debate_state"].get("latest_speaker", "")
+        if latest_speaker.startswith("Bull"):
             return "Bear Researcher"
+        if latest_speaker.startswith("Bear"):
+            return "Neutral Researcher"
         return "Bull Researcher"
-
-    def should_continue_risk_analysis(self, state: AgentState) -> str:
-        """Determine if risk analysis should continue."""
-        if (
-            state["risk_debate_state"]["count"] >= 3 * self.max_risk_discuss_rounds
-        ):  # 3 rounds of back-and-forth between 3 agents
-            return "Risk Judge"
-        if state["risk_debate_state"]["latest_speaker"].startswith("Risky"):
-            return "Safe Analyst"
-        if state["risk_debate_state"]["latest_speaker"].startswith("Safe"):
-            return "Neutral Analyst"
-        return "Risky Analyst"

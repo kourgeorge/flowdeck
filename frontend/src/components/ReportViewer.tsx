@@ -120,15 +120,15 @@ const REPORT_METADATA: Record<string, { title: string; contains: string; aspects
   },
   investment_plan: {
     title: 'Research',
-    contains: 'A definitive investment recommendation (Buy/Sell/Hold) with rationale and strategic actions. Includes expected return ranges (base, bear, bull) and a Conviction Score (1–10). The Conviction Score reflects how strongly and clearly the directional thesis (bullish, bearish, or hold) is supported by the debate — it is not a quality rating of the recommendation itself, but a measure of how much conviction the Research Manager has in the directional call.',
-    aspects: 'Summary of key points from both Bull and Bear; which side the judge aligns with and why; strategic actions, position sizing, and monitoring; expected, bear-case, and bull-case percentage returns from current price over the investment horizon.',
-    methodology: 'Produced after the Bull vs Bear debate. The Bull and Bear researchers take turns arguing, drawing on all prior reports. The Research Manager acts as judge, evaluates both sides, commits to Buy/Sell/Hold, and produces the investment plan with expected return scenarios. The Conviction Score is derived purely from the debate quality: clarity of signals, strength of arguments, and alignment of evidence.',
+    contains: 'The authoritative investment recommendation (Buy/Sell/Hold) with rationale and strategic actions. Includes expected return ranges (base, bear, bull) and a Conviction Score (1–10). The Conviction Score reflects how strongly and clearly the directional thesis (bullish, bearish, or hold) is supported by the debate — it is not a quality rating of the recommendation itself, but a measure of how much conviction the Research Manager has in the directional call.',
+    aspects: 'Summary of key points from the Bull, Bear, and Neutral researchers; which side the judge aligns with and why; strategic actions, position sizing, and monitoring; expected, bear-case, and bull-case percentage returns from current price over the investment horizon.',
+    methodology: 'Produced after the Bull / Bear / Neutral debate. The three researchers take turns arguing, drawing on all prior reports. The Research Manager acts as judge, weighs all three perspectives, commits to the final Buy/Sell/Hold recommendation, and produces the investment plan with expected return scenarios. The Conviction Score is derived from the debate quality: clarity of signals, strength of arguments, and alignment of evidence.',
   },
   trader_investment_plan: {
     title: 'Trader',
     contains: 'The trader\'s execution-oriented plan translated from research into an actionable trading stance.',
     aspects: 'Concrete trade direction, rationale, and execution notes derived from analyst and research-manager outputs.',
-    methodology: 'Produced after the Research Manager\'s investment plan. The Trader agent converts the research recommendation into a practical trading plan used as input for the downstream risk debate.',
+    methodology: 'Produced after the Research Manager\'s investment plan. The Trader agent converts the research recommendation into a practical, executable trading plan (including the structured TPS levels). This is the final step in the pipeline.',
   },
   final_trade_decision: {
     title: 'Risk & Confidence',
@@ -755,12 +755,12 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
       {reportType === 'trader_investment_plan' && tpsPlan && tpsPlan.trim().length > 0 && (
         <TpsPlanCard tpsPlan={tpsPlan} title="TPS v0.1 — Structured Trading Plan" />
       )}
-      {reportType === 'investment_plan' && (bullViewpoint?.length || bearViewpoint?.length) ? (
+      {reportType === 'investment_plan' && (bullViewpoint?.length || bearViewpoint?.length || neutralViewpoint?.length) ? (
         <div className="rounded-lg border border-slate-600 bg-slate-900/40 p-4 space-y-4">
           <div className="text-xs font-semibold uppercase tracking-widest text-slate-500 pb-1 border-b border-slate-700">
             Researcher Viewpoints
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             {bullViewpoint && bullViewpoint.length > 0 && (
               <div className="rounded-lg border border-green-900/50 bg-green-950/30 p-4">
                 <div className="mb-2 text-sm font-semibold text-green-400">Bull Viewpoint</div>
@@ -776,6 +776,16 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
                 <div className="mb-2 text-sm font-semibold text-red-400">Bear Viewpoint</div>
                 <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
                   {bearViewpoint.map((p, i) => (
+                    <li key={`${i}-${p.slice(0, 40)}`}>{p}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {neutralViewpoint && neutralViewpoint.length > 0 && (
+              <div className="rounded-lg border border-gray-500/50 bg-gray-700/40 p-4">
+                <div className="mb-2 text-sm font-semibold text-gray-300">Neutral Viewpoint</div>
+                <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
+                  {neutralViewpoint.map((p, i) => (
                     <li key={`${i}-${p.slice(0, 40)}`}>{p}</li>
                   ))}
                 </ul>

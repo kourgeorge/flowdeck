@@ -158,7 +158,9 @@ export default function SharedReportPage() {
             return idxA - idxB;
           });
           setSelectedReport(
-            sorted.includes('final_trade_decision') ? 'final_trade_decision' : sorted[0] ?? null
+            sorted.includes('investment_plan') ? 'investment_plan'
+            : sorted.includes('final_trade_decision') ? 'final_trade_decision'
+            : sorted[0] ?? null
           );
         }
       })
@@ -415,8 +417,9 @@ export default function SharedReportPage() {
   const ftd = reports.final_trade_decision;
   const tip = reports.trader_investment_plan;
   const plan = reports.investment_plan;
-  const recommendation = (ftd?.recommendation ?? tip?.recommendation) ?? null;
-  const confidence = (ftd?.confidence ?? tip?.confidence) ?? null;
+  // investment_plan (Research Manager) is the authoritative source; final_trade_decision kept for historical runs.
+  const recommendation = (plan?.recommendation ?? ftd?.recommendation ?? tip?.recommendation) ?? null;
+  const confidence = (plan?.confidence ?? ftd?.confidence ?? tip?.confidence) ?? null;
   const normalizedConfidence = confidence != null && confidence <= 1 ? confidence : (confidence != null ? confidence / 10 : null);
   const expectedPct = plan?.expected_return_pct ?? null;
   const bearPct = plan?.bear_case_return_pct ?? null;

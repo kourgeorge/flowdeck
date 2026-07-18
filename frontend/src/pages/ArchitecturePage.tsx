@@ -100,6 +100,8 @@ const AGENT_CONTRACTS: AgentContract[] = [
         history: '<string>',
         bull_history: '<string>',
         bear_history: '<string>',
+        neutral_history: '<string>',
+        latest_speaker: 'Bull',
         current_response: 'Bull Analyst: <string>',
         count: '<int>',
       },
@@ -123,7 +125,34 @@ const AGENT_CONTRACTS: AgentContract[] = [
         history: '<string>',
         bull_history: '<string>',
         bear_history: '<string>',
+        neutral_history: '<string>',
+        latest_speaker: 'Bear',
         current_response: 'Bear Analyst: <string>',
+        count: '<int>',
+      },
+    },
+  },
+  {
+    id: 'neutral-researcher',
+    name: 'Neutral Researcher',
+    kind: 'Researcher',
+    selectedByDefault: 'Always',
+    consumes: [
+      'market_report',
+      'sentiment_report',
+      'fundamentals_report',
+      'technical_report',
+      'investment_debate_state',
+    ],
+    emits: ['investment_debate_state'],
+    outputShape: {
+      investment_debate_state: {
+        history: '<string>',
+        bull_history: '<string>',
+        bear_history: '<string>',
+        neutral_history: '<string>',
+        latest_speaker: 'Neutral',
+        current_response: 'Neutral Analyst: <string>',
         count: '<int>',
       },
     },
@@ -144,9 +173,11 @@ const AGENT_CONTRACTS: AgentContract[] = [
     emits: [
       'investment_debate_state',
       'investment_plan',
+      'recommendation',
       'recommendation_score',
       'bull_summary',
       'bear_summary',
+      'neutral_summary',
       'expected_return_pct',
       'bear_case_return_pct',
       'bull_case_return_pct',
@@ -157,13 +188,17 @@ const AGENT_CONTRACTS: AgentContract[] = [
         history: '<string>',
         bear_history: '<string>',
         bull_history: '<string>',
+        neutral_history: '<string>',
+        latest_speaker: '<string>',
         current_response: '<string>',
         count: '<int>',
       },
       investment_plan: '<string>',
+      recommendation: 'BUY | SELL | HOLD',
       recommendation_score: '<int 1-10 | null>',
       bull_summary: ['<string>'],
       bear_summary: ['<string>'],
+      neutral_summary: ['<string>'],
       expected_return_pct: '<number | null>',
       bear_case_return_pct: '<number | null>',
       bull_case_return_pct: '<number | null>',
@@ -181,148 +216,14 @@ const AGENT_CONTRACTS: AgentContract[] = [
       'sentiment_report',
       'fundamentals_report',
     ],
-    emits: ['messages', 'trader_investment_plan', 'trader_recommendation', 'sender'],
+    emits: ['messages', 'trader_investment_plan', 'trader_recommendation', 'trader_tps_plan', 'trader_key_takeaways', 'sender'],
     outputShape: {
       messages: [{ type: 'AIMessage', content: '<trader_investment_plan>' }],
       trader_investment_plan: '<string>',
       trader_recommendation: 'BUY | SELL | HOLD | null',
+      trader_tps_plan: '<TPS JSON string>',
+      trader_key_takeaways: ['<string>'],
       sender: 'Trader',
-    },
-  },
-  {
-    id: 'risky-analyst',
-    name: 'Risky Analyst',
-    kind: 'Risk Analyst',
-    selectedByDefault: 'Always',
-    consumes: [
-      'trader_investment_plan',
-      'market_report',
-      'sentiment_report',
-      'fundamentals_report',
-      'sec_report',
-      'technical_report',
-      'risk_debate_state',
-    ],
-    emits: ['risk_debate_state'],
-    outputShape: {
-      risk_debate_state: {
-        history: '<string>',
-        risky_history: '<string>',
-        safe_history: '<string>',
-        neutral_history: '<string>',
-        latest_speaker: 'Risky',
-        current_risky_response: 'Risky Analyst: <string>',
-        current_safe_response: '<string>',
-        current_neutral_response: '<string>',
-        count: '<int>',
-      },
-    },
-  },
-  {
-    id: 'safe-analyst',
-    name: 'Safe Analyst',
-    kind: 'Risk Analyst',
-    selectedByDefault: 'Always',
-    consumes: [
-      'trader_investment_plan',
-      'market_report',
-      'sentiment_report',
-      'fundamentals_report',
-      'sec_report',
-      'technical_report',
-      'risk_debate_state',
-    ],
-    emits: ['risk_debate_state'],
-    outputShape: {
-      risk_debate_state: {
-        history: '<string>',
-        risky_history: '<string>',
-        safe_history: '<string>',
-        neutral_history: '<string>',
-        latest_speaker: 'Safe',
-        current_risky_response: '<string>',
-        current_safe_response: 'Safe Analyst: <string>',
-        current_neutral_response: '<string>',
-        count: '<int>',
-      },
-    },
-  },
-  {
-    id: 'neutral-analyst',
-    name: 'Neutral Analyst',
-    kind: 'Risk Analyst',
-    selectedByDefault: 'Always',
-    consumes: [
-      'trader_investment_plan',
-      'market_report',
-      'sentiment_report',
-      'fundamentals_report',
-      'sec_report',
-      'technical_report',
-      'risk_debate_state',
-    ],
-    emits: ['risk_debate_state'],
-    outputShape: {
-      risk_debate_state: {
-        history: '<string>',
-        risky_history: '<string>',
-        safe_history: '<string>',
-        neutral_history: '<string>',
-        latest_speaker: 'Neutral',
-        current_risky_response: '<string>',
-        current_safe_response: '<string>',
-        current_neutral_response: 'Neutral Analyst: <string>',
-        count: '<int>',
-      },
-    },
-  },
-  {
-    id: 'risk-judge',
-    name: 'Risk Judge (Risk Manager)',
-    kind: 'Manager',
-    selectedByDefault: 'Always',
-    consumes: [
-      'risk_debate_state',
-      'investment_plan',
-      'market_report',
-      'sentiment_report',
-      'fundamentals_report',
-      'sec_report',
-      'market_score',
-      'sentiment_score',
-      'fundamentals_score',
-      'sec_score',
-      'technical_score',
-      'recommendation_score',
-    ],
-    emits: [
-      'risk_debate_state',
-      'final_trade_decision',
-      'risk_score',
-      'final_report_key_takeaways',
-      'risky_summary',
-      'safe_summary',
-      'neutral_summary',
-    ],
-    outputShape: {
-      risk_debate_state: {
-        judge_decision: '<string>',
-        history: '<string>',
-        risky_history: '<string>',
-        safe_history: '<string>',
-        neutral_history: '<string>',
-        latest_speaker: 'Judge',
-        current_risky_response: '<string>',
-        current_safe_response: '<string>',
-        current_neutral_response: '<string>',
-        count: '<int>',
-      },
-      final_trade_decision: '<string>',
-      risk_score: '<int 1-10 | null>',
-      final_report_key_takeaways: ['<string>'],
-      risky_summary: ['<string>'],
-      safe_summary: ['<string>'],
-      neutral_summary: ['<string>'],
     },
   },
 ];
@@ -348,17 +249,10 @@ const CONTRACT_PHASES: ContractPhase[] = [
   },
   {
     id: 'phase-2-investment',
-    title: 'Phase 2: Investment Debate + Plan',
+    title: 'Phase 2: Bull/Bear/Neutral Debate + Plan',
     description:
-      'Bull and bear researchers debate, then the research manager produces the investment plan and the trader emits a concrete recommendation.',
-    agents: selectContracts(['bull-researcher', 'bear-researcher', 'research-manager', 'trader']),
-  },
-  {
-    id: 'phase-3-risk',
-    title: 'Phase 3: Risk Debate + Final Judge',
-    description:
-      'Risky, safe, and neutral analysts debate risk tradeoffs before the risk judge emits the final decision narrative and risk score.',
-    agents: selectContracts(['risky-analyst', 'safe-analyst', 'neutral-analyst', 'risk-judge']),
+      'Bull, bear, and neutral researchers debate in round-robin, then the research manager weighs all three sides and emits the investment plan with the authoritative BUY/SELL/HOLD recommendation. The trader then turns it into an executable plan (TPS).',
+    agents: selectContracts(['bull-researcher', 'bear-researcher', 'neutral-researcher', 'research-manager', 'trader']),
   },
 ];
 
@@ -422,25 +316,19 @@ const FINAL_LOGGED_OUTPUT_SHAPE = {
   investment_debate_state: {
     bull_history: '<string>',
     bear_history: '<string>',
+    neutral_history: '<string>',
     history: '<string>',
     current_response: '<string>',
     judge_decision: '<string>',
   },
   trader_investment_decision: '<string>',
-  risk_debate_state: {
-    risky_history: '<string>',
-    safe_history: '<string>',
-    neutral_history: '<string>',
-    history: '<string>',
-    judge_decision: '<string>',
-  },
+  trader_tps_plan: '<TPS JSON string>',
   investment_plan: '<string>',
+  recommendation: 'BUY | SELL | HOLD',
   recommendation_score: '<int | null>',
   expected_return_pct: '<number | null>',
   bear_case_return_pct: '<number | null>',
   bull_case_return_pct: '<number | null>',
-  final_trade_decision: '<string>',
-  risk_score: '<int | null>',
 };
 
 function FlowNode({
@@ -696,28 +584,13 @@ export default function ArchitecturePage() {
                   <FlowArrow />
                   <FlowNode title="Bear Researcher" subtitle="writes bear argument" tone="analyst" />
                   <FlowArrow />
-                  <FlowNode title="Bull/Bear Loop" subtitle="2 * max_debate_rounds" tone="manager" />
+                  <FlowNode title="Neutral Researcher" subtitle="writes balanced argument" tone="analyst" />
                   <FlowArrow />
-                  <FlowNode title="Research Manager" subtitle="investment plan + score + returns" tone="manager" />
+                  <FlowNode title="Debate Loop" subtitle="3 * max_debate_rounds" tone="manager" />
                   <FlowArrow />
-                  <FlowNode title="Trader" subtitle="trader plan + BUY/SELL/HOLD" tone="decision" />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <p className="text-xs uppercase tracking-wide text-gray-400 mb-2">Phase 3: Risk Debate + Final Judge</p>
-              <div className="overflow-x-auto pb-2">
-                <div className="flex items-center gap-1 min-w-max">
-                  <FlowNode title="Risky Analyst" subtitle="high-risk case" tone="analyst" />
+                  <FlowNode title="Research Manager" subtitle="investment plan + BUY/SELL/HOLD + score + returns" tone="decision" />
                   <FlowArrow />
-                  <FlowNode title="Safe Analyst" subtitle="conservative case" tone="analyst" />
-                  <FlowArrow />
-                  <FlowNode title="Neutral Analyst" subtitle="balanced case" tone="analyst" />
-                  <FlowArrow />
-                  <FlowNode title="Risk Loop" subtitle="3 * max_risk_discuss_rounds" tone="manager" />
-                  <FlowArrow />
-                  <FlowNode title="Risk Judge" subtitle="final_trade_decision + risk_score" tone="decision" />
+                  <FlowNode title="Trader" subtitle="trader plan + TPS" tone="decision" />
                 </div>
               </div>
             </div>

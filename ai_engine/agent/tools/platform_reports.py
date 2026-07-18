@@ -47,11 +47,13 @@ _REPORT_ALIASES: dict[str, str] = {
     "valuation": "valuation_report",
     "investment": "investment_plan",
     "plan": "investment_plan",
+    "research": "investment_plan",
+    "recommendation": "investment_plan",
     "trader": "trader_investment_plan",
     "trader_plan": "trader_investment_plan",
+    # Historical alias — final_trade_decision is no longer produced but old runs still have it.
     "final": "final_trade_decision",
     "decision": "final_trade_decision",
-    "recommendation": "final_trade_decision",
 }
 
 
@@ -69,8 +71,8 @@ _PLATFORM_REPORTS_SPEC = ToolSpec(
         "Without report_type: returns a summary of ALL reports — recommendation, return scenarios, "
         "scores, and key takeaways for each report (no full text). "
         "With report_type: returns the full content of that specific report. "
-        "Available reports: Final Trade Decision (risk-adjusted recommendation), "
-        "Investment Plan (bull vs bear researcher debate), Trader Plan, Market Analysis, "
+        "Available reports: Investment Plan (Bull/Bear/Neutral researcher debate + the authoritative "
+        "BUY/SELL/HOLD recommendation), Trader Plan, Market Analysis, "
         "Fundamentals Analysis, Technical Analysis, News & Sentiment Analysis, SEC/Regulatory Analysis, "
         "and Valuation Analysis. "
         "Use report_type when the user asks to 'read', 'show', 'summarize', or 'deep dive' into a specific report. "
@@ -88,9 +90,9 @@ _PLATFORM_REPORTS_SPEC = ToolSpec(
                 "type": "string",
                 "description": (
                     "Optional. Fetch only a specific report instead of all reports. "
-                    "Accepted values: 'final_trade_decision' (or 'final'/'decision'/'recommendation'), "
-                    "'investment_plan' (or 'investment'/'plan'), "
+                    "Accepted values: 'investment_plan' (or 'investment'/'plan'/'research'/'recommendation'), "
                     "'trader_investment_plan' (or 'trader'/'trader_plan'), "
+                    "'final_trade_decision' (or 'final'/'decision' — historical runs only), "
                     "'market_report' (or 'market'), "
                     "'fundamentals_report' (or 'fundamentals'/'fundamental'), "
                     "'technical_report' (or 'technical'), "
@@ -230,22 +232,25 @@ def _fetch_platform_reports(
 
     lines = [f"# FlowDeck AI Analysis Summary for {ticker}", f"*(Analysis date: {date_display})*", ""]
 
-    # Final trade decision first
+    # Recommendation first. The Research Manager (investment_plan) is now the authoritative
+    # source of the BUY/SELL/HOLD recommendation; final_trade_decision is kept as a fallback
+    # for historical runs produced before the Research/Risk report merge.
+    inv = reports.get("investment_plan") or {}
     ftd = reports.get("final_trade_decision") or {}
-    if ftd:
-        rec = ftd.get("recommendation", "N/A")
-        conf = ftd.get("confidence")
+    rec_source = inv if inv.get("recommendation") else ftd
+    if rec_source:
+        rec = rec_source.get("recommendation", "N/A")
+        conf = rec_source.get("confidence")
         conf_str = f" ({conf*100:.0f}% confidence)" if conf else ""
-        lines.append(f"## 🎯 Final Trade Decision: **{rec}**{conf_str}")
+        lines.append(f"## 🎯 Recommendation: **{rec}**{conf_str}")
         # Show key takeaways if available
-        kt = ftd.get("key_takeaways")
+        kt = rec_source.get("key_takeaways")
         if kt and isinstance(kt, list):
             for item in kt[:3]:  # Show top 3 takeaways
                 lines.append(f"- {item}")
         lines.append("")
 
     # Investment plan return scenarios
-    inv = reports.get("investment_plan") or {}
     if inv:
         exp = inv.get("expected_return_pct")
         bear = inv.get("bear_case_return_pct")

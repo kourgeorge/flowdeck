@@ -9,12 +9,9 @@ const ALL_AGENTS = [
   'Valuation Analyst',
   'Bull Researcher',
   'Bear Researcher',
+  'Neutral Researcher',
   'Research Manager',
   'Trader',
-  'Risky Analyst',
-  'Safe Analyst',
-  'Neutral Analyst',
-  'Portfolio Manager',
 ] as const;
 
 interface AIAnalysisLoadingViewProps {

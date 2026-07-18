@@ -45,7 +45,7 @@ export default function HowItWorksPage() {
           <section>
             <h2 className="text-lg font-semibold text-white mb-3">How the AI Processes Information: The Full Flow</h2>
             <p className="mb-4">
-              Our analysis does not rely on a single "black box." It follows a clear sequence: specialized analysts write reports, then bull and bear views debate, then a research manager and a trader perspective shape the plan, and finally a risk debate produces the recommendation you see. Here is that flow in plain terms.
+              Our analysis does not rely on a single "black box." It follows a clear sequence: specialized analysts write reports, then bull, bear, and neutral views debate, then a research manager weighs all sides and commits to the recommendation, and a trader perspective turns it into a concrete plan. Here is that flow in plain terms.
             </p>
 
             <h3 className="text-base font-medium text-white mt-4 mb-2">Step 1 — Specialized analysts</h3>
@@ -53,26 +53,23 @@ export default function HowItWorksPage() {
               First, several <strong className="text-white">specialist analysts</strong> work one after another. Each focuses on a different angle—for example market context (price action, volume, trends), news (headlines and narratives), and fundamentals (financials and valuation). Each analyst uses the underlying data to write a short report and a score. So you get distinct views on "what the market is doing," "what the news is saying," and "what the numbers show," instead of one blended answer. These reports are the building blocks for everything that follows.
             </p>
 
-            <h3 className="text-base font-medium text-white mt-4 mb-2">Step 2 — Bull vs. bear debate</h3>
+            <h3 className="text-base font-medium text-white mt-4 mb-2">Step 2 — Bull / bear / neutral debate</h3>
             <p className="mb-2">
-              Next, two research perspectives—a <strong className="text-white">bull</strong> (focused on reasons to be positive) and a <strong className="text-white">bear</strong> (focused on risks and reasons to be cautious)—take turns arguing. They use all the analyst reports and build on each other's points over several rounds. The goal is to stress-test the idea: what could go right, and what could go wrong? This debate is designed to mimic how a thoughtful investor might weigh both sides before deciding.
+              Next, three research perspectives—a <strong className="text-white">bull</strong> (reasons to be positive), a <strong className="text-white">bear</strong> (risks and reasons to be cautious), and a <strong className="text-white">neutral</strong> voice (a balanced take that challenges both sides)—take turns arguing. They use all the analyst reports and build on each other's points over several rounds. The goal is to stress-test the idea: what could go right, what could go wrong, and where the truth most likely sits. This debate is designed to mimic how a thoughtful investor weighs every side before deciding.
             </p>
 
-            <h3 className="text-base font-medium text-white mt-4 mb-2">Step 3 — Research manager and trader view</h3>
+            <h3 className="text-base font-medium text-white mt-4 mb-2">Step 3 — Research manager decides</h3>
             <p className="mb-2">
-              After the debate, a <strong className="text-white">research manager</strong> step weighs the bull and bear arguments and produces an <strong className="text-white">investment plan</strong>: a summary view, a recommendation score (e.g. 1–10), and where relevant an idea of expected return and downside. Then a <strong className="text-white">trader</strong> perspective turns that into a concrete stance—how to act on the plan given real-world execution and risk. So by this point the AI has moved from "raw reports" to "plan" to "actionable view."
-            </p>
-            <p className="mb-2">
-              As part of the trader step, the system also produces a <strong className="text-white">TPS (Trading Plan Specification)</strong> — a compact, structured JSON object that encodes the trade decision unambiguously: instrument, direction, entry zone, stop-loss, risk limit, and optional execution rules. You can find it in the <strong className="text-white">Trader tab</strong> of any AI Analysis report. <Link to="/how-it-works/tps" className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2">Learn more about TPS →</Link>
+              After the debate, a <strong className="text-white">research manager</strong> weighs the bull, bear, and neutral arguments and produces the <strong className="text-white">investment plan</strong>: a summary view, the final recommendation—<strong className="text-white">BUY</strong>, <strong className="text-white">SELL</strong>, or <strong className="text-white">HOLD</strong>—a conviction score (1–10) reflecting how strongly the debate supports that direction, and where relevant an idea of expected return and downside. This is the authoritative call you see in the app: the BUY/SELL/HOLD is not the first answer the AI had—it is the result of analysts weighing evidence and debating every side.
             </p>
 
-            <h3 className="text-base font-medium text-white mt-4 mb-2">Step 4 — Risk debate and final recommendation</h3>
+            <h3 className="text-base font-medium text-white mt-4 mb-2">Step 4 — Trader plan and TPS</h3>
             <p className="mb-2">
-              Before we show you a recommendation, the system runs a <strong className="text-white">risk debate</strong>. Three angles—more aggressive (emphasizing upside), more cautious (emphasizing downside), and neutral—discuss how much risk the investment carries and whether the plan is appropriate. A final <strong className="text-white">risk judge</strong> considers this discussion and decides the outcome. Only then does the system produce the final recommendation you see: <strong className="text-white">BUY</strong>, <strong className="text-white">SELL</strong>, or <strong className="text-white">HOLD</strong>. So the BUY/SELL/HOLD is not the first answer the AI had—it is the result of analysts, debate, plan, and risk check.
+              Finally, a <strong className="text-white">trader</strong> perspective turns the recommendation into a concrete, actionable stance given real-world execution and risk. As part of this step the system produces a <strong className="text-white">TPS (Trading Plan Specification)</strong> — a compact, structured JSON object that encodes the trade unambiguously: instrument, direction, entry zone, stop-loss, risk limit, and optional execution rules. You can find it in the <strong className="text-white">Trader tab</strong> of any AI Analysis report. <Link to="/how-it-works/tps" className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2">Learn more about TPS →</Link>
             </p>
 
             <p className="mt-3">
-              In short: the AI first gathers and structures information (analyst reports), then challenges it (bull vs. bear), then turns it into a plan and a trader view, and finally subjects it to a risk discussion before committing to BUY, SELL, or HOLD. That is the flow behind every insight you see on Flowdeck.
+              In short: the AI first gathers and structures information (analyst reports), then challenges it from three sides (bull / bear / neutral), then the research manager weighs the debate and commits to BUY, SELL, or HOLD, and finally a trader view turns that into an executable plan. That is the flow behind every insight you see on Flowdeck.
             </p>
           </section>
 
@@ -136,7 +133,7 @@ export default function HowItWorksPage() {
           <section>
             <h2 className="text-lg font-semibold text-white mb-3">In a Nutshell</h2>
             <p>
-              Flowdeck gives you AI-powered stock insights by (1) pulling in live market data, news, and fundamentals, (2) running that information through specialized analysts and a structured bull/bear and risk debate, and (3) showing you a clear BUY/SELL/HOLD plus detailed reports so you can see how the AI got there. <strong className="text-white">{COPILOT_NAME}</strong>, your Trading Copilot, lets you research and chat side by side, while the <strong className="text-white">AI Analyst Agent</strong> is available for deeper, open-ended conversations. The flow is designed to be transparent and multi-step — so you get a reasonable, in-depth explanation of how the AI processes information and arrives at the recommendation you see.
+              Flowdeck gives you AI-powered stock insights by (1) pulling in live market data, news, and fundamentals, (2) running that information through specialized analysts and a structured bull / bear / neutral debate judged by a research manager, and (3) showing you a clear BUY/SELL/HOLD plus detailed reports so you can see how the AI got there. <strong className="text-white">{COPILOT_NAME}</strong>, your Trading Copilot, lets you research and chat side by side, while the <strong className="text-white">AI Analyst Agent</strong> is available for deeper, open-ended conversations. The flow is designed to be transparent and multi-step — so you get a reasonable, in-depth explanation of how the AI processes information and arrives at the recommendation you see.
             </p>
           </section>
         </div>

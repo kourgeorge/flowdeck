@@ -55,7 +55,9 @@ function getRecommendationBadge(rec: string | null) {
 function getWidgetConfidence(widget: TickerWidgetType): number | null {
   const direct = widget.confidence;
   if (direct != null && direct >= 0 && direct <= 1) return direct;
-  const finalScore = widget.report_scores?.final_trade_decision?.score;
+  // investment_plan (Research) is the authoritative score; final_trade_decision kept for historical runs.
+  const finalScore = widget.report_scores?.investment_plan?.score
+    ?? widget.report_scores?.final_trade_decision?.score;
   if (finalScore != null && finalScore >= 0 && finalScore <= 10) return finalScore / 10;
   return null;
 }

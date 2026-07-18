@@ -138,6 +138,8 @@ def _sample_scores() -> dict:
         "investment_plan": {
             "score": 6.0,
             "score_label": "Conviction Score",
+            "recommendation": "BUY",
+            "confidence": 0.6,
             "bull_viewpoint": [
                 "Strong earnings growth trajectory",
                 "Market leadership in key segments",
@@ -148,18 +150,17 @@ def _sample_scores() -> dict:
                 "Macro headwinds could impact demand",
                 "Competitive pressure intensifying",
             ],
+            "neutral_viewpoint": [
+                "Fundamentals are solid but largely priced in",
+                "A balanced position with disciplined sizing is prudent",
+                "Watch macro data before adding to the position",
+            ],
             "key_takeaways": ["Risk/reward remains favorable with disciplined position sizing"],
         },
         "trader_investment_plan": {
             "score_label": "Trader Plan",
             "bull_viewpoint": ["Technical setup looks favorable"],
             "bear_viewpoint": ["Watch for resistance at key levels"],
-        },
-        "final_trade_decision": {
-            "score": 6.0,
-            "score_label": "Confidence",
-            "bull_viewpoint": ["Multiple factors align for upside"],
-            "bear_viewpoint": ["Monitor risk factors closely"],
         },
     }
 

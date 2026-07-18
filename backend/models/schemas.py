@@ -82,7 +82,7 @@ class Recommendation(BaseModel):
     """Ticker recommendation data."""
     recommendation: str  # "BUY", "SELL", "HOLD"
     confidence: Optional[float] = None
-    source: str  # "final_trade_decision" or "trader_investment_plan"
+    source: str  # "investment_plan", "final_trade_decision" (historical), or "trader_investment_plan"
     date: str
 
 

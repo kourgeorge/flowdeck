@@ -16,7 +16,13 @@ const REPORT_LABELS: Record<string, string> = {
   final_trade_decision: 'Risk Analysis',
 };
 
-const EVIDENCE_KEYS = ['market_report', 'sentiment_report', 'fundamentals_report', 'sec_report', 'technical_report', 'valuation_report'] as const;
+// Evidence analysts are split across two lines: market signals on the first line,
+// financial/regulatory analysis on the second.
+const EVIDENCE_ROW_1_KEYS = ['market_report', 'technical_report', 'sentiment_report'] as const;
+const EVIDENCE_ROW_2_KEYS = ['fundamentals_report', 'sec_report', 'valuation_report'] as const;
+// Research Manager (investment_plan) is the authoritative decision; it sits next to the
+// Trader plan on the third line. final_trade_decision is retained on a further line for
+// historical runs produced before the Research/Risk report merge.
 const SYNTHESIS_KEYS = ['investment_plan', 'trader_investment_plan'] as const;
 const DECISION_KEYS = ['final_trade_decision'] as const;
 
@@ -47,7 +53,8 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
     );
   }
 
-  const evidenceNodes = EVIDENCE_KEYS.filter((k) => reports[k]).map((key) => ({ key, data: reports[key]! }));
+  const evidenceRow1Nodes = EVIDENCE_ROW_1_KEYS.filter((k) => reports[k]).map((key) => ({ key, data: reports[key]! }));
+  const evidenceRow2Nodes = EVIDENCE_ROW_2_KEYS.filter((k) => reports[k]).map((key) => ({ key, data: reports[key]! }));
   const synthesisNodes = SYNTHESIS_KEYS.filter((k) => reports[k]).map((key) => ({ key, data: reports[key]! }));
   const decisionNodes = DECISION_KEYS.filter((k) => reports[k]).map((key) => ({ key, data: reports[key]! }));
 
@@ -113,11 +120,11 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
           <div className="connector w-0.5 h-4 bg-slate-500 shrink-0 rounded-full" aria-hidden />
           <div className="flex-1 min-w-0" />
         </div>
-        {/* Evidence: one row of nodes */}
+        {/* Evidence line 1: market signals (Market, Technical, News & Sentiment) */}
         <div className="row flex flex-col items-center w-full gap-2 mb-2">
-          {evidenceNodes.length > 0 ? (
+          {evidenceRow1Nodes.length > 0 ? (
             <div className="flex flex-wrap justify-center gap-2 w-full">
-              {evidenceNodes.map(({ key, data }) => (
+              {evidenceRow1Nodes.map(({ key, data }) => (
                 <div key={key} className="min-w-[220px] flex-1 max-w-[280px]">{renderNode(key, data)}</div>
               ))}
             </div>
@@ -125,6 +132,16 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
             <div className="text-xs text-slate-500">—</div>
           )}
         </div>
+        {/* Evidence line 2: financial & regulatory (Fundamentals, SEC, Valuation) */}
+        {evidenceRow2Nodes.length > 0 && (
+          <div className="row flex flex-col items-center w-full gap-2 mb-2">
+            <div className="flex flex-wrap justify-center gap-2 w-full">
+              {evidenceRow2Nodes.map(({ key, data }) => (
+                <div key={key} className="min-w-[220px] flex-1 max-w-[280px]">{renderNode(key, data)}</div>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="row flex flex-col items-center w-full gap-2 mb-2">
           <div className="flex w-full items-center mb-0">
             <div className="flex-1 min-w-0" />
@@ -139,20 +156,22 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
             )) : <div className="text-xs text-slate-500">—</div>}
           </div>
         </div>
-        <div className="row flex flex-col items-center w-full gap-2 mb-2">
-          <div className="flex w-full items-center mb-0">
-            <div className="flex-1 min-w-0" />
-            <div className="connector w-0.5 h-5 bg-slate-500 shrink-0 rounded-full" aria-hidden />
-            <div className="flex-1 min-w-0 flex items-center justify-start pl-2">
-              <span className="level-label text-[0.7rem] font-bold uppercase tracking-wider text-slate-400">Risk</span>
+        {decisionNodes.length > 0 && (
+          <div className="row flex flex-col items-center w-full gap-2 mb-2">
+            <div className="flex w-full items-center mb-0">
+              <div className="flex-1 min-w-0" />
+              <div className="connector w-0.5 h-5 bg-slate-500 shrink-0 rounded-full" aria-hidden />
+              <div className="flex-1 min-w-0 flex items-center justify-start pl-2">
+                <span className="level-label text-[0.7rem] font-bold uppercase tracking-wider text-slate-400">Risk</span>
+              </div>
+            </div>
+            <div className="flex flex-wrap justify-center gap-2 w-full">
+              {decisionNodes.map(({ key, data }) => (
+                <div key={key} className="min-w-[220px] flex-1 max-w-[280px]">{renderNode(key, data)}</div>
+              ))}
             </div>
           </div>
-          <div className="flex flex-wrap justify-center gap-2 w-full">
-            {decisionNodes.map(({ key, data }) => (
-              <div key={key} className="min-w-[220px] flex-1 max-w-[280px]">{renderNode(key, data)}</div>
-            ))}
-          </div>
-        </div>
+        )}
       </div>
 
       {selectedData && selectedLabel && createPortal(
@@ -207,12 +226,12 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
                 <p className="text-sm text-slate-500">No key takeaways for this report.</p>
               )}
 
-              {selectedReportKey === 'investment_plan' && (selectedData.bull_viewpoint?.length || selectedData.bear_viewpoint?.length) ? (
+              {selectedReportKey === 'investment_plan' && (selectedData.bull_viewpoint?.length || selectedData.bear_viewpoint?.length || selectedData.neutral_viewpoint?.length) ? (
                 <div className="rounded-lg border border-slate-600 bg-slate-900/40 p-4 space-y-4">
                   <div className="text-xs font-semibold uppercase tracking-widest text-slate-500 pb-1 border-b border-slate-700">
                     Researcher Viewpoints
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4">
                     {selectedData.bull_viewpoint && selectedData.bull_viewpoint.length > 0 && (
                       <div className="rounded-lg border border-green-900/50 bg-green-950/30 p-4">
                         <div className="mb-2 text-sm font-semibold text-green-400">Bull Viewpoint</div>
@@ -228,6 +247,16 @@ export default function HierarchicalMindMap({ ticker, companyName, recommendatio
                         <div className="mb-2 text-sm font-semibold text-red-400">Bear Viewpoint</div>
                         <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
                           {selectedData.bear_viewpoint.map((p, i) => (
+                            <li key={`${i}-${p.slice(0, 40)}`}>{p}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {selectedData.neutral_viewpoint && selectedData.neutral_viewpoint.length > 0 && (
+                      <div className="rounded-lg border border-gray-500/50 bg-gray-700/40 p-4">
+                        <div className="mb-2 text-sm font-semibold text-gray-300">Neutral Viewpoint</div>
+                        <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
+                          {selectedData.neutral_viewpoint.map((p, i) => (
                             <li key={`${i}-${p.slice(0, 40)}`}>{p}</li>
                           ))}
                         </ul>

@@ -442,15 +442,15 @@ export default function HomePage() {
                 </p>
               </HomeCard>
               <HomeCard className="p-6">
-                <h4 className="text-lg font-semibold text-white mb-2">2. Investment Debate → Trade Plan</h4>
+                <h4 className="text-lg font-semibold text-white mb-2">2. Bull / Bear / Neutral Debate → Decision</h4>
                 <p className="text-slate-400 text-sm leading-relaxed">
-                  Bull and Bear researchers argue the investment case across multiple rounds using all analyst reports. A Research Manager then adjudicates, producing a conviction score, return scenarios, and a structured investment plan — which a Trader agent refines into an actionable trade strategy.
+                  Bull, Bear, and Neutral researchers argue the investment case across multiple rounds using all analyst reports. A Research Manager then weighs all three sides and produces the final verdict — <strong className="text-green-400">BUY</strong>, <strong className="text-red-400">SELL</strong>, or <strong className="text-yellow-400">HOLD</strong> — with a conviction score and return scenarios.
                 </p>
               </HomeCard>
               <HomeCard className="p-6">
-                <h4 className="text-lg font-semibold text-white mb-2">3. Risk Debate → Final Decision</h4>
+                <h4 className="text-lg font-semibold text-white mb-2">3. Trader Plan → TPS</h4>
                 <p className="text-slate-400 text-sm leading-relaxed">
-                  Three risk agents — Aggressive, Cautious, and Neutral — debate the trade plan in round-robin. A Risk Judge weighs all upstream scores and risk arguments to produce the final verdict: <strong className="text-green-400">BUY</strong>, <strong className="text-red-400">SELL</strong>, or <strong className="text-yellow-400">HOLD</strong>.
+                  A Trader agent turns the recommendation into an actionable strategy and a structured <strong className="text-white">TPS</strong> trade plan — precise entry, stop-loss, and take-profit levels you can act on.
                 </p>
               </HomeCard>
             </div>
@@ -733,7 +733,7 @@ export default function HomePage() {
                   <span className="text-slate-400">    </span><span className="text-sky-300">headers</span><span className="text-slate-400">=</span><span className="text-sky-300">headers</span>{'\n'}
                   <span className="text-slate-400">)</span>{'\n\n'}
                   <span className="text-sky-300">report</span> <span className="text-slate-400">=</span> <span className="text-sky-300">response</span><span className="text-slate-400">.</span><span className="text-green-300">json</span><span className="text-slate-400">()</span>{'\n'}
-                  <span className="text-purple-400">print</span><span className="text-slate-400">(</span><span className="text-sky-300">report</span><span className="text-slate-400">[</span><span className="text-amber-300">'reports'</span><span className="text-slate-400">][</span><span className="text-amber-300">'final_trade_decision'</span><span className="text-slate-400">])</span>
+                  <span className="text-purple-400">print</span><span className="text-slate-400">(</span><span className="text-sky-300">report</span><span className="text-slate-400">[</span><span className="text-amber-300">'reports'</span><span className="text-slate-400">][</span><span className="text-amber-300">'investment_plan'</span><span className="text-slate-400">])</span>
                 </pre>
               </div>
             </HomeCard>

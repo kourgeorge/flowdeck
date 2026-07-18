@@ -24,9 +24,9 @@ class GraphSetup:
         deep_thinking_llm: BaseChatModel,
         bull_memory,
         bear_memory,
+        neutral_memory,
         trader_memory,
         invest_judge_memory,
-        risk_manager_memory,
         conditional_logic: Any,
     ):
         """Initialize with required components."""
@@ -34,9 +34,9 @@ class GraphSetup:
         self.deep_thinking_llm = deep_thinking_llm
         self.bull_memory = bull_memory
         self.bear_memory = bear_memory
+        self.neutral_memory = neutral_memory
         self.trader_memory = trader_memory
         self.invest_judge_memory = invest_judge_memory
-        self.risk_manager_memory = risk_manager_memory
         self.conditional_logic = conditional_logic
 
     def setup_graph(
@@ -89,18 +89,13 @@ class GraphSetup:
         bear_researcher_node = create_bear_researcher(
             self.quick_thinking_llm, self.bear_memory
         )
+        neutral_researcher_node = create_neutral_researcher(
+            self.quick_thinking_llm, self.neutral_memory
+        )
         research_manager_node = create_research_manager(
             self.deep_thinking_llm, self.invest_judge_memory
         )
         trader_node = create_trader(self.quick_thinking_llm, self.trader_memory)
-
-        # Create risk analysis nodes
-        risky_analyst = create_risky_debator(self.quick_thinking_llm)
-        neutral_analyst = create_neutral_debator(self.quick_thinking_llm)
-        safe_analyst = create_safe_debator(self.quick_thinking_llm)
-        risk_manager_node = create_risk_manager(
-            self.deep_thinking_llm, self.risk_manager_memory
-        )
 
         # Create workflow
         workflow = StateGraph(AgentState)
@@ -112,12 +107,9 @@ class GraphSetup:
         # Add other nodes
         workflow.add_node("Bull Researcher", bull_researcher_node)
         workflow.add_node("Bear Researcher", bear_researcher_node)
+        workflow.add_node("Neutral Researcher", neutral_researcher_node)
         workflow.add_node("Research Manager", research_manager_node)
         workflow.add_node("Trader", trader_node)
-        workflow.add_node("Risky Analyst", risky_analyst)
-        workflow.add_node("Neutral Analyst", neutral_analyst)
-        workflow.add_node("Safe Analyst", safe_analyst)
-        workflow.add_node("Risk Judge", risk_manager_node)
 
         analyst_node_names = [
             f"{analyst_type.capitalize()} Analyst" for analyst_type in selected_analysts
@@ -142,12 +134,13 @@ class GraphSetup:
                     next_node = "Bull Researcher"
                 workflow.add_edge(current_analyst, next_node)
 
-        # Add remaining edges
+        # Add remaining edges: 3-way Bull/Bear/Neutral debate, then Research Manager.
         workflow.add_conditional_edges(
             "Bull Researcher",
             self.conditional_logic.should_continue_debate,
             {
                 "Bear Researcher": "Bear Researcher",
+                "Neutral Researcher": "Neutral Researcher",
                 "Research Manager": "Research Manager",
             },
         )
@@ -156,37 +149,21 @@ class GraphSetup:
             self.conditional_logic.should_continue_debate,
             {
                 "Bull Researcher": "Bull Researcher",
+                "Neutral Researcher": "Neutral Researcher",
+                "Research Manager": "Research Manager",
+            },
+        )
+        workflow.add_conditional_edges(
+            "Neutral Researcher",
+            self.conditional_logic.should_continue_debate,
+            {
+                "Bull Researcher": "Bull Researcher",
+                "Bear Researcher": "Bear Researcher",
                 "Research Manager": "Research Manager",
             },
         )
         workflow.add_edge("Research Manager", "Trader")
-        workflow.add_edge("Trader", "Risky Analyst")
-        workflow.add_conditional_edges(
-            "Risky Analyst",
-            self.conditional_logic.should_continue_risk_analysis,
-            {
-                "Safe Analyst": "Safe Analyst",
-                "Risk Judge": "Risk Judge",
-            },
-        )
-        workflow.add_conditional_edges(
-            "Safe Analyst",
-            self.conditional_logic.should_continue_risk_analysis,
-            {
-                "Neutral Analyst": "Neutral Analyst",
-                "Risk Judge": "Risk Judge",
-            },
-        )
-        workflow.add_conditional_edges(
-            "Neutral Analyst",
-            self.conditional_logic.should_continue_risk_analysis,
-            {
-                "Risky Analyst": "Risky Analyst",
-                "Risk Judge": "Risk Judge",
-            },
-        )
-
-        workflow.add_edge("Risk Judge", END)
+        workflow.add_edge("Trader", END)
 
         # Compile and return
         return workflow.compile()

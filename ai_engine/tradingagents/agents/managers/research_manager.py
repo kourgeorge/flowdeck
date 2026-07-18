@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Literal
 from pydantic import BaseModel, Field
 
 from ..analysts.helpers import _UsageCaptureCallback, _capture_usage
@@ -6,9 +6,12 @@ from ..utils.trace_utils import make_agent_step
 
 
 class ResearchManagerOutput(BaseModel):
-    """Structured output for research manager: strategy narrative, directional score, and return expectations."""
+    """Structured output for research manager: strategy narrative, directional call, score, and return expectations."""
     investment_plan: str = Field(
         description="Comprehensive investment plan with directional thesis, rationale, and strategic actions for the Trader"
+    )
+    recommendation: Literal["BUY", "SELL", "HOLD"] = Field(
+        description="Final actionable recommendation after weighing the debate: BUY, SELL, or HOLD."
     )
     recommendation_score: int = Field(
         ge=1, le=10,
@@ -21,6 +24,10 @@ class ResearchManagerOutput(BaseModel):
     bear_summary: List[str] = Field(
         default_factory=list,
         description="3-5 bullet points summarizing the bear analyst's key arguments from the debate"
+    )
+    neutral_summary: List[str] = Field(
+        default_factory=list,
+        description="3-5 bullet points summarizing the neutral analyst's key arguments from the debate"
     )
     expected_return_pct: Optional[float] = Field(
         default=None,
@@ -68,9 +75,11 @@ def create_research_manager(llm, memory):
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
 
-        prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate and make an honest directional call: align with the bear analyst (bearish/sell), the bull analyst (bullish/buy), or recommend a hold stance when the evidence is genuinely mixed, uncertain, or when the risk/reward does not clearly favor action.
+        prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate between the Bull, Bear, and Neutral analysts and make an honest directional call: align with the bear analyst (bearish/sell), the bull analyst (bullish/buy), or take the neutral/hold stance when the evidence is genuinely mixed, uncertain, or when the risk/reward does not clearly favor action.
 
-Summarize the key points from both sides concisely, focusing on the most compelling evidence or reasoning. Your directional stance must be clear and actionable for the Trader. Avoid defaulting to hold-bias simply because both sides have valid points; commit to a stance grounded in the debate's strongest arguments. That said, a HOLD is the right call when signals are genuinely conflicting, conviction is low, or the risk/reward does not clearly favor entering or exiting a position.
+Summarize the key points from all three sides concisely, focusing on the most compelling evidence or reasoning. Weigh the Neutral analyst's balanced perspective when reconciling the bull and bear cases. Your directional stance must be clear and actionable for the Trader. Avoid defaulting to hold-bias simply because both sides have valid points; commit to a stance grounded in the debate's strongest arguments. That said, a HOLD is the right call when signals are genuinely conflicting, conviction is low, or the risk/reward does not clearly favor entering or exiting a position.
+
+**CRITICAL: You MUST provide a final `recommendation` of exactly BUY, SELL, or HOLD reflecting your directional call — this is the authoritative trade signal.**
 
 Additionally, develop a detailed investment plan for the trader. This should include:
 
@@ -89,9 +98,10 @@ Take into account your past mistakes on similar situations. Use these insights t
   * 8-10: Very strong directional conviction, very clear signals, strongly supported thesis
 - Base your score on: clarity of signals, strength of arguments, confidence in directional stance, alignment of evidence, and overall conviction
 
-**CRITICAL: You MUST provide bull_summary and bear_summary as lists of 3-5 bullet points each:**
+**CRITICAL: You MUST provide bull_summary, bear_summary, and neutral_summary as lists of 3-5 bullet points each:**
 - bull_summary: Summarize the bull analyst's key arguments in a short list (each item one sentence).
 - bear_summary: Summarize the bear analyst's key arguments in a short list (each item one sentence).
+- neutral_summary: Summarize the neutral analyst's key arguments in a short list (each item one sentence).
 
 **CRITICAL: You MUST provide numerical return expectations as percentages from current price (e.g. over a 12-month horizon):**
 - expected_return_pct: Base-case expected percentage return (e.g. 0.64 for +0.64%).
@@ -125,9 +135,11 @@ Debate History:
             investment_plan = structured_response.investment_plan
             if usage_cb.last_message is not None:
                 usage_meta = _capture_usage(usage_cb.last_message, llm)
+            recommendation = getattr(structured_response, "recommendation", None)
             recommendation_score = structured_response.recommendation_score
             bull_summary = getattr(structured_response, "bull_summary", None) or []
             bear_summary = getattr(structured_response, "bear_summary", None) or []
+            neutral_summary = getattr(structured_response, "neutral_summary", None) or []
             expected_return_pct = getattr(structured_response, "expected_return_pct", None)
             bear_case_return_pct = getattr(structured_response, "bear_case_return_pct", None)
             bull_case_return_pct = getattr(structured_response, "bull_case_return_pct", None)
@@ -145,9 +157,11 @@ Debate History:
             response = llm.invoke(prompt)
             investment_plan = response.content
             usage_meta = _capture_usage(response, llm)
+            recommendation = None
             recommendation_score = None
             bull_summary = []
             bear_summary = []
+            neutral_summary = []
             plan_key_takeaways = []
 
         new_investment_debate_state = {
@@ -155,6 +169,8 @@ Debate History:
             "history": investment_debate_state.get("history", ""),
             "bear_history": investment_debate_state.get("bear_history", ""),
             "bull_history": investment_debate_state.get("bull_history", ""),
+            "neutral_history": investment_debate_state.get("neutral_history", ""),
+            "latest_speaker": investment_debate_state.get("latest_speaker", ""),
             "current_response": investment_plan,
             "count": investment_debate_state["count"],
         }
@@ -163,9 +179,11 @@ Debate History:
             "investment_debate_state": new_investment_debate_state,
             "investment_plan": investment_plan,
             "investment_plan_key_takeaways": plan_key_takeaways,
+            "recommendation": recommendation,
             "recommendation_score": recommendation_score,
             "bull_summary": bull_summary,
             "bear_summary": bear_summary,
+            "neutral_summary": neutral_summary,
             "expected_return_pct": expected_return_pct,
             "bear_case_return_pct": bear_case_return_pct,
             "bull_case_return_pct": bull_case_return_pct,
@@ -181,9 +199,11 @@ Debate History:
                         output_preview=investment_plan,
                         usage=usage_meta,
                         extra={
+                            "recommendation": recommendation,
                             "recommendation_score": recommendation_score,
                             "bull_summary": bull_summary,
                             "bear_summary": bear_summary,
+                            "neutral_summary": neutral_summary,
                             "key_takeaways": plan_key_takeaways,
                             "expected_return_pct": expected_return_pct,
                             "bear_case_return_pct": bear_case_return_pct,

@@ -108,7 +108,8 @@ def normalize_decision(raw: str) -> str:
 def extract_decision_from_state(final_state: dict) -> tuple[str, str]:
     """Extract normalized decision and raw recommendation from graph final state."""
     rec = final_state.get("recommendation") or ""
-    raw_decision = final_state.get("final_trade_decision") or ""
+    # investment_plan is the merged synthesis report; final_trade_decision is a historical fallback.
+    raw_decision = final_state.get("investment_plan") or final_state.get("final_trade_decision") or ""
     if rec:
         return normalize_decision(rec), rec
     return normalize_decision(raw_decision), raw_decision
@@ -132,7 +133,7 @@ def run_single(ticker: str, analysis_date: str, run_index: int, config: dict, an
     final_state = graph.graph.invoke(init_state, **graph_args)
     decision, raw_rec = extract_decision_from_state(final_state)
     scores = extract_scores(final_state)
-    raw_final = (final_state.get("final_trade_decision") or "")[:200]
+    raw_final = (final_state.get("investment_plan") or final_state.get("final_trade_decision") or "")[:200]
     return RunResult(
         ticker=ticker,
         run_index=run_index,

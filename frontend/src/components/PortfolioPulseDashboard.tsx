@@ -292,7 +292,9 @@ function getWidgetConfidence(widget: TickerWidget): number | null {
   if (widget.confidence != null && widget.confidence >= 0 && widget.confidence <= 1) {
     return widget.confidence;
   }
-  const finalDecision = widget.report_scores?.final_trade_decision?.score;
+  // investment_plan (Research) is the authoritative score; final_trade_decision kept for historical runs.
+  const finalDecision = widget.report_scores?.investment_plan?.score
+    ?? widget.report_scores?.final_trade_decision?.score;
   if (finalDecision != null && finalDecision >= 0 && finalDecision <= 10) {
     return finalDecision / 10;
   }

@@ -84,26 +84,26 @@ class TradingAgentsGraph:
         # Initialize memories
         self.bull_memory = FinancialSituationMemory("bull_memory", self.config)
         self.bear_memory = FinancialSituationMemory("bear_memory", self.config)
+        self.neutral_memory = FinancialSituationMemory("neutral_memory", self.config)
         self.trader_memory = FinancialSituationMemory("trader_memory", self.config)
         self.invest_judge_memory = FinancialSituationMemory("invest_judge_memory", self.config)
-        self.risk_manager_memory = FinancialSituationMemory("risk_manager_memory", self.config)
 
         # Create tool nodes
-        # Initialize conditional logic for debate and risk analysis loops
+        # Initialize conditional logic for the Bull/Bear/Neutral debate loop
         self.conditional_logic = ConditionalLogic(
             max_debate_rounds=self.config.get("max_debate_rounds", 1),
             max_risk_discuss_rounds=self.config.get("max_risk_discuss_rounds", 1),
         )
-        
+
         # Initialize graph setup (analysts are now self-contained, no tool nodes needed)
         self.graph_setup = GraphSetup(
             self.quick_thinking_llm,
             self.deep_thinking_llm,
             self.bull_memory,
             self.bear_memory,
+            self.neutral_memory,
             self.trader_memory,
             self.invest_judge_memory,
-            self.risk_manager_memory,
             self.conditional_logic,
         )
 
@@ -226,6 +226,9 @@ class TradingAgentsGraph:
             "investment_debate_state": {
                 "bull_history": final_state["investment_debate_state"]["bull_history"],
                 "bear_history": final_state["investment_debate_state"]["bear_history"],
+                "neutral_history": final_state["investment_debate_state"].get(
+                    "neutral_history", ""
+                ),
                 "history": final_state["investment_debate_state"]["history"],
                 "current_response": final_state["investment_debate_state"][
                     "current_response"
@@ -236,20 +239,12 @@ class TradingAgentsGraph:
             },
             "trader_investment_decision": final_state["trader_investment_plan"],
             "trader_tps_plan": final_state.get("trader_tps_plan", ""),
-            "risk_debate_state": {
-                "risky_history": final_state["risk_debate_state"]["risky_history"],
-                "safe_history": final_state["risk_debate_state"]["safe_history"],
-                "neutral_history": final_state["risk_debate_state"]["neutral_history"],
-                "history": final_state["risk_debate_state"]["history"],
-                "judge_decision": final_state["risk_debate_state"]["judge_decision"],
-            },
             "investment_plan": final_state["investment_plan"],
+            "recommendation": final_state.get("recommendation"),
             "recommendation_score": final_state.get("recommendation_score"),
             "expected_return_pct": final_state.get("expected_return_pct"),
             "bear_case_return_pct": final_state.get("bear_case_return_pct"),
             "bull_case_return_pct": final_state.get("bull_case_return_pct"),
-            "final_trade_decision": final_state["final_trade_decision"],
-            "risk_score": final_state.get("risk_score"),
         }
 
         # Save to file
@@ -270,12 +265,12 @@ class TradingAgentsGraph:
         self.reflector.reflect_bear_researcher(
             self.curr_state, returns_losses, self.bear_memory
         )
+        self.reflector.reflect_neutral_researcher(
+            self.curr_state, returns_losses, self.neutral_memory
+        )
         self.reflector.reflect_trader(
             self.curr_state, returns_losses, self.trader_memory
         )
         self.reflector.reflect_invest_judge(
             self.curr_state, returns_losses, self.invest_judge_memory
-        )
-        self.reflector.reflect_risk_manager(
-            self.curr_state, returns_losses, self.risk_manager_memory
         )

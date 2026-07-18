@@ -198,13 +198,16 @@ def _get_ticker_widgets_sync(
                 }
                 if not report_scores:
                     report_scores = None
+                ip = scores_raw.get("investment_plan") or {}
                 tip = scores_raw.get("trader_investment_plan") or {}
                 ftd = scores_raw.get("final_trade_decision") or {}
-                if ftd.get("recommendation"):
+                if ip.get("recommendation"):
+                    recommendation = ip["recommendation"]
+                elif ftd.get("recommendation"):
                     recommendation = ftd["recommendation"]
                 elif tip.get("recommendation"):
                     recommendation = tip.get("recommendation")
-                confidence = _extract_confidence(tip, ftd)
+                confidence = _extract_confidence(ip, ftd, tip)
         except Exception as e:
             print(f"Warning: Failed to get batched reports for {ticker}: {e}")
 
@@ -374,30 +377,34 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
         }
         first_report = next(iter(latest_reports_with_scores_raw.values()), {})
         report_days_ago = first_report.get('days_ago')
+        ip_meta = latest_reports_with_scores_raw.get("investment_plan") or {}
         tip_meta = latest_reports_with_scores_raw.get("trader_investment_plan") or {}
         final_meta = latest_reports_with_scores_raw.get("final_trade_decision") or {}
-        confidence = _extract_confidence(tip_meta, final_meta)
-        if final_meta.get("recommendation"):
-            latest_recommendation = Recommendation(
-                recommendation=final_meta["recommendation"],
-                confidence=confidence,
-                source="final_trade_decision",
-                date=latest_date or ""
-            )
-        elif tip_meta.get("recommendation"):
-            latest_recommendation = Recommendation(
-                recommendation=tip_meta["recommendation"],
-                confidence=confidence,
-                source="trader_investment_plan",
-                date=latest_date or ""
-            )
+        # Research Manager (investment_plan) is now the authoritative recommendation source;
+        # final_trade_decision remains as a fallback for historical runs.
+        confidence = _extract_confidence(ip_meta, final_meta, tip_meta)
+        for _meta, _source in (
+            (ip_meta, "investment_plan"),
+            (final_meta, "final_trade_decision"),
+            (tip_meta, "trader_investment_plan"),
+        ):
+            if _meta.get("recommendation"):
+                latest_recommendation = Recommendation(
+                    recommendation=_meta["recommendation"],
+                    confidence=confidence,
+                    source=_source,
+                    date=latest_date or ""
+                )
+                break
 
     historical = gw.get_historical_analyses(ticker)
     historical_analyses = []
     for h in historical:
         reports_with_scores = gw.get_reports_with_scores(h["analysis_run_id"])
         rec = None
-        if (reports_with_scores.get("final_trade_decision") or {}).get("recommendation"):
+        if (reports_with_scores.get("investment_plan") or {}).get("recommendation"):
+            rec = reports_with_scores["investment_plan"]["recommendation"]
+        elif (reports_with_scores.get("final_trade_decision") or {}).get("recommendation"):
             rec = reports_with_scores["final_trade_decision"]["recommendation"]
         elif (reports_with_scores.get("trader_investment_plan") or {}).get("recommendation"):
             rec = reports_with_scores["trader_investment_plan"]["recommendation"]

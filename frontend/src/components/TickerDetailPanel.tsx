@@ -894,7 +894,11 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
         if (ia === -1) return 1; if (ib === -1) return -1;
         return ia - ib;
       });
-      setSelectedReport(keys.includes('final_trade_decision') ? 'final_trade_decision' : keys[0] ?? null);
+      setSelectedReport(
+        keys.includes('investment_plan') ? 'investment_plan'
+        : keys.includes('final_trade_decision') ? 'final_trade_decision'
+        : keys[0] ?? null
+      );
     } catch {
       setHistoricalReportsData(null);
     } finally {
@@ -2333,7 +2337,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                         />
                         <div className="mt-4">
                           {(selectedReport === null || selectedReport === OVERVIEW_TAB_KEY) && availableReports.length > 0 ? (
-                            availableReports.includes('final_trade_decision') ? (
+                            (availableReports.includes('investment_plan') || availableReports.includes('final_trade_decision')) ? (
                               <HierarchicalMindMap
                                 ticker={stockData.ticker}
                                 companyName={companyInfo?.name ?? null}

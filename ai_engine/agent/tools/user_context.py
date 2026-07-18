@@ -227,11 +227,13 @@ def _get_portfolio_overview(user_id: int, db: Any) -> str:
             if latest:
                 ar_id, latest_date = latest
                 reports = report_svc.get_reports_with_scores(ar_id)
+                inv = reports.get("investment_plan") or {}
                 tip = reports.get("trader_investment_plan") or {}
                 ftd = reports.get("final_trade_decision") or {}
-                rec = tip.get("recommendation") or ftd.get("recommendation")
-                conf = tip.get("confidence") or ftd.get("confidence")
-                inv = reports.get("investment_plan") or {}
+                # investment_plan (Research Manager) is the authoritative recommendation source;
+                # final_trade_decision / trader plan are historical fallbacks.
+                rec = inv.get("recommendation") or ftd.get("recommendation") or tip.get("recommendation")
+                conf = inv.get("confidence") or ftd.get("confidence") or tip.get("confidence")
                 exp = inv.get("expected_return_pct")
                 bear_ret = inv.get("bear_case_return_pct")
                 bull_ret = inv.get("bull_case_return_pct")

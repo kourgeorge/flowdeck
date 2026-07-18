@@ -92,8 +92,12 @@ class InvestDebateState(TypedDict):
     ]  # Bullish Conversation history
     bear_history: Annotated[
         str, "Bearish Conversation history"
-    ]  # Bullish Conversation history
+    ]  # Bearish Conversation history
+    neutral_history: Annotated[
+        str, "Neutral Conversation history"
+    ]  # Neutral Conversation history
     history: Annotated[str, "Conversation history"]  # Conversation history
+    latest_speaker: Annotated[str, "Researcher that spoke last"]
     current_response: Annotated[str, "Latest response"]  # Last response
     judge_decision: Annotated[str, "Final judge decision"]  # Last response
     count: Annotated[int, "Length of the current conversation"]  # Conversation length

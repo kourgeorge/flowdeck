@@ -56,10 +56,10 @@
 </div>
 {% endif %}
 
-{% if bull_view or bear_view %}
+{% if bull_view or bear_view or neutral_view %}
 <div style="margin:0 0 24px;">
   {% if bull_view %}
-  <div style="margin-bottom:{{ '20px' if bear_view else '0' }};">
+  <div style="margin-bottom:{{ '20px' if (bear_view or neutral_view) else '0' }};">
     <p style="margin:0 0 10px;font-size:13px;line-height:1.4;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">Bull Case</p>
     {% if bull_view is string %}
     <p style="margin:0;font-size:14px;line-height:1.8;color:#334155;">{{ bull_view }}</p>
@@ -72,15 +72,30 @@
     {% endif %}
   </div>
   {% endif %}
-  
+
   {% if bear_view %}
-  <div>
+  <div style="margin-bottom:{{ '20px' if neutral_view else '0' }};">
     <p style="margin:0 0 10px;font-size:13px;line-height:1.4;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">Bear Case</p>
     {% if bear_view is string %}
     <p style="margin:0;font-size:14px;line-height:1.8;color:#334155;">{{ bear_view }}</p>
     {% else %}
     <ul style="margin:0;padding:0 0 0 20px;font-size:14px;line-height:1.8;color:#334155;">
       {% for point in bear_view %}
+      <li style="margin-bottom:6px;">{{ point }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if neutral_view %}
+  <div>
+    <p style="margin:0 0 10px;font-size:13px;line-height:1.4;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">Neutral Case</p>
+    {% if neutral_view is string %}
+    <p style="margin:0;font-size:14px;line-height:1.8;color:#334155;">{{ neutral_view }}</p>
+    {% else %}
+    <ul style="margin:0;padding:0 0 0 20px;font-size:14px;line-height:1.8;color:#334155;">
+      {% for point in neutral_view %}
       <li style="margin-bottom:6px;">{{ point }}</li>
       {% endfor %}
     </ul>

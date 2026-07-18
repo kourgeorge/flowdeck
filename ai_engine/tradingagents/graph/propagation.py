@@ -4,7 +4,6 @@ from typing import Dict, Any
 from ..agents.utils.agent_states import (
     AgentState,
     InvestDebateState,
-    RiskDebateState,
 )
 
 
@@ -25,14 +24,14 @@ class Propagator:
             "trade_date": str(trade_date),
             "events_report": "",
             "investment_debate_state": InvestDebateState(
-                {"history": "", "current_response": "", "count": 0}
-            ),
-            "risk_debate_state": RiskDebateState(
                 {
                     "history": "",
-                    "current_risky_response": "",
-                    "current_safe_response": "",
-                    "current_neutral_response": "",
+                    "bull_history": "",
+                    "bear_history": "",
+                    "neutral_history": "",
+                    "latest_speaker": "",
+                    "current_response": "",
+                    "judge_decision": "",
                     "count": 0,
                 }
             ),

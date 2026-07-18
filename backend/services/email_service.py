@@ -314,6 +314,7 @@ def _build_report_email_bodies(
     scores_list = []
     bull_view = None
     bear_view = None
+    neutral_view = None
     key_insights = []
     
     if scores:
@@ -344,8 +345,9 @@ def _build_report_email_bodies(
                     "color": score_color
                 })
             
-            # Extract bull/bear viewpoints (keep as list for bullet points in email)
-            # Check investment_plan, trader_investment_plan, and final_trade_decision
+            # Extract bull/bear/neutral viewpoints (keep as list for bullet points in email).
+            # investment_plan (Research Manager) now carries the debate viewpoints;
+            # final_trade_decision is checked for backward compatibility with historical runs.
             if report_type in ("investment_plan", "trader_investment_plan", "final_trade_decision"):
                 if not bull_view and report_data.get("bull_viewpoint"):
                     bv = report_data.get("bull_viewpoint")
@@ -359,6 +361,12 @@ def _build_report_email_bodies(
                         bear_view = bv
                     elif isinstance(bv, str) and bv:
                         bear_view = [bv]
+                if not neutral_view and report_data.get("neutral_viewpoint"):
+                    nv = report_data.get("neutral_viewpoint")
+                    if isinstance(nv, list) and nv:
+                        neutral_view = nv
+                    elif isinstance(nv, str) and nv:
+                        neutral_view = [nv]
             
             # Extract key takeaways/insights only from Market, News & Sentiment, and Fundamentals reports
             if report_type in ("market_report", "sentiment_report", "fundamentals_report"):
@@ -380,6 +388,7 @@ def _build_report_email_bodies(
             " ".join(key_insights) if key_insights else "",
             " ".join(bull_view) if bull_view else "",
             " ".join(bear_view) if bear_view else "",
+            " ".join(neutral_view) if neutral_view else "",
         ])
         text_direction = _detect_text_direction(text_to_check)
         html_body = template.render(
@@ -390,6 +399,7 @@ def _build_report_email_bodies(
             key_insights=key_insights,
             bull_view=bull_view,
             bear_view=bear_view,
+            neutral_view=neutral_view,
             report_url=report_url,
             profile_url=f"{_get_frontend_url()}/profile",
             preheader=f"New analysis for {ticker_upper}. " + (f"Recommendation: {recommendation}." if recommendation else "View your report."),

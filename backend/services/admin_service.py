@@ -558,9 +558,9 @@ def _extract_accuracy_inputs(report_rows: list[tuple[str, Optional[str]]]) -> tu
     analysis_price: Optional[float] = None
 
     preferred_report_order = (
+        "investment_plan",
         "final_trade_decision",
         "trader_investment_plan",
-        "investment_plan",
     )
     rows_by_type = {report_type: _parse_report_metadata(meta_json) for report_type, meta_json in report_rows}
 

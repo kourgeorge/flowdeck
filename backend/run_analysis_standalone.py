@@ -168,12 +168,9 @@ def main() -> None:
         "SEC Analyst": "pending",
         "Bull Researcher": "pending",
         "Bear Researcher": "pending",
+        "Neutral Researcher": "pending",
         "Research Manager": "pending",
         "Trader": "pending",
-        "Risky Analyst": "pending",
-        "Neutral Analyst": "pending",
-        "Safe Analyst": "pending",
-        "Portfolio Manager": "pending",
     }
     analyst_status_map = {
         "market": "Market Analyst",
@@ -386,18 +383,26 @@ def main() -> None:
                 if chunk.get("investment_debate_state") and chunk["investment_debate_state"].get("judge_decision"):
                     agent_statuses["Bull Researcher"] = "completed"
                     agent_statuses["Bear Researcher"] = "completed"
+                    agent_statuses["Neutral Researcher"] = "completed"
                     agent_statuses["Research Manager"] = "completed"
                     agent_statuses["Trader"] = "in_progress"
-                    _progress_log("Bull/Bear/Research Manager completed → Trader started")
+                    _progress_log("Bull/Bear/Neutral/Research Manager completed → Trader started")
 
                 if chunk.get("investment_plan") and "investment_plan" not in _written_reports:
                     bull = chunk.get("bull_summary") or []
                     bear = chunk.get("bear_summary") or []
+                    neutral = chunk.get("neutral_summary") or []
                     content = chunk["investment_plan"]
                     reports["investment_plan"] = content
                     inv_takeaways = _get_or_extract_takeaways("investment_plan", content, chunk)
+                    # Research Manager now emits the authoritative BUY/SELL/HOLD; conviction drives confidence.
+                    rec_score = chunk.get("recommendation_score")
+                    final_recommendation = chunk.get("recommendation") or chunk.get("trader_recommendation")
+                    final_confidence = (rec_score / 10.0) if rec_score is not None else None
                     meta = _build_report_json(
-                        content, chunk.get("recommendation_score"), "Conviction Score", inv_takeaways,
+                        content, rec_score, "Conviction Score", inv_takeaways,
+                        recommendation=final_recommendation,
+                        confidence=final_confidence,
                         expected_return_pct=chunk.get("expected_return_pct"),
                         bear_case_return_pct=chunk.get("bear_case_return_pct"),
                         bull_case_return_pct=chunk.get("bull_case_return_pct"),
@@ -416,9 +421,9 @@ def main() -> None:
                         analysis_run_id,
                         "investment_plan",
                         content=content,
-                        metadata={**meta, "bull_viewpoint": bull, "bear_viewpoint": bear, "resources": _get_report_resources(chunk, "investment_plan")},
+                        metadata={**meta, "bull_viewpoint": bull, "bear_viewpoint": bear, "neutral_viewpoint": neutral, "resources": _get_report_resources(chunk, "investment_plan")},
                     )
-                    _progress_log("Investment plan ready → saved")
+                    _progress_log(f"Investment plan ready → {final_recommendation or ''} → saved")
 
                 if chunk.get("trader_investment_plan"):
                     c = chunk["trader_investment_plan"]
@@ -435,49 +440,8 @@ def main() -> None:
                         resources=_get_report_resources(chunk, "trader_investment_plan"),
                         chunk=chunk,
                     )
-                    agent_statuses["Risky Analyst"] = "in_progress"
-                    agent_statuses["Safe Analyst"] = "in_progress"
-                    agent_statuses["Neutral Analyst"] = "in_progress"
-                    _progress_log("Trader completed → Risk debate (Risky/Safe/Neutral) started")
-
-                if chunk.get("risk_debate_state") and chunk["risk_debate_state"].get("judge_decision"):
-                    agent_statuses["Risky Analyst"] = "completed"
-                    agent_statuses["Safe Analyst"] = "completed"
-                    agent_statuses["Neutral Analyst"] = "completed"
-                    agent_statuses["Portfolio Manager"] = "in_progress"
-                    _progress_log("Risk analysts completed → Portfolio Manager started")
-
-                if chunk.get("final_trade_decision"):
-                    agent_statuses["Portfolio Manager"] = "completed"
-                    content = chunk["final_trade_decision"]
-                    risky = chunk.get("risky_summary") or []
-                    safe = chunk.get("safe_summary") or []
-                    neutral = chunk.get("neutral_summary") or []
-                    reports["final_trade_decision"] = content
-                    rscore = chunk.get("risk_score")
-                    final_recommendation = chunk.get("recommendation") or chunk.get("trader_recommendation")
-                    final_confidence = (rscore / 10.0) if rscore is not None else None
-                    kt = _get_or_extract_takeaways("final_trade_decision", content, chunk)
-                    meta = _build_report_json(
-                        content, rscore, "Confidence", kt,
-                        recommendation=chunk.get("recommendation"),
-                        confidence=(rscore / 10.0) if rscore is not None else None,
-                    )
-                    usage = (chunk.get("report_usage") or {}).get("final_trade_decision")
-                    if usage:
-                        meta["input_tokens"] = usage.get("input_tokens")
-                        meta["output_tokens"] = usage.get("output_tokens")
-                        meta["total_tokens"] = usage.get("total_tokens")
-                        meta["cost_usd"] = usage.get("cost_usd")
-                    meta["agent_steps"] = _get_report_agent_steps(chunk, "final_trade_decision")
-                    save_report(
-                        analysis_run_id,
-                        "final_trade_decision",
-                        content=content,
-                        metadata={**meta, "risky_viewpoint": risky, "safe_viewpoint": safe, "neutral_viewpoint": neutral, "resources": _get_report_resources(chunk, "final_trade_decision")},
-                    )
-                    rec = final_recommendation or ""
-                    _progress_log(f"Final trade decision ready → {rec}")
+                    # Trader is the terminal node; the run ends here.
+                    _progress_log(f"Trader completed → {final_recommendation or ''} → analysis finished")
 
                 emit({
                     "type": "progress",

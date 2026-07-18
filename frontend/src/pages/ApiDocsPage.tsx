@@ -229,11 +229,12 @@ response = requests.get(f"${API_BASE_URL}/api/data/quote/AAPL")
 # {
 #   "report_date": "2026-03-03_10-30-00",
 #   "reports": {
-#     "final_trade_decision": {
+#     "investment_plan": {
 #       "recommendation": "BUY",
 #       "confidence": 0.85,
 #       "content": "..."
 #     },
+#     "trader_investment_plan": {...},
 #     "market_report": {...},
 #     "technical_report": {...}
 #   }
@@ -310,7 +311,7 @@ response = requests.get(f"${API_BASE_URL}/api/data/quote/AAPL")
 
           <CodeBlock
             section="complete-example"
-            code={'#!/usr/bin/env python3\n"""FlowDeck API Example"""\n\nimport requests\n\n# Configuration\nAPI_KEY = "fd_live_your_key_here"  # Get from Profile → API Keys\nBASE_URL = "' + API_BASE_URL + '"\n\nheaders = {\n    "Authorization": f"Bearer {API_KEY}",\n    "Content-Type": "application/json"\n}\n\n# 1. Get your profile\nprint("1. Getting profile...")\nresponse = requests.get(f"{BASE_URL}/api/me", headers=headers)\nprofile = response.json()\nprint(f"   Email: {profile[\'email\']}")\nprint(f"   Balance: {profile[\'token_balance\']} tokens")\n\n# 2. Get stock quote (public, no auth needed)\nprint("\\n2. Getting AAPL quote...")\nresponse = requests.get(f"{BASE_URL}/api/data/quote/AAPL")\nquote = response.json()\nprint(f"   Price: ${quote[\'current_price\']}")\nprint(f"   Change: {quote[\'daily_change_percent\']}%")\n\n# 3. Get AI analysis report\nprint("\\n3. Getting AI analysis for AAPL...")\nresponse = requests.get(\n    f"{BASE_URL}/api/data/reports/AAPL",\n    headers=headers\n)\nreports = response.json()\nif reports[\'report_date\']:\n    ftd = reports[\'reports\'].get(\'final_trade_decision\', {})\n    print(f"   Recommendation: {ftd.get(\'recommendation\', \'N/A\')}")\n    print(f"   Confidence: {ftd.get(\'confidence\', 0)*100:.0f}%")\nelse:\n    print("   No reports available yet")\n\n# 4. Chat with AI analyst\nprint("\\n4. Chatting with AI analyst...")\nresponse = requests.post(\n    f"{BASE_URL}/api/chat",\n    headers=headers,\n    json={\n        "messages": [\n            {"role": "user", "content": "What is AAPL\'s current price?"}\n        ]\n    }\n)\nchat = response.json()\nprint(f"   Reply: {chat[\'reply\'][:100]}...")\nprint(f"   Tokens used: {chat[\'tokens_used\']}")\nprint(f"   New balance: {chat[\'balance\']} tokens")\n\nprint("\\n✓ All requests completed successfully!")'}
+            code={'#!/usr/bin/env python3\n"""FlowDeck API Example"""\n\nimport requests\n\n# Configuration\nAPI_KEY = "fd_live_your_key_here"  # Get from Profile → API Keys\nBASE_URL = "' + API_BASE_URL + '"\n\nheaders = {\n    "Authorization": f"Bearer {API_KEY}",\n    "Content-Type": "application/json"\n}\n\n# 1. Get your profile\nprint("1. Getting profile...")\nresponse = requests.get(f"{BASE_URL}/api/me", headers=headers)\nprofile = response.json()\nprint(f"   Email: {profile[\'email\']}")\nprint(f"   Balance: {profile[\'token_balance\']} tokens")\n\n# 2. Get stock quote (public, no auth needed)\nprint("\\n2. Getting AAPL quote...")\nresponse = requests.get(f"{BASE_URL}/api/data/quote/AAPL")\nquote = response.json()\nprint(f"   Price: ${quote[\'current_price\']}")\nprint(f"   Change: {quote[\'daily_change_percent\']}%")\n\n# 3. Get AI analysis report\nprint("\\n3. Getting AI analysis for AAPL...")\nresponse = requests.get(\n    f"{BASE_URL}/api/data/reports/AAPL",\n    headers=headers\n)\nreports = response.json()\nif reports[\'report_date\']:\n    rec = reports[\'reports\'].get(\'investment_plan\', {})\n    print(f"   Recommendation: {rec.get(\'recommendation\', \'N/A\')}")\n    print(f"   Confidence: {rec.get(\'confidence\', 0)*100:.0f}%")\nelse:\n    print("   No reports available yet")\n\n# 4. Chat with AI analyst\nprint("\\n4. Chatting with AI analyst...")\nresponse = requests.post(\n    f"{BASE_URL}/api/chat",\n    headers=headers,\n    json={\n        "messages": [\n            {"role": "user", "content": "What is AAPL\'s current price?"}\n        ]\n    }\n)\nchat = response.json()\nprint(f"   Reply: {chat[\'reply\'][:100]}...")\nprint(f"   Tokens used: {chat[\'tokens_used\']}")\nprint(f"   New balance: {chat[\'balance\']} tokens")\n\nprint("\\n✓ All requests completed successfully!")'}
           />
         </section>
 
