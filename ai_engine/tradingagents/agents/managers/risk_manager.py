@@ -59,6 +59,7 @@ def create_risk_manager(llm, memory):
             "fundamentals_score": state.get("fundamentals_score"),
             "sec_score": state.get("sec_score"),
             "technical_score": state.get("technical_score"),
+            "valuation_score": state.get("valuation_score"),
             "recommendation_score": state.get("recommendation_score"),
         }
         available_scores = {
