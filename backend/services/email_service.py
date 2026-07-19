@@ -286,7 +286,7 @@ def _build_report_email_bodies(
     if recommendation:
         summary_lines.append(f"Recommendation: {recommendation}")
     if display_confidence is not None:
-        summary_lines.append(f"Confidence: {display_confidence:.1f}/5")
+        summary_lines.append(f"Confidence: {display_confidence:.0f}/5")
     # Add scores to text body
     if scores:
         summary_lines.append("")
@@ -297,7 +297,7 @@ def _build_report_email_bodies(
             if score is not None or score_label:
                 display_name = report_type.replace("_", " ").title()
                 if score is not None:
-                    summary_lines.append(f"  • {display_name}: {score:.1f}/5" + (f" ({score_label})" if score_label else ""))
+                    summary_lines.append(f"  • {display_name}: {score:.0f}/5" + (f" ({score_label})" if score_label else ""))
                 elif score_label:
                     summary_lines.append(f"  • {display_name}: {score_label}")
     
@@ -341,7 +341,7 @@ def _build_report_email_bodies(
                 
                 scores_list.append({
                     "name": display_name,
-                    "score": f"{score:.1f}",
+                    "score": f"{score:.0f}",
                     "label": score_label,
                     "color": score_color
                 })
@@ -395,7 +395,7 @@ def _build_report_email_bodies(
         html_body = template.render(
             ticker=ticker_upper,
             recommendation=recommendation,
-            confidence=f"{display_confidence:.1f}" if display_confidence is not None else None,
+            confidence=f"{display_confidence:.0f}" if display_confidence is not None else None,
             scores=scores_list if scores_list else None,
             key_insights=key_insights,
             bull_view=bull_view,
