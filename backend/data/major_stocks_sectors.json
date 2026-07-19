@@ -15,14 +15,6 @@
     "market_cap": 15939235840,
     "quote_type": "EQUITY"
   },
-  "AAC": {
-    "ticker": "AAC",
-    "name": "AAC",
-    "sector": null,
-    "industry": null,
-    "market_cap": null,
-    "quote_type": "NONE"
-  },
   "AAOI": {
     "ticker": "AAOI",
     "name": "Applied Optoelectronics, Inc.",
