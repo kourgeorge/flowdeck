@@ -1,3 +1,5 @@
+import json
+
 from langchain_core.tools import tool
 from typing import Annotated, Optional
 
@@ -10,6 +12,7 @@ from ...datasources.info_service_client import (
     get_polymarket_sentiment as get_polymarket_sentiment_via_service,
     require_info_service,
 )
+from .article_fetcher import enrich_articles_with_content
 
 
 def _format_polymarket_sentiment(ticker: str, data: Optional[dict]) -> str:
@@ -88,10 +91,26 @@ def get_news(
         start_date (str): Start date in yyyy-mm-dd format
         end_date (str): End date in yyyy-mm-dd format
     Returns:
-        str: A formatted string containing news data
+        str: A formatted string containing news data. When full-text fetching is
+             enabled, each article may include a ``content`` field with the
+             best-effort extracted article body (truncated). Articles behind
+             paywalls or that fail to fetch keep only their ``title``/``summary``.
     """
     require_info_service()
-    return get_news_via_service(ticker, start_date, end_date)
+    raw = get_news_via_service(ticker, start_date, end_date)
+
+    # Best-effort: enrich each article with its full body text. Scoped to this
+    # tool (the News & Sentiment analyst) only; the shared backend endpoint is
+    # untouched. Any failure degrades silently to headline + summary.
+    try:
+        data = json.loads(raw) if isinstance(raw, str) else raw
+        articles = data.get("articles") if isinstance(data, dict) else None
+        if isinstance(articles, list) and articles:
+            enrich_articles_with_content(articles)
+            return json.dumps(data)
+    except (json.JSONDecodeError, TypeError, AttributeError):
+        pass
+    return raw
 
 
 @tool

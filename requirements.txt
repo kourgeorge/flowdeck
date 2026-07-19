@@ -48,6 +48,7 @@ grip
 parsel
 requests
 beautifulsoup4
+trafilatura
 markdown
 
 # CLI / UX
