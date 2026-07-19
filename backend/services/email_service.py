@@ -329,14 +329,15 @@ def _build_report_email_bodies(
                 # Use consistent terminology with frontend
                 if display_name == "Investment Plan":
                     display_name = "Research"
-                # Color code based on score
-                score_color = "#64748b"  # default gray
-                if score >= 3.5:
-                    score_color = "#1e40af"  # website dark-blue
-                elif score >= 2.5:
-                    score_color = "#1e40af"  # website dark-blue
+                # Color code based on score (1-5 scale, matching the frontend tiers)
+                if score <= 1.5:
+                    score_color = "#dc2626"  # red-600 (Poor)
+                elif score <= 2.5:
+                    score_color = "#d97706"  # amber-600 (Fair)
+                elif score <= 3.5:
+                    score_color = "#2563eb"  # blue-600 (Good)
                 else:
-                    score_color = "#dc2626"  # red-600
+                    score_color = "#16a34a"  # green-600 (Excellent)
                 
                 scores_list.append({
                     "name": display_name,
