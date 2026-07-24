@@ -465,7 +465,7 @@ Content-Type: application/json
 
 If an analysis for that ticker+date is already running, the API returns its `analysis_run_id` and `"existing": true` (no extra token charge).
 
-Response (201):
+Response (200):
 ```json
 {
   "analysis_run_id": 123,
@@ -478,8 +478,11 @@ Response (201):
 Errors:
 - **400** – Missing ticker or invalid JSON
 - **402** – Insufficient token balance (need 200 tokens)
+- **404** – Ticker not found / unsupported
 
 The **initiator** (the user whose token is used) is notified by **email** when the report is ready.
+
+**Builds on prior runs:** When a ticker already has a completed run, each new analysis builds upon it rather than starting from scratch. Every report (per analyst aspect and the final recommendation) ends with a `## What changed since {date}` section that calls out what shifted versus the previous run — including any change in the directional recommendation (e.g. BUY → HOLD) and why. The response shape is unchanged; the "what changed" narrative lives inside each report's `content`.
 
 ### Get analysis status
 
@@ -496,10 +499,10 @@ Poll this until the analysis is complete, then the user can open the ticker page
 For real-time progress during a run:
 
 ```
-WS /ws/analyses/{analysis_run_id}
+WS /ws/analyses/{analysis_run_id}?token=YOUR_ACCESS_TOKEN
 ```
 
-Connect after starting the analysis to receive progress updates.
+Connect after starting the analysis to receive progress updates. The JWT/API key must be passed as the `token` query parameter (WebSockets can't set an `Authorization` header); the connection is closed with code **4001** if it is missing or invalid.
 
 ---
 
@@ -665,7 +668,8 @@ ANALYSIS_RUN_ID=$(echo $RESULT | jq -r '.analysis_run_id')
 
 # 5. Poll status until done
 while true; do
-  STATUS=$(curl -s "https://flowdeck.biz/api/analyses/$ANALYSIS_ID/status")
+  STATUS=$(curl -s "https://flowdeck.biz/api/analyses/$ANALYSIS_RUN_ID/status" \
+    -H "Authorization: Bearer $TOKEN")
   echo "$STATUS" | jq .
   if echo "$STATUS" | jq -e '.status == "completed" or .status == "failed"' >/dev/null 2>&1; then break; fi
   sleep 10
