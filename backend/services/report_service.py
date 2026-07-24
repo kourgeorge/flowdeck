@@ -322,6 +322,38 @@ class ReportService:
         """Return (execution_id, date_display) for the latest ticker run, or None."""
         return self.get_latest_execution("ticker", "ticker", ticker.upper())
 
+    def get_latest_completed_execution_for_ticker(
+        self, ticker: str, exclude_execution_id: Optional[int] = None
+    ) -> Optional[tuple[int, str]]:
+        """Return (execution_id, date_display) for the most recent COMPLETED ticker run.
+
+        Used to feed the previous run's reports into a new analysis so each aspect
+        builds upon prior work. Excludes the in-flight run and any running/failed runs.
+        """
+        db = SessionLocal()
+        try:
+            query = (
+                db.query(Execution.id, Execution.created_at)
+                .filter(
+                    Execution.execution_type == "ticker",
+                    Execution.subject_type == "ticker",
+                    Execution.subject_id == ticker.upper(),
+                    Execution.status == "completed",
+                )
+            )
+            if exclude_execution_id is not None:
+                query = query.filter(Execution.id != exclude_execution_id)
+            row = query.order_by(
+                Execution.created_at.desc(), Execution.id.desc()
+            ).first()
+            if not row:
+                return None
+            ex_id, created = row
+            date_display = created.strftime("%Y-%m-%d %H:%M") if created else str(ex_id)
+            return (ex_id, date_display)
+        finally:
+            db.close()
+
     def get_latest_widget_data_for_tickers(
         self, tickers: List[str]
     ) -> Dict[str, Dict[str, Any]]:

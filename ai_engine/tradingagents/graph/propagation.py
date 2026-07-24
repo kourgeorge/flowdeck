@@ -23,6 +23,8 @@ class Propagator:
             "company_of_interest": company_name,
             "trade_date": str(trade_date),
             "events_report": "",
+            "prior_reports": {},
+            "prior_analysis_date": "",
             "investment_debate_state": InvestDebateState(
                 {
                     "history": "",

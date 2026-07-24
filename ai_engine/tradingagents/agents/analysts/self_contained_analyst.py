@@ -142,12 +142,17 @@ def run_self_contained_analyst(
     current_date = state["trade_date"]
     ticker = state["company_of_interest"]
     
-    # Build prompt
+    # Build prompt. If a prior completed run seeded this aspect's report into state,
+    # pass it through so the analyst updates it instead of starting from scratch.
     tool_names = [t.name if hasattr(t, 'name') else t.__name__ for t in tools]
+    prior_report = (state.get("prior_reports") or {}).get(report_field) or None
+    prior_analysis_date = state.get("prior_analysis_date") or None
     prompt = prompt_builder(
         tool_names=tool_names,
         current_date=current_date,
         ticker=ticker,
+        prior_report=prior_report,
+        prior_analysis_date=prior_analysis_date,
     )
     
     # Initialize local message context

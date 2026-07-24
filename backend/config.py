@@ -71,6 +71,12 @@ BACKEND_URL = os.environ.get("BACKEND_URL", "").strip() or "http://127.0.0.1:800
 # Disabled by default; set WRITE_AI_REPORTS_TO_RESULTS=true to enable.
 WRITE_AI_REPORTS_TO_RESULTS = os.environ.get("WRITE_AI_REPORTS_TO_RESULTS", "false").strip().lower() in ("1", "true", "yes")
 
+# Whether each analysis run should build upon the previous completed run for the
+# same ticker: each aspect-agent receives its own prior report and produces an
+# updated, standalone report with a "What changed since {date}" section.
+# Enabled by default; set BUILD_ON_PRIOR_ANALYSIS=false to force from-scratch runs.
+BUILD_ON_PRIOR_ANALYSIS = os.environ.get("BUILD_ON_PRIOR_ANALYSIS", "true").strip().lower() in ("1", "true", "yes")
+
 # Chat token conversion: N LLM tokens = 1 platform token. User balance is in platform tokens.
 # Set LLM_TOKENS_PER_PLATFORM_TOKEN (e.g. 10000) to configure. Default: 10000.
 def _parse_llm_tokens_per_platform() -> int:

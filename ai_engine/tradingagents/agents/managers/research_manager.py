@@ -75,6 +75,26 @@ def create_research_manager(llm, memory):
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
 
+        # Build on the prior investment plan for this ticker (cumulative continuity).
+        # The prior plan is seeded into state["prior_reports"] alongside the analyst reports;
+        # here the fresh inputs are the CURRENT analyst reports + debate (not tool calls).
+        prior_plan = (state.get("prior_reports") or {}).get("investment_plan")
+        prior_date = state.get("prior_analysis_date") or "your previous analysis"
+        prior_plan_block = ""
+        if prior_plan and prior_plan.strip():
+            prior_plan_block = f"""
+
+## BUILD ON YOUR PRIOR INVESTMENT PLAN
+Below is YOUR prior investment plan for this ticker from {prior_date} — your standing thesis and recommendation. The analyst reports and debate in this prompt are the CURRENT, fresh inputs.
+- Carry forward the parts of the thesis that still hold; update or reverse them where the current analysis and debate have changed the picture. Treat the prior plan as a PRIOR, not a commitment.
+- Produce a COMPLETE, self-contained investment plan for today written as a standalone narrative — do NOT write it as a diff.
+- Close with a SHORT note on what changed since {prior_date}, explicitly calling out any change in the directional recommendation (e.g. BUY → HOLD) and the reason for it.
+
+--- BEGIN YOUR PRIOR INVESTMENT PLAN ({prior_date}) ---
+{prior_plan}
+--- END YOUR PRIOR INVESTMENT PLAN ---
+"""
+
         prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate between the Bull, Bear, and Neutral analysts and make an honest directional call: align with the bear analyst (bearish/sell), the bull analyst (bullish/buy), or take the neutral/hold stance when the evidence is genuinely mixed, uncertain, or when the risk/reward does not clearly favor action.
 
 Summarize the key points from all three sides concisely, focusing on the most compelling evidence or reasoning. Weigh the Neutral analyst's balanced perspective when reconciling the bull and bear cases. Your directional stance must be clear and actionable for the Trader. Avoid defaulting to hold-bias simply because both sides have valid points; commit to a stance grounded in the debate's strongest arguments. That said, a HOLD is the right call when signals are genuinely conflicting, conviction is low, or the risk/reward does not clearly favor entering or exiting a position.
@@ -117,7 +137,7 @@ Here are your past reflections on mistakes:
 
 Deterministic event context:
 {events_report if events_report else "No deterministic event summary available."}
-
+{prior_plan_block}
 Here is the debate:
 Debate History:
 {history}"""

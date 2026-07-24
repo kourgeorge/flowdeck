@@ -1,5 +1,7 @@
 import functools
 import json
+import logging
+import re
 from pathlib import Path
 from typing import List, Literal, Optional, Union
 from langchain_core.messages import AIMessage, BaseMessage
@@ -7,6 +9,9 @@ from pydantic import BaseModel, Field
 
 from ..analysts.helpers import _UsageCaptureCallback, _capture_usage
 from ..utils.trace_utils import make_agent_step
+from ...datasources.info_service_client import get_quote, require_info_service
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -149,11 +154,91 @@ def _tps_to_json(plan: TpsPlan) -> str:
     return json.dumps(d, indent=2, ensure_ascii=False)
 
 
+def _leading_float(value) -> Optional[float]:
+    """Extract the first numeric value from a TPS field (number or string like '135.00 ±1%')."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    match = re.search(r"-?\d+(?:\.\d+)?", str(value))
+    return float(match.group()) if match else None
+
+
+# Entry this far from the live price almost always means the plan was anchored on a
+# stale/remembered price rather than a deliberate pullback/breakout entry.
+_STALE_ENTRY_DEVIATION = 0.30
+
+
+def _tps_sanity_warnings(plan: "TpsPlan", current_price: Optional[float]) -> List[str]:
+    """Flag TPS levels that are internally incoherent or detached from the live price.
+
+    Safety net behind the price injection. It does NOT require the entry to be at/below
+    the current price — a pullback or breakout entry is legitimate. It only flags:
+      * internal incoherence (long: stop<entry<target; short: stop>entry>target), and
+      * an entry so far from the current price it looks like a stale-price anchor.
+    Returns human-readable warnings (empty when coherent or price/plan unavailable).
+    """
+    warnings: List[str] = []
+    if plan is None:
+        return warnings
+    try:
+        side = plan.side
+        entry = _leading_float(plan.entry.near) if plan.entry else None
+        stop = plan.risk.stop if plan.risk else None
+        tp1 = _leading_float(plan.take_profit.tp1) if plan.take_profit else None
+    except Exception:
+        return warnings
+
+    # Internal coherence (independent of the current price).
+    if side == "long":
+        if entry is not None and stop is not None and stop >= entry:
+            warnings.append(f"long stop {stop:g} is not below entry {entry:g}")
+        if entry is not None and tp1 is not None and tp1 <= entry:
+            warnings.append(f"long take-profit tp1 {tp1:g} is not above entry {entry:g}")
+    elif side == "short":
+        if entry is not None and stop is not None and stop <= entry:
+            warnings.append(f"short stop {stop:g} is not above entry {entry:g}")
+        if entry is not None and tp1 is not None and tp1 >= entry:
+            warnings.append(f"short take-profit tp1 {tp1:g} is not below entry {entry:g}")
+
+    # Detached-from-reality check (only a very large gap — normal pullbacks are fine).
+    if current_price and entry is not None:
+        deviation = abs(entry - current_price) / current_price
+        if deviation > _STALE_ENTRY_DEVIATION:
+            warnings.append(
+                f"entry {entry:g} is {deviation * 100:.0f}% from current price "
+                f"{current_price:g} (possible stale-price anchor)"
+            )
+    return warnings
+
+
 def create_trader(llm, memory):
     def trader_node(state, name):
         company_name = state["company_of_interest"]
         investment_plan = state["investment_plan"]
         events_report = state.get("events_report", "")
+
+        # Ground the trade plan in the live price. Without this the Trader (which has no
+        # tools) invents entry/stop/take-profit levels anchored on stale/remembered prices.
+        current_price = None
+        price_line = (
+            "CURRENT MARKET PRICE: unavailable — do NOT invent price levels; base any "
+            "levels only on prices explicitly stated in the investment plan below."
+        )
+        try:
+            require_info_service()
+            quote = get_quote(company_name) or {}
+            cp = quote.get("current_price")
+            if cp is not None:
+                current_price = float(cp)
+                currency = (quote.get("currency") or "").strip()
+                as_of = quote.get("last_update_time")
+                price_line = (
+                    f"CURRENT MARKET PRICE: {current_price:g} {currency}".rstrip()
+                    + (f" (as of {as_of})" if as_of else "")
+                )
+        except Exception as e:
+            logger.warning(f"[Trader] Could not fetch current quote for {company_name}: {e}")
 
         # Build memory similarity key from all available reports (not re-fed to LLM — already synthesized in investment_plan)
         curr_situation = investment_plan
@@ -173,6 +258,7 @@ def create_trader(llm, memory):
                 f"tailored for {company_name}. This plan incorporates insights from current technical "
                 f"market trends, macroeconomic indicators, and social media sentiment. Use this plan as "
                 f"a foundation for evaluating your next trading decision.\n\n"
+                f"{price_line}\n\n"
                 f"Deterministic event summary:\n{events_report or 'No deterministic event summary available.'}\n\n"
                 f"Proposed Investment Plan: {investment_plan}\n\n"
                 f"Leverage these insights to make an informed and strategic decision."
@@ -193,7 +279,12 @@ def create_trader(llm, memory):
                     f"entry.near (entry price as a number, or price-band string like '123.45 ±1%'), "
                     f"risk.stop (hard stop price as a number), risk.max_loss (default '1%'). "
                     f"Add optional fields only when you can infer them from the analysis. "
-                    f"Never fabricate prices.\n"
+                    f"Never fabricate prices. Anchor every level to the CURRENT MARKET PRICE given in the "
+                    f"user message — do NOT use stale or remembered prices. YOU decide the entry based on "
+                    f"your strategy: it may be at, above, or below the current price (e.g. a limit entry on "
+                    f"a pullback is perfectly valid) — just state the reasoning. Keep the plan internally "
+                    f"coherent: for a long, stop below entry and take-profit above entry; for a short, "
+                    f"mirror this.\n"
                     f"4) key_takeaways: 3-5 one-sentence trader takeaways.\n\n"
                     f"Do not forget to utilize lessons from past decisions to learn from your mistakes. "
                     f"Here are some reflections from similar situations you traded in and the lessons learned: "
@@ -205,6 +296,7 @@ def create_trader(llm, memory):
 
         recommendation = None
         tps_plan_yaml = ""
+        tps_sanity_warnings: List[str] = []
         usage_meta = None
         usage_cb = _UsageCaptureCallback()
         try:
@@ -219,6 +311,12 @@ def create_trader(llm, memory):
             tps_obj = getattr(structured_response, "tps_plan", None)
             if tps_obj is not None:
                 tps_plan_yaml = _tps_to_json(tps_obj)
+                tps_sanity_warnings = _tps_sanity_warnings(tps_obj, current_price)
+                if tps_sanity_warnings:
+                    logger.warning(
+                        f"[Trader] TPS plan for {company_name} may be inconsistent "
+                        f"(current price {current_price}): {'; '.join(tps_sanity_warnings)}"
+                    )
             trader_key_takeaways = list(
                 getattr(structured_response, "key_takeaways", None) or []
             )[:5]
@@ -261,6 +359,8 @@ def create_trader(llm, memory):
                             "recommendation": recommendation,
                             "tps_plan": tps_plan_yaml or None,
                             "key_takeaways": trader_key_takeaways,
+                            "current_price": current_price,
+                            "tps_sanity_warnings": tps_sanity_warnings or None,
                         },
                     )
                 ]

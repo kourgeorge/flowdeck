@@ -661,6 +661,35 @@ class AnalysisService:
 
             # Initialize state
             init_agent_state = graph.propagator.create_initial_state(ticker, analysis_date)
+
+            # Build upon the previous completed run for this ticker: seed each aspect's
+            # prior report so the analysts produce an updated, standalone report with a
+            # "What changed since {date}" section instead of starting from scratch.
+            try:
+                from config import BUILD_ON_PRIOR_ANALYSIS
+                if BUILD_ON_PRIOR_ANALYSIS:
+                    from services.report_service import ReportService
+                    _rs = ReportService()
+                    prior = _rs.get_latest_completed_execution_for_ticker(
+                        ticker, exclude_execution_id=analysis_run_id
+                    )
+                    if prior:
+                        prev_id, prev_date = prior
+                        prev_reports = _rs.get_reports_for_run(prev_id) or {}
+                        # Keep only non-empty report content
+                        prev_reports = {
+                            k: v for k, v in prev_reports.items() if (v or "").strip()
+                        }
+                        if prev_reports:
+                            init_agent_state["prior_reports"] = prev_reports
+                            init_agent_state["prior_analysis_date"] = prev_date
+                            logger.info(
+                                f"[{ticker}] Building upon prior run {prev_id} "
+                                f"({prev_date}); {len(prev_reports)} prior reports seeded"
+                            )
+            except Exception as e:
+                logger.warning(f"[{ticker}] Could not load prior analysis to build upon: {e}")
+
             # Use analysis_run_id as session_id to maintain context across all requests in this execution
             session_id = f"analysis-{analysis_run_id}"
             args = graph.propagator.get_graph_args(session_id=session_id)

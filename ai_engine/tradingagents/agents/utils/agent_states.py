@@ -134,6 +134,11 @@ class AgentState(TypedDict):
     trade_date: Annotated[str, "What date we are trading at"]
     events_report: Annotated[str, "Deterministic event summary for the ticker"]
 
+    # Prior-run continuity: reports from the most recent completed run for this ticker,
+    # keyed by report_type (e.g. "market_report"). Read-only; agents build upon these.
+    prior_reports: Annotated[Dict[str, str], "Previous completed run's reports by report_type"]
+    prior_analysis_date: Annotated[str, "Display date of the previous completed run being built upon"]
+
     sender: Annotated[str, "Agent that sent this message"]
 
     # Temporary isolated message contexts for analysts (not shared between analysts)
