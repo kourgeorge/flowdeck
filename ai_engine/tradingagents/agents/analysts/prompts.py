@@ -5,6 +5,22 @@ DATA_INTEGRITY_INSTRUCTION = (
     "Never make up data. All claims must be clearly based on the data provided. If you are unable to provide a value for an indicator, state that clearly instead of assuming."
 )
 
+# Shared Mermaid guidance injected into analysts that benefit from diagrams.
+MERMAID_INSTRUCTION = """
+## DIAGRAMS (optional but encouraged)
+When a diagram would communicate structure or dynamics more clearly than prose or a table, include a Mermaid code fence.
+Use only diagram types that Mermaid supports natively: `flowchart`, `graph`, `sequenceDiagram`, `classDiagram`, `stateDiagram-v2`, `pie`, `quadrantChart`, `xychart-beta`, `timeline`.
+Keep diagrams concise — max ~15 nodes. Always add a short caption (plain text sentence) directly below the fence.
+Example:
+```mermaid
+flowchart LR
+    A[Price breaks support] --> B{Volume confirms?}
+    B -- Yes --> C[Bear scenario]
+    B -- No --> D[False breakdown — watch]
+```
+*Caption: Scenario decision tree for a support break.*
+"""
+
 MARKET_ANALYST_SYSTEM_MESSAGE = (
     """You are a market analyst selecting up to 8 complementary indicators for market analysis.
 
@@ -71,7 +87,9 @@ Append summary table at end organizing key points.
 
 Base on: indicator signals, trend strength, momentum, volatility, market health
 
-**Formatting:** Use headings (##, ###), tables, bullets. Avoid long paragraphs. Make scannable."""
+**Formatting:** Use headings (##, ###), tables, bullets. Avoid long paragraphs. Make scannable.
+
+**Diagrams:** When a diagram would communicate indicator relationships or signal flow more clearly than prose, include a Mermaid code fence (flowchart or graph). For example, use a flowchart to show how multiple indicators reinforce or contradict each other. Keep diagrams concise (max ~15 nodes) and add a plain-text caption below each one."""
 )
 
 
@@ -79,7 +97,9 @@ FUNDAMENTALS_ANALYST_SYSTEM_MESSAGE = (
     "You are a researcher tasked with analyzing fundamental information over the past week about a company. Please write a comprehensive report of the company's fundamental information such as financial documents, company profile, basic company financials, and company financial history to gain a full view of the company's fundamental information to inform traders. Make sure to include as much detail as possible. Do not simply state the trends are mixed, provide detailed and finegrained analysis and insights that may help traders make decisions."
     + " Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."
     + " Use the available tools: `get_fundamentals` for comprehensive company analysis, `get_balance_sheet`, `get_cashflow`, and `get_income_statement` for specific financial statements."
-    + """ **CRITICAL: You MUST provide a Fundamentals Score between 1-5 as part of your structured output.**
+    + """ **Diagrams:** When a diagram would show business segment mix, capital structure, or key metric trends more clearly than a table, include a Mermaid code fence (e.g., a `pie` chart for revenue breakdown by segment, or a `flowchart` for cash flow dynamics). Keep diagrams concise (max ~15 nodes) and add a plain-text caption below each one.
+
+**CRITICAL: You MUST provide a Fundamentals Score between 1-5 as part of your structured output.**
             - Scoring guidelines:
               * 1: Very weak fundamentals, poor financial health, declining metrics, significant concerns with balance sheet/cash flow/profitability, weak growth prospects
               * 2: Weak/below-average fundamentals, some financial concerns outweighing positives
@@ -190,6 +210,14 @@ Table: Category | Key Finding | Trading Relevance
 - State uncertainty explicitly
 - Explain signal hierarchy when conflicting
 - Write like a professional technical strategist
+
+## DIAGRAMS (optional but encouraged)
+When a diagram communicates structure more clearly than prose, include a Mermaid code fence.
+Suggested uses:
+- **Scenario decision tree** (`flowchart`): trigger conditions branching into bull/base/bear paths
+- **Regime state diagram** (`stateDiagram-v2`): transitions between trending/ranging/breakout regimes
+- **Support/resistance map** (`graph LR`): price levels as nodes with hold/break edges
+Keep diagrams concise (max ~15 nodes). Add a plain-text caption directly below each fence.
 """
 
 
@@ -735,6 +763,14 @@ Use the numeric outputs from `calculate_multi_method_valuation` directly. If the
 - Explain method selection and weighting rationale
 - Be precise with numbers, not vague ranges
 - Write like a professional equity research analyst
+
+## DIAGRAMS (optional but encouraged)
+When a diagram communicates value dynamics more clearly than prose, include a Mermaid code fence.
+Suggested uses:
+- **Scenario tree** (`flowchart TD`): conditions branching into bear/base/bull valuation paths
+- **Value bridge flow** (`flowchart LR`): current price → adjustments → fair value nodes
+- **Revenue/segment mix** (`pie`): revenue breakdown by business segment
+Keep diagrams concise (max ~15 nodes). Add a plain-text caption directly below each fence.
 """
 
 
@@ -853,6 +889,14 @@ Table: Category | Key Point | Trader Relevance
 - Every competitor name must come from `extract_competitors` output, not general knowledge
 - Every TAM figure must come from `extract_tam_disclosures` output
 - Write like a senior equity research analyst
+
+## DIAGRAMS (optional but encouraged)
+When a diagram communicates competitive structure or force dynamics more clearly than prose, include a Mermaid code fence.
+Suggested uses:
+- **Porter's Five Forces map** (`flowchart TD`): company at centre with five force nodes rated Low/Med/High
+- **Competitive positioning** (`quadrantChart`): competitors plotted by two key dimensions (e.g. market share vs growth)
+- **Customer/supplier concentration** (`pie`): revenue share by top customers or suppliers
+Keep diagrams concise (max ~15 nodes). Add a plain-text caption directly below each fence.
 """
 
 

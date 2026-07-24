@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import MermaidBlock from './MermaidBlock';
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line, ScatterChart, Scatter,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -706,7 +707,12 @@ export function MessageBubble({
                   li: ({ node, ...props }) => <li className="text-slate-100 text-sm" {...props} />,
                   strong: ({ node, ...props }) => <strong className="font-semibold text-white" {...props} />,
                   em: ({ node, ...props }) => <em className="italic text-slate-200" {...props} />,
-                  code: ({ node, ...props }) => <code className="bg-slate-800 px-1 py-0.5 rounded text-xs text-green-400 font-mono" {...props} />,
+                  code: ({ node, className, children, ...props }) => {
+                    if (className === 'language-mermaid') {
+                      return <MermaidBlock code={String(children).trim()} />;
+                    }
+                    return <code className="bg-slate-800 px-1 py-0.5 rounded text-xs text-green-400 font-mono" {...props}>{children}</code>;
+                  },
                   h1: ({ node, ...props }) => <h1 className="text-base font-bold text-white mb-2 mt-3 first:mt-0" {...props} />,
                   h2: ({ node, ...props }) => <h2 className="text-sm font-bold text-white mb-1.5 mt-3 first:mt-0" {...props} />,
                   h3: ({ node, ...props }) => <h3 className="text-sm font-semibold text-slate-200 mb-1 mt-2 first:mt-0" {...props} />,

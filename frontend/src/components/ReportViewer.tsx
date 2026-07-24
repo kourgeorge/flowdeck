@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import TpsPlanCard from './TpsPlanCard';
 import { useAuth } from '../contexts/AuthContext';
+import MermaidBlock from './MermaidBlock';
 
 export interface ReportResource {
   type?: string;
@@ -845,9 +846,12 @@ export default function ReportViewer({ content, score, scoreLabel, keyTakeaways,
             ol: ({ node, ...props }) => <ol className="list-decimal list-outside pl-6 text-slate-300 mb-4 space-y-2" {...props} />,
             li: ({ node, ...props }) => <li className="text-slate-300" {...props} />,
             strong: ({ node, ...props }) => <strong className="font-semibold text-white" {...props} />,
-            code: ({ node, ...props }) => (
-              <code className="bg-slate-900 px-2 py-1 rounded text-sm text-green-400" {...props} />
-            ),
+            code: ({ node, className, children, ...props }) => {
+              if (className === 'language-mermaid') {
+                return <MermaidBlock code={String(children).trim()} />;
+              }
+              return <code className="bg-slate-900 px-2 py-1 rounded text-sm text-green-400" {...props}>{children}</code>;
+            },
             pre: ({ node, ...props }) => (
               <pre className="bg-slate-900 p-4 rounded-lg overflow-x-auto mb-4" {...props} />
             ),
