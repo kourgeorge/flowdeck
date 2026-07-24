@@ -1,9 +1,53 @@
+from typing import Optional
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 # Shared instruction for all pipeline agents: no fabricated data; all claims must be grounded in provided data.
 DATA_INTEGRITY_INSTRUCTION = (
     "Never make up data. All claims must be clearly based on the data provided. If you are unable to provide a value for an indicator, state that clearly instead of assuming."
 )
+
+
+def _build_prior_analysis_instruction(prior_report: str, prior_analysis_date: str) -> str:
+    """Instruction block appended when a previous run's report for this ticker exists.
+
+    The prior report is the accumulated knowledge base for this stock. The agent uses
+    it as its existing understanding: it decides what to build upon and what fresh data
+    it still needs to gather, then writes a COMPLETE standalone narrative for the current
+    date. Before writing, it performs an explicit reflection step comparing the fresh
+    data against the prior report, and it MUST close with a substantive, mandatory
+    "What changed" section (which, across runs, forms a "changes chain"). The prior is
+    treated as a prior, not ground truth.
+    """
+    date_label = prior_analysis_date or "your previous analysis"
+    return f"""
+
+## BUILD ON YOUR ACCUMULATED KNOWLEDGE OF THIS STOCK
+Below is YOUR own prior analysis of this ticker from {date_label}. It is your accumulated understanding of this stock — your starting knowledge, not a document to diff against.
+
+Work from it like an analyst updating an ongoing coverage note:
+- Treat it as what you already knew as of {date_label}. Decide what has likely changed since then and what fresh data you need to pull with your tools to confirm, update, or extend it.
+- Carry forward what still holds, gather what is new, and correct what has become stale. Independently re-verify time-sensitive/live values (current price, latest news, recent filings) — the prior analysis is a PRIOR, not ground truth.
+- Write a COMPLETE, self-contained analysis for today as a flowing standalone narrative. A reader seeing ONLY this report must get the full current picture. Do NOT open with a changelog and do NOT write the body of the report as a diff or a list of changes.
+
+### REFLECTION STEP (do this before writing the report)
+After you have gathered fresh data and BEFORE composing the final narrative, explicitly reflect on how the picture has changed since {date_label}. Go through your prior analysis point by point and ask:
+- Which of my prior conclusions still hold, which are now WRONG or STALE, and which are STRENGTHENED or WEAKENED by the new data?
+- What are the material MOVES since then — in the numbers (price, key metrics/indicators, estimates), the narrative (news, catalysts, sentiment), and the risks?
+- For each material change: what MOVED, in which DIRECTION, by roughly HOW MUCH, and WHY does it matter for the thesis or score?
+- Did my score/stance shift versus last time, and what specifically drove that shift?
+Use this reflection to inform the whole report — then distil it into the mandatory closing section below.
+
+### MANDATORY CLOSING SECTION — "What changed since {date_label}"
+Every report MUST end with a clearly-titled section "## What changed since {date_label}". This section is REQUIRED, not optional, and is the single place where you explicitly call out changes versus your prior analysis. It must be substantive:
+- Lead with a one-line verdict on the overall direction of travel since {date_label} (e.g. thesis strengthening / deteriorating / broadly unchanged), and note how your score moved versus last time and why.
+- Then give a short bulleted list of the concrete material changes — each bullet naming what moved, the direction, the rough magnitude, and why it matters. Prefer specific numbers over vague adjectives.
+- Explicitly flag any prior conclusion that turned out to be wrong or has gone stale, and how you corrected it.
+- If genuinely little has changed, say so explicitly and briefly justify WHY (e.g. no new catalysts, metrics flat) — do not pad, but do not silently omit the section.
+
+--- BEGIN YOUR PRIOR ANALYSIS ({date_label}) ---
+{prior_report}
+--- END YOUR PRIOR ANALYSIS ---
+"""
 
 # Shared Mermaid guidance injected into analysts that benefit from diagrams.
 MERMAID_INSTRUCTION = """
@@ -414,7 +458,7 @@ For each method:
 - Compare to the real peer group returned by `get_peer_comparables`
 - Apply appropriate multiple to forward metrics
 - Justify any premium/discount to peers
-- Never invent placeholder rows such as "Peer 1" or "Peer 2"
+- **CRITICAL: Use the actual `ticker` and `name` fields from `get_peer_comparables` output for every peer row — never use generic labels like "Peer 1" or "Peer 2"**
 - If fewer than 3 valid peers are returned, explicitly state that the peer set is limited and use only the returned peers
 
 ### 2. Discounted Cash Flow (DCF)
@@ -542,10 +586,13 @@ The tool uses **dynamic deltas** based on actual uncertainty:
 Show how fair value changes with these key variables and their specific deltas.
 
 ### 6. Peer Comparison
+Use the `ticker` and `name` fields returned by `get_peer_comparables` for every row.
+Do NOT use generic labels — each peer row must show the real company name/ticker from the tool output.
+
 | Company | P/E | EV/EBITDA | P/S | Growth | Margin |
 |---------|-----|-----------|-----|--------|--------|
-| [Ticker] | Xx | Xx | Xx | X% | X% |
-| Peer 1 | Xx | Xx | Xx | X% | X% |
+| [Target ticker] | Xx | Xx | Xx | X% | X% |
+| [Peer ticker — from get_peer_comparables] | Xx | Xx | Xx | X% | X% |
 | Peer Avg | Xx | Xx | Xx | X% | X% |
 
 Justify premium/discount based on growth, margins, quality.
@@ -906,16 +953,25 @@ def _build_prompt(
     tool_names: list[str],
     current_date: str,
     ticker: str,
+    prior_report: Optional[str] = None,
+    prior_analysis_date: Optional[str] = None,
 ) -> ChatPromptTemplate:
     """
     Build a properly structured prompt with:
     1. System message with data integrity instruction at the top
     2. Explicit user task message
     3. Message placeholder for conversation history
+
+    When prior_report is provided, a "build upon prior analysis" block is appended
+    so the agent updates the previous run's report instead of starting from scratch.
     """
     # Put DATA_INTEGRITY_INSTRUCTION at the START for visibility
     full_system_message = DATA_INTEGRITY_INSTRUCTION + "\n\n" + system_message
-    
+    if prior_report and prior_report.strip():
+        full_system_message += _build_prior_analysis_instruction(
+            prior_report, prior_analysis_date or ""
+        )
+
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", full_system_message),
@@ -931,66 +987,84 @@ def _build_prompt(
 
 
 def build_market_analyst_prompt(
-    tool_names: list[str], current_date: str, ticker: str
+    tool_names: list[str], current_date: str, ticker: str,
+    prior_report: Optional[str] = None, prior_analysis_date: Optional[str] = None,
 ) -> ChatPromptTemplate:
     return _build_prompt(
         system_message=MARKET_ANALYST_SYSTEM_MESSAGE,
         tool_names=tool_names,
         current_date=current_date,
         ticker=ticker,
+        prior_report=prior_report,
+        prior_analysis_date=prior_analysis_date,
     )
 
 
 def build_fundamentals_analyst_prompt(
-    tool_names: list[str], current_date: str, ticker: str
+    tool_names: list[str], current_date: str, ticker: str,
+    prior_report: Optional[str] = None, prior_analysis_date: Optional[str] = None,
 ) -> ChatPromptTemplate:
     return _build_prompt(
         system_message=FUNDAMENTALS_ANALYST_SYSTEM_MESSAGE,
         tool_names=tool_names,
         current_date=current_date,
         ticker=ticker,
+        prior_report=prior_report,
+        prior_analysis_date=prior_analysis_date,
     )
 
 
 def build_technical_analyst_prompt(
-    tool_names: list[str], current_date: str, ticker: str
+    tool_names: list[str], current_date: str, ticker: str,
+    prior_report: Optional[str] = None, prior_analysis_date: Optional[str] = None,
 ) -> ChatPromptTemplate:
     return _build_prompt(
         system_message=TECHNICAL_ANALYST_SYSTEM_MESSAGE,
         tool_names=tool_names,
         current_date=current_date,
         ticker=ticker,
+        prior_report=prior_report,
+        prior_analysis_date=prior_analysis_date,
     )
 
 
 def build_social_media_analyst_prompt(
-    tool_names: list[str], current_date: str, ticker: str
+    tool_names: list[str], current_date: str, ticker: str,
+    prior_report: Optional[str] = None, prior_analysis_date: Optional[str] = None,
 ) -> ChatPromptTemplate:
     return _build_prompt(
         system_message=SOCIAL_MEDIA_ANALYST_SYSTEM_MESSAGE,
         tool_names=tool_names,
         current_date=current_date,
         ticker=ticker,
+        prior_report=prior_report,
+        prior_analysis_date=prior_analysis_date,
     )
 
 
 def build_sec_analyst_prompt(
-    tool_names: list[str], current_date: str, ticker: str
+    tool_names: list[str], current_date: str, ticker: str,
+    prior_report: Optional[str] = None, prior_analysis_date: Optional[str] = None,
 ) -> ChatPromptTemplate:
     return _build_prompt(
         system_message=SEC_ANALYST_SYSTEM_MESSAGE,
         tool_names=tool_names,
         current_date=current_date,
         ticker=ticker,
+        prior_report=prior_report,
+        prior_analysis_date=prior_analysis_date,
     )
 
 
 def build_valuation_analyst_prompt(
-    tool_names: list[str], current_date: str, ticker: str
+    tool_names: list[str], current_date: str, ticker: str,
+    prior_report: Optional[str] = None, prior_analysis_date: Optional[str] = None,
 ) -> ChatPromptTemplate:
     return _build_prompt(
         system_message=VALUATION_ANALYST_SYSTEM_MESSAGE,
         tool_names=tool_names,
         current_date=current_date,
         ticker=ticker,
+        prior_report=prior_report,
+        prior_analysis_date=prior_analysis_date,
     )
