@@ -20,6 +20,31 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
+# sec2md: deterministic SEC filing -> markdown + PART/ITEM section extraction.
+# Guarded so the service still imports (and falls back to LLM extraction) if absent.
+try:
+    import sec2md
+
+    _SEC2MD_AVAILABLE = True
+except Exception as _sec2md_err:  # pragma: no cover - import environment issue
+    sec2md = None  # type: ignore[assignment]
+    _SEC2MD_AVAILABLE = False
+    logging.getLogger(__name__).warning(
+        "sec2md unavailable (%s); EDGAR extraction will use LLM fallback only", _sec2md_err
+    )
+
+# Section keys returned to callers (the output contract - do not change).
+# `competition` has no own ITEM (it is a subsection of Business/Item 1) and is
+# folded into business_overview on the sec2md path; the LLM fallback still fills it.
+SECTION_KEYS = (
+    "risk_factors",
+    "management_mda",
+    "competition",
+    "business_overview",
+    "legal_proceedings",
+    "market_risk_disclosures",
+)
+
 SEC_COMPANY_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 SEC_ARCHIVES_BASE = "https://www.sec.gov/Archives/edgar/data"
@@ -128,39 +153,84 @@ class EdgarService:
     def _get_headers_html(self) -> Dict[str, str]:
         return {"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml"}
 
-    def _fetch_document_text(self, url: str, truncate: bool = True) -> str:
-        """
-        Fetch document at URL, strip XBRL markup, extract text with BeautifulSoup,
-        skip to narrative, optionally truncate.
-        
-        Args:
-            url: SEC document URL
-            truncate: If True, truncate to MAX_DOCUMENT_TEXT_CHARS (100K chars).
-                     If False, return full text for agent exploration.
-        
-        Returns:
-            Cleaned document text (empty string on failure)
-        """
+    def _fetch_raw_html(self, url: str) -> str:
+        """Fetch raw filing HTML at URL (throttled, SEC User-Agent). Empty string on failure."""
         if not url:
             return ""
         self._throttle()
         try:
             r = requests.get(url, headers=self._get_headers_html(), timeout=30)
             r.raise_for_status()
-            raw = r.text
+            return r.text
         except Exception as e:
             logger.warning("Failed to fetch SEC document %s: %s", url[:80], e)
             return ""
-        # All formatting and parsing steps maintained
+
+    @staticmethod
+    def _html_to_text(raw: str, truncate: bool = True) -> str:
+        """Strip XBRL markup, flatten HTML to text with BeautifulSoup, skip to narrative, optionally truncate."""
+        if not raw:
+            return ""
         raw = _strip_xbrl_markup(raw)
         soup = BeautifulSoup(raw, "html.parser")
         text = soup.get_text(separator="\n", strip=True)
         text = _skip_to_narrative(text)
-        # Truncation depends on parameter
         if truncate:
             return _truncate(text, MAX_DOCUMENT_TEXT_CHARS)
+        return text  # Full text for exploration
+
+    def _fetch_document_text(self, url: str, truncate: bool = True) -> str:
+        """Fetch document at URL and convert to cleaned narrative text. Empty string on failure."""
+        return self._html_to_text(self._fetch_raw_html(url), truncate=truncate)
+
+    def _extract_sections_sec2md(self, raw_html: str, form_type: str) -> Optional[Dict[str, Any]]:
+        """
+        Deterministic ITEM-based section extraction via sec2md (no LLM).
+
+        Reuses HTML we already fetched (convert_to_markdown, not parse_filing, so our
+        throttle/User-Agent apply). Returns a sections dict, or None to signal the
+        caller should fall back to LLM extraction (sec2md unavailable, parse error,
+        or no items detected - e.g. older/non-standard filers).
+        """
+        if not _SEC2MD_AVAILABLE or sec2md is None or not raw_html:
+            return None
+        if form_type == "10-K":
+            item_map = {
+                "risk_factors": sec2md.Item10K.RISK_FACTORS,            # 1A
+                "management_mda": sec2md.Item10K.MD_AND_A,              # 7
+                "business_overview": sec2md.Item10K.BUSINESS,           # 1 (incl. competition subsection)
+                "legal_proceedings": sec2md.Item10K.LEGAL_PROCEEDINGS,  # 3
+                "market_risk_disclosures": sec2md.Item10K.MARKET_RISK,  # 7A
+            }
+        elif form_type == "10-Q":
+            item_map = {
+                "risk_factors": sec2md.Item10Q.RISK_FACTORS_P2,             # 1A.P2
+                "management_mda": sec2md.Item10Q.MD_AND_A_P1,               # 2.P1
+                "legal_proceedings": sec2md.Item10Q.LEGAL_PROCEEDINGS_P2,   # 1.P2
+                "market_risk_disclosures": sec2md.Item10Q.MARKET_RISK_P1,   # 3.P1
+            }
         else:
-            return text  # Full text for exploration
+            return None
+        try:
+            # return_pages=True yields List[Page]; annotate Any to bypass the
+            # str-overload the type checker infers from the literal kwarg.
+            pages: Any = sec2md.convert_to_markdown(raw_html, return_pages=True)
+            sections = sec2md.extract_sections(pages, filing_type=form_type)
+        except Exception as e:
+            logger.warning("sec2md extraction failed: %s", e)
+            return None
+
+        out: Dict[str, Any] = {k: "" for k in SECTION_KEYS}
+        found = False
+        for key, item in item_map.items():
+            try:
+                sec = sec2md.get_section(sections, item, filing_type=form_type)
+            except Exception:
+                sec = None
+            if sec:
+                out[key] = _truncate(sec.markdown(), MAX_SECTION_CHARS)
+                found = True
+        return out if found else None
 
     def _get_extraction_llm(self):
         """Lazy-init LLM for section extraction using centralized llm_provider."""
@@ -392,12 +462,25 @@ Filing text:
             url = f.get("url") or ""
             
             if raw:
-                # RAW MODE: Return full text without LLM extraction (for agent exploration)
+                # RAW MODE: Return full text without LLM extraction (for agent exploration).
+                # Prefer sec2md clean markdown (tables preserved); fall back to stripped text.
                 logger.info(f"Fetching raw text for {ticker_upper} {form_type} (exploration mode)")
-                text = self._fetch_document_text(url, truncate=False)
+                html = self._fetch_raw_html(url)
+                if not html:
+                    continue
+                text = ""
+                if _SEC2MD_AVAILABLE and sec2md is not None:
+                    try:
+                        pages: Any = sec2md.convert_to_markdown(html, return_pages=True)
+                        text = "\n\n".join(p.content for p in pages) if pages else ""
+                    except Exception as e:
+                        logger.warning("sec2md markdown conversion failed: %s", e)
+                        text = ""
+                if not text:
+                    text = self._html_to_text(html, truncate=False)
                 if not text:
                     continue
-                
+
                 out["filings"].append({
                     "form": form_type,
                     "filing_date": f.get("filing_date", ""),
@@ -406,9 +489,9 @@ Filing text:
                     "char_count": len(text),
                 })
             else:
-                # EXTRACTION MODE: Current behavior with LLM extraction (default)
+                # EXTRACTION MODE: sec2md deterministic extraction, LLM fallback.
                 key = (ticker_upper, form_type, acc)
-                
+
                 # Check cache
                 if key in self._extraction_cache:
                     ts, sections = self._extraction_cache[key]
@@ -422,14 +505,22 @@ Filing text:
                         continue
                     else:
                         del self._extraction_cache[key]
-                
-                # Fetch with truncate=True (current behavior)
-                text = self._fetch_document_text(url, truncate=True)
-                if not text:
+
+                html = self._fetch_raw_html(url)
+                if not html:
                     continue
-                
-                # LLM extraction
-                sections = self._extract_sections(text)
+
+                # Deterministic sec2md extraction first; fall back to LLM if it
+                # finds no items (older/non-standard filers) or is unavailable.
+                sections = self._extract_sections_sec2md(html, form_type)
+                if sections is None:
+                    logger.info(
+                        "sec2md found no sections for %s %s; using LLM fallback", ticker_upper, form_type
+                    )
+                    text = self._html_to_text(html, truncate=True)
+                    if not text:
+                        continue
+                    sections = self._extract_sections(text)
                 self._extraction_cache[key] = (now, sections)
                 
                 out["filings"].append({

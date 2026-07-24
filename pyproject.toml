@@ -38,6 +38,7 @@ dependencies = [
     "parsel>=1.10.0",
     "praw>=7.8.1",
     "requests>=2.32.4",
+    "sec2md>=0.1.23",
     # CLI / UX
     "chainlit>=2.5.5",
     "questionary>=2.1.0",

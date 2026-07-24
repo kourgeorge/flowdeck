@@ -94,8 +94,9 @@ class SECFilingExplorer:
                 r"ITEM 1A\.?\s*RISK FACTORS",
             ],
             "mda": [
-                r"Item 7\.?\s*Management'?s Discussion and Analysis",
-                r"ITEM 7\.?\s*MANAGEMENT'?S DISCUSSION AND ANALYSIS",
+                # Apostrophe class covers straight (') and curly (’/‛) quotes used by filers.
+                r"Item 7\.?\s*Management['’‛]?s Discussion and Analysis",
+                r"ITEM 7\.?\s*MANAGEMENT['’‛]?S DISCUSSION AND ANALYSIS",
             ],
             "business": [
                 r"Item 1\.?\s*Business",

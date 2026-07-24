@@ -50,7 +50,7 @@ def create_sec_analyst(llm):
         llm=llm,
         tools=[
             # ── Primary ──────────────────────────────────────────────────
-            get_edgar_filing_content,       # LLM-extracted sections (MD&A, risk factors, competition)
+            get_edgar_filing_content,       # sec2md-extracted sections (MD&A, risk factors, business/competition), LLM fallback
             # ── Intelligence extractors (deterministic regex, no LLM) ───
             extract_competitors,            # Named competitor sentences from Item 1
             extract_tam_disclosures,        # TAM/SAM/$Xbn/CAGR from Item 1 Business

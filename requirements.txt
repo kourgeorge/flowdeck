@@ -61,6 +61,9 @@ tqdm
 duckduckgo-search
 aiohttp
 
+# SEC EDGAR filing -> markdown / deterministic section extraction
+sec2md>=0.1.23
+
 # Infra
 typing-extensions
 setuptools
