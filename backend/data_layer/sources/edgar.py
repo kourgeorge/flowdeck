@@ -23,5 +23,6 @@ class EdgarDataSource:
         form: Optional[str] = None,
         limit: int = 1,
         raw: bool = False,
+        accession: Optional[str] = None,
     ) -> Dict[str, Any]:
-        return self._service.get_filing_content(ticker, form, limit, raw)
+        return self._service.get_filing_content(ticker, form, limit, raw, accession)

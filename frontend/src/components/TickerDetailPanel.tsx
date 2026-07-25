@@ -18,6 +18,7 @@ import ReportViewer from './ReportViewer';
 import HierarchicalMindMap from './HierarchicalMindMap';
 import SubscribeButton from './SubscribeButton';
 import AuthModal from './AuthModal';
+import SecFilingModal from './SecFilingModal';
 import PriceTrendWidget from './PriceTrendWidget';
 import FinancialStatementViewer from './FinancialStatementViewer';
 import FundamentalCharts from './FundamentalCharts';
@@ -216,6 +217,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const [edgarFilingsError, setEdgarFilingsError] = useState<string | null>(null);
   const [isLoadingEdgar, setIsLoadingEdgar] = useState(false);
   const [hasLoadedEdgar, setHasLoadedEdgar] = useState(false);
+  const [selectedFiling, setSelectedFiling] = useState<any>(null);
   const [futureEvents, setFutureEvents] = useState<any>(null);
   const [isLoadingFutureEvents, setIsLoadingFutureEvents] = useState(false);
   const [eventsData, setEventsData] = useState<any>(null);
@@ -2454,7 +2456,12 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                         <tr key={f.accession_number} className="border-b border-gray-700">
                           <td className="py-2.5 pr-4"><span className="font-medium text-white">{f.form}</span></td>
                           <td className="py-2.5 pr-4 text-gray-300">{f.filing_date}</td>
-                          <td className="py-2.5">{f.url ? <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">View on SEC.gov</a> : <span className="text-gray-500">{f.description}</span>}</td>
+                          <td className="py-2.5">
+                            <div className="flex items-center gap-3">
+                              <button type="button" onClick={() => setSelectedFiling(f)} className="text-blue-400 hover:text-blue-300 underline">Read</button>
+                              {f.url && <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-gray-300 underline">View on SEC.gov</a>}
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -2469,6 +2476,9 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
         </div>
       </div>
       {authModalOpen && <AuthModal onClose={() => setAuthModalOpen(false)} message={authModalMessage} />}
+      {selectedFiling && stockData && (
+        <SecFilingModal ticker={stockData.ticker} filing={selectedFiling} onClose={() => setSelectedFiling(null)} />
+      )}
     </>
   );
 }

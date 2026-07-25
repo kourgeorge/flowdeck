@@ -429,16 +429,19 @@ Filing text:
         form: Optional[str] = None,
         limit: int = 1,
         raw: bool = False,
+        accession: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Get filing content - either extracted sections (via LLM) or raw text (for exploration).
-        
+
         Args:
             ticker: Stock ticker
             form: Optional '10-K' or '10-Q' filter
             limit: Number of filings to return
             raw: If True, return raw text without LLM extraction (for agent exploration).
                  If False, return LLM-extracted sections (current behavior, default).
+            accession: Optional accession number to select one specific filing. When
+                 provided, only that filing is returned (form/limit are ignored).
 
         Returns:
             {
@@ -462,9 +465,12 @@ Filing text:
             out["error"] = filings_result["error"]
             return out
         filings_list = filings_result.get("filings") or []
-        if form:
-            filings_list = [f for f in filings_list if f.get("form") == form]
-        filings_list = filings_list[:limit]
+        if accession:
+            filings_list = [f for f in filings_list if f.get("accession_number") == accession]
+        else:
+            if form:
+                filings_list = [f for f in filings_list if f.get("form") == form]
+            filings_list = filings_list[:limit]
         now = time.monotonic()
         
         for f in filings_list:

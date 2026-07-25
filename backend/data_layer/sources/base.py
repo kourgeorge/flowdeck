@@ -222,5 +222,7 @@ class EdgarSourceProtocol(Protocol):
         ticker: str,
         form: Optional[str] = None,
         limit: int = 1,
+        raw: bool = False,
+        accession: Optional[str] = None,
     ) -> Dict[str, Any]:
         ...

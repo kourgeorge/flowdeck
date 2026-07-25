@@ -505,23 +505,27 @@ async def data_edgar_filing_content(
     form: Optional[str] = Query(None, description="10-K or 10-Q"),
     limit: int = Query(1, ge=1, le=5, description="Max number of filings"),
     raw: bool = Query(False, description="If true, return raw text for exploration instead of LLM-extracted sections"),
+    accession: Optional[str] = Query(None, description="Accession number to select one specific filing (form/limit ignored)"),
 ):
     """
     Get SEC EDGAR filing content.
-    
+
     Args:
         ticker: Stock ticker symbol
         form: Optional form type filter (10-K or 10-Q)
         limit: Number of filings to return (default 1)
         raw: If true, return full filing text for agent exploration.
              If false, return LLM-extracted sections (current behavior, default).
-    
+        accession: Optional accession number to select one specific filing.
+
     Returns:
         - raw=false: Extracted sections (risk_factors, mda, competition, etc.) via LLM
-        - raw=true: Full filing text for agent-side exploration
+        - raw=true: Full filing text (sec2md markdown) for rendering / agent exploration
     """
     await _ensure_ticker_exists(ticker)
-    return await asyncio.to_thread(_gateway().get_edgar_filing_content, ticker, form, limit, raw)
+    return await asyncio.to_thread(
+        _gateway().get_edgar_filing_content, ticker, form, limit, raw, accession
+    )
 
 
 # --- Report access for AI agents (portfolio deep research, etc.) ---

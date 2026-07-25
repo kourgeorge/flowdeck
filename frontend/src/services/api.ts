@@ -952,6 +952,31 @@ export const tickerApi = {
     return response.data;
   },
 
+  // Get the full text of a single SEC filing rendered as markdown (sec2md).
+  // Selects the exact filing by accession number.
+  getEdgarFilingContent: async (
+    ticker: string,
+    accession: string,
+  ): Promise<{
+    filings: Array<{
+      form: string;
+      filing_date: string;
+      accession_number: string;
+      text: string;
+      char_count: number;
+    }>;
+    error: string | null;
+  }> => {
+    const response = await getCachedRequest(
+      `edgar-filing-content:${ticker.toUpperCase()}:${accession}`,
+      24 * 60 * 60 * 1000,
+      () => api.get(`/api/data/edgar-filing-content/${ticker}`, {
+        params: { accession, raw: true },
+      }),
+    );
+    return response.data;
+  },
+
   // Get reports for a specific historical run (experimental)
   getHistoricalReports: async (ticker: string, analysisRunId: number): Promise<Record<string, {
     content: string | null;
