@@ -76,6 +76,7 @@ backend/flowdeck.db
 backend/data_cache.sqlite
 backend/data_cache.sqlite-wal
 backend/data_cache.sqlite-shm
+backend/.scheduler.lock
 
 results/
 eval_results/

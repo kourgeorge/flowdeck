@@ -53,6 +53,51 @@ from services.report_service import ReportService
 from services.edgar_service import get_edgar_service
 
 
+# Holds the OS-level lock that elects a single scheduler-owning worker.
+# Kept at module scope so the flock is held for the entire process lifetime.
+_scheduler_lock_handle = None
+
+
+def _acquire_scheduler_leadership() -> bool:
+    """Elect exactly one process to run the background schedulers.
+
+    With ``uvicorn --workers N`` every worker imports this module and runs
+    ``lifespan``, so without gating all N workers would start duplicate
+    schedulers -- multiplying upstream fetches, cache writes, and digest emails,
+    and causing cross-process SQLite lock contention on the data cache. We take
+    an exclusive, non-blocking flock held for the lifetime of the process;
+    whichever worker wins is the sole scheduler owner. The others serve
+    requests only.
+
+    ``RUN_SCHEDULER`` overrides the election: ``0``/``false`` never runs the
+    schedulers (pure API worker), ``1``/``true`` forces this process to run them
+    (a single-worker deploy or a dedicated scheduler process).
+    """
+    global _scheduler_lock_handle
+    mode = os.environ.get("RUN_SCHEDULER", "auto").strip().lower()
+    if mode in ("0", "false", "no"):
+        return False
+    if mode in ("1", "true", "yes"):
+        return True
+    # "auto": elect one worker via an exclusive file lock.
+    try:
+        import fcntl
+    except ImportError:
+        # Non-Unix (no flock): assume a single process and run the schedulers.
+        return True
+    lock_path = os.environ.get(
+        "SCHEDULER_LOCK_PATH", str(Path(__file__).with_name(".scheduler.lock"))
+    )
+    try:
+        handle = open(lock_path, "w")
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        # Another worker already holds the lock -> this worker is API-only.
+        return False
+    _scheduler_lock_handle = handle  # keep the handle alive to hold the lock
+    return True
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize DB and start optional daily sync and market overview cache refresh."""
@@ -60,7 +105,17 @@ async def lifespan(app: FastAPI):
     from services.data_cache import ensure_data_cache
     ensure_data_cache()
     scheduler = None
-    if os.environ.get("ENABLE_DAILY_SYNC", "true").lower() in ("true", "1", "yes"):
+    is_scheduler_leader = _acquire_scheduler_leadership()
+    if is_scheduler_leader:
+        logger.info(
+            "Scheduler leader elected (pid=%s); starting background jobs", os.getpid()
+        )
+    else:
+        logger.info(
+            "This worker (pid=%s) is API-only; background schedulers disabled",
+            os.getpid(),
+        )
+    if is_scheduler_leader and os.environ.get("ENABLE_DAILY_SYNC", "true").lower() in ("true", "1", "yes"):
         try:
             from apscheduler.schedulers.background import BackgroundScheduler
             sync_time = os.environ.get("SYNC_SCHEDULE_TIME", "06:00").strip()
@@ -79,7 +134,7 @@ async def lifespan(app: FastAPI):
             print(f"Failed to start daily sync scheduler: {e}")
 
     # Optional: refresh market overview cache every 5 min so Overview/Regional Map are warm
-    if os.environ.get("ENABLE_MARKET_OVERVIEW_CACHE_REFRESH", "true").lower() in ("true", "1", "yes"):
+    if is_scheduler_leader and os.environ.get("ENABLE_MARKET_OVERVIEW_CACHE_REFRESH", "true").lower() in ("true", "1", "yes"):
         try:
             if scheduler is None:
                 from apscheduler.schedulers.background import BackgroundScheduler
@@ -167,7 +222,7 @@ async def lifespan(app: FastAPI):
             print(f"Failed to start market overview cache refresh: {e}")
 
     # Optional: scheduled jobs (currently User Daily Brief emails: daily/weekly digests)
-    if os.environ.get("ENABLE_DIGEST_SCHEDULER", "false").lower() in ("true", "1", "yes"):
+    if is_scheduler_leader and os.environ.get("ENABLE_DIGEST_SCHEDULER", "false").lower() in ("true", "1", "yes"):
         try:
             if scheduler is None:
                 from apscheduler.schedulers.background import BackgroundScheduler

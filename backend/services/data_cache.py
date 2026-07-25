@@ -90,7 +90,7 @@ class _SQLiteTTLStore:
             parent = Path(self._path).parent
             if parent:
                 parent.mkdir(parents=True, exist_ok=True)
-            conn = sqlite3.connect(self._path, timeout=30.0)
+            conn = sqlite3.connect(self._path, timeout=30.0, isolation_level=None, check_same_thread=False)
             # WAL lets readers proceed while a writer commits, which matters because
             # the startup refresh jobs and live requests share this cache file.
             conn.execute("PRAGMA journal_mode=WAL")
@@ -121,11 +121,6 @@ class _SQLiteTTLStore:
             """
         )
         conn.commit()
-        now = time.time()
-        conn.execute(
-            f"DELETE FROM {self._DATA_CACHE_TABLE} WHERE expires_at <= ?", (now,)
-        )
-        conn.commit()
 
     def get(self, key: str) -> Optional[T]:
         with self._lock:
@@ -138,8 +133,6 @@ class _SQLiteTTLStore:
                 return None
             value_json, expires_at = row
             if time.time() >= expires_at:
-                conn.execute(f"DELETE FROM {self._DATA_CACHE_TABLE} WHERE key = ?", (key,))
-                conn.commit()
                 return None
             return json.loads(value_json)
 
@@ -160,37 +153,34 @@ class _SQLiteTTLStore:
             conn = self._connection()
             expires_at = time.time() + ttl_seconds
             value_json = _cache_dumps(value)
-            conn.execute(
-                f"""
-                INSERT OR REPLACE INTO {self._DATA_CACHE_TABLE} (key, value, expires_at)
-                VALUES (?, ?, ?)
-                """,
-                (key, value_json, expires_at),
-            )
-            conn.commit()
-            now = time.time()
-            conn.execute(
-                f"DELETE FROM {self._DATA_CACHE_TABLE} WHERE expires_at <= ?", (now,)
-            )
-            conn.commit()
-            count = conn.execute(
-                f"SELECT count(*) FROM {self._DATA_CACHE_TABLE}"
-            ).fetchone()[0]
-            while count > self._maxsize:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute(
+                    f"""
+                    INSERT OR REPLACE INTO {self._DATA_CACHE_TABLE} (key, value, expires_at)
+                    VALUES (?, ?, ?)
+                    """,
+                    (key, value_json, expires_at),
+                )
+                conn.execute(
+                    f"DELETE FROM {self._DATA_CACHE_TABLE} WHERE expires_at <= ?",
+                    (time.time(),),
+                )
                 conn.execute(
                     f"""
                     DELETE FROM {self._DATA_CACHE_TABLE}
-                    WHERE key = (
+                    WHERE key IN (
                         SELECT key FROM {self._DATA_CACHE_TABLE}
                         ORDER BY expires_at ASC
-                        LIMIT 1
+                        LIMIT MAX(0, (SELECT count(*) FROM {self._DATA_CACHE_TABLE}) - ?)
                     )
-                    """
+                    """,
+                    (self._maxsize,),
                 )
-                conn.commit()
-                count = conn.execute(
-                    f"SELECT count(*) FROM {self._DATA_CACHE_TABLE}"
-                ).fetchone()[0]
+                conn.execute("COMMIT")
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
 
     def clear(self) -> None:
         with self._lock:
