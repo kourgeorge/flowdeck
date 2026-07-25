@@ -1,4 +1,5 @@
-from typing import Annotated, Any
+from typing import Annotated, Any, Optional
+import math
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import yfinance as yf
@@ -1085,6 +1086,26 @@ def get_analyst_recommendations(
         }
 
 
+def _round_or_none(val: Any, digits: int = 2) -> Optional[float]:
+    """Round to a JSON-safe float, or None for missing/non-finite values.
+
+    yfinance rows can carry NaN cells (partial/most-recent candle, halted or
+    gap days). NaN/Infinity are valid Python floats but illegal JSON, and
+    Starlette serializes responses with allow_nan=False -- an unsanitized NaN
+    raises "Out of range float values are not JSON compliant" (HTTP 500).
+    Note NaN is not None, so a plain `is not None` guard does not catch it.
+    """
+    if val is None:
+        return None
+    try:
+        f = float(val)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(f):
+        return None
+    return round(f, digits)
+
+
 def get_historical_app_format(ticker: str, period: str = "6mo", interval: str = "1d") -> dict:
     """Fetch historical OHLCV from yfinance. App API shape: {ticker, period, interval, data, count}."""
     from datetime import date, timedelta
@@ -1113,15 +1134,24 @@ def get_historical_app_format(ticker: str, period: str = "6mo", interval: str = 
             d = d.tz_localize(None)
         date_str = d.strftime("%Y-%m-%dT%H:%M:%S") if use_last_trading_day and hasattr(d, "strftime") else (d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d))
         adj_close = row.get("Adj Close") if "Adj Close" in row else row.get("Close")
+        o = _round_or_none(row["Open"])
+        h = _round_or_none(row["High"])
+        low = _round_or_none(row["Low"])
+        c = _round_or_none(row["Close"])
+        # Skip rows with no usable OHLC (e.g. an empty/forming candle) rather
+        # than emit an all-null point the chart would render as a gap anyway.
+        if o is None and h is None and low is None and c is None:
+            continue
+        volume = row.get("Volume") if "Volume" in row else None
         data.append({
             "date": date_str,
             "timestamp": int(d.timestamp() * 1000) if hasattr(d, "timestamp") else None,
-            "open": round(float(row["Open"]), 2),
-            "high": round(float(row["High"]), 2),
-            "low": round(float(row["Low"]), 2),
-            "close": round(float(row["Close"]), 2),
-            "volume": int(row["Volume"]) if "Volume" in row else None,
-            "adj_close": round(float(adj_close), 2) if adj_close is not None else None,
+            "open": o,
+            "high": h,
+            "low": low,
+            "close": c,
+            "volume": int(volume) if volume is not None and pd.notna(volume) else None,
+            "adj_close": _round_or_none(adj_close),
         })
     return {"ticker": ticker, "period": period, "interval": interval, "data": data, "count": len(data)}
 
