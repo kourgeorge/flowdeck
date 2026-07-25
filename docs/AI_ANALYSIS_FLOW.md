@@ -4,6 +4,22 @@ This document describes the **exact flow** of the AI analysis in TradingAgents: 
 
 ---
 
+## Graph engineering perspective
+
+The TradingAgents pipeline is a **LangGraph `StateGraph`** — a state machine where:
+
+- **Nodes do work.** Each node is classified on the deterministic-to-agentic scale:
+  - **Fixed step** — deterministic code or a simple API call (no LLM).
+  - **Model step** — a single structured LLM call (no tools).
+  - **Agent step** — a full internal ReAct loop (the node calls tools, inspects results, and iterates until done — all without graph-level routing).
+- **Edges define transitions.** Most post-analyst edges are deterministic. The analyst fan-out and debate routing are conditional/dynamic.
+- **Cycles are intentional.** The debate loop (Bull ↔ Bear ↔ Neutral) is a directed cycle; this is expected and correct behavior, not a bug.
+- **Dynamic fan-out via `Send`.** When `parallel_analysts=True` (default), a single conditional edge from `START` fans out dynamically to N analyst nodes using LangGraph's `Send` primitive — the number of workers equals the number of `selected_analysts`, which is not known until runtime.
+
+The graph is therefore **not a DAG**: it contains cycles (debate) and dynamic fan-out. This is the normal shape for a production agentic system.
+
+---
+
 ## 1. Entry points
 
 Analysis can be started from:
@@ -17,149 +33,156 @@ In both cases the **core execution** is:
 
 1. **State init**: `graph.propagator.create_initial_state(ticker, trade_date)`
 2. **Graph args**: `graph.propagator.get_graph_args()` → `stream_mode="values"`, `config={"recursion_limit": ...}`
-3. **Run**: `graph.graph.stream(init_agent_state, **args)` (or `invoke` in non-debug)  
+3. **Run**: `graph.graph.stream(init_agent_state, **args)` (or `invoke` in non-debug)
    The `graph` is the **compiled LangGraph** built in `GraphSetup.setup_graph(selected_analysts)`.
 
 ---
 
-## 2. Graph topology (exact node order)
+## 2. Graph topology
 
-The graph is a **StateGraph(AgentState)**. Edges are fixed and conditional as below.
+The graph is a **`StateGraph(AgentState)`**. Edges are fixed and conditional as below.
 
-### 2.1 Analyst chain (sequential)
+### 2.1 Analyst phase — parallel Agent nodes (dynamic fan-out)
 
-- **START** → **First analyst** (e.g. `Market Analyst` if `selected_analysts = ["market", "news", "fundamentals"]`).
+**Node type: Agent step** — each analyst is a self-contained node with an internal ReAct loop. The node calls its tools, inspects results, and iterates until it has enough context to produce a structured report. There are **no separate tool nodes or message-clear nodes** in the compiled graph; all tool execution happens inside the node.
 
-Analyst types (in selection order): **market**, **social**, **news**, **fundamentals**, **technical**, **sec**.  
-Graph default is `["market", "social", "news", "fundamentals"]`; Dashboard API default is `["market", "news", "fundamentals", "sec"]`.
+**Fan-out (parallel, default):**
 
-For **each** selected analyst (e.g. `market`, `social`, `news`, `fundamentals`):
-
-1. **`{Analyst} Analyst`** (e.g. `Market Analyst`, `Social Analyst`, `News Analyst`, …)
-   - Reads state: `company_of_interest`, `trade_date`, `messages`.
-   - Uses LLM + tools (e.g. `get_stock_data`, `get_indicators` for market; social uses `get_insider_sentiment`, `get_insider_transactions`, `get_global_news`) to produce a report and score.
-   - Writes: `market_report`, `sentiment_report` (Social), `news_report`, `fundamentals_report`, `sec_report`, `technical_report` and corresponding `*_score`.
-   - Conditional edge:
-     - If last message has **tool_calls** → **`tools_{analyst}`**
-     - Else → **`Msg Clear {Analyst}`**
-
-2. **`tools_{analyst}`**
-   - Runs the analyst’s tools (e.g. ToolNode for market: `get_stock_data`, `get_indicators`).
-   - Edge: **back to** **`{Analyst} Analyst`** (analyst can call tools again).
-
-3. **`Msg Clear {Analyst}`**
-   - Cleans messages for that analyst.
-   - Edge:
-     - If not last analyst → **next analyst** (e.g. `News Analyst`).
-     - If last analyst → **Bull Researcher**.
-
-So the **exact analyst flow** is:
+When `parallel_analysts=True` (default) and more than one analyst is selected, `setup_graph` adds a conditional edge from `START` that returns a `list[Send]` — one `Send` per analyst. LangGraph dispatches all analyst nodes concurrently. After all analyst nodes complete, a barrier edge routes to `Bull Researcher`.
 
 ```
-START → Analyst_1 ⟷ tools_1 → Msg Clear 1 → Analyst_2 ⟷ tools_2 → … → Msg Clear Last → Bull Researcher
+START ──conditional_edge(fan_out_analysts)──► Market Analyst    ─┐
+                                            ► Social Analyst     ├── (barrier) ──► Bull Researcher
+                                            ► Fundamentals Analyst│
+                                            ► Technical Analyst  │
+                                            ► SEC Analyst        │
+                                            ► Valuation Analyst  ─┘
 ```
 
-(Each analyst can loop with its tool node until it stops calling tools.)
+**Fan-out (sequential, fallback):**
 
-#### Social Analyst
+When `parallel_analysts=False` or only one analyst is selected, analysts run in a deterministic chain: `START → Analyst_1 → Analyst_2 → … → Bull Researcher`.
 
-When `"social"` is in `selected_analysts`, the **Social (Media) Analyst** runs in the analyst chain. It produces `sentiment_report` and `sentiment_score` (1–10) using tools such as `get_insider_sentiment`, `get_insider_transactions`, `get_global_news`.
+**Available analyst types** (selection order when sequential):
 
-#### Technical Analyst (optional)
+| Analyst | State fields written | Node type |
+|---------|----------------------|-----------|
+| `market` | `market_report`, `market_score` (1–5), `market_key_takeaways` | Agent step |
+| `social` | `sentiment_report`, `sentiment_score` (1–5), `sentiment_key_takeaways` | Agent step |
+| `fundamentals` | `fundamentals_report`, `fundamentals_score` (1–5), `fundamentals_key_takeaways` | Agent step |
+| `technical` | `technical_report`, `technical_score` (1–5), `technical_key_takeaways` | Agent step |
+| `sec` | `sec_report`, `sec_score` (1–5), `sec_key_takeaways` | Agent step |
+| `valuation` | `valuation_report`, `valuation_score` (1–5), `valuation_key_takeaways`, `fair_value_bear/base/bull`, `current_discount_pct`, `valuation_conviction` | Agent step |
 
-When `"technical"` is in `selected_analysts`, the **Technical Analyst** runs with tools including `get_stock_data`, `get_indicators`, and advanced tools (`detect_divergence`, `detect_regime`, `detect_support_resistance`). It produces `technical_report` and `technical_score` (1–10).
+Default selections:
+- **`setup_graph` default**: `["market", "social", "fundamentals"]`
+- **Dashboard API default**: `["market", "news", "fundamentals", "sec"]` (where `"news"` maps to the Social/News & Sentiment analyst)
 
-#### SEC Analyst (optional)
+#### Social (News & Sentiment) Analyst
 
-When `"sec"` is in `selected_analysts`, the **SEC Analyst** runs in the analyst chain. It uses the `get_edgar_filing_content` tool, which calls the backend `GET /api/data/edgar-filing-content/{ticker}`. The backend fetches the filing from SEC EDGAR, converts HTML to text, and uses an LLM to extract structured sections (Risk Factors, MD&A, Competition). The SEC analyst receives that formatted content and produces `sec_report` and `sec_score` (1–10). The risk manager includes `sec_report` in its context and factors regulatory and disclosure risk into the final decision.
+The `"social"` analyst produces `sentiment_report` and `sentiment_score`. Despite the key name, it covers news/catalysts and crowd sentiment (insider transactions, Reddit sentiment, global news). It is the "News & Sentiment Analyst" in user-facing UI.
+
+#### Technical Analyst
+
+When `"technical"` is in `selected_analysts`, the Technical Analyst uses tools including `get_stock_data`, `get_indicators`, and advanced pattern tools (`detect_divergence`, `detect_regime`, `detect_support_resistance`).
+
+#### SEC Analyst
+
+When `"sec"` is in `selected_analysts`, the SEC Analyst uses `get_edgar_filing_content` to fetch and parse SEC EDGAR filings (10-K/10-Q), extracting Risk Factors, MD&A, and Competition sections.
+
+#### Valuation Analyst
+
+When `"valuation"` is in `selected_analysts`, the Valuation Analyst performs multi-method fair value analysis, producing bear/base/bull fair value estimates and a discount-to-fair-value percentage.
 
 ---
 
-## 3. Investment debate (Bull vs Bear)
+## 3. Investment debate (Bull ↔ Bear ↔ Neutral) — cyclic subgraph
 
-After the last analyst’s “Msg Clear”:
+**Node type: Model step** — each researcher makes a single LLM call (no tools) using all analyst reports and the accumulated debate history.
 
-- **Bull Researcher**
-  - Inputs: all reports (market, sentiment, news, fundamentals, optional sec, optional technical), `investment_debate_state` (history, current_response, count).
-  - Outputs: bull argument; updates `investment_debate_state` (history, bull_history, current_response, count).
-  - Conditional edge:
-    - If `count >= 2 * max_debate_rounds` → **Research Manager**
-    - Else if `current_response` starts with `"Bull"` → **Bear Researcher**
-    - Else → **Bull Researcher** (next turn is bull again in practice from setup).
+After all analyst nodes complete, a barrier routes to `Bull Researcher`. The debate then runs round-robin:
 
-- **Bear Researcher**
-  - Same idea: uses reports + debate history; produces bear argument; updates `investment_debate_state`.
-  - Conditional edge:
-    - If `count >= 2 * max_debate_rounds` → **Research Manager**
-    - Else → **Bull Researcher**.
+```
+Bull Researcher ──should_continue_debate──► Bear Researcher
+Bear Researcher ──should_continue_debate──► Neutral Researcher
+Neutral Researcher ──should_continue_debate──► Bull Researcher
+(any) ──should_continue_debate (when count ≥ 3 × max_debate_rounds)──► Research Manager
+```
 
-So the loop is: **Bull Researcher ⇄ Bear Researcher** until `count >= 2 * max_debate_rounds`, then → **Research Manager**.
+This is a **directed cycle** — the graph is not a DAG. One round = one turn each for Bull, Bear, and Neutral (count incremented per turn).
+
+**Routing logic** (`ConditionalLogic.should_continue_debate`):
+- `count >= 3 * max_debate_rounds` → `Research Manager`
+- `latest_speaker` starts with `"Bull"` → `Bear Researcher`
+- `latest_speaker` starts with `"Bear"` → `Neutral Researcher`
+- otherwise → `Bull Researcher`
+
+State written per turn: `investment_debate_state` (`bull_history`, `bear_history`, `neutral_history`, `history`, `latest_speaker`, `current_response`, `count`).
 
 ---
 
 ## 4. Research Manager → Trader
 
-- **Research Manager**
-  - Inputs: all reports (including sec_report when SEC analyst ran), full debate `history`, judge memory.
-  - Produces: `investment_plan`, `recommendation_score` (1–10, also labelled **Conviction Score** in the UI — measures how strongly the directional thesis is supported by the debate, not the quality of the recommendation), `expected_return_pct`, `bear_case_return_pct`, `bull_case_return_pct` (optional), and updates `investment_debate_state` (e.g. `judge_decision`).
-  - Edge: **Trader** (fixed).
+**Both are fixed graph edges (deterministic).**
 
-- **Trader**
-  - Inputs: investment plan, reports, trader memory.
-  - Produces: `trader_investment_plan` (and can set `final_trade_decision` or it’s set later from risk).
-  - Edge: **Risky Analyst** (fixed).
+### Research Manager — Model step
+
+- **Inputs**: all analyst reports (`market_report`, `sentiment_report`, `fundamentals_report`, optional `sec_report`, `technical_report`, `valuation_report`, `events_report`), full debate `history`, judge memory.
+- **Outputs** (structured `ResearchManagerOutput`):
+  - `investment_plan` — comprehensive narrative for the Trader.
+  - `recommendation` — **BUY / SELL / HOLD** (issued directly by the Research Manager).
+  - `recommendation_score` (1–5) — directional conviction score.
+  - `bull_summary`, `bear_summary`, `neutral_summary` — 3–5 bullet summaries of each side's debate arguments.
+  - `expected_return_pct`, `bear_case_return_pct`, `bull_case_return_pct` — return scenarios.
+  - `key_takeaways` — written to `investment_plan_key_takeaways`.
+- **Edge**: deterministic → `Trader`.
+
+### Trader — Model step
+
+- **Inputs**: `investment_plan`, all analyst reports, `recommendation` from Research Manager, `events_report`, trader memory, live quote (fetched inside node).
+- **Outputs** (structured `TraderOutput`):
+  - `trader_investment_plan` — detailed narrative with execution rationale.
+  - `trader_recommendation` — **BUY / SELL / HOLD**.
+  - `trader_tps_plan` — structured **TPS-YAML v0.1** trade plan (instrument, timeframe, side, entry, risk.stop, risk.max_loss, take_profit, vol_guard, add_if).
+  - `trader_key_takeaways`.
+- **Edge**: deterministic → `END`.
 
 ---
 
-## 5. Risk debate (Risky / Safe / Neutral) → Risk Judge
+## 5. Risk debate (legacy — not in compiled graph)
 
-- **Risky Analyst**
-  - Conditional edge:
-    - If `risk_debate_state["count"] >= 3 * max_risk_discuss_rounds` → **Risk Judge**
-    - Else if last speaker was Risky → **Safe Analyst**
-    - Else → **Risky Analyst** (or Safe/Neutral per logic).
-
-- **Safe Analyst** and **Neutral Analyst**
-  - Same pattern: conditional on `count` and `latest_speaker`:
-    - Either continue to the next risk debator (Risky / Safe / Neutral),
-    - Or go to **Risk Judge** when round limit is reached.
-
-- **Risk Judge**
-  - Produces final risk decision, **`final_trade_decision`** (text — a risk analysis and refined plan, does **not** issue BUY/SELL/HOLD), and optionally **`recommendation`** (BUY/HOLD/SELL extracted separately), **`risk_score`** (1–10, labelled **Risk Score** in the UI — measures confidence in the quality and clarity of the risk assessment, quantitatively anchored to the average and standard deviation of all upstream scores: market, sentiment, news, fundamentals, SEC, technical, and conviction), **`risky_summary`**, **`safe_summary`**, **`neutral_summary`**, **`final_report_key_takeaways`**.
-  - Edge: **END**.
-
-So: **Risky Analyst → Safe Analyst → Neutral Analyst → Risky Analyst → …** (round-robin via `should_continue_risk_analysis`) until `count >= 3 * max_risk_discuss_rounds`, then → **Risk Judge** → **END**.
+> **Note**: The `AgentState` type still defines `risk_debate_state`, `final_trade_decision`, `risky_summary`, `safe_summary`, `neutral_summary` (risk side), and `risk_score` fields. These originated from an older version of the graph that included Risky / Safe / Neutral Analysts and a Risk Judge after the Trader. **The current compiled graph does not include these nodes** — `setup.py` adds `Trader → END` with no risk debate in between. These state fields are currently unpopulated at the end of a run. Do not rely on them in new code.
 
 ---
 
 ## 6. State (AgentState) — what flows through
 
-- **Input / identity**: `company_of_interest`, `trade_date`, `messages`, `sender`.
-- **Analyst outputs**: `market_report`, `market_score`; `sentiment_report`, `sentiment_score`; `news_report`, `news_score`; `fundamentals_report`, `fundamentals_score`; `sec_report`, `sec_score`; `technical_report`, `technical_score`.
-- **Investment debate**: `investment_debate_state` (`history`, `bull_history`, `bear_history`, `current_response`, `count`, `judge_decision`).
-- **Research Manager**: `investment_plan`, `recommendation_score`, `expected_return_pct`, `bear_case_return_pct`, `bull_case_return_pct`, `bull_summary`, `bear_summary`.
-- **Trader**: `trader_investment_plan`.
-- **Risk debate**: `risk_debate_state` (`risky_history`, `safe_history`, `neutral_history`, `history`, `latest_speaker`, `current_risky_response`, `current_safe_response`, `current_neutral_response`, `count`, `judge_decision`).
-- **Risk Judge**: `final_trade_decision`, `recommendation` (BUY/SELL/HOLD), `risk_score`, `risky_summary`, `safe_summary`, `neutral_summary`, `final_report_key_takeaways`.
+- **Input / identity**: `company_of_interest`, `trade_date`, `events_report`, `prior_reports`, `prior_analysis_date`, `sender`.
+- **Analyst outputs**: `market_report`, `market_score` (1–5); `sentiment_report`, `sentiment_score` (1–5); `fundamentals_report`, `fundamentals_score` (1–5); `sec_report`, `sec_score` (1–5); `technical_report`, `technical_score` (1–5); `valuation_report`, `valuation_score` (1–5), `fair_value_bear/base/bull`, `current_discount_pct`, `valuation_conviction`.
+- **Key takeaways per analyst**: `market_key_takeaways`, `sentiment_key_takeaways`, `fundamentals_key_takeaways`, `sec_key_takeaways`, `technical_key_takeaways`, `valuation_key_takeaways`.
+- **Investment debate**: `investment_debate_state` (`bull_history`, `bear_history`, `neutral_history`, `history`, `latest_speaker`, `current_response`, `count`, `judge_decision`).
+- **Research Manager**: `investment_plan`, `recommendation` (BUY/SELL/HOLD), `recommendation_score` (1–5), `bull_summary`, `bear_summary`, `neutral_summary`, `expected_return_pct`, `bear_case_return_pct`, `bull_case_return_pct`, `investment_plan_key_takeaways`.
+- **Trader**: `trader_investment_plan`, `trader_recommendation` (BUY/SELL/HOLD), `trader_tps_plan` (TPS-YAML JSON string), `trader_key_takeaways`.
+- **LLM usage / tracing**: `report_usage` (tokens, cost per report key), `report_resources`, `report_resources_by_report`, `report_steps_by_report`.
+- **Legacy (unpopulated)**: `risk_debate_state`, `final_trade_decision`, `risk_score`, `risky_summary`, `safe_summary` (risk), `neutral_summary` (risk), `final_report_key_takeaways`.
 
-Each node **reads** from this state and **returns** a dict of keys to **update** (LangGraph merges into the single AgentState).
+Each node **reads** from this state and **returns** a dict of keys to **update** (LangGraph merges into the single `AgentState`).
 
 ---
 
 ## 7. After the graph finishes
 
-- **TradingAgentsGraph.propagate()** (used from CLI or equivalent):
+- **`resolve_trade_signal_from_state(state)`** (`signal_processing.py`):
+  - Reads `recommendation` first (from Research Manager), then falls back to `trader_recommendation`.
+  - Returns `BUY`, `SELL`, or `HOLD` — no second LLM call.
+
+- **`TradingAgentsGraph.propagate()`** (used from CLI or equivalent):
   - Stores `final_state` in `self.curr_state`.
   - Logs state to `eval_results/{ticker}/TradingAgentsStrategy_logs/full_states_log_{date}.json`.
-  - Returns `(final_state, self.process_signal(final_state["final_trade_decision"]))`.
+  - Returns `(final_state, resolve_trade_signal_from_state(final_state))`.
 
-- **SignalProcessor.process_signal(full_signal)**:
-  - Takes the **final_trade_decision** text (or equivalent).
-  - Uses the quick-thinking LLM to **extract a single token**: **BUY**, **SELL**, or **HOLD**.
-  - That is the **final actionable output** of the AI analysis. (The Risk Judge may also set **`recommendation`** directly; the dashboard can use either.)
-
-- **Reflection (optional)**  
-  `reflect_and_remember(returns_losses)` updates bull/bear/trader/judge/risk-manager memories based on outcomes.
+- **Reflection (optional)**
+  `reflect_and_remember(returns_losses)` updates bull/bear/neutral/trader/research-manager memories based on outcomes.
 
 ---
 
@@ -172,35 +195,42 @@ Each node **reads** from this state and **returns** a dict of keys to **update**
                                         │
                                         ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ ANALYST CHAIN (sequential; each can loop with tools)                        │
-│ START → [Market] Analyst ⇄ tools_market → Msg Clear →                        │
-│         [Social] Analyst ⇄ tools_social → Msg Clear →                        │
-│         [News] Analyst ⇄ tools_news → Msg Clear →                            │
-│         [Fundamentals] Analyst ⇄ tools_fundamentals → Msg Clear →             │
-│         [Technical]/[SEC] … (if selected) → … → Bull Researcher              │
+│ ANALYST PHASE — Agent steps (each: full internal ReAct loop + tools)        │
+│                                                                             │
+│ Parallel (default, via Send):                                               │
+│   START ──fan_out──► Market Analyst      ─┐                                 │
+│                    ► Social Analyst       ├── barrier ──► Bull Researcher   │
+│                    ► Fundamentals Analyst │                                 │
+│                    ► [Technical Analyst]  │  (N = len(selected_analysts),   │
+│                    ► [SEC Analyst]        │   resolved at runtime)          │
+│                    ► [Valuation Analyst] ─┘                                 │
+│                                                                             │
+│ Sequential (fallback):                                                      │
+│   START → Analyst_1 → Analyst_2 → … → Bull Researcher                      │
 └─────────────────────────────────────────────────────────────────────────────┘
                                         │
                                         ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ INVESTMENT DEBATE (until max_debate_rounds)                                  │
-│ Bull Researcher ⇄ Bear Researcher → Research Manager                        │
+│ INVESTMENT DEBATE — Model steps (cyclic; not a DAG)                         │
+│   Bull Researcher ⇄ Bear Researcher ⇄ Neutral Researcher                   │
+│   (round-robin until count ≥ 3 × max_debate_rounds)                        │
+│                              │                                              │
+│                              ▼                                              │
+│                      Research Manager                                       │
+│                   (issues investment_plan + recommendation BUY/SELL/HOLD)   │
 └─────────────────────────────────────────────────────────────────────────────┘
-                                        │
+                                        │ (fixed edge)
                                         ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ Research Manager → Trader                                                    │
+│ TRADER — Model step                                                         │
+│   Produces: trader_investment_plan, trader_recommendation, TPS-YAML plan   │
 └─────────────────────────────────────────────────────────────────────────────┘
-                                        │
+                                        │ (fixed edge)
                                         ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ RISK DEBATE (round-robin until 3 * max_risk_discuss_rounds)                 │
-│ Risky Analyst → Safe Analyst → Neutral Analyst → (loop) → Risk Judge → END   │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                        │
-                                        ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ OUTPUT: final_trade_decision → process_signal() → BUY | SELL | HOLD          │
-│         (or recommendation from Risk Judge if set)                           │
+│ END                                                                         │
+│ resolve_trade_signal_from_state() → reads recommendation or                 │
+│   trader_recommendation → BUY | SELL | HOLD  (no LLM call)                 │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -210,15 +240,17 @@ Each node **reads** from this state and **returns** a dict of keys to **update**
 
 | Concern | File |
 |--------|------|
-| Graph build, nodes, edges | `tradingagents/graph/setup.py` |
+| Graph build, nodes, edges, parallel Send fan-out | `tradingagents/graph/setup.py` |
 | Initial state, graph args | `tradingagents/graph/propagation.py` |
-| Analyst/tool/debate/risk routing | `tradingagents/graph/conditional_logic.py` |
+| Debate routing condition | `tradingagents/graph/conditional_logic.py` |
 | Orchestrator, LLMs, tools, propagate | `tradingagents/graph/trading_graph.py` |
-| Final BUY/SELL/HOLD extraction | `tradingagents/graph/signal_processing.py` |
-| State types | `tradingagents/agents/utils/agent_states.py` |
-| Research Manager (judge + plan) | `tradingagents/agents/managers/research_manager.py` |
+| BUY/SELL/HOLD extraction (no LLM) | `tradingagents/graph/signal_processing.py` |
+| State types (AgentState, InvestDebateState, RiskDebateState) | `tradingagents/agents/utils/agent_states.py` |
+| Self-contained analyst base | `tradingagents/agents/analysts/self_contained_analyst.py` |
+| Research Manager (judge + plan + recommendation) | `tradingagents/agents/managers/research_manager.py` |
+| Trader (narrative + TPS-YAML plan) | `tradingagents/agents/trader/trader.py` |
 | Analysts | `tradingagents/agents/analysts/*.py` |
-| Bull/Bear researchers | `tradingagents/agents/researchers/*.py` |
+| Bull/Bear/Neutral researchers | `tradingagents/agents/researchers/*.py` |
 | Dashboard analysis run | `backend/services/analysis_service.py` |
 | API trigger | `backend/main.py` (POST /api/analyses/start) |
 

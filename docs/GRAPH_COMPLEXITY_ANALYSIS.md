@@ -1,6 +1,10 @@
 # Multi-Agent Graph Complexity Analysis
 
-## Current Graph Structure
+> **Status (2026-07-25)**: The problems described in this document have been **resolved**. The current graph uses self-contained Agent nodes (no external `tools_*` or `extract_resources` nodes), parallel analyst fan-out via LangGraph `Send`, and a 3-way Bull/Bear/Neutral debate. See [AI_ANALYSIS_FLOW.md](AI_ANALYSIS_FLOW.md) for the current architecture. This document is retained for historical context.
+
+---
+
+## Historical Graph Structure (as of 2026-04-02)
 
 ### The Problem: Too Many Loops and Cycles
 

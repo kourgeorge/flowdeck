@@ -227,24 +227,35 @@ The primary conversational agent that serves the `/api/chat/*` endpoints. Implem
 
 Long-form research pipeline invoked by `AnalysisService` via `/api/analyses/start`. Produces per-ticker, per-date report JSON files to `results/<TICKER>/<DATE>/`.
 
+#### Graph engineering perspective
+
+This pipeline is a **LangGraph `StateGraph`** — a state machine mixing deterministic paths and agentic steps. It is **not a DAG**: the debate subgraph is a directed cycle (intentional). Key design points:
+
+- **Agent steps** (analyst nodes): each analyst runs a full internal ReAct loop — it calls tools, inspects results, and iterates until it can produce a structured report. All of this happens inside a single graph node; there are no external tool nodes.
+- **Dynamic fan-out via `Send`**: when `parallel_analysts=True` (default), a conditional edge from `START` uses LangGraph's `Send` primitive to dispatch all N analyst nodes concurrently. N equals `len(selected_analysts)`, which is not known until runtime — classic map-reduce fan-out.
+- **Cyclic debate**: the Bull/Bear/Neutral subgraph is a directed cycle. Conditional edges route between researchers until `count ≥ 3 × max_debate_rounds`.
+- **Model steps** (Research Manager, Trader): each makes a single structured LLM call (no tools).
+
 **Graph flow:**
 
 ```
 START
-  └─► Analysts (parallel fan-out)
-        • Market Analyst
-        • Social Analyst       (news/catalysts + crowd sentiment)
-        • Fundamentals Analyst
-        • Technical Analyst
-        • SEC Analyst          (EDGAR risk factors, MD&A, competition)
-        • Valuation Analyst    (multi-method fair value)
-  └─► Bull Researcher ↔ Bear Researcher ↔ Neutral Researcher  (debate loop)
-  └─► Research Manager
-  └─► Trader
+  └─► [Send fan-out — N analysts in parallel]
+        • Market Analyst        (Agent step)
+        • Social Analyst        (Agent step — news/catalysts + crowd sentiment)
+        • Fundamentals Analyst  (Agent step)
+        • Technical Analyst     (Agent step — optional)
+        • SEC Analyst           (Agent step — optional, EDGAR filings)
+        • Valuation Analyst     (Agent step — optional, multi-method fair value)
+  └─► [barrier] → Bull Researcher ⇄ Bear Researcher ⇄ Neutral Researcher  (cyclic debate)
+  └─► Research Manager  (Model step — issues investment_plan + BUY/SELL/HOLD)
+  └─► Trader            (Model step — issues trader_investment_plan + TPS-YAML plan)
   └─► END
 ```
 
-Analysts are self-contained nodes (no external tool nodes); they pull data directly inside their node. The debate loop continues until the `ConditionalLogic.should_continue_debate` condition resolves to `Research Manager`.
+The debate loop continues until `ConditionalLogic.should_continue_debate` resolves to `Research Manager`. Signal extraction after the graph is a direct field read (`recommendation` → `trader_recommendation`), no second LLM call.
+
+For the full node-by-node breakdown, see [AI_ANALYSIS_FLOW.md](AI_ANALYSIS_FLOW.md).
 
 ---
 
