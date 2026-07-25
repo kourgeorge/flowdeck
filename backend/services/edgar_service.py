@@ -12,11 +12,22 @@ import logging
 import os
 import re
 import time
+import warnings
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from bs4 import BeautifulSoup
 from pydantic import BaseModel, Field
+
+# SEC iXBRL documents are XML-ish; parsing them with an HTML parser (here and
+# inside sec2md's lxml path) raises a cosmetic XMLParsedAsHTMLWarning per the
+# bs4 docs. Silence it - the extracted text is unaffected.
+try:
+    from bs4 import XMLParsedAsHTMLWarning
+
+    warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+except Exception:  # pragma: no cover - older bs4 without this warning class
+    pass
 
 logger = logging.getLogger(__name__)
 
