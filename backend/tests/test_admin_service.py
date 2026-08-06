@@ -17,7 +17,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from database import Base
 from models.db_models import Execution, Report, User
-from services.admin_service import build_analysis_reports_zip
+from services.admin_service import build_analysis_reports_zip, delete_user
+from services.token_service import SYSTEM_USER_EMAIL
 
 
 class TestAdminService(unittest.TestCase):
@@ -99,6 +100,29 @@ class TestAdminService(unittest.TestCase):
             self.assertEqual(manifest["analysis_run_id"], 42)
             self.assertEqual(manifest["ticker"], "AAPL")
             self.assertEqual(manifest["report_count"], 2)
+
+    def test_delete_user_preserves_platform_reports_by_reassigning_executions(self) -> None:
+        deleted = delete_user(self.db, 1)
+
+        self.assertTrue(deleted)
+        self.assertIsNone(self.db.query(User).filter(User.id == 1).first())
+
+        system_user = self.db.query(User).filter(User.email == SYSTEM_USER_EMAIL).one()
+        execution = self.db.query(Execution).filter(Execution.id == 42).one()
+        reports = self.db.query(Report).filter(Report.execution_id == 42).all()
+
+        self.assertEqual(execution.creator_id, system_user.id)
+        self.assertEqual(len(reports), 2)
+
+    def test_delete_user_refuses_system_account(self) -> None:
+        system_user = User(id=2, email=SYSTEM_USER_EMAIL, name="System", token_balance=0)
+        self.db.add(system_user)
+        self.db.commit()
+
+        with self.assertRaises(ValueError):
+            delete_user(self.db, 2)
+
+        self.assertIsNotNone(self.db.query(User).filter(User.id == 2).first())
 
 
 if __name__ == "__main__":

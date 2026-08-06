@@ -14,6 +14,7 @@ from config import RESULTS_DIR
 from data_layer import get_data_gateway
 from models.db_models import Execution, Report, ReportView, Subscription, User
 from services.data_cache import get_cached_batch
+from services.token_service import SYSTEM_USER_EMAIL, get_system_user_id
 
 
 def get_stats(db: Session) -> dict:
@@ -67,9 +68,19 @@ def delete_user(db: Session, user_id: int) -> bool:
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         return False
-    
-    # The User model has cascade="all, delete-orphan" relationships, so related records
-    # (subscriptions, profile, etc.) will be automatically deleted
+
+    if (user.email or "").strip().lower() == SYSTEM_USER_EMAIL:
+        raise ValueError("System user cannot be deleted")
+
+    system_user_id = get_system_user_id(db)
+    db.query(Execution).filter(Execution.creator_id == user_id).update(
+        {Execution.creator_id: system_user_id},
+        synchronize_session=False,
+    )
+
+    # The User model has cascade="all, delete-orphan" relationships, so private records
+    # (subscriptions, profile, etc.) will be automatically deleted. Executions are
+    # reassigned above because their reports are shared platform content.
     db.delete(user)
     db.commit()
     return True
