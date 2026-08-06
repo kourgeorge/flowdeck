@@ -83,19 +83,36 @@ def create_payment(user_id: int, package_id: str) -> dict:
         raise Exception(f"Payment creation failed: {payment.error}")
 
 
-def execute_payment(payment_id: str, payer_id: str, db: Session) -> dict:
+def _parse_payment_custom(custom_data: str) -> tuple[int, str, int]:
+    """Return user/package/token data embedded when the payment was created."""
+    try:
+        user_id, package_id, tokens = custom_data.split(":")
+        return int(user_id), package_id, int(tokens)
+    except (AttributeError, TypeError, ValueError):
+        raise ValueError("Invalid payment metadata")
+
+
+def execute_payment(payment_id: str, payer_id: str, current_user_id: int, db: Session) -> dict:
     """Execute the payment and credit tokens."""
     payment = paypalrestsdk.Payment.find(payment_id)
-    
+
+    custom_data = payment.transactions[0].custom
+    user_id, package_id, tokens = _parse_payment_custom(custom_data)
+    if user_id != current_user_id:
+        raise PermissionError("Payment does not belong to the authenticated user")
+    if package_id not in TOKEN_PACKAGES or TOKEN_PACKAGES[package_id]["tokens"] != tokens:
+        raise ValueError("Invalid payment package metadata")
+
     if payment.execute({"payer_id": payer_id}):
-        # Payment successful - credit tokens
-        custom_data = payment.transactions[0].custom
-        user_id, package_id, tokens = custom_data.split(":")
-        user_id = int(user_id)
-        tokens = int(tokens)
-        
         # Credit tokens to user
-        token_service.top_up(user_id, tokens, db)
+        credited = token_service.top_up(
+            user_id,
+            tokens,
+            db,
+            metadata={"package_id": package_id, "payment_id": payment_id},
+        )
+        if not credited:
+            raise Exception("Payment executed but token credit failed")
         
         return {
             "success": True,
