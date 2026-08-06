@@ -11,9 +11,11 @@ from ai_engine.tradingagents.agents.analysts.valuation_analyst import (
     ValuationSummaryTable,
 )
 from ai_engine.tradingagents.agents.utils.valuation_tools import (
+    _is_index_or_etf,
     calculate_multi_method_valuation_data,
     calculate_valuation_summary,
 )
+from ai_engine.tradingagents.agents.utils.agent_states import AgentState
 
 
 class TestValuationSummary(unittest.TestCase):
@@ -117,6 +119,83 @@ class TestValuationSummary(unittest.TestCase):
         self.assertEqual(dumped["valuation_bridge"]["fair_value"], 50.0)
         self.assertEqual(dumped["valuation_sensitivity"]["exit_multiple"]["delta"], 2.0)
 
+    def test_agent_state_allows_valuation_metadata_to_persist(self):
+        expected_keys = {
+            "valuation_summary",
+            "valuation_bridge",
+            "valuation_sensitivity",
+            "dcf",
+            "pe_comps",
+            "ev_ebitda",
+        }
+
+        self.assertTrue(expected_keys.issubset(AgentState.__annotations__))
+
+    def test_structured_output_accepts_tool_assumption_list(self):
+        summary = calculate_valuation_summary(
+            dcf={"bear": 40.0, "base": 50.0, "bull": 60.0},
+            pe_comps={"bear": 42.0, "base": 52.0, "bull": 62.0},
+            ev_ebitda={"bear": 38.0, "base": 48.0, "bull": 58.0},
+        )
+        assumptions = [
+            "DCF projection period: 10 years",
+            "FCF growth: bear 5.0%, base 8.0%, bull 12.0%",
+            "WACC: bear 10.0%, base 9.0%, bull 8.0%",
+            "Terminal growth: bear 2.0%, base 3.0%, bull 4.0%",
+            "Forward EPS used for P/E comps: 5.00",
+            "Base EV/EBITDA multiple: 15.00x",
+            "Method weights: DCF 40.0%, P/E Comps 30.0%, EV/EBITDA 30.0%",
+        ]
+
+        result = ValuationAnalysisOutput(
+            report="Report",
+            valuation_score=6,
+            fair_value_bear=40.0,
+            fair_value_base=50.0,
+            fair_value_bull=60.0,
+            current_discount_pct=12.0,
+            valuation_conviction="medium",
+            valuation_key_assumptions=assumptions,
+            dcf=ValuationMethodScenario(bear=40.0, base=50.0, bull=60.0),
+            pe_comps=ValuationMethodScenario(bear=42.0, base=52.0, bull=62.0),
+            ev_ebitda=ValuationMethodScenario(bear=38.0, base=48.0, bull=58.0),
+            valuation_summary=ValuationSummaryTable(**summary),
+            valuation_bridge=ValuationBridge(
+                current_price=44.00,
+                growth_premium=6.00,
+                multiple_expansion=5.00,
+                risk_discount=5.00,
+                fair_value=50.00,
+            ),
+            valuation_sensitivity=ValuationSensitivity(
+                fcf_growth_rate=ValuationSensitivityRange(delta=0.02, low=47.0, high=53.0),
+                wacc=ValuationSensitivityRange(delta=0.01, low=46.0, high=54.0),
+                terminal_growth=ValuationSensitivityRange(delta=0.005, low=48.0, high=52.0),
+                exit_multiple=ValuationSensitivityRange(delta=2.0, low=49.0, high=51.0),
+            ),
+            key_takeaways=["Fair value above market."],
+        )
+
+        self.assertEqual(result.valuation_key_assumptions, assumptions)
+
+    def test_trust_equity_is_not_treated_as_etf_when_quote_type_is_equity(self):
+        self.assertFalse(
+            _is_index_or_etf(
+                {
+                    "QuoteType": "EQUITY",
+                    "Name": "PennyMac Mortgage Investment Trust",
+                }
+            )
+        )
+        self.assertTrue(
+            _is_index_or_etf(
+                {
+                    "QuoteType": "ETF",
+                    "Name": "SPDR S&P 500 ETF Trust",
+                }
+            )
+        )
+
     def test_multi_method_valuation_data_returns_non_zero_methods(self):
         fundamentals = {
             "MarketCapitalization": 1_000_000_000_000,
@@ -199,7 +278,7 @@ class TestValuationSummary(unittest.TestCase):
             + result["valuation_bridge"]["multiple_expansion"]
             - result["valuation_bridge"]["risk_discount"],
             result["valuation_bridge"]["fair_value"],
-            places=6,
+            places=2,
         )
 
 

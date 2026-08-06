@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from auth import get_current_admin_user
 from database import get_db
 import app_services
-from models.db_models import User
+from models.db_models import Execution, User
 from services import admin_service, analytics_service, token_service
 from services.data_cache import delete_analysis_status, list_running_analyses, set_stop_requested
 
@@ -357,6 +357,23 @@ def admin_delete_user(
     db: Session = Depends(get_db),
 ):
     """Delete a user account. Admin only. This action is irreversible."""
+    if not admin_service.get_user(db, user_id):
+        raise HTTPException(status_code=404, detail="User not found")
+    running_analysis_ids = [
+        row[0]
+        for row in db.query(Execution.id)
+        .filter(
+            Execution.creator_id == user_id,
+            Execution.execution_type == "ticker",
+            Execution.status == "running",
+        )
+        .all()
+    ]
+    analysis_service = app_services.get_analysis_service()
+    for analysis_run_id in running_analysis_ids:
+        set_stop_requested(analysis_run_id)
+        analysis_service.mark_analysis_cancelled(analysis_run_id)
+        delete_analysis_status("ticker", analysis_run_id)
     if not admin_service.delete_user(db, user_id):
         raise HTTPException(status_code=404, detail="User not found")
     return {"ok": True, "id": user_id}
@@ -432,7 +449,13 @@ def delete_analysis_run(
     db: Session = Depends(get_db),
 ):
     """Delete an AI analysis run and its reports (admin only). Cascades to reports and report_views."""
-    delete_analysis_status("ticker", analysis_run_id)
+    execution = db.query(Execution).filter(Execution.id == analysis_run_id).first()
+    if not execution:
+        raise HTTPException(status_code=404, detail="Analysis run not found")
+    if execution.execution_type == "ticker":
+        set_stop_requested(analysis_run_id)
+        app_services.get_analysis_service().mark_analysis_cancelled(analysis_run_id)
+        delete_analysis_status("ticker", analysis_run_id)
     token_service.delete_execution(analysis_run_id, db)
     return {"ok": True, "id": analysis_run_id}
 

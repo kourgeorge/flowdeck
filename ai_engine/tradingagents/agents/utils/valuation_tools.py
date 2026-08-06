@@ -62,7 +62,6 @@ _INDEX_ETF_NAME_KEYWORDS = (
     " ETN",
     " INDEX",
     " INDEX FUND",
-    " TRUST",
     " FUND",
     " SPDR",
     " ISHARES",
@@ -89,6 +88,28 @@ SECTOR_DIVERGENCE_THRESHOLDS = {
     "default": {"high": 0.20, "medium": 0.35},
 }
 
+
+_INDEX_ETF_TYPE_VALUES = {
+    "ETF",
+    "ETN",
+    "INDEX",
+    "MUTUAL FUND",
+    "MUTUALFUND",
+    "FUND",
+    "EXCHANGE TRADED FUND",
+    "EXCHANGE TRADED NOTE",
+}
+
+_COMMON_EQUITY_TYPE_VALUES = {
+    "EQUITY",
+    "COMMON STOCK",
+    "COMMONSTOCK",
+    "STOCK",
+    "COMMON SHARE",
+    "COMMON SHARES",
+    "ORDINARY SHARE",
+    "ORDINARY SHARES",
+}
 
 
 def _weighted_base_value(
@@ -231,21 +252,33 @@ def _average_metric(entries: list[Dict[str, Any]], metric_name: str) -> Optional
 
 def _is_index_or_etf(fundamentals: Dict[str, Any]) -> bool:
     profile = _extract_company_profile(fundamentals)
-    candidates = [
+    instrument_type_candidates = [
         fundamentals.get("QuoteType"),
         fundamentals.get("AssetType"),
         fundamentals.get("SecurityType"),
         fundamentals.get("InstrumentType"),
-        fundamentals.get("Category"),
-        fundamentals.get("FundFamily"),
         profile.get("quoteType"),
         profile.get("assetType"),
         profile.get("securityType"),
         profile.get("instrumentType"),
+    ]
+    normalized_instrument_types = {
+        _normalize_upper(value) for value in instrument_type_candidates if value
+    }
+    if normalized_instrument_types & _INDEX_ETF_TYPE_VALUES:
+        return True
+    if normalized_instrument_types & _COMMON_EQUITY_TYPE_VALUES:
+        return False
+
+    descriptive_candidates = [
+        fundamentals.get("Category"),
+        fundamentals.get("FundFamily"),
         profile.get("category"),
     ]
-    normalized_fields = " ".join(_normalize_upper(value) for value in candidates if value)
-    if any(keyword.strip() in normalized_fields for keyword in ("ETF", "ETN", "INDEX", "MUTUAL FUND", "FUND")):
+    normalized_descriptors = " ".join(
+        _normalize_upper(value) for value in descriptive_candidates if value
+    )
+    if any(keyword in normalized_descriptors for keyword in ("ETF", "ETN", "INDEX FUND", "MUTUAL FUND")):
         return True
 
     name_candidates = [

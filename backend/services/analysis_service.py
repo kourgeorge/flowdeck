@@ -441,6 +441,22 @@ class AnalysisService:
             if info.get("status") == "running" and info.get("ticker") == ticker_upper and info.get("date") == analysis_date:
                 return run_id
         return None
+
+    def mark_analysis_cancelled(self, analysis_run_id: int) -> bool:
+        """Mark an in-memory analysis as cancelled after an external stop request."""
+        with self._lock:
+            analysis_info = self.running_analyses.get(analysis_run_id)
+            if not analysis_info:
+                return False
+            if analysis_info.get("status") == "running":
+                analysis_info["status"] = "cancelled"
+                self._append_live_activity(
+                    analysis_info,
+                    kind="status",
+                    status="cancelled",
+                    summary="Analysis cancellation requested",
+                )
+            return True
     
     def start_analysis(
         self,
@@ -769,6 +785,12 @@ class AnalysisService:
 
             def _write_report(key, content, score, label, llm_usage=None, resources=None, chunk=None, **extra):
                 try:
+                    if get_stop_requested(analysis_run_id):
+                        logger.info(
+                            "Skipping report save after stop request analysis_run_id=%s report_type=%s",
+                            analysis_run_id, key,
+                        )
+                        return
                     takeaways = _get_or_extract_takeaways(key, content, chunk)
                     data = _build_report_json(content, score, label, takeaways, **extra)
                     meta = data.get("metadata", {})
@@ -829,6 +851,27 @@ class AnalysisService:
                     if isinstance(specific, list):
                         return sort_agent_steps(specific)
                 return []
+
+            def _valuation_metadata_from_chunk(
+                chunk: Optional[Dict[str, Any]],
+                report_key: str,
+            ) -> Dict[str, Any]:
+                if report_key != "valuation_report" or not isinstance(chunk, dict):
+                    return {}
+                return {
+                    "fair_value_bear": chunk.get("fair_value_bear"),
+                    "fair_value_base": chunk.get("fair_value_base"),
+                    "fair_value_bull": chunk.get("fair_value_bull"),
+                    "current_discount_pct": chunk.get("current_discount_pct"),
+                    "valuation_conviction": chunk.get("valuation_conviction"),
+                    "valuation_key_assumptions": chunk.get("valuation_key_assumptions"),
+                    "valuation_summary": chunk.get("valuation_summary"),
+                    "valuation_bridge": chunk.get("valuation_bridge"),
+                    "valuation_sensitivity": chunk.get("valuation_sensitivity"),
+                    "dcf": chunk.get("dcf"),
+                    "pe_comps": chunk.get("pe_comps"),
+                    "ev_ebitda": chunk.get("ev_ebitda"),
+                }
 
             # Determine when analyst phase is complete (last selected analyst report saved).
             analyst_to_report_key = {
@@ -999,18 +1042,7 @@ class AnalysisService:
                                 llm_usage=report_usage.get(key),
                                 resources=_get_report_resources(chunk, key),
                                 chunk=chunk,
-                                fair_value_bear=chunk.get("fair_value_bear") if key == "valuation_report" else None,
-                                fair_value_base=chunk.get("fair_value_base") if key == "valuation_report" else None,
-                                fair_value_bull=chunk.get("fair_value_bull") if key == "valuation_report" else None,
-                                current_discount_pct=chunk.get("current_discount_pct") if key == "valuation_report" else None,
-                                valuation_conviction=chunk.get("valuation_conviction") if key == "valuation_report" else None,
-                                valuation_key_assumptions=chunk.get("valuation_key_assumptions") if key == "valuation_report" else None,
-                                valuation_summary=chunk.get("valuation_summary") if key == "valuation_report" else None,
-                                valuation_bridge=chunk.get("valuation_bridge") if key == "valuation_report" else None,
-                                valuation_sensitivity=chunk.get("valuation_sensitivity") if key == "valuation_report" else None,
-                                dcf=chunk.get("dcf") if key == "valuation_report" else None,
-                                pe_comps=chunk.get("pe_comps") if key == "valuation_report" else None,
-                                ev_ebitda=chunk.get("ev_ebitda") if key == "valuation_report" else None,
+                                **_valuation_metadata_from_chunk(chunk, key),
                             )
                             _written_reports.add(key)
                             _progress_log(f"{agent} completed → {key} saved")
@@ -1183,6 +1215,7 @@ class AnalysisService:
                             llm_usage=report_usage.get(report_key),
                             resources=_get_report_resources(last_chunk, report_key),
                             chunk=last_chunk,
+                            **_valuation_metadata_from_chunk(last_chunk, report_key),
                         )
                         analysis_info["reports"][report_key] = content
                         analysis_info["agent_statuses"][agent] = "completed"
