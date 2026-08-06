@@ -169,8 +169,8 @@ class ValuationAnalysisOutput(BaseModel):
     )
     valuation_key_assumptions: List[str] = Field(
         default_factory=list,
-        max_length=5,
-        description="Top 3-5 most critical assumptions driving the valuation (e.g., 'FCF growth 15%', 'WACC 9.5%')"
+        max_length=12,
+        description="Critical assumptions copied from the valuation tool output (e.g., 'FCF growth 15%', 'WACC 9.5%')"
     )
     dcf: ValuationMethodScenario = Field(
         description="DCF fair value outputs by scenario"

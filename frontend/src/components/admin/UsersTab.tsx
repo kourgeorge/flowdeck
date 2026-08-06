@@ -412,7 +412,7 @@ export default function UsersTab({
             <ul className="text-gray-400 text-sm mb-6 list-disc list-inside space-y-1">
               <li>User account and profile</li>
               <li>All subscriptions ({deleteConfirmUser.subscription_count})</li>
-              <li>Chat history and analysis runs</li>
+              <li>Chat history and personal usage data</li>
               <li>Token balance ({deleteConfirmUser.token_balance.toLocaleString()} tokens)</li>
             </ul>
             <div className="flex gap-3 justify-end">
