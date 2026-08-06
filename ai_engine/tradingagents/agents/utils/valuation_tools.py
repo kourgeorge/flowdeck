@@ -62,7 +62,6 @@ _INDEX_ETF_NAME_KEYWORDS = (
     " ETN",
     " INDEX",
     " INDEX FUND",
-    " TRUST",
     " FUND",
     " SPDR",
     " ISHARES",
@@ -231,22 +230,29 @@ def _average_metric(entries: list[Dict[str, Any]], metric_name: str) -> Optional
 
 def _is_index_or_etf(fundamentals: Dict[str, Any]) -> bool:
     profile = _extract_company_profile(fundamentals)
-    candidates = [
+    quote_type_fields = [
         fundamentals.get("QuoteType"),
         fundamentals.get("AssetType"),
         fundamentals.get("SecurityType"),
         fundamentals.get("InstrumentType"),
-        fundamentals.get("Category"),
-        fundamentals.get("FundFamily"),
         profile.get("quoteType"),
         profile.get("assetType"),
         profile.get("securityType"),
         profile.get("instrumentType"),
+    ]
+    candidates = [
+        *quote_type_fields,
+        fundamentals.get("Category"),
+        fundamentals.get("FundFamily"),
         profile.get("category"),
     ]
     normalized_fields = " ".join(_normalize_upper(value) for value in candidates if value)
     if any(keyword.strip() in normalized_fields for keyword in ("ETF", "ETN", "INDEX", "MUTUAL FUND", "FUND")):
         return True
+
+    normalized_quote_types = {_normalize_upper(value) for value in quote_type_fields if value}
+    if normalized_quote_types.intersection({"EQUITY", "COMMON STOCK", "STOCK"}):
+        return False
 
     name_candidates = [
         fundamentals.get("Name"),
