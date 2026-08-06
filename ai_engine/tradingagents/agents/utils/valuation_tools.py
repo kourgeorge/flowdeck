@@ -62,8 +62,6 @@ _INDEX_ETF_NAME_KEYWORDS = (
     " ETN",
     " INDEX",
     " INDEX FUND",
-    " TRUST",
-    " FUND",
     " SPDR",
     " ISHARES",
     " VANGUARD",
@@ -231,21 +229,29 @@ def _average_metric(entries: list[Dict[str, Any]], metric_name: str) -> Optional
 
 def _is_index_or_etf(fundamentals: Dict[str, Any]) -> bool:
     profile = _extract_company_profile(fundamentals)
-    candidates = [
+    type_candidates = [
         fundamentals.get("QuoteType"),
         fundamentals.get("AssetType"),
         fundamentals.get("SecurityType"),
         fundamentals.get("InstrumentType"),
-        fundamentals.get("Category"),
-        fundamentals.get("FundFamily"),
         profile.get("quoteType"),
         profile.get("assetType"),
         profile.get("securityType"),
         profile.get("instrumentType"),
+    ]
+    normalized_type_fields = " ".join(_normalize_upper(value) for value in type_candidates if value)
+    if any(keyword in normalized_type_fields for keyword in ("ETF", "ETN", "INDEX", "MUTUAL FUND", "MUTUALFUND", "FUND")):
+        return True
+    if any(keyword in normalized_type_fields for keyword in ("EQUITY", "COMMON STOCK", "COMMON SHARE", "ORDINARY SHARE")):
+        return False
+
+    fund_metadata_candidates = [
+        fundamentals.get("Category"),
+        fundamentals.get("FundFamily"),
         profile.get("category"),
     ]
-    normalized_fields = " ".join(_normalize_upper(value) for value in candidates if value)
-    if any(keyword.strip() in normalized_fields for keyword in ("ETF", "ETN", "INDEX", "MUTUAL FUND", "FUND")):
+    normalized_fund_metadata = " ".join(_normalize_upper(value) for value in fund_metadata_candidates if value)
+    if any(keyword in normalized_fund_metadata for keyword in ("ETF", "ETN", "INDEX", "MUTUAL FUND", "MUTUALFUND", "FUND")):
         return True
 
     name_candidates = [
@@ -500,12 +506,13 @@ def _build_valuation_bridge(
 
     # Handle overvalued case (negative gap)
     if total_gap <= 0:
+        risk_discount = round(abs(total_gap), 2)
         return {
             "current_price": current_price,
             "growth_premium": 0.0,
             "multiple_expansion": 0.0,
-            "risk_discount": abs(total_gap),  # Premium being paid
-            "fair_value": fair_value_base,
+            "risk_discount": risk_discount,  # Premium being paid
+            "fair_value": current_price - risk_discount,
         }
 
     # Calculate actual contributions from each method
@@ -557,12 +564,16 @@ def _build_valuation_bridge(
             growth_premium += shortfall * 0.5
             multiple_expansion += shortfall * 0.5
 
+    growth_premium = round(growth_premium, 2)
+    multiple_expansion = round(multiple_expansion, 2)
+    risk_discount = round(risk_discount, 2)
+
     return {
         "current_price": current_price,
-        "growth_premium": round(growth_premium, 2),
-        "multiple_expansion": round(multiple_expansion, 2),
-        "risk_discount": round(risk_discount, 2),
-        "fair_value": fair_value_base,
+        "growth_premium": growth_premium,
+        "multiple_expansion": multiple_expansion,
+        "risk_discount": risk_discount,
+        "fair_value": current_price + growth_premium + multiple_expansion - risk_discount,
     }
 
 

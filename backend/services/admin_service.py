@@ -7,13 +7,30 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from config import RESULTS_DIR
 from data_layer import get_data_gateway
-from models.db_models import Execution, Report, ReportView, Subscription, User
+from models.db_models import (
+    ApiKey,
+    ChatMessage,
+    ChatSession,
+    ChatTurn,
+    Execution,
+    Report,
+    ReportView,
+    Subscription,
+    Usage,
+    User,
+    UserProfile,
+    UserSchedule,
+)
 from services.data_cache import get_cached_batch
+
+
+class AdminUserDeletionError(ValueError):
+    """Raised when a protected admin account would be deleted."""
 
 
 def get_stats(db: Session) -> dict:
@@ -67,9 +84,50 @@ def delete_user(db: Session, user_id: int) -> bool:
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         return False
-    
-    # The User model has cascade="all, delete-orphan" relationships, so related records
-    # (subscriptions, profile, etc.) will be automatically deleted
+
+    if user.is_admin:
+        raise AdminUserDeletionError("Admin accounts cannot be deleted")
+
+    execution_ids = select(Execution.id).where(Execution.creator_id == user_id)
+    session_ids = select(ChatSession.id).where(ChatSession.user_id == user_id)
+
+    db.query(ChatTurn).filter(
+        or_(
+            ChatTurn.user_id == user_id,
+            ChatTurn.session_id.in_(session_ids),
+        )
+    ).delete(synchronize_session=False)
+    db.query(ChatMessage).filter(ChatMessage.session_id.in_(session_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(ChatSession).filter(ChatSession.user_id == user_id).delete(
+        synchronize_session=False
+    )
+
+    db.query(ReportView).filter(
+        or_(
+            ReportView.viewer_id == user_id,
+            ReportView.execution_id.in_(execution_ids),
+        )
+    ).delete(synchronize_session=False)
+    db.query(Report).filter(Report.execution_id.in_(execution_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(Execution).filter(Execution.creator_id == user_id).delete(
+        synchronize_session=False
+    )
+    db.query(ApiKey).filter(ApiKey.user_id == user_id).delete(synchronize_session=False)
+    db.query(Usage).filter(Usage.user_id == user_id).delete(synchronize_session=False)
+    db.query(UserSchedule).filter(UserSchedule.user_id == user_id).delete(
+        synchronize_session=False
+    )
+    db.query(Subscription).filter(Subscription.user_id == user_id).delete(
+        synchronize_session=False
+    )
+    db.query(UserProfile).filter(UserProfile.user_id == user_id).delete(
+        synchronize_session=False
+    )
+
     db.delete(user)
     db.commit()
     return True
