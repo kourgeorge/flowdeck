@@ -17,8 +17,7 @@ from pathlib import Path
 try:
     import pandas as pd
 except ImportError:
-    print("Error: pandas is required. Install with: pip install pandas lxml html5lib")
-    exit(1)
+    pd = None
 
 STOCK_LISTS_PATH = Path(__file__).parent / "data" / "stock_lists.json"
 
@@ -26,11 +25,19 @@ STOCK_LISTS_PATH = Path(__file__).parent / "data" / "stock_lists.json"
 SP500_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 NASDAQ100_URL = "https://en.wikipedia.org/wiki/Nasdaq-100"
 
+MIN_SP500_COUNT = 450
+MIN_NASDAQ100_COUNT = 90
+MAX_REMOVAL_RATIO = 0.15
+
 
 def extract_sp500_tickers() -> list[str]:
     """
     Extract S&P 500 tickers from Wikipedia using pandas.
     """
+    if pd is None:
+        print("Error: pandas is required. Install with: pip install pandas lxml html5lib")
+        return []
+
     print(f"Fetching {SP500_URL}...")
     try:
         # Read all tables from the page with proper headers
@@ -71,6 +78,10 @@ def extract_nasdaq100_tickers() -> list[str]:
     """
     Extract NASDAQ-100 tickers from Wikipedia using pandas.
     """
+    if pd is None:
+        print("Error: pandas is required. Install with: pip install pandas lxml html5lib")
+        return []
+
     print(f"Fetching {NASDAQ100_URL}...")
     try:
         # Read all tables from the page with proper headers
@@ -133,9 +144,61 @@ def save_stock_lists(path: Path, data: dict) -> None:
         f.write('\n')  # Add trailing newline
 
 
+def validate_ticker_update(
+    index_name: str,
+    new_tickers: list[str],
+    old_tickers: list[str],
+    min_count: int,
+) -> list[str]:
+    """Return safety errors for implausible index updates."""
+    errors = []
+    if len(new_tickers) < min_count:
+        errors.append(
+            f"{index_name} parse returned {len(new_tickers)} tickers; expected at least {min_count}"
+        )
+
+    if old_tickers:
+        removed = set(old_tickers) - set(new_tickers)
+        max_removed = max(10, int(len(old_tickers) * MAX_REMOVAL_RATIO))
+        if len(removed) > max_removed:
+            errors.append(
+                f"{index_name} update would remove {len(removed)} tickers; safety limit is {max_removed}"
+            )
+
+    return errors
+
+
+def safe_ticker_update(
+    index_name: str,
+    fetched_tickers: list[str],
+    old_tickers: list[str],
+    min_count: int,
+    force: bool = False,
+) -> list[str]:
+    """Use fetched tickers only when they pass sanity checks, unless forced."""
+    if not fetched_tickers:
+        print(f"✗ Failed to fetch {index_name}, keeping existing list")
+        return old_tickers
+
+    print(f"✓ Fetched {index_name}: {len(fetched_tickers)} stocks")
+    validation_errors = validate_ticker_update(index_name, fetched_tickers, old_tickers, min_count)
+    if validation_errors and not force:
+        for error in validation_errors:
+            print(f"✗ {error}")
+        print(f"✗ Refusing to update {index_name}; keeping existing list (use --force to override)")
+        return old_tickers
+
+    if validation_errors and force:
+        for error in validation_errors:
+            print(f"! {error} (--force set, accepting update)")
+
+    return fetched_tickers
+
+
 def main():
     parser = argparse.ArgumentParser(description='Update S&P 500 and NASDAQ-100 lists')
     parser.add_argument('--dry-run', action='store_true', help='Show changes without saving')
+    parser.add_argument('--force', action='store_true', help='Save even when safety checks reject a fetched list')
     args = parser.parse_args()
     
     # Load existing lists
@@ -150,19 +213,21 @@ def main():
     print()
     
     # Fetch new lists
-    new_sp500 = extract_sp500_tickers()
-    if new_sp500:
-        print(f"✓ Fetched S&P 500: {len(new_sp500)} stocks")
-    else:
-        print(f"✗ Failed to fetch S&P 500, keeping existing list")
-        new_sp500 = old_sp500
+    new_sp500 = safe_ticker_update(
+        "S&P 500",
+        extract_sp500_tickers(),
+        old_sp500,
+        MIN_SP500_COUNT,
+        force=args.force,
+    )
     
-    new_nasdaq100 = extract_nasdaq100_tickers()
-    if new_nasdaq100:
-        print(f"✓ Fetched NASDAQ-100: {len(new_nasdaq100)} stocks")
-    else:
-        print(f"✗ Failed to fetch NASDAQ-100, keeping existing list")
-        new_nasdaq100 = old_nasdaq100
+    new_nasdaq100 = safe_ticker_update(
+        "NASDAQ-100",
+        extract_nasdaq100_tickers(),
+        old_nasdaq100,
+        MIN_NASDAQ100_COUNT,
+        force=args.force,
+    )
     
     print()
     

@@ -70,6 +70,45 @@ def _extract_confidence(*metas: object) -> Optional[float]:
     return None
 
 
+def _report_data_from_mapping(report: dict) -> ReportData:
+    """Preserve the full report metadata shape exposed by ReportService."""
+    return ReportData(
+        content=report.get("content"),
+        score=report.get("score"),
+        score_label=report.get("score_label"),
+        key_takeaways=report.get("key_takeaways") or [],
+        analysis_date=report.get("analysis_date"),
+        generated_at=report.get("generated_at"),
+        days_ago=report.get("days_ago"),
+        models_used=report.get("models_used"),
+        bull_viewpoint=report.get("bull_viewpoint"),
+        bear_viewpoint=report.get("bear_viewpoint"),
+        risky_viewpoint=report.get("risky_viewpoint"),
+        safe_viewpoint=report.get("safe_viewpoint"),
+        neutral_viewpoint=report.get("neutral_viewpoint"),
+        tps_plan=report.get("tps_plan"),
+        resources=report.get("resources") or [],
+        agent_steps=report.get("agent_steps") or [],
+        expected_return_pct=report.get("expected_return_pct"),
+        bear_case_return_pct=report.get("bear_case_return_pct"),
+        bull_case_return_pct=report.get("bull_case_return_pct"),
+        current_price=report.get("current_price"),
+        currency=report.get("currency"),
+        fair_value_bear=report.get("fair_value_bear"),
+        fair_value_base=report.get("fair_value_base"),
+        fair_value_bull=report.get("fair_value_bull"),
+        current_discount_pct=report.get("current_discount_pct"),
+        valuation_conviction=report.get("valuation_conviction"),
+        valuation_key_assumptions=report.get("valuation_key_assumptions"),
+        valuation_summary=report.get("valuation_summary"),
+        valuation_bridge=report.get("valuation_bridge"),
+        valuation_sensitivity=report.get("valuation_sensitivity"),
+        dcf=report.get("dcf"),
+        pe_comps=report.get("pe_comps"),
+        ev_ebitda=report.get("ev_ebitda"),
+    )
+
+
 def _get_ticker_widgets_sync(
     tickers: Optional[str],
     date: Optional[str],
@@ -350,29 +389,7 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
         latest_reports = gw.get_reports_for_run(latest_analysis_run_id)
         latest_reports_with_scores_raw = gw.get_reports_with_scores(latest_analysis_run_id)
         latest_reports_with_scores = {
-            k: ReportData(
-                content=v.get('content'),
-                score=v.get('score'),
-                score_label=v.get('score_label'),
-                key_takeaways=v.get('key_takeaways') or [],
-                analysis_date=v.get('analysis_date'),
-                generated_at=v.get('generated_at'),
-                days_ago=v.get('days_ago'),
-                models_used=v.get('models_used'),
-                bull_viewpoint=v.get('bull_viewpoint'),
-                bear_viewpoint=v.get('bear_viewpoint'),
-                risky_viewpoint=v.get('risky_viewpoint'),
-                safe_viewpoint=v.get('safe_viewpoint'),
-                neutral_viewpoint=v.get('neutral_viewpoint'),
-                tps_plan=v.get('tps_plan'),
-                resources=v.get('resources') or [],
-                agent_steps=v.get('agent_steps') or [],
-                expected_return_pct=v.get('expected_return_pct'),
-                bear_case_return_pct=v.get('bear_case_return_pct'),
-                bull_case_return_pct=v.get('bull_case_return_pct'),
-                current_price=v.get('current_price'),
-                currency=v.get('currency'),
-            )
+            k: _report_data_from_mapping(v)
             for k, v in latest_reports_with_scores_raw.items()
         }
         first_report = next(iter(latest_reports_with_scores_raw.values()), {})
@@ -500,29 +517,7 @@ async def get_ticker_reports_for_run(
         if not scores_raw:
             return None
         return {
-            k: ReportData(
-                content=v.get("content"),
-                score=v.get("score"),
-                score_label=v.get("score_label"),
-                key_takeaways=v.get("key_takeaways") or [],
-                analysis_date=v.get("analysis_date"),
-                generated_at=v.get("generated_at"),
-                days_ago=v.get("days_ago"),
-                models_used=v.get("models_used"),
-                bull_viewpoint=v.get("bull_viewpoint"),
-                bear_viewpoint=v.get("bear_viewpoint"),
-                risky_viewpoint=v.get("risky_viewpoint"),
-                safe_viewpoint=v.get("safe_viewpoint"),
-                neutral_viewpoint=v.get("neutral_viewpoint"),
-                tps_plan=v.get("tps_plan"),
-                resources=v.get("resources") or [],
-                agent_steps=v.get("agent_steps") or [],
-                expected_return_pct=v.get("expected_return_pct"),
-                bear_case_return_pct=v.get("bear_case_return_pct"),
-                bull_case_return_pct=v.get("bull_case_return_pct"),
-                current_price=v.get("current_price"),
-                currency=v.get("currency"),
-            )
+            k: _report_data_from_mapping(v)
             for k, v in scores_raw.items()
         }
 
