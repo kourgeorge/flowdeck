@@ -16,6 +16,10 @@ from models.db_models import Execution, Report, ReportView, Subscription, User
 from services.data_cache import get_cached_batch
 
 
+class CannotDeleteAdminError(ValueError):
+    """Raised when an admin account is targeted by irreversible user deletion."""
+
+
 def get_stats(db: Session) -> dict:
     """Platform-wide stats for admin dashboard."""
     now = datetime.now(timezone.utc)
@@ -67,7 +71,10 @@ def delete_user(db: Session, user_id: int) -> bool:
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         return False
-    
+
+    if getattr(user, "is_admin", False):
+        raise CannotDeleteAdminError("Admin accounts cannot be deleted")
+
     # The User model has cascade="all, delete-orphan" relationships, so related records
     # (subscriptions, profile, etc.) will be automatically deleted
     db.delete(user)
