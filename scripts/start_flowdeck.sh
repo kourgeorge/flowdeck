@@ -15,8 +15,10 @@ PID_FILE="$ROOT_DIR/.flowdeck.pids"
 
 cd "$ROOT_DIR"
 
-# Activate venv if it exists
-if [ -d "$ROOT_DIR/venv" ]; then
+# Activate venv if it exists (.venv is the uv-managed default; venv is the legacy path)
+if [ -d "$ROOT_DIR/.venv" ]; then
+  source "$ROOT_DIR/.venv/bin/activate"
+elif [ -d "$ROOT_DIR/venv" ]; then
   source "$ROOT_DIR/venv/bin/activate"
 elif [ -n "$CONDA_DEFAULT_ENV" ] && [ "$CONDA_DEFAULT_ENV" = "flowdeck" ]; then
   : # already in conda flowdeck env
