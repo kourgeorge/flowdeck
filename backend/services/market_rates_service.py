@@ -7,7 +7,7 @@ Uses caching to minimize API calls and improve performance.
 
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional
 import requests
 
@@ -17,26 +17,32 @@ logger = logging.getLogger(__name__)
 FRED_API_KEY = os.getenv("FRED_API_KEY", "")
 FRED_BASE_URL = "https://api.stlouisfed.org/fred/series/observations"
 
-# Cache for market rates (refresh daily)
-_market_rates_cache: Optional[Dict[str, Any]] = None
-_cache_timestamp: Optional[datetime] = None
-_CACHE_DURATION_HOURS = 24
-
 
 class MarketRatesService:
     """Service for fetching market rates from FRED API."""
 
-    @staticmethod
-    def _fetch_fred_series(series_id: str, limit: int = 1) -> Optional[float]:
+    # Cache for market rates (refresh daily)
+    _cache: Optional[Dict[str, Any]] = None
+    _cache_timestamp: Optional[datetime] = None
+    _CACHE_DURATION_HOURS = 24
+
+    @classmethod
+    def _fetch_fred_series(
+        cls, series_id: str, limit: int = 5, is_percentage: bool = True
+    ) -> Optional[float]:
         """
-        Fetch the latest value from a FRED series.
-        
+        Fetch the latest valid observation from a FRED series.
+
+        FRED daily series carry a "." value on market holidays and publish with a
+        1-2 day lag, so several observations are scanned rather than just the newest.
+
         Args:
             series_id: FRED series ID (e.g., 'DGS10' for 10-year treasury)
-            limit: Number of observations to fetch (default 1 for latest)
-            
+            limit: Number of recent observations to scan for a valid value
+            is_percentage: If True, convert percent to decimal (4.3 -> 0.043)
+
         Returns:
-            Latest value as float (in decimal form, e.g., 0.043 for 4.3%), or None if error
+            Latest valid value, or None if unavailable
         """
         if not FRED_API_KEY:
             logger.warning("FRED_API_KEY not configured, cannot fetch market rates")
@@ -58,24 +64,25 @@ class MarketRatesService:
             
             data = response.json()
             observations = data.get("observations", [])
-            
-            if not observations:
-                logger.warning(f"No observations returned for FRED series {series_id}")
-                return None
-                
-            value = observations[0].get("value")
-            date = observations[0].get("date")
-            
-            # FRED returns "." for missing values
-            if value is None or value == ".":
-                logger.warning(f"Missing value for FRED series {series_id} on {date}")
-                return None
-                
-            # Convert from percentage to decimal (e.g., "4.3" -> 0.043)
-            rate = float(value) / 100.0
-            logger.info(f"Fetched {series_id} = {rate:.4f} ({value}%) as of {date}")
-            return rate
-            
+
+            # Scan newest-first for the first non-missing value (FRED uses "." for missing)
+            for obs in observations:
+                value = obs.get("value")
+                date = obs.get("date")
+
+                if value is None or value == ".":
+                    continue
+
+                parsed = float(value)
+                result = parsed / 100.0 if is_percentage else parsed
+                logger.info(f"Fetched {series_id} = {result:.4f} (raw: {value}) as of {date}")
+                return result
+
+            logger.warning(
+                f"No valid observations in latest {limit} entries for FRED series {series_id}"
+            )
+            return None
+
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching FRED series {series_id}: {e}")
             return None
@@ -83,19 +90,17 @@ class MarketRatesService:
             logger.error(f"Error parsing FRED response for {series_id}: {e}")
             return None
 
-    @staticmethod
-    def _should_refresh_cache() -> bool:
+    @classmethod
+    def _should_refresh_cache(cls) -> bool:
         """Check if cache should be refreshed."""
-        global _cache_timestamp
-        
-        if _cache_timestamp is None:
+        if cls._cache_timestamp is None:
             return True
-            
-        age = datetime.now() - _cache_timestamp
-        return age > timedelta(hours=_CACHE_DURATION_HOURS)
 
-    @staticmethod
-    def get_market_rates(force_refresh: bool = False) -> Dict[str, Any]:
+        age = datetime.now(timezone.utc) - cls._cache_timestamp
+        return age > timedelta(hours=cls._CACHE_DURATION_HOURS)
+
+    @classmethod
+    def get_market_rates(cls, force_refresh: bool = False) -> Dict[str, Any]:
         """
         Get current market rates including treasury yields.
         
@@ -111,42 +116,44 @@ class MarketRatesService:
                 "treasury_10y": float,
                 "treasury_2y": float,
                 "treasury_3m": float,
-                "last_updated": str (ISO format),
+                "vix": float | None,
+                "market_risk_premium": float,
+                "last_updated": str (ISO format, UTC),
                 "source": "FRED",
                 "cache_age_hours": float
             }
         """
-        global _market_rates_cache, _cache_timestamp
-        
+        now = datetime.now(timezone.utc)
+
         # Return cached data if valid
-        if not force_refresh and _market_rates_cache and not MarketRatesService._should_refresh_cache():
-            if _cache_timestamp:
-                cache_age = (datetime.now() - _cache_timestamp).total_seconds() / 3600
+        if not force_refresh and cls._cache and not cls._should_refresh_cache():
+            if cls._cache_timestamp:
+                cache_age = (now - cls._cache_timestamp).total_seconds() / 3600
             else:
                 cache_age = 0.0
-            result = _market_rates_cache.copy()
+            result = cls._cache.copy()
             result["cache_age_hours"] = round(cache_age, 2)
             logger.debug(f"Returning cached market rates (age: {cache_age:.1f}h)")
             return result
-        
+
         logger.info("Fetching fresh market rates from FRED")
         
         # Fetch treasury rates from FRED
         # DGS10 = 10-Year Treasury Constant Maturity Rate
         # DGS2 = 2-Year Treasury Constant Maturity Rate
         # DGS3MO = 3-Month Treasury Constant Maturity Rate
-        treasury_10y = MarketRatesService._fetch_fred_series("DGS10")
-        treasury_2y = MarketRatesService._fetch_fred_series("DGS2")
-        treasury_3m = MarketRatesService._fetch_fred_series("DGS3MO")
-        
+        treasury_10y = cls._fetch_fred_series("DGS10")
+        treasury_2y = cls._fetch_fred_series("DGS2")
+        treasury_3m = cls._fetch_fred_series("DGS3MO")
+
         # Use 10-year as risk-free rate (standard for DCF/WACC)
         # Fallback to reasonable defaults if API fails
         risk_free_rate = treasury_10y if treasury_10y is not None else 0.045
-        
+
         # Fetch VIX and calculate market risk premium
-        vix = MarketRatesService.get_vix()
-        market_risk_premium = MarketRatesService.calculate_market_risk_premium(vix)
-        
+        vix = cls.get_vix()
+        market_risk_premium = cls.calculate_market_risk_premium(vix)
+
         rates = {
             "risk_free_rate": risk_free_rate,
             "treasury_10y": treasury_10y if treasury_10y is not None else risk_free_rate,
@@ -154,60 +161,69 @@ class MarketRatesService:
             "treasury_3m": treasury_3m if treasury_3m is not None else 0.050,
             "vix": vix,
             "market_risk_premium": market_risk_premium,
-            "last_updated": datetime.now().isoformat(),
+            "last_updated": now.isoformat(),
             "source": "FRED" if FRED_API_KEY else "fallback",
             "cache_age_hours": 0.0
         }
-        
+
         # Update cache
-        _market_rates_cache = rates.copy()
-        _cache_timestamp = datetime.now()
-        
+        cls._cache = rates.copy()
+        cls._cache_timestamp = now
+
         if not FRED_API_KEY:
             logger.warning("FRED_API_KEY not configured, using fallback rates")
         
         return rates
 
-    @staticmethod
-    def get_risk_free_rate() -> float:
+    @classmethod
+    def get_risk_free_rate(cls) -> float:
         """
         Get current risk-free rate (10-year treasury).
-        
+
         Convenience method for valuation calculations.
-        
+
         Returns:
             Risk-free rate as decimal (e.g., 0.043 for 4.3%)
         """
-        rates = MarketRatesService.get_market_rates()
+        rates = cls.get_market_rates()
         return rates["risk_free_rate"]
 
-    @staticmethod
-    def get_vix() -> Optional[float]:
+    @classmethod
+    def get_vix(cls) -> Optional[float]:
         """
         Fetch current VIX (volatility index) level.
-        
+
         VIX measures market volatility expectations and is used to calculate
         dynamic market risk premium for equity valuations.
-        
+
+        Primary source is FRED's VIXCLS series (prior-day close, same pipeline as
+        the treasury rates). Falls back to yfinance when FRED is unavailable or
+        no API key is configured.
+
         Returns:
             Current VIX level (e.g., 18.5), or None if unavailable
         """
+        # VIX is an index level, not a percentage rate, so no /100 conversion
+        vix = cls._fetch_fred_series("VIXCLS", is_percentage=False)
+        if vix is not None:
+            return vix
+
         try:
             import yfinance as yf
             vix_ticker = yf.Ticker("^VIX")
             hist = vix_ticker.history(period="1d")
-            
+
             if not hist.empty and 'Close' in hist.columns:
                 vix_value = float(hist['Close'].iloc[-1])
-                logger.info(f"Fetched VIX = {vix_value:.2f}")
+                logger.info(f"Fetched VIX = {vix_value:.2f} (yfinance fallback)")
                 return vix_value
         except Exception as e:
-            logger.error(f"Error fetching VIX: {e}")
-        
+            logger.error(f"Error fetching VIX from yfinance fallback: {e}")
+
         return None
 
-    @staticmethod
-    def calculate_market_risk_premium(vix: Optional[float] = None) -> float:
+    @classmethod
+    def calculate_market_risk_premium(cls, vix: Optional[float] = None) -> float:
         """
         Calculate market risk premium based on VIX (volatility index).
         
@@ -225,8 +241,8 @@ class MarketRatesService:
         """
         # Fetch VIX if not provided
         if vix is None:
-            vix = MarketRatesService.get_vix()
-        
+            vix = cls.get_vix()
+
         # Default to historical average if VIX unavailable
         if vix is None:
             logger.warning("VIX unavailable, using historical average market risk premium (5.5%)")
@@ -249,12 +265,11 @@ class MarketRatesService:
         logger.info(f"Calculated market risk premium = {premium:.4f} ({premium*100:.2f}%) for VIX = {vix:.2f}")
         return premium
 
-    @staticmethod
-    def clear_cache() -> None:
+    @classmethod
+    def clear_cache(cls) -> None:
         """Clear the market rates cache. Useful for testing or forcing refresh."""
-        global _market_rates_cache, _cache_timestamp
-        _market_rates_cache = None
-        _cache_timestamp = None
+        cls._cache = None
+        cls._cache_timestamp = None
         logger.info("Market rates cache cleared")
 
 # Made with Bob
