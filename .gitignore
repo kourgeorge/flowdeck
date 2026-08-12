@@ -73,6 +73,9 @@ frontend/dist/
 # -----------------------------------------------------------------------------
 .flowdeck.pids
 backend/flowdeck.db
+backend/flowdeck.db-wal
+backend/flowdeck.db-shm
+backend/flowdeck.db.bak-*
 backend/data_cache.sqlite
 backend/data_cache.sqlite-wal
 backend/data_cache.sqlite-shm
@@ -109,6 +112,7 @@ ehthumbs.db
 .vscode/
 .idea/
 .cursor/
+.claude/
 
 # -----------------------------------------------------------------------------
 # Jupyter & misc
