@@ -1552,6 +1552,44 @@ def _determine_dynamic_method_weights(
     return normalized
 
 
+# Above this, a "share count" is almost certainly a balance-sheet dollar figure
+# misread as shares (Berkshire, the widest-held US large cap, is under 30B).
+_MAX_PLAUSIBLE_SHARES_OUTSTANDING = 50_000_000_000
+
+
+def _valuation_unavailable(
+    ticker: str,
+    current_price: Optional[float],
+    reason: str,
+    resolved_shares: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Return a structured 'valuation unavailable' dict matching the normal return shape."""
+    empty_scenarios = {"bear": None, "base": None, "bull": None}
+    return {
+        "ticker": ticker.upper(),
+        "current_price": current_price,
+        "dcf": dict(empty_scenarios),
+        "pe_comps": dict(empty_scenarios),
+        "ev_ebitda": dict(empty_scenarios),
+        "valuation_summary": f"Valuation unavailable: {reason}",
+        "fair_value_bear": None,
+        "fair_value_base": None,
+        "fair_value_bull": None,
+        "current_discount_pct": None,
+        "valuation_score": None,
+        "valuation_score_breakdown": {},
+        "valuation_conviction": "UNAVAILABLE",
+        "valuation_bridge": [],
+        "valuation_sensitivity": {},
+        "probability_distribution": {},
+        "scenario_interpretation": {},
+        "valuation_key_assumptions": [f"⚠️ VALUATION_UNAVAILABLE: {reason}"],
+        "inputs": {"shares_outstanding": resolved_shares},
+        "valuation_available": False,
+        "valuation_unavailable_reason": reason,
+    }
+
+
 def calculate_multi_method_valuation_data(
     *,
     ticker: str,
@@ -1577,7 +1615,15 @@ def calculate_multi_method_valuation_data(
     shares_outstanding = _first_numeric(fundamentals, "SharesOutstanding")
     if shares_outstanding is None:
         shares_outstanding = _latest_numeric(balance_sheet_quarterly or balance_sheet_annual, "shareIssued", "ordinarySharesNumber")
-    shares_outstanding = max(shares_outstanding or 1.0, 1.0)
+
+    if (
+        shares_outstanding is None
+        or shares_outstanding <= 0
+        or shares_outstanding > _MAX_PLAUSIBLE_SHARES_OUTSTANDING
+    ):
+        reason = f"shares_outstanding could not be reliably resolved (got: {shares_outstanding})"
+        logger.warning("[%s] %s — refusing to compute valuation", ticker, reason)
+        return _valuation_unavailable(ticker, current_price, reason, resolved_shares=shares_outstanding)
 
     # Extract FCF and its components for negative cash flow analysis
     current_fcf = _latest_numeric(cashflow_annual, "freeCashFlow")
@@ -2009,6 +2055,7 @@ def calculate_multi_method_valuation_data(
         "probability_distribution": probability_distribution,
         "scenario_interpretation": scenario_interpretation,
         "valuation_key_assumptions": key_assumptions,
+        "valuation_available": True,
         "inputs": {
             "shares_outstanding": shares_outstanding,
             "current_fcf": original_fcf,  # Report original FCF

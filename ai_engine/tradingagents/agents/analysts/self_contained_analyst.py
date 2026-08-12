@@ -45,6 +45,17 @@ def _parse_tool_output_snapshot(tool_result: Any) -> Any:
     return _json_safe(tool_result)
 
 
+def _valuation_unavailable_reason(snapshot: Any) -> str:
+    """Reason the valuation result is untrustworthy, or "" when it is usable."""
+    if not isinstance(snapshot, dict):
+        return "valuation tool returned an unparseable payload"
+    if snapshot.get("error"):
+        return str(snapshot["error"])
+    if snapshot.get("valuation_available") is False:
+        return str(snapshot.get("valuation_unavailable_reason", "unknown reason"))
+    return ""
+
+
 def _format_tool_output_preview(snapshot: Any, max_chars: int = 4500) -> str:
     """Create a compact preview for UI inspection while keeping the full snapshot separately."""
     try:
@@ -161,6 +172,11 @@ def run_self_contained_analyst(
     total_usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost_usd": 0.0}
     resources_used = []
     agent_steps = []
+    # Empty string means the deterministic valuation tool produced usable output
+    # (or was never called).  Set to a human-readable reason when the tool errored
+    # or reported valuation_available=False.  Latest tool call wins, so a
+    # successful retry clears an earlier failure.
+    valuation_unavailable_reason: str = ""
     
     # ReAct loop - all happens internally
     for iteration in range(max_iterations):
@@ -229,6 +245,11 @@ def run_self_contained_analyst(
                             name=tool_name,
                         )
                     )
+                    if tool_name == "calculate_multi_method_valuation":
+                        # The tool returns a JSON string, so parse before inspecting.
+                        valuation_unavailable_reason = _valuation_unavailable_reason(
+                            _parse_tool_output_snapshot(tool_result)
+                        )
                     resources_used.extend(
                         build_tool_resource_snapshots(tool_name, tool_args, tool_result)
                     )
@@ -251,6 +272,10 @@ def run_self_contained_analyst(
                     )
                 except Exception as e:
                     logger.error(f"{agent_name} tool {tool_name} failed: {e}")
+                    if tool_name == "calculate_multi_method_valuation":
+                        valuation_unavailable_reason = (
+                            f"calculate_multi_method_valuation tool failed: {e}"
+                        )
                     tool_results.append(
                         ToolMessage(
                             content=f"Error: {str(e)}",
@@ -308,6 +333,27 @@ def run_self_contained_analyst(
                 extra_state = {}
             for key in ("report", report_field, score_field, "key_takeaways"):
                 extra_state.pop(key, None)
+        # Without trustworthy deterministic output the LLM invents fair_value_*
+        # numbers from its own heuristics (typically FCF/shares ≈ $6).  Replace them
+        # with the -1.0 sentinel (the Pydantic fields are non-optional floats) so
+        # callers can tell the values apart from a real valuation.
+        if valuation_unavailable_reason:
+            note = (
+                f"⚠️ VALUATION_UNAVAILABLE: {valuation_unavailable_reason}; "
+                "fair_value fields are set to sentinel -1.0 and must not "
+                "be used for investment decisions."
+            )
+            for fv_field in ("fair_value_base", "fair_value_bull", "fair_value_bear"):
+                if fv_field in extra_state:
+                    extra_state[fv_field] = -1.0
+            existing_assumptions = extra_state.get("valuation_key_assumptions")
+            extra_state["valuation_key_assumptions"] = [note] + (
+                list(existing_assumptions) if isinstance(existing_assumptions, list) else []
+            )
+            report = (
+                f"[DATA UNAVAILABLE: {valuation_unavailable_reason} — "
+                "fair value estimates below are not reliable.]\n\n" + report
+            )
         agent_steps.append(
             make_agent_step(
                 agent=agent_name,
