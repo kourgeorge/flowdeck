@@ -290,7 +290,11 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   const hasFundamentals = quoteType === 'EQUITY' || quoteType == null;
   const hasInsiderTransactions = quoteType === 'EQUITY' || quoteType == null;
   const hasSimilarStocks = quoteType === 'EQUITY' || quoteType == null;
-  const isUSCompany = companyInfo?.country === 'United States' || companyInfo?.country === 'USA';
+  // Country is not a signal for SEC registration: foreign private issuers such as
+  // Nebius (Netherlands) file 20-F/6-K, and Canadian issuers file 40-F.  Prewarm EDGAR
+  // for any equity and show the tab only once filings actually come back.
+  const canHaveSecFilings = quoteType === 'EQUITY' || quoteType == null;
+  const hasSecFilings = isLoadingEdgar || (edgarFilings?.filings?.length ?? 0) > 0;
 
   useEffect(() => {
     configApi.getPublicConfig()
@@ -1001,10 +1005,10 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
   }, [ticker, companyInfo, hasInsiderTransactions, hasLoadedInsiderTransactions, isLoadingInsiderTransactions, fetchInsiderTransactions]);
 
   useEffect(() => {
-    if (!ticker || !companyInfo || !isUSCompany || hasLoadedEdgar || isLoadingEdgar || tabPrewarmRef.current.edgarFilings) return;
+    if (!ticker || !companyInfo || !canHaveSecFilings || hasLoadedEdgar || isLoadingEdgar || tabPrewarmRef.current.edgarFilings) return;
     tabPrewarmRef.current.edgarFilings = true;
     fetchEdgarFilings();
-  }, [ticker, companyInfo, isUSCompany, hasLoadedEdgar, isLoadingEdgar, fetchEdgarFilings]);
+  }, [ticker, companyInfo, canHaveSecFilings, hasLoadedEdgar, isLoadingEdgar, fetchEdgarFilings]);
 
   const handleGenerateReport = async (source: 'fresh' | 'generate' = 'fresh') => {
     if (!ticker) return;
@@ -1411,7 +1415,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                 {[
                   { id: 'overview', label: 'Overview' },
                   ...(hasFundamentals ? [{ id: 'fundamentals', label: 'Fundamentals' }] : []),
-                  ...(isUSCompany ? [{ id: 'sec-filings', label: 'SEC Filings' }] : []),
+                  ...(hasSecFilings ? [{ id: 'sec-filings', label: 'SEC Filings' }] : []),
                   ...(hasInsiderTransactions ? [{ id: 'insider-transactions', label: 'Insider Transactions' }] : []),
                   { id: 'news', label: 'News' },
                   { id: 'prediction-markets', label: 'Prediction Markets' },

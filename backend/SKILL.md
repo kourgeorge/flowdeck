@@ -135,7 +135,7 @@ All under `/api/data/`. Most endpoints are public; auth-required endpoints are m
 | GET | `/api/data/future-events/{ticker}` | Upcoming earnings and ex-dividend dates |
 | GET | `/api/data/similar-tickers/{ticker}?limit=10&offset=0` | Similar tickers based on sector/industry matching (paginated) |
 | GET | `/api/data/company-officers/{ticker}` | Company officers / management team |
-| GET | `/api/data/edgar-filings/{ticker}` | SEC 10-K / 10-Q filings list |
+| GET | `/api/data/edgar-filings/{ticker}` | SEC filings list: 10-K / 10-Q (US issuers), 20-F / 6-K / 40-F (foreign private issuers) |
 | GET | `/api/data/edgar-filing-content/{ticker}?form=10-K&limit=1` | Extracted SEC sections (risk factors, MD&A); uses LLM |
 | GET | `/api/data/reports/{ticker}` | **[Auth required]** Latest AI-generated reports with recommendations |
 | POST | `/api/data/reports/batch` | **[Auth required]** Batch fetch reports for multiple tickers |
