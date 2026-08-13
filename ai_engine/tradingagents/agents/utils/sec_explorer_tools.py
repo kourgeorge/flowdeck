@@ -16,14 +16,32 @@ _current_explorer: Optional[SECFilingExplorer] = None
 _current_key: Optional[tuple] = None
 
 
+_FORM_ALIASES = {
+    # Domestic issuers
+    "10K": "10-K",
+    "10-K": "10-K",
+    "10Q": "10-Q",
+    "10-Q": "10-Q",
+    # Foreign private issuers
+    "20F": "20-F",
+    "20-F": "20-F",
+    "6K": "6-K",
+    "6-K": "6-K",
+    "40F": "40-F",
+    "40-F": "40-F",
+}
+
+
 def _normalize_form(form: str) -> str:
     """Normalize an agent-supplied filing type to the exact SEC form string."""
     f = (form or "").strip().upper().replace(" ", "")
-    if f in ("10K", "10-K"):
-        return "10-K"
-    if f in ("10Q", "10-Q"):
-        return "10-Q"
-    raise ValueError(f"Unsupported form '{form}'. Use '10-K' or '10-Q'.")
+    try:
+        return _FORM_ALIASES[f]
+    except KeyError:
+        raise ValueError(
+            f"Unsupported form '{form}'. Use '10-K' or '10-Q' (US issuers), "
+            f"or '20-F', '6-K' or '40-F' (foreign private issuers)."
+        ) from None
 
 
 def _get_explorer(ticker: str, form: str) -> SECFilingExplorer:
@@ -31,8 +49,9 @@ def _get_explorer(ticker: str, form: str) -> SECFilingExplorer:
     Get or create an explorer for a specific (ticker, form) filing.
 
     `form` is required so every tool operates on the same filing the agent is
-    analyzing (the latest 10-K or 10-Q), rather than whatever the newest filing
-    happens to be - Item 1 Business / Competition only exist in the 10-K.
+    analyzing (the latest annual or interim report), rather than whatever the
+    newest filing happens to be - business/competition disclosures live only in
+    the annual report (10-K Item 1, or 20-F Item 4 for foreign private issuers).
     """
     global _current_explorer, _current_key
 
@@ -62,7 +81,7 @@ def _get_explorer(ticker: str, form: str) -> SECFilingExplorer:
 @tool
 def grep_sec_filing(
     ticker: Annotated[str, "ticker symbol"],
-    form: Annotated[str, "filing type to search: '10-K' or '10-Q'"],
+    form: Annotated[str, "filing type to search: '10-K'/'10-Q' (US) or '20-F'/'6-K'/'40-F' (foreign private issuer)"],
     pattern: Annotated[str, "search pattern (regex)"],
     context: Annotated[int, "context lines (default 3)"] = 3,
     max_results: Annotated[int, "max results (default 10)"] = 10,
@@ -97,7 +116,7 @@ def grep_sec_filing(
 @tool
 def read_sec_section(
     ticker: Annotated[str, "ticker symbol"],
-    form: Annotated[str, "filing type to read from: '10-K' or '10-Q'"],
+    form: Annotated[str, "filing type to read from: '10-K'/'10-Q' (US) or '20-F'/'6-K'/'40-F' (foreign private issuer)"],
     section: Annotated[str, "section: risk_factors, mda, business, competition, legal_proceedings, market_risk"],
     max_chars: Annotated[int, "max chars (default 20000)"] = 20000,
 ) -> str:
@@ -116,7 +135,7 @@ def read_sec_section(
 @tool
 def get_sec_toc(
     ticker: Annotated[str, "ticker symbol"],
-    form: Annotated[str, "filing type: '10-K' or '10-Q'"],
+    form: Annotated[str, "filing type: '10-K'/'10-Q' (US) or '20-F'/'6-K'/'40-F' (foreign private issuer)"],
 ) -> str:
     """
     Get table of contents for SEC filing.
@@ -143,7 +162,7 @@ def get_sec_toc(
 @tool
 def get_sec_stats(
     ticker: Annotated[str, "ticker symbol"],
-    form: Annotated[str, "filing type: '10-K' or '10-Q'"],
+    form: Annotated[str, "filing type: '10-K'/'10-Q' (US) or '20-F'/'6-K'/'40-F' (foreign private issuer)"],
 ) -> str:
     """Get filing statistics (size, word count, top terms)."""
     explorer = _get_explorer(ticker, form)
@@ -162,7 +181,7 @@ def get_sec_stats(
 @tool
 def read_sec_lines(
     ticker: Annotated[str, "ticker symbol"],
-    form: Annotated[str, "filing type: '10-K' or '10-Q'"],
+    form: Annotated[str, "filing type: '10-K'/'10-Q' (US) or '20-F'/'6-K'/'40-F' (foreign private issuer)"],
     start: Annotated[int, "start line (1-indexed)"],
     end: Annotated[int, "end line (inclusive)"],
 ) -> str:
@@ -177,15 +196,17 @@ def read_sec_lines(
 @tool
 def extract_competitors(
     ticker: Annotated[str, "ticker symbol"],
-    form: Annotated[str, "filing type: '10-K' or '10-Q'. Competition lives in the 10-K's Item 1, so choose '10-K' for competitor analysis"],
+    form: Annotated[str, "competition sits in the annual report - use '10-K' (US) or '20-F'/'40-F' (foreign private issuer)"],
 ) -> str:
     """
     Mine the SEC filing for sentences that name or describe direct competitors.
 
-    Targets Item 1 Competition language: "We compete with ...",
+    Targets Competition language: "We compete with ...",
     "Our competitors include ...", "competitive landscape", etc.
-    The Item 1 Business/Competition section exists only in the 10-K, so choose
-    form="10-K" for competitor analysis (a 10-Q contains none).
+    Competition is disclosed only in the annual report - Item 1 Business of a
+    10-K, or Item 4.B Business Overview of a 20-F - so choose form="10-K"
+    (US issuers) or form="20-F"/"40-F" (foreign private issuers). An interim
+    report (10-Q, 6-K) contains none.
 
     Returns JSON with:
       - total_matches (int)
@@ -202,16 +223,17 @@ def extract_competitors(
 @tool
 def extract_tam_disclosures(
     ticker: Annotated[str, "ticker symbol"],
-    form: Annotated[str, "filing type: '10-K' or '10-Q'. TAM/market-size sits in Item 1 Business, so choose '10-K'"],
+    form: Annotated[str, "TAM/market-size sits in the annual report - use '10-K' (US) or '20-F'/'40-F' (foreign private issuer)"],
 ) -> str:
     """
     Mine the SEC filing for Total Addressable Market (TAM), Serviceable
     Addressable Market (SAM), and CAGR disclosures.
 
     Companies cite third-party market size estimates (Gartner, IDC, etc.)
-    inside Item 1 Business Overview. This tool finds those passages.
-    The Item 1 Business section exists only in the 10-K, so choose form="10-K"
-    for market-size analysis (a 10-Q contains none).
+    inside their Business Overview. This tool finds those passages.
+    That section exists only in the annual report - Item 1 of a 10-K, or Item 4
+    of a 20-F - so choose form="10-K" (US issuers) or form="20-F"/"40-F"
+    (foreign private issuers). An interim report (10-Q, 6-K) contains none.
 
     Returns JSON with:
       - total_matches (int)
@@ -229,7 +251,7 @@ def extract_tam_disclosures(
 @tool
 def extract_customer_concentration(
     ticker: Annotated[str, "ticker symbol"],
-    form: Annotated[str, "filing type: '10-K' or '10-Q' (10-K has the fullest disclosures)"],
+    form: Annotated[str, "filing type: '10-K'/'10-Q' (US) or '20-F'/'6-K'/'40-F' (foreign private issuer). The annual report has the fullest disclosures"],
 ) -> str:
     """
     Mine the SEC filing for customer and supplier concentration disclosures.
@@ -254,10 +276,11 @@ def extract_customer_concentration(
 @tool
 def extract_porter_signals(
     ticker: Annotated[str, "ticker symbol"],
-    form: Annotated[str, "filing type: '10-K' (richest Item 1A Risk Factors) or '10-Q'"],
+    form: Annotated[str, "filing type: '10-K'/'10-Q' (US) or '20-F'/'6-K'/'40-F' (foreign private issuer). The annual report has the richest risk factors"],
 ) -> str:
     """
-    Mine Item 1A Risk Factors for language that maps to Porter's Five Forces.
+    Mine the filing's Risk Factors (Item 1A of a 10-K, Item 3.D of a 20-F) for
+    language that maps to Porter's Five Forces.
 
     Each matched passage is tagged with the force it represents:
       - rivalry        : pricing pressure, market share, intense competition

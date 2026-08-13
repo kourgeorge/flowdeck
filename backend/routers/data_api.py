@@ -494,7 +494,7 @@ async def data_company_officers(ticker: str):
 
 @router.get("/edgar-filings/{ticker}")
 async def data_edgar_filings(ticker: str):
-    """Get recent 10-K and 10-Q SEC EDGAR filings for a ticker. Returns empty filings if not in EDGAR or on error."""
+    """Get recent SEC EDGAR filings for a ticker: 10-K/10-Q for US issuers, 20-F/6-K/40-F for foreign private issuers. Returns empty filings if not in EDGAR or on error."""
     await _ensure_ticker_exists(ticker)
     return await asyncio.to_thread(_gateway().get_edgar_filings, ticker)
 
@@ -502,7 +502,7 @@ async def data_edgar_filings(ticker: str):
 @router.get("/edgar-filing-content/{ticker}")
 async def data_edgar_filing_content(
     ticker: str,
-    form: Optional[str] = Query(None, description="10-K or 10-Q"),
+    form: Optional[str] = Query(None, description="10-K, 10-Q, 20-F, 6-K or 40-F"),
     limit: int = Query(1, ge=1, le=5, description="Max number of filings"),
     raw: bool = Query(False, description="If true, return raw text for exploration instead of LLM-extracted sections"),
     accession: Optional[str] = Query(None, description="Accession number to select one specific filing (form/limit ignored)"),
@@ -512,7 +512,7 @@ async def data_edgar_filing_content(
 
     Args:
         ticker: Stock ticker symbol
-        form: Optional form type filter (10-K or 10-Q)
+        form: Optional form type filter (10-K, 10-Q, 20-F, 6-K or 40-F)
         limit: Number of filings to return (default 1)
         raw: If true, return full filing text for agent exploration.
              If false, return LLM-extracted sections (current behavior, default).

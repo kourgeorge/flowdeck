@@ -2442,7 +2442,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
           {activeTab === 'sec-filings' && (
             <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
               <h3 className="text-lg font-semibold text-white mb-2">SEC EDGAR Filings</h3>
-              <p className="text-xs text-gray-400 mb-4">Quarterly (10-Q) and annual (10-K) reports filed with the U.S. Securities and Exchange Commission.</p>
+              <p className="text-xs text-gray-400 mb-4">Periodic reports filed with the U.S. Securities and Exchange Commission: annual (10-K) and quarterly (10-Q) for U.S. companies, annual (20-F, 40-F) and interim (6-K, most recent 20) for foreign issuers.</p>
               {isLoadingEdgar ? (
                 <div className="animate-pulse"><div className="h-5 bg-gray-700 rounded w-48 mb-3" /><div className="h-48 bg-gray-700 rounded" /></div>
               ) : edgarFilingsError ? (

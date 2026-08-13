@@ -28,7 +28,8 @@ _NOT_APPLICABLE_REPORT = (
     "## SEC Analysis — Not Applicable\n\n"
     "This ticker is an ETF, index fund, or similar non-company instrument. "
     "SEC/EDGAR filing analysis is only meaningful for individual companies that file "
-    "10-K/10-Q reports, and has been skipped for this asset."
+    "periodic reports (10-K/10-Q, or 20-F/6-K/40-F for foreign issuers), and has been "
+    "skipped for this asset."
 )
 
 

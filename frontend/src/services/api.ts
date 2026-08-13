@@ -931,7 +931,8 @@ export const tickerApi = {
     return response.data;
   },
 
-  // Get SEC EDGAR filings (10-K, 10-Q) for a ticker (US companies only)
+  // Get SEC EDGAR filings for a ticker: 10-K/10-Q for US issuers,
+  // 20-F/6-K/40-F for foreign private issuers (6-K capped at the most recent 20).
   getEdgarFilings: async (ticker: string): Promise<{
     cik: string;
     company_name: string | null;
@@ -953,7 +954,8 @@ export const tickerApi = {
   },
 
   // Get the full text of a single SEC filing rendered as markdown (sec2md).
-  // Selects the exact filing by accession number.
+  // Selects the exact filing by accession number. For 6-K/40-F the primary
+  // document is usually a cover page, so its EX-* exhibits are appended.
   getEdgarFilingContent: async (
     ticker: string,
     accession: string,

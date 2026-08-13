@@ -8,6 +8,22 @@ import re
 from typing import List, Dict, Any, Optional
 from collections import Counter
 
+from .sec_section_anchors import extract_section
+
+# Agent-facing section names -> the canonical keys in sec_section_anchors, which is
+# the single source of truth for SEC heading patterns (shared with the backend).
+_SECTION_ALIASES = {
+    "risk_factors": "risk_factors",
+    "mda": "management_mda",
+    "management_mda": "management_mda",
+    "business": "business_overview",
+    "business_overview": "business_overview",
+    "competition": "competition",
+    "legal_proceedings": "legal_proceedings",
+    "market_risk": "market_risk_disclosures",
+    "market_risk_disclosures": "market_risk_disclosures",
+}
+
 
 class SECFilingExplorer:
     """
@@ -80,73 +96,29 @@ class SECFilingExplorer:
     def find_section(self, section_name: str, max_chars: int = 20000) -> Optional[str]:
         """
         Find and extract section by name (like finding a function in code).
-        
+
         Args:
             section_name: risk_factors, mda, business, competition, etc.
             max_chars: Maximum characters to return
-        
+
         Returns:
             Section text or None if not found
         """
-        patterns = {
-            "risk_factors": [
-                r"Item 1A\.?\s*Risk Factors",
-                r"ITEM 1A\.?\s*RISK FACTORS",
-            ],
-            "mda": [
-                # Apostrophe class covers straight (') and curly (’/‛) quotes used by filers.
-                r"Item 7\.?\s*Management['’‛]?s Discussion and Analysis",
-                r"ITEM 7\.?\s*MANAGEMENT['’‛]?S DISCUSSION AND ANALYSIS",
-            ],
-            "business": [
-                r"Item 1\.?\s*Business",
-                r"ITEM 1\.?\s*BUSINESS",
-            ],
-            "competition": [
-                r"Competition",
-                r"COMPETITION",
-                r"Competitive",
-            ],
-            "legal_proceedings": [
-                r"Item 3\.?\s*Legal Proceedings",
-                r"ITEM 3\.?\s*LEGAL PROCEEDINGS",
-            ],
-            "market_risk": [
-                r"Item 7A\.?\s*Quantitative and Qualitative",
-                r"ITEM 7A\.?\s*QUANTITATIVE AND QUALITATIVE",
-            ],
-        }
-        
-        section_patterns = patterns.get(section_name, [])
-        if not section_patterns:
+        key = _SECTION_ALIASES.get(section_name.strip().lower())
+        if not key:
             return None
-        
-        for pattern in section_patterns:
-            match = re.search(pattern, self.text, re.IGNORECASE)
-            if match:
-                start_pos = match.start()
-                
-                # Find next section or take max_chars
-                next_section = re.search(
-                    r"\n\s*Item \d+[A-Z]?\.?\s+[A-Z]",
-                    self.text[start_pos + 100:],
-                    re.IGNORECASE
-                )
-                
-                if next_section:
-                    end_pos = start_pos + 100 + next_section.start()
-                else:
-                    end_pos = start_pos + max_chars
-                
-                section_text = self.text[start_pos:end_pos].strip()
-                
-                if len(section_text) > max_chars:
-                    section_text = section_text[:max_chars] + "\n... (truncated)"
-                
-                return section_text
-        
-        return None
-    
+        hit = extract_section(
+            self.text,
+            key,
+            form=self.metadata.get("form"),
+            max_chars=max_chars,
+        )
+        if hit is None:
+            return None
+        if hit.truncated:
+            return hit.text + "\n... (truncated)"
+        return hit.text
+
     def get_toc(self) -> List[Dict[str, Any]]:
         """
         Generate table of contents (like listing functions in a code file).

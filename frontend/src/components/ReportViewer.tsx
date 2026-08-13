@@ -103,9 +103,9 @@ const REPORT_METADATA: Record<string, { title: string; contains: string; aspects
   },
   sec_report: {
     title: 'SEC / Regulatory',
-    contains: 'Analysis of SEC EDGAR filings (10-K/10-Q): risk factors, management\'s discussion and analysis (MD&A), and competition. Assigns an SEC Score (1–5) reflecting regulatory and disclosure risk.',
-    aspects: 'Risk Factors (Item 1A), Management\'s Discussion and Analysis (Item 7 or Part I Item 2), Competition subsection from Business (Item 1), and optionally legal proceedings and market risk disclosures. Focus is on implications for traders.',
-    methodology: 'Runs in the analyst chain when the SEC analyst is selected. The backend fetches the filing from SEC EDGAR, extracts sections via LLM, and the SEC Analyst summarizes management, competition, and risk into a report. For non-US companies, no SEC content is available.',
+    contains: 'Analysis of SEC EDGAR filings — 10-K/10-Q for U.S. companies, 20-F/6-K/40-F for foreign issuers: risk factors, management\'s discussion and analysis (MD&A), and competition. Assigns an SEC Score (1–5) reflecting regulatory and disclosure risk.',
+    aspects: 'Risk Factors (Item 1A of a 10-K, Item 3.D of a 20-F), Management\'s Discussion and Analysis (Item 7, Part I Item 2, or Item 5 of a 20-F), the Competition subsection of Business (Item 1, or Item 4.B of a 20-F), and optionally legal proceedings and market risk disclosures. Focus is on implications for traders.',
+    methodology: 'Runs in the analyst chain when the SEC analyst is selected. The backend fetches the filing from SEC EDGAR, extracts sections deterministically where the filing follows the standard item structure and via LLM otherwise, and the SEC Analyst summarizes management, competition, and risk into a report. Foreign filings are supported, but section extraction is less reliable than for a 10-K — many foreign issuers file an integrated annual report, in which case the analyst searches the full filing text instead. ETFs and indices are skipped.',
   },
   technical_report: {
     title: 'Technical Analysis',
