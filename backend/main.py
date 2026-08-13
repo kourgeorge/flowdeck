@@ -270,7 +270,10 @@ async def lifespan(app: FastAPI):
     # re-anchors its baseline instead of being analyzed twice, which leaves the monitor's
     # budget for the subscribed tickers nothing else refreshes. Weekdays only -- the signal
     # is derived from market data that does not move over the weekend.
-    if is_scheduler_leader and os.environ.get("ENABLE_EVENT_MONITOR", "false").lower() in ("true", "1", "yes"):
+    #
+    # On by default: the spend is bounded by MAX_RERUNS_PER_DAY in event_monitor_service,
+    # so the worst case is three analyses a day on the system user's tokens.
+    if is_scheduler_leader and os.environ.get("ENABLE_EVENT_MONITOR", "true").lower() in ("true", "1", "yes"):
         try:
             if scheduler is None:
                 from apscheduler.schedulers.background import BackgroundScheduler
