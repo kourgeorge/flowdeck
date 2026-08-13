@@ -262,6 +262,48 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"Failed to start digest scheduler: {e}")
 
+    # Optional: event-driven re-analysis. Re-runs a subscribed ticker's analysis when its
+    # deterministic event signal is both high and much higher than at the last run, so a
+    # stored report stops silently describing a stock that has moved on.
+    #
+    # Scheduled after the 06:00 daily sync on purpose: a ticker the sync just re-analyzed
+    # re-anchors its baseline instead of being analyzed twice, which leaves the monitor's
+    # budget for the subscribed tickers nothing else refreshes. Weekdays only -- the signal
+    # is derived from market data that does not move over the weekend.
+    if is_scheduler_leader and os.environ.get("ENABLE_EVENT_MONITOR", "false").lower() in ("true", "1", "yes"):
+        try:
+            if scheduler is None:
+                from apscheduler.schedulers.background import BackgroundScheduler
+
+                scheduler = BackgroundScheduler()
+
+            from database import SessionLocal
+            from services.event_monitor_service import run_event_monitor
+
+            def _run_event_monitor_job():
+                db = SessionLocal()
+                try:
+                    logger.info("Event monitor run: %s", run_event_monitor(db))
+                except Exception:
+                    logger.exception("Event monitor run failed")
+                finally:
+                    db.close()
+
+            scheduler.add_job(
+                _run_event_monitor_job,
+                "cron",
+                hour=int(os.environ.get("EVENT_MONITOR_HOUR", "7")),
+                day_of_week="mon-fri",
+                id="event_monitor",
+                coalesce=True,
+                max_instances=1,
+                misfire_grace_time=600,
+            )
+            if not scheduler.running:
+                scheduler.start()
+        except Exception as e:
+            print(f"Failed to start event monitor scheduler: {e}")
+
     yield
     if scheduler is not None:
         try:
