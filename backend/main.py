@@ -266,13 +266,13 @@ async def lifespan(app: FastAPI):
     # deterministic event signal is both high and much higher than at the last run, so a
     # stored report stops silently describing a stock that has moved on.
     #
-    # Scheduled after the 06:00 daily sync on purpose: a ticker the sync just re-analyzed
-    # re-anchors its baseline instead of being analyzed twice, which leaves the monitor's
-    # budget for the subscribed tickers nothing else refreshes. Weekdays only -- the signal
+    # Scheduled after the 06:00 daily sync on purpose: a ticker the sync just re-analyzed is
+    # inside its cooldown and skipped rather than analyzed twice, which leaves the monitor's
+    # attention for the subscribed tickers nothing else refreshes. Weekdays only -- the signal
     # is derived from market data that does not move over the weekend.
     #
-    # On by default: the spend is bounded by MAX_RERUNS_PER_DAY in event_monitor_service,
-    # so the worst case is three analyses a day on the system user's tokens.
+    # Spend is bounded by COOLDOWN_HOURS in event_monitor_service: a ticker that fires cannot
+    # fire again for three days, because the analysis it starts resets its own clock.
     if is_scheduler_leader and os.environ.get("ENABLE_EVENT_MONITOR", "true").lower() in ("true", "1", "yes"):
         try:
             if scheduler is None:

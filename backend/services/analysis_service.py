@@ -727,7 +727,27 @@ class AnalysisService:
                     meta["currency"] = currency.strip().upper()
                 return meta
 
+            def _get_analysis_event_meta() -> Dict[str, Any]:
+                """Deterministic event signal as of this analysis, for the event monitor.
+
+                Recorded now because it cannot be recomputed later: extract_price_technical_events
+                windows its *events* by end_date but derives prefix stats and 52-week extremes from
+                every bar it is handed, so replaying a past date leaks the future.
+                """
+                try:
+                    from data_layer import get_data_gateway
+                    from processing import get_ticker_event_summary
+                    summary = get_ticker_event_summary(get_data_gateway(), ticker, as_of_date=analysis_date)
+                except Exception as e:
+                    logger.warning("Failed to read event signal for %s: %s", ticker, e)
+                    return {}
+                return {
+                    "event_score": float(summary.event_score or 0.0),
+                    "dominant_events": list(summary.dominant_events or []),
+                }
+
             analysis_quote_meta = _get_analysis_quote_meta()
+            analysis_event_meta = _get_analysis_event_meta()
 
             def _write_report_to_filesystem(key, content, report_dir: Path):
                 """Write report content as a markdown file in the results folder."""
@@ -1140,6 +1160,10 @@ class AnalysisService:
                         tps_plan=tps or None,
                         resources=_get_report_resources(chunk, "trader_investment_plan"),
                         chunk=chunk,
+                        # Trader is the terminal node, so this report exists on every completed
+                        # run -- the one place the event monitor can reliably find the signal.
+                        event_score=analysis_event_meta.get("event_score"),
+                        dominant_events=analysis_event_meta.get("dominant_events"),
                     )
                     # Trader is the terminal node; the run ends here.
                     analysis_info["current_agents"] = []

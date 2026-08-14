@@ -9,10 +9,12 @@ there is deliberately no email code here.
 
 The decision is fully deterministic; no LLM is involved.
 
-Baselines are stored as ``Execution`` + ``Report`` rows (``execution_type="event_monitor"``),
-the same generic-persistence pattern digests use, so this needs no new table. The latest
-baseline row for a ticker is simultaneously the score to compare against and the cooldown
-anchor.
+This service keeps no state of its own. The baseline it compares against is the
+``event_score`` each analysis records in its own ``trader_investment_plan`` report metadata
+(see ``analysis_service._get_analysis_event_meta``), and the cooldown is that analysis's
+timestamp. So a ticker analyzed before that recording existed simply has no baseline and is
+skipped until its next real analysis -- the repo's "refuse to compute rather than guess"
+default, and the reason nothing here needs a backfill.
 """
 
 from __future__ import annotations
@@ -30,9 +32,8 @@ from services import token_service
 
 logger = logging.getLogger(__name__)
 
-EXECUTION_TYPE = "event_monitor"
-BASELINE_REPORT_TYPE = "event_baseline"
-RERUN_REPORT_TYPE = "event_rerun"
+# The report whose metadata carries each analysis's event signal.
+SIGNAL_REPORT_TYPE = "trader_investment_plan"
 
 # Calibrated against the real subscribed universe on 2026-08-13, whose scores were
 # 2.25 / 4.50 / 4.50 / 5.00 / 7.50 / 10.25 / 13.50 (median 5.0). ``event_score`` is an
@@ -46,10 +47,10 @@ MIN_EVENT_SCORE = 10.0  # "high signal"
 # latter so a single mundane event appearing cannot clear the bar on its own.
 MIN_SCORE_DELTA = 4.0  # "changed a lot" since the last analysis
 
-# Cost brakes, in the order they bite.
+# Cost brakes. The cooldown is self-limiting: a re-analysis stamps a fresh event_score and
+# resets its own clock, so a firing ticker cannot fire again for COOLDOWN_HOURS.
 MAX_TICKERS_PER_RUN = 25
 COOLDOWN_HOURS = 72
-MAX_RERUNS_PER_DAY = 3
 
 RERUN_ANALYSTS = ["market", "social", "fundamentals", "technical", "sec", "valuation"]
 RERUN_RESEARCH_DEPTH = 5
@@ -109,15 +110,23 @@ def select_monitor_universe(db: Session, *, limit: int = MAX_TICKERS_PER_RUN) ->
     return [str(row[0]).upper() for row in rows]
 
 
-def _latest_analysis_execution_id(db: Session, ticker: str) -> Optional[int]:
-    """Id of the most recent completed analysis for a ticker.
+def load_last_analysis(db: Session, ticker: str) -> Optional[Dict[str, Any]]:
+    """The ticker's latest completed analysis and the event score it recorded.
 
-    Deliberately queried on the caller's session rather than through
-    ``ReportService.get_latest_completed_execution_for_ticker``, which opens its own
-    ``SessionLocal`` and so would read a different database under test.
+    Queried on the caller's session rather than through ``ReportService``, whose helpers each
+    open their own ``SessionLocal`` and so would read a different database under test.
+
+    LEFT JOINed so "analyzed but recorded no score" stays distinguishable from "never
+    analyzed": the former is a run that predates the recording and gets skipped, not treated
+    as a baseline of zero.
     """
     row = (
-        db.query(Execution.id)
+        db.query(Execution.id, Execution.created_at, Report.metadata_json)
+        .outerjoin(
+            Report,
+            (Report.execution_id == Execution.id)
+            & (Report.report_type == SIGNAL_REPORT_TYPE),
+        )
         .filter(
             Execution.execution_type == "ticker",
             Execution.subject_type == "ticker",
@@ -127,129 +136,21 @@ def _latest_analysis_execution_id(db: Session, ticker: str) -> Optional[int]:
         .order_by(Execution.created_at.desc(), Execution.id.desc())
         .first()
     )
-    return int(row[0]) if row else None
-
-
-def load_baseline(db: Session, ticker: str) -> Optional[Dict[str, Any]]:
-    """Latest recorded event-score baseline for a ticker, or None if never observed."""
-    row = (
-        db.query(Execution, Report)
-        .join(Report, Report.execution_id == Execution.id)
-        .filter(
-            Execution.execution_type == EXECUTION_TYPE,
-            Execution.subject_type == "ticker",
-            Execution.subject_id == ticker.upper(),
-            Report.report_type == BASELINE_REPORT_TYPE,
-        )
-        .order_by(Execution.created_at.desc(), Execution.id.desc())
-        .first()
-    )
     if row is None:
         return None
-    execution, report = row
+    execution_id, created_at, metadata_json = row
     try:
-        meta = json.loads(report.metadata_json) if report.metadata_json else {}
+        meta = json.loads(metadata_json) if metadata_json else {}
     except (TypeError, ValueError):
         meta = {}
     if not isinstance(meta, dict):
         meta = {}
     return {
-        "execution_id": execution.id,
-        "observed_at": execution.created_at,
+        "execution_id": int(execution_id),
+        "analyzed_at": created_at,
         "event_score": _as_float(meta.get("event_score")),
-        "analysis_execution_id": meta.get("analysis_execution_id"),
         "dominant_events": meta.get("dominant_events") or [],
     }
-
-
-def _write_baseline(
-    db: Session,
-    ticker: str,
-    *,
-    creator_id: int,
-    event_score: float,
-    dominant_events: List[str],
-    analysis_execution_id: Optional[int],
-    baseline_score: Optional[float],
-    now: datetime,
-    rerun_analysis_id: Optional[int] = None,
-) -> int:
-    """Persist an observation. Writing this row is what arms the cooldown.
-
-    The ``Execution`` is built inline rather than via ``token_service.record_execution``
-    because a monitor observation is already finished when recorded, and that helper
-    cannot set ``status``. Everything stays on the caller's session so the write is one
-    transaction.
-    """
-    execution = Execution(
-        execution_type=EXECUTION_TYPE,
-        subject_type="ticker",
-        subject_id=ticker.upper(),
-        creator_id=creator_id,
-        earned_tokens=0,
-        status="completed",
-        completed_at=now,
-        created_at=now,
-    )
-    db.add(execution)
-    db.flush()
-
-    delta = None if baseline_score is None else round(event_score - baseline_score, 4)
-    db.add(
-        Report(
-            execution_id=execution.id,
-            report_type=BASELINE_REPORT_TYPE,
-            content="",
-            metadata_json=json.dumps(
-                {
-                    "event_score": event_score,
-                    "dominant_events": list(dominant_events or []),
-                    "analysis_execution_id": analysis_execution_id,
-                    "baseline_score": baseline_score,
-                    "delta": delta,
-                    "triggered": rerun_analysis_id is not None,
-                    "observed_at": now.isoformat(),
-                }
-            ),
-            created_at=now,
-        )
-    )
-    if rerun_analysis_id is not None:
-        # A separate report type (rather than a JSON flag) keeps the daily-cap count a
-        # plain indexed query instead of a scan over metadata_json.
-        db.add(
-            Report(
-                execution_id=execution.id,
-                report_type=RERUN_REPORT_TYPE,
-                content="",
-                metadata_json=json.dumps(
-                    {
-                        "analysis_run_id": rerun_analysis_id,
-                        "event_score": event_score,
-                        "baseline_score": baseline_score,
-                        "delta": delta,
-                    }
-                ),
-                created_at=now,
-            )
-        )
-    db.commit()
-    return int(execution.id)
-
-
-def _reruns_today(db: Session, *, now: datetime) -> int:
-    """How many re-analyses the monitor has already triggered in the current UTC day."""
-    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    return (
-        db.query(func.count(Report.id))
-        .join(Execution, Execution.id == Report.execution_id)
-        .filter(
-            Execution.execution_type == EXECUTION_TYPE,
-            Report.report_type == RERUN_REPORT_TYPE,
-            Execution.created_at >= day_start,
-        )
-        .scalar()
-    ) or 0
 
 
 def _start_rerun(
@@ -303,16 +204,23 @@ def check_ticker(
     as_of_date = as_of_date or now.strftime("%Y-%m-%d")
     result: Dict[str, Any] = {"ticker": ticker, "status": "unknown"}
 
-    baseline = load_baseline(db, ticker)
-    if baseline is not None and baseline["observed_at"] is not None:
-        if baseline["observed_at"] > now - timedelta(hours=COOLDOWN_HOURS):
-            result["status"] = "skipped_cooldown"
-            result["last_observed_at"] = baseline["observed_at"].isoformat()
-            return result
-
-    analysis_execution_id = _latest_analysis_execution_id(db, ticker)
-    if analysis_execution_id is None:
+    last = load_last_analysis(db, ticker)
+    if last is None:
         result["status"] = "skipped_no_analysis"
+        return result
+
+    # The cooldown is the analysis's own age, so a ticker the monitor just re-analyzed is
+    # quiet for COOLDOWN_HOURS without any separate anchor being written.
+    if last["analyzed_at"] is not None and last["analyzed_at"] > now - timedelta(hours=COOLDOWN_HOURS):
+        result["status"] = "skipped_cooldown"
+        result["last_analyzed_at"] = last["analyzed_at"].isoformat()
+        return result
+
+    baseline_score = last["event_score"]
+    if baseline_score is None:
+        # An analysis from before the score was recorded. Guessing a baseline would fabricate
+        # a delta, so wait for the next real analysis to supply one.
+        result["status"] = "skipped_no_baseline"
         return result
 
     if gateway is None:
@@ -324,31 +232,8 @@ def check_ticker(
 
     summary = get_ticker_event_summary(gateway, ticker, as_of_date=as_of_date)
     event_score = float(summary.event_score or 0.0)
-    dominant_events = list(summary.dominant_events or [])
     result["event_score"] = event_score
-    result["dominant_events"] = dominant_events
-
-    creator_id = token_service.get_system_user_id(db)
-    baseline_score = baseline["event_score"] if baseline else None
-
-    # Re-anchor whenever we have never seen this ticker, or an analysis has completed
-    # since the baseline was taken. This is what makes the comparison "versus the last
-    # run" regardless of who triggered that run.
-    if baseline_score is None or baseline["analysis_execution_id"] != analysis_execution_id:
-        _write_baseline(
-            db,
-            ticker,
-            creator_id=creator_id,
-            event_score=event_score,
-            dominant_events=dominant_events,
-            analysis_execution_id=analysis_execution_id,
-            baseline_score=baseline_score,
-            now=now,
-        )
-        result["status"] = "rebaselined"
-        result["baseline_score"] = baseline_score
-        return result
-
+    result["dominant_events"] = list(summary.dominant_events or [])
     result["baseline_score"] = baseline_score
     result["delta"] = round(event_score - baseline_score, 4)
 
@@ -361,27 +246,12 @@ def check_ticker(
         result["status"] = "would_rerun"
         return result
 
-    if _reruns_today(db, now=now) >= MAX_RERUNS_PER_DAY:
-        result["status"] = "skipped_daily_cap"
-        return result
-
     analysis_run_id, existing = _start_rerun(
         db,
         ticker,
-        creator_id=creator_id,
+        creator_id=token_service.get_system_user_id(db),
         analysis_date=as_of_date,
         analysis_service=analysis_service,
-    )
-    _write_baseline(
-        db,
-        ticker,
-        creator_id=creator_id,
-        event_score=event_score,
-        dominant_events=dominant_events,
-        analysis_execution_id=analysis_execution_id,
-        baseline_score=baseline_score,
-        now=now,
-        rerun_analysis_id=analysis_run_id,
     )
     if existing:
         result["status"] = "skipped_already_running"
@@ -394,7 +264,7 @@ def check_ticker(
         ticker,
         event_score,
         baseline_score,
-        dominant_events,
+        result["dominant_events"],
         analysis_run_id,
     )
     return result

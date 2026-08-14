@@ -86,7 +86,7 @@ class TestEventMonitorService(unittest.TestCase):
         self.db.add(User(id=1, email="watcher@example.com", hashed_password="x"))
         self.db.commit()
 
-        # Fixed clock so cooldown and daily-cap windows never depend on wall time.
+        # Fixed clock so the cooldown window never depends on wall time.
         self.now = datetime(2026, 8, 13, 12, 0, 0)
         self.stale = self.now - timedelta(hours=ems.COOLDOWN_HOURS + 1)
         self.gateway = object()  # never touched; the summary function is patched
@@ -104,7 +104,19 @@ class TestEventMonitorService(unittest.TestCase):
         self.db.add(Subscription(user_id=1, ticker=ticker))
         self.db.commit()
 
-    def _add_analysis(self, ticker: str, *, created_at: datetime, status: str = "completed") -> int:
+    def _add_analysis(
+        self,
+        ticker: str,
+        *,
+        created_at: datetime,
+        status: str = "completed",
+        event_score: float = None,
+    ) -> int:
+        """A completed analysis, optionally carrying the event score it recorded.
+
+        The report row is written directly on the test session rather than through
+        ``report_service.save_report``, which opens its own ``SessionLocal``.
+        """
         execution = Execution(
             execution_type="ticker",
             subject_type="ticker",
@@ -115,28 +127,20 @@ class TestEventMonitorService(unittest.TestCase):
         )
         self.db.add(execution)
         self.db.commit()
+        if event_score is not None:
+            self.db.add(
+                Report(
+                    execution_id=execution.id,
+                    report_type=ems.SIGNAL_REPORT_TYPE,
+                    content="plan",
+                    metadata_json=json.dumps(
+                        {"event_score": event_score, "dominant_events": ["new_52w_low"]}
+                    ),
+                    created_at=created_at,
+                )
+            )
+            self.db.commit()
         return int(execution.id)
-
-    def _seed_baseline(
-        self,
-        ticker: str,
-        *,
-        event_score: float,
-        analysis_execution_id: int,
-        observed_at: datetime = None,
-        rerun_analysis_id: int = None,
-    ) -> int:
-        return ems._write_baseline(
-            self.db,
-            ticker,
-            creator_id=1,
-            event_score=event_score,
-            dominant_events=["new_52w_low"],
-            analysis_execution_id=analysis_execution_id,
-            baseline_score=None,
-            now=observed_at or self.stale,
-            rerun_analysis_id=rerun_analysis_id,
-        )
 
     def _summary(self, score: float):
         return patch(
@@ -184,37 +188,7 @@ class TestEventMonitorService(unittest.TestCase):
         self._add_analysis("AAPL", created_at=self.now)
         self.assertEqual(ems.select_monitor_universe(self.db), [])
 
-    # --- re-baselining ------------------------------------------------------
-
-    def test_first_observation_rebaselines_without_analyzing(self) -> None:
-        analysis_id = self._add_analysis("AAPL", created_at=self.now - timedelta(days=4))
-        service = _FakeAnalysisService()
-
-        with self._summary(self.high):
-            result = self._check("AAPL", analysis_service=service)
-
-        self.assertEqual(result["status"], "rebaselined")
-        self.assertIsNone(result["baseline_score"])
-        self.assertEqual(service.calls, [])
-
-        baseline = ems.load_baseline(self.db, "AAPL")
-        self.assertEqual(baseline["event_score"], self.high)
-        self.assertEqual(baseline["analysis_execution_id"], analysis_id)
-
-    def test_analysis_since_baseline_rebaselines_instead_of_firing(self) -> None:
-        old_analysis = self._add_analysis("AAPL", created_at=self.now - timedelta(days=9))
-        self._seed_baseline("AAPL", event_score=self.quiet, analysis_execution_id=old_analysis)
-        new_analysis = self._add_analysis("AAPL", created_at=self.now - timedelta(days=1))
-        service = _FakeAnalysisService()
-
-        with self._summary(self.high):
-            result = self._check("AAPL", analysis_service=service)
-
-        self.assertEqual(result["status"], "rebaselined")
-        self.assertEqual(service.calls, [])
-        self.assertEqual(
-            ems.load_baseline(self.db, "AAPL")["analysis_execution_id"], new_analysis
-        )
+    # --- reading the baseline off the last analysis --------------------------
 
     def test_no_completed_analysis_is_skipped(self) -> None:
         self._add_analysis("AAPL", created_at=self.now, status="running")
@@ -222,15 +196,35 @@ class TestEventMonitorService(unittest.TestCase):
             result = self._check("AAPL")
         self.assertEqual(result["status"], "skipped_no_analysis")
 
+    def test_analysis_without_a_recorded_score_is_skipped(self) -> None:
+        """A run predating the recording has no baseline; fabricating one would invent a delta."""
+        self._add_analysis("AAPL", created_at=self.stale)
+        service = _FakeAnalysisService()
+
+        with self._summary(self.high):
+            result = self._check("AAPL", analysis_service=service)
+
+        self.assertEqual(result["status"], "skipped_no_baseline")
+        self.assertEqual(service.calls, [])
+
+    def test_baseline_comes_from_the_newest_analysis(self) -> None:
+        """"Versus the last run" means the newest analysis wins, whoever triggered it."""
+        self._add_analysis("AAPL", created_at=self.now - timedelta(days=9), event_score=0.0)
+        self._add_analysis("AAPL", created_at=self.stale, event_score=self.nearly)
+        service = _FakeAnalysisService()
+
+        with self._summary(self.high):
+            result = self._check("AAPL", analysis_service=service)
+
+        self.assertEqual(result["baseline_score"], self.nearly)
+        self.assertEqual(result["status"], "skipped_small_delta")
+        self.assertEqual(service.calls, [])
+
     # --- cooldown -----------------------------------------------------------
 
     def test_cooldown_short_circuits_before_computing_the_summary(self) -> None:
-        analysis_id = self._add_analysis("AAPL", created_at=self.now - timedelta(days=4))
-        self._seed_baseline(
-            "AAPL",
-            event_score=self.quiet,
-            analysis_execution_id=analysis_id,
-            observed_at=self.now - timedelta(hours=1),
+        self._add_analysis(
+            "AAPL", created_at=self.now - timedelta(hours=1), event_score=self.quiet
         )
 
         with patch(
@@ -243,9 +237,8 @@ class TestEventMonitorService(unittest.TestCase):
 
     # --- the fire path ------------------------------------------------------
 
-    def test_signal_spike_starts_a_rerun_and_records_it(self) -> None:
-        analysis_id = self._add_analysis("AAPL", created_at=self.now - timedelta(days=4))
-        self._seed_baseline("AAPL", event_score=self.quiet, analysis_execution_id=analysis_id)
+    def test_signal_spike_starts_a_rerun_and_writes_no_bookkeeping(self) -> None:
+        analysis_id = self._add_analysis("AAPL", created_at=self.stale, event_score=self.quiet)
         service = _FakeAnalysisService()
 
         with self._summary(self.high):
@@ -257,23 +250,22 @@ class TestEventMonitorService(unittest.TestCase):
         self.assertEqual(service.calls[0]["ticker"], "AAPL")
         self.assertEqual(service.calls[0]["analysis_date"], "2026-08-13")
 
-        baseline = ems.load_baseline(self.db, "AAPL")
-        self.assertEqual(baseline["event_score"], self.high)
-        rerun = (
-            self.db.query(Report)
-            .filter(
-                Report.execution_id == baseline["execution_id"],
-                Report.report_type == ems.RERUN_REPORT_TYPE,
-            )
-            .one()
+        # The monitor keeps no state of its own: the only new execution is the analysis it
+        # started, and it is a plain ticker run.
+        self.assertEqual(
+            [e.execution_type for e in self.db.query(Execution).all()],
+            ["ticker", "ticker"],
         )
         self.assertEqual(
-            json.loads(rerun.metadata_json)["analysis_run_id"], result["analysis_run_id"]
+            [r.report_type for r in self.db.query(Report).all()], [ems.SIGNAL_REPORT_TYPE]
+        )
+        self.assertEqual(
+            [e.id for e in self._ticker_executions("AAPL")],
+            [analysis_id, result["analysis_run_id"]],
         )
 
     def test_allow_rerun_false_reports_the_decision_without_spending_tokens(self) -> None:
-        analysis_id = self._add_analysis("AAPL", created_at=self.now - timedelta(days=4))
-        self._seed_baseline("AAPL", event_score=self.quiet, analysis_execution_id=analysis_id)
+        self._add_analysis("AAPL", created_at=self.stale, event_score=self.quiet)
         service = _FakeAnalysisService()
 
         with self._summary(self.high):
@@ -283,8 +275,7 @@ class TestEventMonitorService(unittest.TestCase):
         self.assertEqual(service.calls, [])
 
     def test_small_delta_does_not_fire(self) -> None:
-        analysis_id = self._add_analysis("AAPL", created_at=self.now - timedelta(days=4))
-        self._seed_baseline("AAPL", event_score=self.nearly, analysis_execution_id=analysis_id)
+        self._add_analysis("AAPL", created_at=self.stale, event_score=self.nearly)
         service = _FakeAnalysisService()
 
         with self._summary(self.high):
@@ -294,8 +285,7 @@ class TestEventMonitorService(unittest.TestCase):
         self.assertEqual(service.calls, [])
 
     def test_low_signal_does_not_fire(self) -> None:
-        analysis_id = self._add_analysis("AAPL", created_at=self.now - timedelta(days=4))
-        self._seed_baseline("AAPL", event_score=0.0, analysis_execution_id=analysis_id)
+        self._add_analysis("AAPL", created_at=self.stale, event_score=0.0)
         service = _FakeAnalysisService()
 
         with self._summary(ems.MIN_EVENT_SCORE - 1.0):
@@ -305,8 +295,7 @@ class TestEventMonitorService(unittest.TestCase):
         self.assertEqual(service.calls, [])
 
     def test_already_running_analysis_leaves_no_orphan_execution(self) -> None:
-        analysis_id = self._add_analysis("AAPL", created_at=self.now - timedelta(days=4))
-        self._seed_baseline("AAPL", event_score=self.quiet, analysis_execution_id=analysis_id)
+        analysis_id = self._add_analysis("AAPL", created_at=self.stale, event_score=self.quiet)
         service = _FakeAnalysisService(existing=True)
 
         with self._summary(self.high):
@@ -317,35 +306,14 @@ class TestEventMonitorService(unittest.TestCase):
         # The placeholder run was deleted, so only the seeded analysis survives.
         self.assertEqual([e.id for e in self._ticker_executions("AAPL")], [analysis_id])
 
-    def test_daily_cap_blocks_further_reruns(self) -> None:
-        for index in range(ems.MAX_RERUNS_PER_DAY):
-            filler = f"FILL{index}"
-            filler_analysis = self._add_analysis(filler, created_at=self.now - timedelta(days=4))
-            self._seed_baseline(
-                filler,
-                event_score=self.high,
-                analysis_execution_id=filler_analysis,
-                observed_at=self.now,
-                rerun_analysis_id=1000 + index,
-            )
-
-        analysis_id = self._add_analysis("AAPL", created_at=self.now - timedelta(days=4))
-        self._seed_baseline("AAPL", event_score=self.quiet, analysis_execution_id=analysis_id)
-        service = _FakeAnalysisService()
-
-        with self._summary(self.high):
-            result = self._check("AAPL", analysis_service=service)
-
-        self.assertEqual(result["status"], "skipped_daily_cap")
-        self.assertEqual(service.calls, [])
-
     # --- the run loop -------------------------------------------------------
 
     def test_run_event_monitor_survives_a_failing_ticker(self) -> None:
         self._subscribe("AAPL")
         self._subscribe("MSFT")
-        self._add_analysis("AAPL", created_at=self.now - timedelta(days=10))
-        self._add_analysis("MSFT", created_at=self.now - timedelta(days=2))
+        self._add_analysis("AAPL", created_at=self.now - timedelta(days=10), event_score=self.quiet)
+        self._add_analysis("MSFT", created_at=self.stale, event_score=self.quiet)
+        service = _FakeAnalysisService()
 
         def _summary(_gateway, ticker, **_kwargs):
             if ticker == "AAPL":
@@ -356,16 +324,16 @@ class TestEventMonitorService(unittest.TestCase):
             summary = ems.run_event_monitor(
                 self.db,
                 gateway=self.gateway,
-                analysis_service=_FakeAnalysisService(),
+                analysis_service=service,
                 as_of_date="2026-08-13",
                 now=self.now,
             )
 
         self.assertEqual(summary["checked"], 2)
         self.assertEqual(summary["errors"], ["AAPL"])
-        self.assertEqual(summary["statuses"], {"error": 1, "rebaselined": 1})
-        self.assertEqual(summary["reruns"], [])
-        self.assertIsNotNone(ems.load_baseline(self.db, "MSFT"))
+        self.assertEqual(summary["statuses"], {"error": 1, "rerun_started": 1})
+        self.assertEqual(summary["reruns"], ["MSFT"])
+        self.assertEqual([call["ticker"] for call in service.calls], ["MSFT"])
 
 
 if __name__ == "__main__":
