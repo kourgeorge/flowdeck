@@ -4,12 +4,13 @@ import asyncio
 import json
 import os
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Optional, Union
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.orm import Session
 
 import app_services
+from api_docs import ERR_402, ERR_404_TICKER
 from auth import get_current_user, get_current_admin_user, decode_token
 from database import get_db, SessionLocal
 from models.db_models import User as UserModel
@@ -18,9 +19,114 @@ from services import token_service
 from data_layer import get_data_gateway
 from sync_major_stocks import get_missing_and_skipped, run_analyses_for_tickers
 
-router = APIRouter(prefix="/api", tags=["analyses"])
+ANALYSTS = ["market", "social", "fundamentals", "technical", "sec", "valuation"]
+
+# Documentation-only: the real endpoint reads `await request.json()` directly
+# (see start_analysis below), not a Pydantic model -- unknown keys are accepted
+# and ignored today, and a validation error there is `400 {"detail": "Ticker is
+# required"}`, not FastAPI's 422. A response_model/request model would change
+# that behavior for every existing caller. openapi_extra is injected into the
+# schema verbatim and never validated against, so it documents the shape without
+# touching runtime behavior.
+START_ANALYSIS_REQUEST_BODY = {
+    "required": True,
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "required": ["ticker"],
+                "properties": {
+                    "ticker": {"type": "string", "description": "Ticker symbol. Required."},
+                    "analysis_date": {
+                        "type": "string",
+                        "format": "date",
+                        "description": "YYYY-MM-DD. Defaults to today.",
+                    },
+                    "analysts": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": ANALYSTS},
+                        "description": (
+                            "Analysts to run. Defaults to all six. Each maps to one report "
+                            "key -- note `social` produces `sentiment_report`, not `news_report`."
+                        ),
+                    },
+                    "research_depth": {
+                        "type": "integer",
+                        "default": 2,
+                        "description": "Debate/tool-call depth per analyst.",
+                    },
+                    "llm_provider": {
+                        "type": "string",
+                        "description": "Defaults to the LLM_PROVIDER env var, or 'azure'.",
+                    },
+                    "backend_url": {"type": "string", "description": "Optional LLM backend override."},
+                    "shallow_thinker": {"type": "string", "description": "Optional model override, shallow-thinker role."},
+                    "deep_thinker": {"type": "string", "description": "Optional model override, deep-thinker role."},
+                },
+            },
+            "examples": {
+                "minimal": {"summary": "Minimal request", "value": {"ticker": "AAPL"}},
+                "full": {
+                    "summary": "All fields set",
+                    "value": {
+                        "ticker": "AAPL",
+                        "analysis_date": "2026-08-28",
+                        "analysts": ANALYSTS,
+                        "research_depth": 2,
+                        "llm_provider": "azure",
+                    },
+                },
+            },
+        }
+    },
+}
+
+START_ANALYSIS_RESPONSES: Dict[Union[int, str], Dict[str, Any]] = {
+    200: {
+        "description": (
+            "A run was started, or an already-running run for the same ticker/date was "
+            "reused (`existing: true`, and the 200 tokens already spent on it are refunded)."
+        ),
+        "content": {
+            "application/json": {
+                "examples": {
+                    "fresh_run": {
+                        "summary": "New run started",
+                        "value": {
+                            "analysis_run_id": 1234,
+                            "ticker": "AAPL",
+                            "date": "2026-08-28",
+                            "existing": False,
+                        },
+                    },
+                    "existing_run": {
+                        "summary": "Merged into an already-running run",
+                        "value": {
+                            "analysis_run_id": 1234,
+                            "ticker": "AAPL",
+                            "date": "2026-08-28",
+                            "existing": True,
+                        },
+                    },
+                }
+            }
+        },
+    },
+    400: {"content": {"application/json": {"example": {"detail": "Ticker is required"}}}},
+    402: {"content": {"application/json": {"example": ERR_402}}},
+    404: {"content": {"application/json": {"example": ERR_404_TICKER}}},
+    500: {
+        "content": {
+            "application/json": {
+                "example": {"detail": "Failed to start analysis: <error message>"}
+            }
+        }
+    },
+}
+
+router = APIRouter(prefix="/api", tags=["Analyses"])
 # WebSocket at /ws/... (no /api prefix); included separately in main
-ws_router = APIRouter(tags=["analyses-ws"])
+ws_router = APIRouter(tags=["Analyses"])
 
 active_connections: dict[str, WebSocket] = {}
 
@@ -49,14 +155,25 @@ def run_sync_major_tickers_background(analysis_date: str, analysis_service: Anal
         db.close()
 
 
-@router.post("/analyses/start")
+@router.post(
+    "/analyses/start",
+    summary="Start an analysis",
+    response_description="The analysis run id to poll or subscribe to.",
+    openapi_extra={"requestBody": START_ANALYSIS_REQUEST_BODY},
+    responses=START_ANALYSIS_RESPONSES,
+)
 async def start_analysis(
     request: Request,
     background_tasks: BackgroundTasks,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Start a new analysis. Requires signed-in user; initiator is notified by email when the report is done. Costs 200 tokens."""
+    """Start a new analysis. Requires signed-in user; initiator is notified by email when the report is done. Costs 200 tokens.
+
+    Each analyst maps to one report key -- `social` produces `sentiment_report`, not
+    `news_report`. Each run builds on the ticker's prior report and ends with a
+    `## What changed since {date}` section rather than starting from scratch.
+    """
     analysis_service = app_services.get_analysis_service()
     try:
         body = await request.json()

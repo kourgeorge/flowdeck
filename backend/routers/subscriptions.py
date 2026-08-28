@@ -10,7 +10,7 @@ from models.db_models import User
 from services.email_service import notify_admin_new_subscription, send_subscription_confirmation
 from services import subscription_service
 
-router = APIRouter(prefix="/api/subscriptions", tags=["subscriptions"])
+router = APIRouter(prefix="/api/subscriptions", tags=["Subscriptions"])
 
 
 class SubscribeRequest(BaseModel):

@@ -33,7 +33,7 @@ from processing import (
     warm_ticker_event_summary_async,
 )
 
-router = APIRouter(prefix="/api/tickers", tags=["tickers"])
+router = APIRouter(prefix="/api/tickers", tags=["Ticker Pages"])
 
 
 def _normalize_confidence(value: object) -> Optional[float]:

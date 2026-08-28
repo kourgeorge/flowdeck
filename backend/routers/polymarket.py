@@ -52,7 +52,7 @@ async def _fetch_company_info(ticker: str) -> Optional[dict]:
         logger.warning(f"Could not fetch company info for {ticker}: {e}")
         return None
 
-router = APIRouter(prefix="/api/polymarket", tags=["polymarket"])
+router = APIRouter(prefix="/api/polymarket", tags=["Prediction Markets"])
 
 
 # Response models

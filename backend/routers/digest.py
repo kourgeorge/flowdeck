@@ -25,7 +25,7 @@ from models.db_models import Execution
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api", tags=["digest"])
+router = APIRouter(prefix="/api", tags=["Digests"])
 
 
 class DigestResponse(BaseModel):

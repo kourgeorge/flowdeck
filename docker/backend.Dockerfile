@@ -25,6 +25,7 @@ COPY ai_engine/ ./ai_engine/
 # Copy all backend files to /app/backend
 COPY backend/*.py ./backend/
 COPY backend/*.json ./backend/
+COPY backend/SKILL.md ./backend/
 COPY backend/data/ ./backend/data/
 COPY backend/models/ ./backend/models/
 COPY backend/routers/ ./backend/routers/

@@ -80,16 +80,6 @@ Same response shape: `access_token`, `token_type`, `user_id`, `email`.
 
 **Password:** Must be at least 6 characters.
 
-### Google OAuth (browser flow)
-
-```
-GET /api/auth/google              # 302 redirect to Google's consent screen
-GET /api/auth/google/callback     # Google calls this back
-```
-
-The callback redirects the browser to `{FRONTEND_URL}/auth/callback?token=...&email=...&user_id=...&is_new=0|1`.
-This flow needs a browser; headless agents should use `/api/auth/login` or an API key.
-
 ### Delete account
 
 ```bash
@@ -118,8 +108,6 @@ Use these without a token for market research and data.
 GET /                    # {"message": "Stock Dashboard API", "status": "running"}
 GET /health              # {"status": "healthy", "service": "tradingagents-api"}
 GET /api/SKILL.md        # this file, as text/markdown
-GET /api/config/public   # {"preview_tickers": ["AAPL", ...]} — tickers shown without login
-GET /api/stats           # {"total_analyses": N, "total_reports": N, "unique_tickers_analyzed": N}
 ```
 
 ### Share links
@@ -753,9 +741,9 @@ For real-time progress during a run:
 WS /ws/analyses/{analysis_run_id}?token=YOUR_ACCESS_TOKEN
 ```
 
-Connect after starting the analysis to receive progress updates. The JWT or API key must be passed as the
-`token` query parameter (WebSockets cannot set an `Authorization` header); the connection closes with code
-**4001** if it is missing or invalid.
+Connect after starting the analysis to receive progress updates. The `token` query parameter must be a
+JWT (WebSockets cannot set an `Authorization` header, and this endpoint does not accept `fd_live_...` API
+keys); the connection closes with code **4001** if it is missing or invalid.
 
 ---
 
@@ -833,7 +821,6 @@ GET /api/polymarket/markets/relevant/{ticker}?limit=20   # markets matched to th
 GET /api/polymarket/markets/trending?category=finance&limit=20
 GET /api/polymarket/market/{market_id}
 GET /api/polymarket/market/{market_id}/history?days=30
-GET /api/polymarket/health
 ```
 
 `category` accepts `finance`, `crypto`, `politics`, `economics`. Sentiment runs **0 = bearish → 1 = bullish**
@@ -934,7 +921,8 @@ curl -X POST https://flowdeck.biz/api/data/reports/batch \
   -d '{"tickers": ["AAPL", "MSFT", "GOOGL"]}'
 ```
 
-They also work as the `token` query parameter on the analysis WebSocket.
+API keys do **not** work on the analysis WebSocket — its `?token=` parameter is JWT-only
+(`decode_token` in `auth.py` has no `fd_live_` branch). Use an `access_token` there.
 
 ---
 
@@ -944,12 +932,9 @@ They also work as the `token` query parameter on the analysis WebSocket.
 |--------|----------|------|-------------|
 | GET | `/`, `/health` | No | Health and root |
 | GET | `/api/SKILL.md` | No | This guide |
-| GET | `/api/config/public` | No | Preview tickers shown without login |
-| GET | `/api/stats` | No | Platform-wide analysis/report counts |
 | GET | `/api/share/{token}` | No | Public shared report or digest view |
 | POST | `/api/auth/register` | No | Register (email, password) |
 | POST | `/api/auth/login` | No | Login (email, password) |
-| GET | `/api/auth/google`, `/api/auth/google/callback` | No | Google OAuth (browser flow) |
 | DELETE | `/api/auth/account` | Yes | Delete account (204) |
 | GET | `/api/tickers/widgets` | No | Widget data (tickers, date, pagination, events) |
 | GET | `/api/tickers/event-summaries` | No | Batch `dominant_events` + `event_count` |

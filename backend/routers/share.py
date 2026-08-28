@@ -17,7 +17,7 @@ from data_layer import get_data_gateway
 from models.db_models import Execution, Report
 from services.share_service import decode_share_token
 
-router = APIRouter(prefix="/api/share", tags=["share"])
+router = APIRouter(prefix="/api/share", tags=["Share Links"])
 
 
 def _resolve_ticker(db: Session, ex: Execution) -> Dict[str, Any]:
@@ -87,7 +87,56 @@ _SHARE_RESOLVERS: Dict[str, Callable[[Session, Execution], Dict[str, Any]]] = {
 }
 
 
-@router.get("/{token}")
+@router.get(
+    "/{token}",
+    summary="Resolve a share link",
+    response_description="Report data. Shape depends on the report kind -- see the two 200 examples.",
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "ticker": {
+                            "summary": "Ticker analysis report",
+                            "value": {
+                                "type": "ticker",
+                                "ticker": "AAPL",
+                                "company_name": "Apple Inc.",
+                                "execution_id": 1234,
+                                "report_date": "2026-08-28",
+                                "reports": {"final_trade_decision": "BUY..."},
+                            },
+                        },
+                        "digest": {
+                            "summary": "Daily/weekly digest",
+                            "value": {
+                                "type": "digest",
+                                "execution_id": 5678,
+                                "narrative": "Markets were mixed today...",
+                                "what_to_watch": "Fed minutes tomorrow.",
+                                "digest_date": "2026-08-28",
+                                "span_type": "daily",
+                                "span_label": "Daily",
+                                "priority_tickers": ["AAPL", "MSFT"],
+                                "references": None,
+                                "resources": None,
+                                "agent_steps": [],
+                                "important_events": [],
+                            },
+                        },
+                    }
+                }
+            }
+        },
+        404: {
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Invalid or expired link"}
+                }
+            }
+        },
+    },
+)
 async def get_shared_report(token: str):
     """
     Resolve a share token to report data. No authentication required.

@@ -247,6 +247,7 @@ async def get_turn_status(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Poll a chat turn's status. 404 if it doesn't exist or belongs to another user."""
     turn = get_turn_for_user(db, turn_id, current_user.id)
     if turn is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Turn not found")
@@ -329,7 +330,32 @@ async def chat(
     )
 
 
-@router.post("/chat/stream")
+@router.post(
+    "/chat/stream",
+    summary="Stream a chat turn (SSE)",
+    response_description="`text/event-stream`, not JSON -- see the description for the event vocabulary.",
+    responses={
+        200: {
+            "description": "SSE stream. Each event is `data: {json}\\n\\n`; see the event vocabulary above.",
+            "content": {
+                "text/event-stream": {
+                    "schema": {"type": "string"},
+                    "example": 'data: {"type": "started", "turn_id": 1, "session_id": 1, "status": "running"}\n\n',
+                }
+            },
+        },
+        402: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Insufficient token balance. Please purchase more tokens to continue chatting."
+                    }
+                }
+            }
+        },
+        404: {"content": {"application/json": {"example": {"detail": "Session not found"}}}},
+    },
+)
 async def chat_stream(
     body: ChatRequest,
     current_user=Depends(get_current_user),
@@ -338,10 +364,13 @@ async def chat_stream(
     """
     Stream a chat turn as Server-Sent Events (SSE).
 
-    Each SSE event is a JSON object:
-      - ``{"type":"token","content":"..."}``  — incremental text chunk
-      - ``{"type":"done","tokens_used":N}``   — stream finished; tokens deducted
-      - ``{"type":"error","content":"..."}``  — error occurred
+    Each SSE event is a JSON object, in the order they can appear:
+      - ``{"type":"started","turn_id":N,"session_id":N,"status":"running"}``  — emitted first
+      - ``{"type":"thinking","content":"..."}``                              — reasoning trace
+      - ``{"type":"tool_call","name":"...","args":{...}}``                   — a tool the analyst invoked
+      - ``{"type":"token","content":"..."}``                                 — incremental text chunk
+      - ``{"type":"done","tokens_used":N}``                                  — stream finished; tokens deducted
+      - ``{"type":"error","content":"..."}``                                 — error occurred
 
     - Requires authentication (Bearer token).
     - Returns 402 if the user has insufficient token balance.

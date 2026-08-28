@@ -26,7 +26,7 @@ from services.schedule_service import (
 )
 
 
-router = APIRouter(prefix="/api", tags=["schedule"])
+router = APIRouter(prefix="/api", tags=["Digests"])
 
 
 class DigestScheduleMetadata(BaseModel):

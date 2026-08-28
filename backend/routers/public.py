@@ -11,7 +11,7 @@ from config import MAJOR_TICKERS
 from database import get_db
 from services.public_stats_service import get_public_stats
 
-router = APIRouter(prefix="/api", tags=["public"])
+router = APIRouter(prefix="/api", tags=["Platform"])
 
 
 class PublicConfigResponse(BaseModel):

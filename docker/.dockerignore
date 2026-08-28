@@ -54,6 +54,7 @@ logs/
 docs/
 *.md
 !README.md
+!backend/SKILL.md
 
 # Tests
 tests/

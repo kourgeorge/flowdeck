@@ -35,7 +35,9 @@ export default defineConfig(({ mode }) => {
       port: 3003,
       host: true,
       proxy: {
-        '/api': {
+        // Regex-anchored so it matches only /api and /api/*, not the frontend's
+        // /api-docs route (a plain "/api" key is a prefix match and would swallow it).
+        '^/api(/|$)': {
           target: proxyTarget,
           changeOrigin: true,
           secure: false,

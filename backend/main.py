@@ -13,6 +13,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from scalar_fastapi import get_scalar_api_reference
 
 # Ensure backend loggers have sensible defaults (uvicorn configures root; our loggers propagate)
 logging.getLogger("services.analysis_service").setLevel(logging.INFO)
@@ -42,6 +43,7 @@ from routers.public import router as public_router
 from routers.share import router as share_router
 from routers.tokens import router as tokens_router
 from routers.polymarket import router as polymarket_router
+from api_docs import API_DESCRIPTION, API_CONTACT, API_LICENSE, API_VERSION, OPENAPI_TAGS, install_public_openapi
 from data_layer import init_data_gateway
 from data_layer.market import MarketDataLayer
 from data_layer.sources.market import CachedMarketSource
@@ -315,7 +317,19 @@ async def lifespan(app: FastAPI):
             pass
 
 
-app = FastAPI(title="Stock Dashboard API", lifespan=lifespan)
+app = FastAPI(
+    title="Flowdeck API",
+    version=API_VERSION,
+    summary="AI ticker analysis, market data, and deterministic event signals for agents.",
+    description=API_DESCRIPTION,
+    openapi_tags=OPENAPI_TAGS,
+    contact=API_CONTACT,
+    license_info=API_LICENSE,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url="/api/openapi.json",
+    lifespan=lifespan,
+)
 
 # CORS middleware - must be added before routes (origins from CORS_ORIGINS env or config)
 app.add_middleware(
@@ -366,13 +380,28 @@ app.include_router(api_keys_router)
 app.include_router(tokens_router)
 app.include_router(polymarket_router)
 
+install_public_openapi(app)
 
-@app.get("/")
+
+@app.get("/api/docs", include_in_schema=False)
+async def api_docs():
+    return get_scalar_api_reference(
+        openapi_url="/api/openapi.json",
+        title="Flowdeck API",
+        scalar_js_url="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.66.1",
+        telemetry=False,
+        show_developer_tools="never",
+        persist_auth=True,
+    )
+
+
+@app.get("/", tags=["Platform"])
 async def root():
+    """Liveness marker. Not versioned; use /health for readiness checks."""
     return {"message": "Stock Dashboard API", "status": "running"}
 
 
-@app.get("/health")
+@app.get("/health", tags=["Platform"])
 async def health():
     """Health check endpoint."""
     return {"status": "healthy", "service": "tradingagents-api"}

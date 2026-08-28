@@ -13,7 +13,7 @@ from services import token_service
 from services import me_service
 from services import user_profile_service
 
-router = APIRouter(prefix="/api", tags=["me"])
+router = APIRouter(prefix="/api", tags=["Account"])
 
 
 class UserStatsResponse(BaseModel):

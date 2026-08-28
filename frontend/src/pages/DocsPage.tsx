@@ -1,19 +1,22 @@
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import HowItWorksPage from './HowItWorksPage';
 import TpsPage from './TpsPage';
 import ArchitecturePage from './ArchitecturePage';
-import ApiDocsPage from './ApiDocsPage';
 
-type TabId = 'how-it-works' | 'tps' | 'architecture' | 'api';
+type TabId = 'how-it-works' | 'tps' | 'architecture';
 
 export default function DocsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabId>('how-it-works');
 
+  if (searchParams.get('tab') === 'api') {
+    return <Navigate to="/api-docs" replace />;
+  }
+
   useEffect(() => {
     const tab = searchParams.get('tab') as TabId;
-    if (tab && ['how-it-works', 'tps', 'architecture', 'api'].includes(tab)) {
+    if (tab && ['how-it-works', 'tps', 'architecture'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [searchParams]);
@@ -27,7 +30,6 @@ export default function DocsPage() {
     { id: 'how-it-works' as TabId, label: 'How It Works', icon: '📖' },
     { id: 'tps' as TabId, label: 'TPS Spec', icon: '📋' },
     { id: 'architecture' as TabId, label: 'Architecture', icon: '🏗️' },
-    { id: 'api' as TabId, label: 'API', icon: '🔌' },
   ];
 
   return (
@@ -63,7 +65,6 @@ export default function DocsPage() {
           {activeTab === 'how-it-works' && <HowItWorksPage />}
           {activeTab === 'tps' && <TpsPage />}
           {activeTab === 'architecture' && <ArchitecturePage />}
-          {activeTab === 'api' && <ApiDocsPage />}
         </div>
       </div>
     </div>
