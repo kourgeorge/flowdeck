@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional
 
 import yfinance as yf
 
+from data_layer.vendors.yf_session import get_yf_session
+
 logger = logging.getLogger(__name__)
 
 
@@ -74,7 +76,7 @@ def get_financial_statements(
     }
     logger.info("Fetching financial statements from Yahoo for %s (type=%s)", ticker, statement_type)
     try:
-        t = yf.Ticker(ticker)
+        t = yf.Ticker(ticker, session=get_yf_session())
         bs_ann = t.balance_sheet
         bs_qtr = t.quarterly_balance_sheet
         cf_ann = t.cashflow

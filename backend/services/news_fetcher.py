@@ -15,6 +15,8 @@ from typing import Any, Dict, List
 
 import yfinance as yf
 
+from data_layer.vendors.yf_session import get_yf_session
+
 logger = logging.getLogger(__name__)
 
 
@@ -110,7 +112,7 @@ def get_news_yahoo(ticker: str, lookback_days: int = 7) -> Dict[str, Any]:
     curr_date = datetime.now().strftime("%Y-%m-%d")
     logger.info("Fetching news from Yahoo for %s", ticker)
     try:
-        ticker_obj = yf.Ticker(ticker)
+        ticker_obj = yf.Ticker(ticker, session=get_yf_session())
         news = ticker_obj.news
     except Exception as e:
         logger.warning("Unable to fetch news for %s: %s", ticker, e, exc_info=True)

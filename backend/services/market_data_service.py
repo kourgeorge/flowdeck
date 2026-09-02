@@ -7,6 +7,7 @@ import yfinance as yf
 import pandas as pd
 from typing import List, Optional, Dict, Literal, Any
 from datetime import datetime
+from data_layer.vendors.yf_session import close_orphaned_price_history_session, get_yf_session
 from models.schemas import TickerQuote
 
 logger = logging.getLogger(__name__)
@@ -107,6 +108,7 @@ class MarketDataService:
                 auto_adjust=False,
                 prepost=False,
             )
+            close_orphaned_price_history_session(ticker_obj)
             if hist is None or not hasattr(hist, "columns") or hist.columns is None:
                 return None
             if hist.empty or "Close" not in hist.columns:
@@ -141,7 +143,7 @@ class MarketDataService:
         ticker = ticker.upper()
         logger.info("Fetching quote from Yahoo (yfinance) for %s", ticker)
         try:
-            ticker_obj = yf.Ticker(ticker)
+            ticker_obj = yf.Ticker(ticker, session=get_yf_session())
             info = ticker_obj.info
             fast_info = ticker_obj.fast_info
             # Yahoo often returns 401 (Invalid Crumb / rate limit); yfinance then gives None for info/fast_info
@@ -248,6 +250,7 @@ class MarketDataService:
                 prepost=False,
                 threads=True,
                 progress=False,
+                session=get_yf_session(),
             )
             # Yahoo 401/rate limit can make yfinance return None or a DataFrame with no usable columns
             if data is None or data.empty:
@@ -435,6 +438,7 @@ class MarketDataService:
                 prepost=False,
                 threads=True,
                 progress=False,
+                session=get_yf_session(),
             )
             return out if out is not None and not (isinstance(out, pd.DataFrame) and out.empty) else None
 

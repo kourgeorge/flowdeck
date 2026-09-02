@@ -7,6 +7,7 @@ from typing import Annotated
 
 from services.data_cache import get_cached, get_cached_raw
 from config import DATA_CACHE_TTL_VENDOR_OHLCV
+from .yf_session import get_yf_session
 
 
 class StockstatsUtils:
@@ -35,6 +36,7 @@ class StockstatsUtils:
                     multi_level_index=False,
                     progress=False,
                     auto_adjust=True,
+                    session=get_yf_session(),
                 ).reset_index()
                 if downloaded.empty or "Date" not in downloaded.columns:
                     raise ValueError("Empty or invalid download")

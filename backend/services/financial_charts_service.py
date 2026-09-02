@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional
 
 import yfinance as yf
 
+from data_layer.vendors.yf_session import get_yf_session
+
 logger = logging.getLogger(__name__)
 
 
@@ -101,7 +103,7 @@ def get_financial_charts(ticker: str, freq: str = "annual") -> Dict[str, Any]:
     """
     ticker = ticker.upper()
     try:
-        t = yf.Ticker(ticker)
+        t = yf.Ticker(ticker, session=get_yf_session())
         if freq.lower() == "quarterly":
             bs = t.quarterly_balance_sheet
             cf = t.quarterly_cashflow

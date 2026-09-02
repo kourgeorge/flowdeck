@@ -5,6 +5,8 @@ from dateutil.relativedelta import relativedelta
 import yfinance as yf
 import pandas as pd
 
+from .yf_session import close_orphaned_price_history_session, get_yf_session
+
 # Make stockstats import optional - only needed for technical indicators
 try:
     from .stockstats_utils import StockstatsUtils
@@ -21,10 +23,11 @@ def get_YFin_data_online(
     datetime.strptime(end_date, "%Y-%m-%d")
 
     # Create ticker object
-    ticker = yf.Ticker(symbol.upper())
+    ticker = yf.Ticker(symbol.upper(), session=get_yf_session())
 
     # Fetch historical data for the specified date range
     data = ticker.history(start=start_date, end=end_date)
+    close_orphaned_price_history_session(ticker)
 
     # Check if data is empty
     if data.empty:
@@ -223,6 +226,7 @@ def _get_stock_stats_bulk(
                 multi_level_index=False,
                 progress=False,
                 auto_adjust=True,
+                session=get_yf_session(),
             ).reset_index()
             if downloaded.empty or "Date" not in downloaded.columns:
                 raise ValueError("Empty or invalid download")
@@ -299,8 +303,8 @@ def get_balance_sheet(
 ):
     """Get balance sheet data from yfinance."""
     try:
-        ticker_obj = yf.Ticker(ticker.upper())
-        
+        ticker_obj = yf.Ticker(ticker.upper(), session=get_yf_session())
+
         if freq.lower() == "quarterly":
             data = ticker_obj.quarterly_balance_sheet
         else:
@@ -329,8 +333,8 @@ def get_cashflow(
 ):
     """Get cash flow data from yfinance."""
     try:
-        ticker_obj = yf.Ticker(ticker.upper())
-        
+        ticker_obj = yf.Ticker(ticker.upper(), session=get_yf_session())
+
         if freq.lower() == "quarterly":
             data = ticker_obj.quarterly_cashflow
         else:
@@ -359,8 +363,8 @@ def get_income_statement(
 ):
     """Get income statement data from yfinance."""
     try:
-        ticker_obj = yf.Ticker(ticker.upper())
-        
+        ticker_obj = yf.Ticker(ticker.upper(), session=get_yf_session())
+
         if freq.lower() == "quarterly":
             data = ticker_obj.quarterly_income_stmt
         else:
@@ -389,9 +393,9 @@ def get_fundamentals_core(
     """Get fundamental data (overview) from yfinance as a JSON dictionary."""
     
     try:
-        ticker_obj = yf.Ticker(ticker.upper())
+        ticker_obj = yf.Ticker(ticker.upper(), session=get_yf_session())
         info = ticker_obj.info
-        
+
         if not info:
             return {}
         
@@ -633,7 +637,7 @@ def get_insider_transactions(
 ):
     """Get insider transactions data from yfinance (string format for agents)."""
     try:
-        ticker_obj = yf.Ticker(ticker.upper())
+        ticker_obj = yf.Ticker(ticker.upper(), session=get_yf_session())
         data = ticker_obj.insider_transactions
 
         if data is None or data.empty:
@@ -672,7 +676,7 @@ def get_insider_transactions_app_format(ticker: str, limit: int = 50) -> dict:
         return val
 
     try:
-        raw_df = yf.Ticker(ticker).insider_transactions
+        raw_df = yf.Ticker(ticker, session=get_yf_session()).insider_transactions
     except Exception as e:
         return {"ticker": ticker, "date": curr_date, "transactions": [], "count": 0, "error": str(e)}
     if raw_df is None or raw_df.empty:
@@ -711,7 +715,7 @@ def get_company_info(ticker: str) -> dict:
         "quoteType": "INDEX" if ticker.startswith("^") else None,
     }
     try:
-        t = yf.Ticker(ticker)
+        t = yf.Ticker(ticker, session=get_yf_session())
         info = t.info
         quote_type = info.get("quoteType")
         if quote_type is None and ticker.startswith("^"):
@@ -736,13 +740,15 @@ def get_extended_info(ticker: str) -> dict:
              "trailing_eps": None, "forward_eps": None, "average_volume": None, "enterprise_value": None,
              "profit_margin": None, "operating_margin": None, "ebitda": None, "pe_ratio": None, "forward_pe": None}
     try:
-        t = yf.Ticker(ticker)
+        t = yf.Ticker(ticker, session=get_yf_session())
         info = t.info
         try:
             hist = t.history(period="3mo")
             avg_volume = int(hist["Volume"].mean()) if not hist.empty and "Volume" in hist.columns else None
         except Exception:
             avg_volume = None
+        finally:
+            close_orphaned_price_history_session(t)
         return {
             "beta": info.get("beta"),
             "market_cap": info.get("marketCap"),
@@ -767,7 +773,7 @@ def get_company_officers(ticker: str) -> dict:
     """Get company officers from yfinance. App API shape."""
     ticker = ticker.upper()
     try:
-        t = yf.Ticker(ticker)
+        t = yf.Ticker(ticker, session=get_yf_session())
         info = t.info
         officers_data = info.get("companyOfficers") or []
         officers = []
@@ -800,7 +806,7 @@ def get_fund_info(ticker: str) -> dict:
            "expenseRatio": None, "description": None, "fund_overview": None, "top_holdings": None,
            "sector_weightings": None, "asset_classes": None}
     try:
-        t = yf.Ticker(ticker)
+        t = yf.Ticker(ticker, session=get_yf_session())
         info = t.info
         out["totalAssets"] = info.get("totalAssets")
         out["yield"] = info.get("yield")
@@ -833,7 +839,7 @@ def get_future_events(ticker: str) -> dict:
     today = datetime.now().date()
     events = []
     try:
-        t = yf.Ticker(ticker)
+        t = yf.Ticker(ticker, session=get_yf_session())
         info = t.info or {}
         ex_ts = info.get("exDividendDate")
         if ex_ts is not None:
@@ -895,9 +901,9 @@ def get_yfinance_news(
     import json
     
     try:
-        ticker_obj = yf.Ticker(ticker.upper())
+        ticker_obj = yf.Ticker(ticker.upper(), session=get_yf_session())
         news = ticker_obj.news
-        
+
         if not news:
             return json.dumps({
                 "ticker": ticker.upper(),
@@ -950,7 +956,7 @@ def get_analyst_recommendations(
         Dictionary containing recommendation summary and breakdown
     """
     try:
-        ticker_obj = yf.Ticker(ticker.upper())
+        ticker_obj = yf.Ticker(ticker.upper(), session=get_yf_session())
         recommendations = ticker_obj.recommendations
         
         if recommendations is None or recommendations.empty:
@@ -1113,8 +1119,9 @@ def get_historical_app_format(ticker: str, period: str = "6mo", interval: str = 
     ticker = ticker.upper()
     intraday_intervals = ("1m", "2m", "5m", "15m", "30m", "60m")
     use_last_trading_day = period == "1d" and interval in intraday_intervals
+    ticker_obj = None
     try:
-        ticker_obj = yf.Ticker(ticker)
+        ticker_obj = yf.Ticker(ticker, session=get_yf_session())
         if use_last_trading_day:
             today = date.today()
             last_close = today - timedelta(days=3) if today.weekday() == 0 else today - timedelta(days=1)
@@ -1125,6 +1132,9 @@ def get_historical_app_format(ticker: str, period: str = "6mo", interval: str = 
             hist = ticker_obj.history(period=period, interval=interval)
     except Exception:
         return {"ticker": ticker, "period": period, "interval": interval, "data": [], "count": 0}
+    finally:
+        if ticker_obj is not None:
+            close_orphaned_price_history_session(ticker_obj)
     if hist.empty:
         return {"ticker": ticker, "period": period, "interval": interval, "data": [], "count": 0}
     data = []
@@ -1252,7 +1262,7 @@ def get_news_app_format(ticker: str, lookback_days: int = 7) -> dict:
             return None
 
     try:
-        ticker_obj = yf.Ticker(ticker)
+        ticker_obj = yf.Ticker(ticker, session=get_yf_session())
         news = ticker_obj.news
     except Exception as e:
         return {"ticker": ticker, "date": curr_date, "articles": [], "count": 0, "error": str(e)}
@@ -1309,7 +1319,7 @@ def get_financial_statements(
     curr_date = datetime.now().strftime("%Y-%m-%d")
     result = {"ticker": ticker, "date": curr_date, "frequency": freq, "statements": {}}
     try:
-        t = yf.Ticker(ticker)
+        t = yf.Ticker(ticker, session=get_yf_session())
         bs_ann, bs_qtr = t.balance_sheet, t.quarterly_balance_sheet
         cf_ann, cf_qtr = t.cashflow, t.quarterly_cashflow
         inc_ann, inc_qtr = t.income_stmt, t.quarterly_income_stmt
@@ -1391,7 +1401,7 @@ def get_financial_charts(ticker: str, freq: str = "annual") -> dict:
         "performance_metrics": None,
     }
     try:
-        t = yf.Ticker(ticker)
+        t = yf.Ticker(ticker, session=get_yf_session())
         if freq.lower() == "quarterly":
             bs, cf, inc = t.quarterly_balance_sheet, t.quarterly_cashflow, t.quarterly_income_stmt
         else:

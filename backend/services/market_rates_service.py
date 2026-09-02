@@ -210,8 +210,10 @@ class MarketRatesService:
 
         try:
             import yfinance as yf
-            vix_ticker = yf.Ticker("^VIX")
+            from data_layer.vendors.yf_session import close_orphaned_price_history_session, get_yf_session
+            vix_ticker = yf.Ticker("^VIX", session=get_yf_session())
             hist = vix_ticker.history(period="1d")
+            close_orphaned_price_history_session(vix_ticker)
 
             if not hist.empty and 'Close' in hist.columns:
                 vix_value = float(hist['Close'].iloc[-1])

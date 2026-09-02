@@ -16,6 +16,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, TypeVar
 import pandas as pd
 import yfinance as yf
 
+from .yf_session import close_orphaned_price_history_session, get_yf_session
 from models.schemas import TickerQuote
 
 logger = logging.getLogger(__name__)
@@ -177,7 +178,7 @@ def _get_quote_yfinance(ticker: str) -> Optional[TickerQuote]:
     ticker = ticker.upper()
     logger.info("Fetching quote from Yahoo (yfinance) for %s", ticker)
     try:
-        ticker_obj = yf.Ticker(ticker)
+        ticker_obj = yf.Ticker(ticker, session=get_yf_session())
         info = _yf_with_retry(lambda: ticker_obj.info)
         fast_info = ticker_obj.fast_info
         if info is None:
@@ -190,6 +191,7 @@ def _get_quote_yfinance(ticker: str) -> Optional[TickerQuote]:
             return None
 
         hist = ticker_obj.history(period="10d", interval="1d", auto_adjust=False, prepost=False)
+        close_orphaned_price_history_session(ticker_obj)
         previous_close = None
         if hist is not None and not hist.empty and "Close" in hist.columns:
             close_series = hist["Close"].dropna()
@@ -372,6 +374,7 @@ def _get_quotes_batch_yfinance(tickers: List[str]) -> Dict[str, Optional[TickerQ
             prepost=False,
             threads=True,
             progress=False,
+            session=get_yf_session(),
         ))
         if data is None or data.empty or not hasattr(data, "columns"):
             return results
@@ -481,6 +484,7 @@ def _get_quotes_batch_with_range_yfinance(
             prepost=False,
             threads=True,
             progress=False,
+            session=get_yf_session(),
         ))
         return out if out is not None and not (isinstance(out, pd.DataFrame) and out.empty) else None
 

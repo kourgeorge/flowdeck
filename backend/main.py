@@ -46,6 +46,7 @@ from routers.polymarket import router as polymarket_router
 from api_docs import API_DESCRIPTION, API_CONTACT, API_LICENSE, API_VERSION, OPENAPI_TAGS, install_public_openapi
 from data_layer import init_data_gateway
 from data_layer.market import MarketDataLayer
+from data_layer.vendors.yf_session import close_yf_session
 from data_layer.sources.market import CachedMarketSource
 from data_layer.sources.reports import ReportDataSource
 from data_layer.sources.user import UserPortfolioSource
@@ -315,6 +316,7 @@ async def lifespan(app: FastAPI):
             scheduler.shutdown(wait=False)
         except Exception:
             pass
+    close_yf_session()
 
 
 app = FastAPI(
