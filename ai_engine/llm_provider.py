@@ -134,6 +134,7 @@ def get_llm(
     *,
     model_name: Optional[str] = None,
     temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
     request_timeout: Optional[int] = 600,
 ) -> BaseChatModel:
     """
@@ -144,6 +145,8 @@ def get_llm(
         config: Must contain llm_provider and optionally deep_think_llm, quick_think_llm, backend_url.
         model_name: If set, overrides the model for this role (still uses same provider).
         temperature: Optional override (e.g. 0.0 for deterministic).
+        max_tokens: Optional cap on output tokens. Anthropic defaults to 1024 if unset, which
+            silently truncates long output, so callers generating long-form content should set this.
         request_timeout: Request timeout in seconds (default 600).
 
     Returns:
@@ -168,19 +171,29 @@ def get_llm(
         kwargs = dict(model=model, base_url=base_url, request_timeout=timeout)
         if use_temp:
             kwargs["temperature"] = temp
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
         return ChatOpenAI(**kwargs)
     if provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
         kwargs = dict(model=model, base_url=base_url, request_timeout=timeout)
         if use_temp:
             kwargs["temperature"] = temp
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
         return ChatAnthropic(**kwargs)
     if provider == "google":
         from langchain_google_genai import ChatGoogleGenerativeAI
-        return ChatGoogleGenerativeAI(model=model, temperature=temp)
+        kwargs = dict(model=model, temperature=temp)
+        if max_tokens is not None:
+            kwargs["max_output_tokens"] = max_tokens
+        return ChatGoogleGenerativeAI(**kwargs)
     if provider == "perplexity":
         from langchain_perplexity import ChatPerplexity
-        return ChatPerplexity(model=model, temperature=temp)
+        kwargs = dict(model=model, temperature=temp)
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+        return ChatPerplexity(**kwargs)
     if provider == "azure":
         from langchain_openai import AzureChatOpenAI
         azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
@@ -200,6 +213,8 @@ def get_llm(
         )
         if use_temp:
             kwargs["temperature"] = temp
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
         return AzureChatOpenAI(**kwargs)
     if provider == "cerebras":
         from langchain_cerebras import ChatCerebras
@@ -212,7 +227,7 @@ def get_llm(
             model=model,
             api_key=api_key,
             timeout=timeout,
-            max_tokens=config.get("max_tokens") or 32768,
+            max_tokens=max_tokens or config.get("max_tokens") or 32768,
         )
         if use_temp:
             kwargs["temperature"] = temp

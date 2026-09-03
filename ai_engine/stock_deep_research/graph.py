@@ -31,56 +31,30 @@ from .state import (
     SupervisorState,
 )
 from .tools import get_all_tools
+from ai_engine.llm_provider import get_config_from_env, get_llm
 
-# --- Chat model factory (avoids langchain meta-package) ---
-def _model_name_only(model: str) -> str:
-    """Strip provider prefix (e.g. openai:gpt-4o -> gpt-4o)."""
+
+def _split_provider_model(model: str) -> tuple[str, str]:
+    """Split an init_chat_model-style name (e.g. openai:gpt-4o) into (provider, model)."""
     if not model:
-        return "gpt-4o"
+        return "openai", "gpt-4o"
     if ":" in model:
-        return model.split(":", 1)[1].strip()
-    return model
+        provider, name = model.split(":", 1)
+        return provider.strip().lower() or "openai", name.strip()
+    return "openai", model
 
 
-def _get_chat_model(model: str, max_tokens: int, api_key: Optional[str], config: Optional[RunnableConfig]):
-    """Return a chat model (OpenAI, Anthropic, or Google) from model name and config."""
-    model_lower = (model or "").lower()
-    api_key = api_key or _get_api_key(model, config)
-    name = _model_name_only(model)
-    if "anthropic" in model_lower or "claude" in model_lower:
-        from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(model=name, max_tokens=max_tokens, api_key=api_key)
-    if "google" in model_lower or "gemini" in model_lower:
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        return ChatGoogleGenerativeAI(model=name, max_output_tokens=max_tokens, api_key=api_key)
-    from langchain_openai import ChatOpenAI
-    return ChatOpenAI(model=name, max_tokens=max_tokens, api_key=api_key)
+def _get_chat_model(model: str, max_tokens: int, config: Optional[RunnableConfig]):
+    """Build a chat model for an init_chat_model-style name via the shared LLM provider factory."""
+    provider, name = _split_provider_model(model)
+    conf = (config or {}).get("configurable") or {}
+    llm_config = get_config_from_env({**conf, "llm_provider": provider})
+    return get_llm("quick", llm_config, model_name=name, max_tokens=max_tokens)
 
 
 def _get_today_str() -> str:
     from datetime import datetime
     return datetime.now().strftime("%a %b %d, %Y")
-
-
-def _get_api_key(model_name: str, config: Optional[RunnableConfig]) -> Optional[str]:
-    import os
-    model_name = (model_name or "").lower()
-    conf = (config or {}).get("configurable") or {}
-    keys = conf.get("apiKeys") or {}
-    if keys:
-        if "openai" in model_name:
-            return keys.get("OPENAI_API_KEY")
-        if "anthropic" in model_name:
-            return keys.get("ANTHROPIC_API_KEY")
-        if "google" in model_name:
-            return keys.get("GOOGLE_API_KEY")
-    if "openai" in model_name:
-        return os.getenv("OPENAI_API_KEY")
-    if "anthropic" in model_name:
-        return os.getenv("ANTHROPIC_API_KEY")
-    if "google" in model_name:
-        return os.getenv("GOOGLE_API_KEY")
-    return None
 
 
 def _notes_from_tool_messages(messages):
@@ -98,7 +72,7 @@ async def write_research_brief(state: AgentState, config: RunnableConfig) -> Com
         date=_get_today_str(),
     )
     model = (
-        _get_chat_model(cfg.research_model, cfg.research_model_max_tokens, _get_api_key(cfg.research_model, config), config)
+        _get_chat_model(cfg.research_model, cfg.research_model_max_tokens, config)
         .with_structured_output(StockResearchQuestion)
         .with_retry(stop_after_attempt=cfg.max_structured_output_retries)
     )
@@ -130,7 +104,7 @@ async def supervisor(state: SupervisorState, config: RunnableConfig) -> Command[
     from .tools import think_tool
     lead_tools = [ConductResearch, ResearchComplete, think_tool]
     model = (
-        _get_chat_model(cfg.research_model, cfg.research_model_max_tokens, _get_api_key(cfg.research_model, config), config)
+        _get_chat_model(cfg.research_model, cfg.research_model_max_tokens, config)
         .bind_tools(lead_tools)
         .with_retry(stop_after_attempt=cfg.max_structured_output_retries)
     )
@@ -159,7 +133,7 @@ async def researcher(state: ResearcherState, config: RunnableConfig) -> Command[
     topic = state.get("research_topic", "")
     system = RESEARCHER_SYSTEM_PROMPT.format(date=_get_today_str(), research_topic=topic)
     model = (
-        _get_chat_model(cfg.research_model, cfg.research_model_max_tokens, _get_api_key(cfg.research_model, config), config)
+        _get_chat_model(cfg.research_model, cfg.research_model_max_tokens, config)
         .bind_tools(tools)
         .with_retry(stop_after_attempt=cfg.max_structured_output_retries)
     )
@@ -242,7 +216,7 @@ async def compress_research(state: ResearcherState, config: RunnableConfig) -> d
     )
     compression_prompt = COMPRESS_RESEARCH_SYSTEM.format(date=_get_today_str())
     messages = [SystemMessage(content=compression_prompt)] + researcher_messages + [HumanMessage(content=COMPRESS_RESEARCH_HUMAN)]
-    model = _get_chat_model(cfg.compression_model, cfg.compression_model_max_tokens, _get_api_key(cfg.compression_model, config), config)
+    model = _get_chat_model(cfg.compression_model, cfg.compression_model_max_tokens, config)
     try:
         response = await model.ainvoke(messages)
         compressed = response.content if hasattr(response, "content") else str(response)
@@ -351,7 +325,7 @@ async def final_report_generation(state: AgentState, config: RunnableConfig) -> 
         findings=findings,
         date=_get_today_str(),
     )
-    model = _get_chat_model(cfg.final_report_model, cfg.final_report_model_max_tokens, _get_api_key(cfg.final_report_model, config), config)
+    model = _get_chat_model(cfg.final_report_model, cfg.final_report_model_max_tokens, config)
     try:
         report_msg = await model.ainvoke([HumanMessage(content=prompt_content)])
         report = report_msg.content if hasattr(report_msg, "content") else str(report_msg)
