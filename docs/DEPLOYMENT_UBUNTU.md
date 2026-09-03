@@ -179,7 +179,7 @@ Replace `your-domain.com` with your actual domain. If your API is on a subdomain
 cd /opt/flowdeck/frontend
 cp .env.example .env   # optional; edit for production
 npm ci
-npm run build
+npm run build:prerender
 ```
 
 For production, set the API URL before build (in `.env` or inline). If the API is served at `/api` on the same domain as the frontend, use same-origin:
@@ -187,17 +187,29 @@ For production, set the API URL before build (in `.env` or inline). If the API i
 ```bash
 # Same-origin (API at https://your-domain.com/api): leave empty
 export VITE_API_URL=
-npm run build
+npm run build:prerender
 ```
 
 If the API is on a separate subdomain:
 
 ```bash
 export VITE_API_URL=https://api.your-domain.com
-npm run build
+npm run build:prerender
 ```
 
 Built assets will be in `frontend/dist/`.
+
+---
+
+## 5.4. Prerendering for AI Crawlers
+
+`npm run build:prerender` runs the normal `npm run build`, then a second pass (`npm run prerender`) that renders the fully-static pages (`/architecture`, `/contact`, `/how-it-works`, `/privacy`, `/terms`, `/tps`) to real HTML via `react-dom/server` — no headless browser — and writes them into `frontend/dist/` as `<route>.html` (e.g. `dist/tps.html`).
+
+This exists because these routes only ever render an empty `<div id="root"></div>` until client JS runs, which AI crawlers (ChatGPT, Perplexity, Claude, etc.) generally don't execute — they'd otherwise see no content at all. `vite preview`'s built-in fallback already checks for `<path>.html` before falling back to the SPA shell, so this needs no extra web-server configuration on this deployment path. If you deploy via `docker/frontend.Dockerfile` + `docker/nginx.conf` instead, that Dockerfile already runs `npm run build:prerender` and nginx's `try_files` is configured to prefer the prerendered file.
+
+The prerender step is a safety-first, all-or-nothing pass: every route is rendered and checked (minimum text length, no leftover loading spinner, no error-page text, `<main>` present, expected JSON-LD present) in memory before anything is written. If any route fails its checks, the script exits non-zero and `frontend/dist/` is left exactly as `vite build` produced it — plain `npm run build` output, nothing prerendered, but nothing broken either. If you see `npm run build:prerender` fail, run `npm run build` on its own and deploy that; the SPA still works for every route, it just won't be prerendered for crawlers until the failure is fixed. To see the acceptance-gate measurements without writing anything, run `PRERENDER_REPORT=1 npm run prerender`.
+
+Only those 6 routes are prerendered; every other route (`/dashboard`, `/market`, `/tickers/*`, etc.) is untouched and still served as the normal client-rendered SPA.
 
 ---
 
@@ -461,6 +473,12 @@ sudo chmod 640 /opt/flowdeck/.env
 - Confirm frontend is running: `systemctl status stock-dashboard-frontend`
 - Ensure Caddy on the gateway proxies to the correct Flowdeck server IP and ports (8002, 4173)
 
+### Prerendered pages missing or stale (`/tps`, `/architecture`, etc. show the SPA shell instead of content)
+
+- Confirm the build actually ran `npm run build:prerender`, not plain `npm run build` — check for `dist/tps.html` etc.
+- If the last prerender run failed its acceptance gates, `dist/` is left as a plain build (see section 5.4) — re-run `PRERENDER_REPORT=1 npm run prerender` to see why, fix the page, rebuild
+- Restart `stock-dashboard-frontend` after a rebuild — `npm run preview` serves whatever was in `dist/` when it started
+
 ---
 
 ## 14. Upgrade Procedure
@@ -471,7 +489,7 @@ git pull origin main
 source venv/bin/activate   # or: conda activate flowdeck
 pip install -r requirements.txt
 python backend/scripts/migrate_token_economy.py   # run if new DB schema (e.g. token economy) was added
-cd frontend && npm ci && npm run build
+cd frontend && npm ci && npm run build:prerender
 sudo systemctl restart stock-dashboard-backend stock-dashboard-frontend
 ```
 
@@ -484,7 +502,7 @@ sudo systemctl restart stock-dashboard-backend stock-dashboard-frontend
 - [ ] Ubuntu 22.04+, Python 3.11, Node.js 20
 - [ ] Repository cloned and dependencies installed
 - [ ] Root `.env` with API keys; `backend/.env` with production `CORS_ORIGINS`, `BACKEND_URL`
-- [ ] Frontend built with production `VITE_API_URL` (or `''` for same-origin)
+- [ ] Frontend built with production `VITE_API_URL` (or `''` for same-origin) via `npm run build:prerender`
 - [ ] systemd service for backend (bind to 0.0.0.0 when gateway is on another host)
 - [ ] Caddy on gateway configured (see section 5.5)
 - [ ] npm preview and backend systemd services running

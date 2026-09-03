@@ -38,41 +38,71 @@ function upsertLink(rel: string, href: string) {
   tag.setAttribute('href', href);
 }
 
+export interface ResolvedSeoTags {
+  title: string;
+  description: string;
+  canonical: string;
+  image: string;
+  robots: string;
+  type: 'website' | 'article';
+  jsonLdBlocks: Array<Record<string, unknown>>;
+}
+
+export function resolveSeoTags(options: SeoOptions, pathname: string): ResolvedSeoTags {
+  const {
+    title,
+    description = DEFAULT_SEO_DESCRIPTION,
+    path,
+    canonicalUrl,
+    image = DEFAULT_OG_IMAGE,
+    robots = 'index,follow',
+    type = 'website',
+    jsonLd,
+  } = options;
+
+  const fullTitle = title ? `${title} | ${APP_NAME}` : APP_NAME;
+  const canonical = canonicalUrl ?? toAbsoluteUrl(path ?? pathname);
+  const imageUrl = toAbsoluteUrl(image);
+  const jsonLdBlocks = Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [];
+
+  return { title: fullTitle, description, canonical, image: imageUrl, robots, type, jsonLdBlocks };
+}
+
 export function useSeo({
   title,
-  description = DEFAULT_SEO_DESCRIPTION,
+  description,
   path,
   canonicalUrl,
-  image = DEFAULT_OG_IMAGE,
-  robots = 'index,follow',
-  type = 'website',
+  image,
+  robots,
+  type,
   jsonLd,
 }: SeoOptions) {
   useEffect(() => {
-    const fullTitle = title ? `${title} | ${APP_NAME}` : APP_NAME;
-    const canonical = canonicalUrl ?? toAbsoluteUrl(path ?? window.location.pathname);
-    const imageUrl = toAbsoluteUrl(image);
+    const resolved = resolveSeoTags(
+      { title, description, path, canonicalUrl, image, robots, type, jsonLd },
+      window.location.pathname,
+    );
 
-    document.title = fullTitle;
+    document.title = resolved.title;
 
-    upsertMeta('name', 'description', description);
-    upsertMeta('name', 'robots', robots);
+    upsertMeta('name', 'description', resolved.description);
+    upsertMeta('name', 'robots', resolved.robots);
     upsertMeta('property', 'og:site_name', APP_NAME);
-    upsertMeta('property', 'og:type', type);
-    upsertMeta('property', 'og:title', fullTitle);
-    upsertMeta('property', 'og:description', description);
-    upsertMeta('property', 'og:url', canonical);
-    upsertMeta('property', 'og:image', imageUrl);
+    upsertMeta('property', 'og:type', resolved.type);
+    upsertMeta('property', 'og:title', resolved.title);
+    upsertMeta('property', 'og:description', resolved.description);
+    upsertMeta('property', 'og:url', resolved.canonical);
+    upsertMeta('property', 'og:image', resolved.image);
     upsertMeta('name', 'twitter:card', 'summary_large_image');
-    upsertMeta('name', 'twitter:title', fullTitle);
-    upsertMeta('name', 'twitter:description', description);
-    upsertMeta('name', 'twitter:image', imageUrl);
-    upsertLink('canonical', canonical);
+    upsertMeta('name', 'twitter:title', resolved.title);
+    upsertMeta('name', 'twitter:description', resolved.description);
+    upsertMeta('name', 'twitter:image', resolved.image);
+    upsertLink('canonical', resolved.canonical);
 
     document.head.querySelectorAll('script[data-flowdeck-jsonld="true"]').forEach((node) => node.remove());
 
-    const blocks = Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [];
-    blocks.forEach((block) => {
+    resolved.jsonLdBlocks.forEach((block) => {
       const script = document.createElement('script');
       script.type = 'application/ld+json';
       script.dataset.flowdeckJsonld = 'true';

@@ -151,12 +151,14 @@ function todayDateStr() {
 }
 
 export default function Layout() {
-  // Start collapsed on mobile (< 768px), expanded on desktop
+  // Start collapsed on mobile (< 768px), expanded on desktop. The client
+  // always has `window`, so the `true` fallback only affects prerendering
+  // (Node has no `window`) — it keeps nav link text in the static HTML.
   const [sidebarExpanded, setSidebarExpanded] = useState(() => {
     if (typeof window !== 'undefined') {
       return window.innerWidth >= 768;
     }
-    return false;
+    return true;
   });
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [hasBriefForToday, setHasBriefForToday] = useState<boolean | null>(null);

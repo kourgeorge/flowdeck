@@ -31,6 +31,11 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     customLogger: logger,
+    build: {
+      // Read by scripts/prerender.mjs to find each prerendered route's JS
+      // chunk for <link rel="modulepreload"> injection.
+      manifest: true,
+    },
     server: {
       port: 3003,
       host: true,
