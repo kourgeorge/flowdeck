@@ -171,7 +171,7 @@ All under `/api/data/`. Most endpoints are public; auth-required endpoints are m
 | GET | `/api/data/market-movers?count=8` | Top gainers/losers (`count` 1–100) |
 | GET | `/api/data/market-overview?range=1d` | Indices, sectors, regions, commodities in one payload |
 | GET | `/api/data/market-overview/section?section=indices` | One section only, paginated |
-| GET | `/api/data/news?ticker=AAPL` | News articles (optional: `vendor`, `lookback_days=7`) |
+| GET | `/api/data/news?ticker=AAPL` | News articles (optional: `lookback_days=7`) |
 | GET | `/api/data/news/batch?tickers=AAPL,MSFT` | Merged, de-duplicated news for up to 50 tickers |
 | GET | `/api/data/news/batch/stream?tickers=AAPL,MSFT` | Same, as an NDJSON progressive stream |
 | GET | `/api/data/global-news?lookback_days=7&limit=10` | Macro / world news (optional `query`, `curr_date`) |
