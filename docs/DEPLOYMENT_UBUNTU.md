@@ -250,10 +250,14 @@ sudo systemctl start stock-dashboard-frontend
 
 ### Caddy on gateway
 
-Configure Caddy on the gateway to proxy `/api` and `/ws` to the backend, and everything else to the frontend preview:
+Configure Caddy on the gateway to proxy `/api` and `/ws` to the backend, everything else to the frontend preview, and redirect `www` and any legacy domain to the canonical `flowdeck.biz` host:
 
 ```caddy
-flowdeck.kour.me {
+www.flowdeck.biz {
+    redir https://flowdeck.biz{uri} permanent
+}
+
+flowdeck.biz {
     @api path /api /api/* /ws /ws/*
     handle @api {
         reverse_proxy 192.168.1.110:8002
@@ -261,10 +265,17 @@ flowdeck.kour.me {
     handle {
         reverse_proxy 192.168.1.110:4173
     }
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "geolocation=(), camera=(), microphone=()"
+    }
 }
 ```
 
-Replace `192.168.1.110` with your Flowdeck server IP. Open port **4173** on the Flowdeck server firewall (or your gateway must reach it on the LAN).
+Replace `192.168.1.110` with your Flowdeck server IP. Open port **4173** on the Flowdeck server firewall (or your gateway must reach it on the LAN). Without the `www` redirect, both hosts serve identical content with no canonical relationship between them, which splits search/AI-crawler trust signals across two domains instead of one.
 
 ---
 
