@@ -35,10 +35,6 @@ load_dotenv(REPO_ROOT / ".env")
 from backend.processing import get_ticker_event_summary
 from data_layer import get_data_gateway, init_data_gateway
 from data_layer.market import MarketDataLayer
-from data_layer.sources.edgar import EdgarDataSource
-from data_layer.sources.market import CachedMarketSource
-from data_layer.sources.reports import ReportDataSource
-from data_layer.sources.user import UserPortfolioSource
 from database import init_db
 from services.edgar_service import get_edgar_service
 from services.report_service import ReportService
@@ -93,16 +89,10 @@ def _ensure_gateway() -> Any:
     try:
         return get_data_gateway()
     except Exception:
-        market_layer = MarketDataLayer()
-        market_source = CachedMarketSource(market_layer)
-        report_source = ReportDataSource(ReportService())
-        user_source = UserPortfolioSource()
-        edgar_source = EdgarDataSource(get_edgar_service())
         init_data_gateway(
-            market=market_source,
-            reports=report_source,
-            user=user_source,
-            edgar=edgar_source,
+            market=MarketDataLayer(),
+            reports=ReportService(),
+            edgar=get_edgar_service(),
         )
         return get_data_gateway()
 

@@ -47,10 +47,6 @@ from api_docs import API_DESCRIPTION, API_CONTACT, API_LICENSE, API_VERSION, OPE
 from data_layer import init_data_gateway
 from data_layer.market import MarketDataLayer
 from data_layer.vendors.yf_session import close_yf_session
-from data_layer.sources.market import CachedMarketSource
-from data_layer.sources.reports import ReportDataSource
-from data_layer.sources.user import UserPortfolioSource
-from data_layer.sources.edgar import EdgarDataSource
 from services.analysis_service import AnalysisService
 from services.report_service import ReportService
 from services.edgar_service import get_edgar_service
@@ -348,15 +344,10 @@ report_service = ReportService()
 analysis_service = AnalysisService()
 
 # Initialize data layer (single entry point for all data access; owns cache + vendors)
-market_source = CachedMarketSource(MarketDataLayer())
-report_source = ReportDataSource(report_service)
-user_source = UserPortfolioSource()
-edgar_source = EdgarDataSource(get_edgar_service())
 init_data_gateway(
-    market=market_source,
-    reports=report_source,
-    user=user_source,
-    edgar=edgar_source,
+    market=MarketDataLayer(),
+    reports=report_service,
+    edgar=get_edgar_service(),
 )
 
 # Shared services for routers that need them (tickers, analyses)

@@ -13,10 +13,9 @@ _engine: Optional[Any] = None
 
 
 def get_info_fetcher() -> Any:
-    """Get the shared market data source (CachedMarketSource wrapping MarketDataLayer)."""
+    """Get the shared market data source (MarketDataLayer)."""
     global _engine
     if _engine is None:
         from data_layer.market import MarketDataLayer
-        from data_layer.sources.market import CachedMarketSource
-        _engine = CachedMarketSource(MarketDataLayer())
+        _engine = MarketDataLayer()
     return _engine

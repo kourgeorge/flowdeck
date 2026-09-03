@@ -21,10 +21,6 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
 from backend.processing import get_ticker_event_summary
 from data_layer import get_data_gateway, init_data_gateway
 from data_layer.market import MarketDataLayer
-from data_layer.sources.edgar import EdgarDataSource
-from data_layer.sources.market import CachedMarketSource
-from data_layer.sources.reports import ReportDataSource
-from data_layer.sources.user import UserPortfolioSource
 from database import init_db
 from services.edgar_service import get_edgar_service
 from services.report_service import ReportService
@@ -50,16 +46,10 @@ def calculate_ticker_events(ticker):
     except Exception:
         print("Initializing data gateway...")
         try:
-            market_layer = MarketDataLayer()
-            market_source = CachedMarketSource(market_layer)
-            report_source = ReportDataSource(ReportService())
-            user_source = UserPortfolioSource()
-            edgar_source = EdgarDataSource(get_edgar_service())
             init_data_gateway(
-                market=market_source,
-                reports=report_source,
-                user=user_source,
-                edgar=edgar_source,
+                market=MarketDataLayer(),
+                reports=ReportService(),
+                edgar=get_edgar_service(),
             )
             gateway = get_data_gateway()
             print("  ✓ Data gateway initialized")

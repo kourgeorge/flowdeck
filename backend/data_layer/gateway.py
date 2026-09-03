@@ -1,7 +1,7 @@
 """
 DataGateway: single facade for all data access.
 
-Delegates to pluggable sources (market, reports, user, EDGAR).
+Delegates to concrete services (market, reports, EDGAR).
 Used by REST API, AI agents, and other app components.
 """
 
@@ -13,13 +13,6 @@ from typing import Any, Dict, List, Optional
 from config import MAJOR_TICKERS
 from processing import get_ticker_event_summary
 
-from data_layer.sources.base import (
-    EdgarSourceProtocol,
-    MarketDataSourceProtocol,
-    ReportDataSourceProtocol,
-    UserPortfolioSourceProtocol,
-)
-
 
 _data_gateway: Optional["DataGateway"] = None
 
@@ -27,19 +20,19 @@ _data_gateway: Optional["DataGateway"] = None
 class DataGateway:
     """
     Unified data access facade.
-    Holds references to sources; all methods delegate to the appropriate source.
+    Holds references to concrete services; all methods delegate to the appropriate one.
     """
 
     def __init__(
         self,
-        market: MarketDataSourceProtocol,
-        reports: ReportDataSourceProtocol,
-        user: UserPortfolioSourceProtocol,
-        edgar: EdgarSourceProtocol,
+        market: Any,
+        reports: Any,
+        edgar: Any,
     ):
+        """market: a MarketDataLayer instance. reports: a ReportService instance.
+        edgar: an EdgarService instance (from services.edgar_service)."""
         self._market = market
         self._reports = reports
-        self._user = user
         self._edgar = edgar
 
     # ---------- Market ----------
@@ -271,7 +264,10 @@ class DataGateway:
 
     # ---------- User ----------
     def get_user_context(self, user_id: int, db: Any) -> str:
-        return self._user.get_user_context(user_id, db)
+        """Get user profile as a formatted string for AI context."""
+        from services.user_profile_service import build_user_context_snapshot
+
+        return build_user_context_snapshot(user_id, db)
 
     # ---------- EDGAR ----------
     def get_edgar_filings(self, ticker: str) -> Dict[str, Any]:
@@ -300,12 +296,11 @@ def get_data_gateway() -> DataGateway:
 
 
 def init_data_gateway(
-    market: MarketDataSourceProtocol,
-    reports: ReportDataSourceProtocol,
-    user: UserPortfolioSourceProtocol,
-    edgar: EdgarSourceProtocol,
+    market: Any,
+    reports: Any,
+    edgar: Any,
 ) -> DataGateway:
     """Initialize the shared DataGateway. Called from main.py at startup."""
     global _data_gateway
-    _data_gateway = DataGateway(market=market, reports=reports, user=user, edgar=edgar)
+    _data_gateway = DataGateway(market=market, reports=reports, edgar=edgar)
     return _data_gateway

@@ -124,7 +124,7 @@ def _fetch_company_info(ticker: str) -> Dict[str, Any]:
 
 
 class MarketDataLayer:
-    """Cache + vendor routing. Implements MarketDataSourceProtocol."""
+    """Cache + vendor routing."""
 
     def get_quote(self, ticker: str) -> Optional[Dict[str, Any]]:
         """Single-ticker quote with full fields (bid/ask, day high/low, 52-week range).
