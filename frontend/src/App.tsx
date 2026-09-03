@@ -1,36 +1,50 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import Layout from './components/Layout';
-import HomePage from './pages/HomePage';
-import ProfilePage from './pages/ProfilePage';
-import TickerPage from './pages/StockPage';
-import TermsOfUsePage from './pages/TermsOfUsePage';
-import PrivacyPage from './pages/PrivacyPage';
-import ContactUsPage from './pages/ContactUsPage';
-import AdminDashboardPage from './pages/AdminDashboardPage';
-import BriefPage from './pages/BriefPage';
-import DashboardPage from './pages/DashboardPage';
-import MarketPage from './pages/MarketPage';
-import NewsroomPage from './pages/NewsroomPage';
-import PortfolioPulsePage from './pages/PortfolioPulsePage';
-import PaymentSuccessPage from './pages/PaymentSuccessPage';
-import PaymentCancelPage from './pages/PaymentCancelPage';
-import ChatPage from './pages/ChatPage';
-import CopilotPage from './pages/CopilotPage';
-import DocsPage from './pages/DocsPage';
-import AuthCallbackPage from './pages/AuthCallbackPage';
-import SharedReportPage from './pages/SharedReportPage';
-import HowItWorksPage from './pages/HowItWorksPage';
-import TpsPage from './pages/TpsPage';
-import ArchitecturePage from './pages/ArchitecturePage';
-import ApiDocsPage from './pages/ApiDocsPage';
 import RouteSeoManager from './components/RouteSeoManager';
+
+const HomePage = lazy(() => import('./pages/HomePage'));
+const ProfilePage = lazy(() => import('./pages/ProfilePage'));
+const TickerPage = lazy(() => import('./pages/StockPage'));
+const TermsOfUsePage = lazy(() => import('./pages/TermsOfUsePage'));
+const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
+const ContactUsPage = lazy(() => import('./pages/ContactUsPage'));
+const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'));
+const BriefPage = lazy(() => import('./pages/BriefPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const MarketPage = lazy(() => import('./pages/MarketPage'));
+const NewsroomPage = lazy(() => import('./pages/NewsroomPage'));
+const PortfolioPulsePage = lazy(() => import('./pages/PortfolioPulsePage'));
+const PaymentSuccessPage = lazy(() => import('./pages/PaymentSuccessPage'));
+const PaymentCancelPage = lazy(() => import('./pages/PaymentCancelPage'));
+const ChatPage = lazy(() => import('./pages/ChatPage'));
+const CopilotPage = lazy(() => import('./pages/CopilotPage'));
+const DocsPage = lazy(() => import('./pages/DocsPage'));
+const AuthCallbackPage = lazy(() => import('./pages/AuthCallbackPage'));
+const SharedReportPage = lazy(() => import('./pages/SharedReportPage'));
+const HowItWorksPage = lazy(() => import('./pages/HowItWorksPage'));
+const TpsPage = lazy(() => import('./pages/TpsPage'));
+const ArchitecturePage = lazy(() => import('./pages/ArchitecturePage'));
+const ApiDocsPage = lazy(() => import('./pages/ApiDocsPage'));
+
+function RouteFallback() {
+  return (
+    <div className="flex h-screen w-full items-center justify-center bg-[#0f172a]">
+      <svg className="h-8 w-8 animate-spin text-blue-400" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+      </svg>
+    </div>
+  );
+}
 
 function App() {
   return (
     <AuthProvider>
     <Router>
       <RouteSeoManager />
+      <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="r/:token" element={<SharedReportPage />} />
         <Route element={<Layout />}>
@@ -60,6 +74,7 @@ function App() {
           <Route path="auth/callback" element={<AuthCallbackPage />} />
         </Route>
       </Routes>
+      </Suspense>
     </Router>
     </AuthProvider>
   );
