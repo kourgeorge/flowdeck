@@ -60,22 +60,16 @@ class DataGateway:
     def get_news(
         self,
         ticker: str,
-        vendor: Optional[str] = None,
         lookback_days: int = 7,
     ) -> Dict[str, Any]:
-        return self._market.get_news(
-            ticker, vendor=vendor, lookback_days=lookback_days
-        )
+        return self._market.get_news(ticker, lookback_days=lookback_days)
 
     def get_news_batch(
         self,
         tickers: List[str],
-        vendor: Optional[str] = None,
         lookback_days: int = 7,
     ) -> Dict[str, Any]:
-        return self._market.get_news_batch(
-            tickers, vendor=vendor, lookback_days=lookback_days
-        )
+        return self._market.get_news_batch(tickers, lookback_days=lookback_days)
 
     def get_insider_transactions(self, ticker: str, limit: int = 50) -> Dict[str, Any]:
         return self._market.get_insider_transactions(ticker, limit=limit)

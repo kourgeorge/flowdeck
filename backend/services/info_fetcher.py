@@ -12,12 +12,8 @@ from typing import Any, Optional
 _engine: Optional[Any] = None
 
 
-def get_info_fetcher(
-    market_data_service: Optional[Any] = None,
-    news_service: Optional[Any] = None,
-) -> Any:
-    """Get the shared market data source (CachedMarketSource wrapping MarketDataLayer).
-    market_data_service and news_service args are ignored; kept for backward compatibility."""
+def get_info_fetcher() -> Any:
+    """Get the shared market data source (CachedMarketSource wrapping MarketDataLayer)."""
     global _engine
     if _engine is None:
         from data_layer.market import MarketDataLayer

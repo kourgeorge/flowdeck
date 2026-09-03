@@ -198,14 +198,13 @@ async def data_market_overview_section(
 )
 async def data_news(
     ticker: str = Query(..., description="Ticker symbol"),
-    vendor: Optional[str] = Query(None, description="News vendor (e.g. yfinance, alpha_vantage)"),
     lookback_days: int = Query(7, ge=1, le=90, description="Days to look back"),
 ):
     """Get news articles for a ticker."""
     await _ensure_ticker_exists(ticker)
     gw = _gateway()
     return await asyncio.to_thread(
-        lambda: gw.get_news(ticker, vendor=vendor, lookback_days=lookback_days)
+        lambda: gw.get_news(ticker, lookback_days=lookback_days)
     )
 
 
@@ -217,7 +216,6 @@ async def data_news(
 )
 async def data_news_batch(
     tickers: str = Query(..., description="Comma-separated ticker symbols (max 50)"),
-    vendor: Optional[str] = Query(None, description="News vendor"),
     lookback_days: int = Query(7, ge=1, le=90, description="Days to look back"),
 ):
     """Get merged, deduped news for multiple tickers in one request. Each article has a 'tickers' list."""
@@ -227,7 +225,7 @@ async def data_news_batch(
     tickers_list = raw[:50]
     gw = _gateway()
     return await asyncio.to_thread(
-        lambda: gw.get_news_batch(tickers_list, vendor=vendor, lookback_days=lookback_days)
+        lambda: gw.get_news_batch(tickers_list, lookback_days=lookback_days)
     )
 
 
@@ -257,7 +255,6 @@ async def data_news_batch(
 )
 async def data_news_batch_stream(
     tickers: str = Query(..., description="Comma-separated ticker symbols (max 50)"),
-    vendor: Optional[str] = Query(None, description="News vendor"),
     lookback_days: int = Query(7, ge=1, le=90, description="Days to look back"),
 ):
     """
@@ -284,7 +281,7 @@ async def data_news_batch_stream(
         
         def fetch_one_ticker(ticker: str):
             try:
-                return gw.get_news(ticker, vendor=vendor, lookback_days=lookback_days)
+                return gw.get_news(ticker, lookback_days=lookback_days)
             except Exception as e:
                 logger.warning(f"Failed to fetch news for {ticker}: {e}")
                 return {"ticker": ticker, "articles": [], "count": 0, "error": str(e)}

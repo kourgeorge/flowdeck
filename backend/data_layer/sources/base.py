@@ -29,7 +29,6 @@ class MarketDataSourceProtocol(Protocol):
     def get_news(
         self,
         ticker: str,
-        vendor: Optional[str] = None,
         lookback_days: int = 7,
     ) -> Dict[str, Any]:
         ...
@@ -37,7 +36,6 @@ class MarketDataSourceProtocol(Protocol):
     def get_news_batch(
         self,
         tickers: List[str],
-        vendor: Optional[str] = None,
         lookback_days: int = 7,
     ) -> Dict[str, Any]:
         ...

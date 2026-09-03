@@ -7,7 +7,7 @@ the dashboard UI and to AI agents via the info API. No dependency on tradingagen
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from services.news_fetcher import get_news_yahoo
 
@@ -18,7 +18,6 @@ class NewsService:
     def get_news(
         self,
         ticker: str,
-        vendor: Optional[str] = None,
         lookback_days: int = 7,
     ) -> Dict[str, Any]:
         """
@@ -26,7 +25,6 @@ class NewsService:
 
         Args:
             ticker: Ticker symbol
-            vendor: Ignored for now; only Yahoo is supported in-app. Kept for API compatibility.
             lookback_days: Number of days to look back (yfinance does not filter by date; used for future providers)
 
         Returns:

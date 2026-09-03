@@ -1,7 +1,7 @@
 """
 MarketDataLayer: data layer market implementation with cache and vendor routing.
 
-App/agents → DataGateway → CachedMarketSource → MarketDataLayer → (cache) → vendors
+App/agents → DataGateway → MarketDataLayer → (cache) → vendors
 """
 
 from __future__ import annotations
@@ -79,8 +79,10 @@ def _cached(key: str, ttl: float, fetch: Callable[[], T]) -> T:
     return get_cached(key, ttl, fetch)
 
 
-def _news_cache_key(ticker: str, vendor: str, lookback_days: int) -> str:
-    return f"news:{ticker.upper()}:{vendor}:{lookback_days}"
+def _news_cache_key(ticker: str, lookback_days: int) -> str:
+    # yfinance is the only news vendor actually wired up; the literal keeps
+    # cache keys byte-identical to when this was a (never-used) vendor param.
+    return f"news:{ticker.upper()}:yfinance:{lookback_days}"
 
 
 def _ticker_from_news_cache_key(cache_key: str) -> str:
@@ -154,12 +156,11 @@ class MarketDataLayer:
         return _cached(f"historical:{ticker.upper()}:{period}:{interval}", DATA_CACHE_TTL_HISTORICAL,
                       lambda: yf_get_historical(ticker, period=period, interval=interval))
 
-    def get_news(self, ticker: str, vendor: Optional[str] = None, lookback_days: int = 7) -> Dict[str, Any]:
-        v = vendor or "yfinance"
-        return _cached(_news_cache_key(ticker, v, lookback_days), DATA_CACHE_TTL_NEWS,
+    def get_news(self, ticker: str, lookback_days: int = 7) -> Dict[str, Any]:
+        return _cached(_news_cache_key(ticker, lookback_days), DATA_CACHE_TTL_NEWS,
                       lambda: yf_get_news(ticker, lookback_days=lookback_days))
 
-    def get_news_batch(self, tickers: List[str], vendor: Optional[str] = None, lookback_days: int = 7) -> Dict[str, Any]:
+    def get_news_batch(self, tickers: List[str], lookback_days: int = 7) -> Dict[str, Any]:
         if not tickers:
             return {"articles": [], "count": 0}
         normalized_tickers: List[str] = []
@@ -170,9 +171,8 @@ class MarketDataLayer:
                 normalized_tickers.append(ticker_upper)
                 seen_tickers.add(ticker_upper)
 
-        cache_vendor = vendor or "yfinance"
         key_ttl = [
-            (_news_cache_key(ticker, cache_vendor, lookback_days), DATA_CACHE_TTL_NEWS)
+            (_news_cache_key(ticker, lookback_days), DATA_CACHE_TTL_NEWS)
             for ticker in normalized_tickers
         ]
 
@@ -225,7 +225,7 @@ class MarketDataLayer:
         news_by_cache_key = get_cached_batch(key_ttl, batch_fetch)
         by_key: Dict[str, Dict] = {}
         for ticker in normalized_tickers:
-            cache_key = _news_cache_key(ticker, cache_vendor, lookback_days)
+            cache_key = _news_cache_key(ticker, lookback_days)
             payload = news_by_cache_key.get(cache_key) or {}
             for a in (payload.get("articles") or []):
                 key = a.get("uuid") or a.get("link") or ""

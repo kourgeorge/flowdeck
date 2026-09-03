@@ -252,7 +252,7 @@ class TestMarketDataLayerNews(unittest.TestCase):
         mock_get_cached_batch.side_effect = cached_batch_impl
 
         layer = MarketDataLayer()
-        layer.get_news_batch(["AAPL", "MSFT"], vendor="yfinance", lookback_days=5)
+        layer.get_news_batch(["AAPL", "MSFT"], lookback_days=5)
 
         self.assertEqual(
             captured_keys,
