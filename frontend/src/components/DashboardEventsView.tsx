@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { tickerApi } from '../services/api';
-import type { TickerWidget } from '../services/types';
+import type { DetectedEvent, TickerWidget } from '../services/types';
 import { EventIcon, formatDominantEventLabel } from './EventsPanel';
 import { formatPrice } from '../utils/currency';
 
@@ -9,8 +9,6 @@ type Strength = 'low' | 'medium' | 'high';
 type Domain = 'price_technical' | 'news_information' | 'fundamental';
 type StrengthFilter = 'all' | Strength;
 type DomainFilter = 'all' | Domain;
-type TickerEventsResponse = Awaited<ReturnType<typeof tickerApi.getEvents>>;
-type DetectedEvent = TickerEventsResponse['events'][number];
 
 interface DashboardEventsViewProps {
   widgets: TickerWidget[];
@@ -210,27 +208,16 @@ export default function DashboardEventsView({
       setIsLoading(true);
       setLoadError(null);
 
-      const settled = await Promise.allSettled(
-        widgets.map(async (widget) => {
-          const response = await tickerApi.getEvents(widget.ticker);
-          return { widget, response };
-        }),
-      );
+      const { summaries } = await tickerApi.getEventsBatch(widgets.map((widget) => widget.ticker));
 
       if (cancelled) return;
 
       const nextBundles: EventBundle[] = [];
       const nextFailed: string[] = [];
 
-      settled.forEach((result, index) => {
-        const widget = widgets[index];
-        if (result.status !== 'fulfilled') {
-          nextFailed.push(widget.ticker);
-          return;
-        }
-
-        const { response } = result.value;
-        if (response.error) {
+      widgets.forEach((widget) => {
+        const response = summaries[widget.ticker.toUpperCase()];
+        if (!response || response.error) {
           nextFailed.push(widget.ticker);
           return;
         }

@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from processing.event import DetectedEvent, TickerEventSummary
 from routers.tickers import router as tickers_router
 
 
@@ -244,3 +245,41 @@ class TestTickerWidgetsAPI(unittest.TestCase):
         self.assertEqual(payload["summaries"]["AAPL"]["event_count"], 4)
         self.assertEqual(payload["summaries"]["MSFT"]["dominant_events"], ["earnings_upcoming"])
         self.assertEqual(payload["summaries"]["MSFT"]["event_count"], 1)
+
+    def test_events_batch_endpoint_returns_full_event_details_in_one_call(self) -> None:
+        mock_gateway = MagicMock()
+
+        aapl_summary = TickerEventSummary(
+            ticker="AAPL",
+            events=[
+                DetectedEvent(
+                    event_type="price_spike_up",
+                    domain="price_technical",
+                    detected_on="2026-03-18",
+                    strength="high",
+                    metric_value=5.2,
+                )
+            ],
+            event_score=2.0,
+            dominant_events=["price_spike_up"],
+            event_count=1,
+        )
+        msft_summary = TickerEventSummary(ticker="MSFT")
+
+        def summary_side_effect(_gw, ticker, **_kwargs):
+            return {"AAPL": aapl_summary, "MSFT": msft_summary}[ticker]
+
+        with patch("routers.tickers.get_data_gateway", return_value=mock_gateway), patch(
+            "routers.tickers.get_ticker_event_summary",
+            side_effect=summary_side_effect,
+        ) as mock_get_summary:
+            client = TestClient(app)
+            response = client.get("/api/tickers/events-batch", params={"tickers": "AAPL,MSFT"})
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(mock_get_summary.call_count, 2)
+        self.assertEqual(payload["summaries"]["AAPL"]["event_count"], 1)
+        self.assertEqual(len(payload["summaries"]["AAPL"]["events"]), 1)
+        self.assertEqual(payload["summaries"]["AAPL"]["events"][0]["event_type"], "price_spike_up")
+        self.assertEqual(payload["summaries"]["MSFT"]["event_count"], 0)

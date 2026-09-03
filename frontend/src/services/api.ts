@@ -1,6 +1,7 @@
 import axios from 'axios';
 import type {
   AnalysisStatus,
+  TickerEventDetailsResponse,
   TickerEventSummariesResponse,
   WidgetsResponse,
   TickerPageData,
@@ -379,6 +380,21 @@ export const tickerApi = {
       cacheKey,
       5 * 60 * 1000,
       () => api.get<TickerEventSummariesResponse>('/api/tickers/event-summaries', {
+        params: { tickers: normalized.join(',') },
+      }),
+    );
+    return response.data;
+  },
+
+  // Batch full deterministic event details (event list included) for views rendering many tickers' events at once
+  getEventsBatch: async (tickers: string[]): Promise<TickerEventDetailsResponse> => {
+    const normalized = Array.from(new Set(tickers.map((ticker) => ticker.toUpperCase()).filter(Boolean)));
+    if (normalized.length === 0) return { summaries: {} };
+    const cacheKey = `ticker-event-details:${normalized.join(',')}`;
+    const response = await getCachedRequest(
+      cacheKey,
+      5 * 60 * 1000,
+      () => api.get<TickerEventDetailsResponse>('/api/tickers/events-batch', {
         params: { tickers: normalized.join(',') },
       }),
     );

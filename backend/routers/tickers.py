@@ -15,6 +15,7 @@ from database import get_db
 from models.schemas import (
     ReportData,
     ReportScoreSummary,
+    TickerEventDetailsResponse,
     TickerEventSummariesResponse,
     TickerEventSummaryLite,
     TickerPageData,
@@ -305,6 +306,47 @@ def _get_ticker_event_summaries_sync(tickers: str) -> TickerEventSummariesRespon
     return TickerEventSummariesResponse(summaries=ordered)
 
 
+def _get_ticker_event_details_sync(tickers: str) -> TickerEventDetailsResponse:
+    """Batch-load full deterministic event details (including the event list) for views like Portfolio Pulse."""
+    gw = get_data_gateway()
+    ticker_list: list[str] = []
+    seen: set[str] = set()
+    for ticker in tickers.split(","):
+        ticker_upper = ticker.strip().upper()
+        if ticker_upper and ticker_upper not in seen:
+            ticker_list.append(ticker_upper)
+            seen.add(ticker_upper)
+
+    if not ticker_list:
+        return TickerEventDetailsResponse(summaries={})
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    summaries: dict[str, object] = {}
+
+    def _load_one(ticker: str):
+        try:
+            return ticker, get_ticker_event_summary(gw, ticker, as_of_date=today)
+        except Exception:
+            return ticker, None
+
+    max_workers = min(4, len(ticker_list))
+    results = []
+    if max_workers <= 1:
+        results = [_load_one(ticker) for ticker in ticker_list]
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ticker-event-detail-batch") as executor:
+            futures = {executor.submit(_load_one, ticker): ticker for ticker in ticker_list}
+            for future in as_completed(futures):
+                results.append(future.result())
+
+    for ticker, summary in results:
+        if summary is not None:
+            summaries[ticker] = summary
+
+    ordered = {ticker: summaries[ticker] for ticker in ticker_list if ticker in summaries}
+    return TickerEventDetailsResponse(summaries=ordered)
+
+
 def _get_ticker_page_sync(ticker: str) -> TickerPageData:
     """Sync implementation of ticker page data (runs in thread pool to avoid blocking event loop)."""
     gw = get_data_gateway()
@@ -481,6 +523,18 @@ async def get_ticker_event_summaries(
     except Exception as e:
         print(f"Error in get_ticker_event_summaries: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to load event summaries: {str(e)}")
+
+
+@router.get("/events-batch", response_model=TickerEventDetailsResponse)
+async def get_ticker_event_details_batch(
+    tickers: str = Query(..., description="Comma-separated list of tickers"),
+):
+    """Batch full deterministic event details (event list included) for views that render a portfolio's events at once."""
+    try:
+        return await asyncio.to_thread(_get_ticker_event_details_sync, tickers)
+    except Exception as e:
+        print(f"Error in get_ticker_event_details_batch: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to load event details: {str(e)}")
 
 
 @router.get("/{ticker}/reports/{analysis_run_id}")

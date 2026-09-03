@@ -5,6 +5,8 @@ from pydantic import BaseModel, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
+from processing.event import TickerEventSummary
+
 
 def _sanitize_float(v: Optional[float]) -> Optional[float]:
     """Replace NaN/Inf float values with None to keep JSON serialization valid."""
@@ -139,6 +141,11 @@ class TickerEventSummaryLite(BaseModel):
 class TickerEventSummariesResponse(BaseModel):
     """Batch event-summary response keyed by ticker."""
     summaries: Dict[str, TickerEventSummaryLite]
+
+
+class TickerEventDetailsResponse(BaseModel):
+    """Batch full event-detail response keyed by ticker, for views that need the event list itself."""
+    summaries: Dict[str, TickerEventSummary]
 
 
 class HistoricalAnalysis(BaseModel):

@@ -40,6 +40,32 @@ export interface TickerEventSummariesResponse {
   summaries: Record<string, TickerEventSummaryLite>;
 }
 
+export interface DetectedEvent {
+  event_type: string;
+  domain: 'price_technical' | 'news_information' | 'fundamental';
+  detected_on: string | null;
+  window_start: string | null;
+  window_end: string | null;
+  strength: 'low' | 'medium' | 'high';
+  metric_value: number | null;
+  threshold_value: number | null;
+  metadata: Record<string, any>;
+  description?: string;
+}
+
+export interface TickerEventSummary {
+  ticker: string;
+  event_score: number;
+  events: DetectedEvent[];
+  dominant_events: string[];
+  event_count: number;
+  error?: string;
+}
+
+export interface TickerEventDetailsResponse {
+  summaries: Record<string, TickerEventSummary>;
+}
+
 export interface TickerQuote {
   ticker: string;
   current_price: number;
