@@ -17,15 +17,7 @@ from sqlalchemy import text
 from database import engine, init_db, SessionLocal
 from models.db_models import Report, ReportView, AnalysisRun
 from services import token_service
-
-
-def _table_has_column(conn, table: str, column: str) -> bool:
-    """Return True if table has column (SQLite)."""
-    r = conn.execute(text(f"PRAGMA table_info({table})"))
-    for row in r:
-        if row[1] == column:
-            return True
-    return False
+from _migration_utils import table_has_column as _table_has_column
 
 
 def main() -> None:

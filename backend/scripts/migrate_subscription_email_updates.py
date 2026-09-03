@@ -13,15 +13,7 @@ sys.path.insert(0, str(BACKEND))
 
 from database import engine, init_db
 from sqlalchemy import text
-
-
-def _table_has_column(conn, table: str, column: str) -> bool:
-    """Return True if table has column (SQLite)."""
-    r = conn.execute(text(f"PRAGMA table_info({table})"))
-    for row in r:
-        if row[1] == column:
-            return True
-    return False
+from _migration_utils import table_has_column as _table_has_column
 
 
 def main() -> None:

@@ -16,19 +16,12 @@ sys.path.insert(0, str(BACKEND))
 from sqlalchemy import text
 
 from database import engine, init_db
+from _migration_utils import table_has_column as _table_has_column
 
 
 def _table_exists(conn, table: str) -> bool:
     r = conn.execute(text(f"SELECT name FROM sqlite_master WHERE type='table' AND name={repr(table)}"))
     return r.fetchone() is not None
-
-
-def _table_has_column(conn, table: str, column: str) -> bool:
-    r = conn.execute(text(f"PRAGMA table_info({table})"))
-    for row in r:
-        if row[1] == column:
-            return True
-    return False
 
 
 def main() -> None:
