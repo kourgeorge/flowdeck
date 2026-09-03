@@ -85,8 +85,8 @@ def test_no_orphan_component_schemas():
 
 
 def test_public_surface_size():
-    assert len(SCHEMA["paths"]) == 75
-    assert sum(len(ops) for ops in SCHEMA["paths"].values()) == 82
+    assert len(SCHEMA["paths"]) == 76
+    assert sum(len(ops) for ops in SCHEMA["paths"].values()) == 83
 
 
 def test_optional_and_required_auth_partition():
