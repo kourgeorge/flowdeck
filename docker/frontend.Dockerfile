@@ -13,8 +13,8 @@ RUN npm ci
 # Copy frontend source code
 COPY frontend/ ./
 
-# Build the application, then prerender the fully-static routes for AI crawlers
-RUN npm run build:prerender
+# Build the application (includes prerendering the fully-static routes for AI crawlers)
+RUN npm run build
 
 # Stage 2: Serve with Nginx
 FROM nginx:alpine

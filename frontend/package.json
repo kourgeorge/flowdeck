@@ -6,9 +6,8 @@
   "scripts": {
     "dev": "vite",
     "generate:sitemap": "node scripts/generate-sitemap.mjs",
-    "build": "node scripts/generate-sitemap.mjs && tsc && vite build",
+    "build": "node scripts/generate-sitemap.mjs && tsc && vite build && npm run prerender",
     "prerender": "node scripts/prerender.mjs",
-    "build:prerender": "npm run build && npm run prerender",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },
