@@ -13,7 +13,7 @@ The **Information Fetcher Engine** is a single service that fetches data from di
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/quote/{ticker}` | Current market quote |
-| GET | `/news?ticker=...&vendor=...&lookback_days=7` | News articles |
+| GET | `/news?ticker=...&lookback_days=7` | News articles |
 | GET | `/company/{ticker}` | Company profile (name, sector, industry, etc.) |
 | GET | `/extended-info/{ticker}` | Extended metrics (beta, market cap, PE, etc.) |
 | GET | `/fundamentals/{ticker}` | Fundamental data |

@@ -154,7 +154,7 @@ The data layer uses explicit keys such as:
 
 - `quote_full:{ticker}`
 - `historical:{ticker}:{period}:{interval}`
-- `news:{ticker}:{vendor_version}:{lookback_days}`
+- `news:{ticker}:{vendor_version}:{lookback_days}` — `vendor_version` is currently the fixed literal `yfinance`; there is no vendor selection
 - `future_events:{ticker}`
 - `insider_transactions:{ticker}:{limit}`
 - `indicators:{ticker}:{indicator}:{curr_date}:{look_back_days}`
