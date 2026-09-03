@@ -1,0 +1,15 @@
+# Flowdeck
+
+> AI-powered stock research platform with live market data, multi-agent analysis, portfolio monitoring, and conversational investment copilots.
+
+## Product
+- [How It Works](https://flowdeck.biz/how-it-works): platform overview and methodology
+- [Trading Plan Specification](https://flowdeck.biz/tps): the structured output format Flowdeck's AI agents emit
+- [Architecture](https://flowdeck.biz/architecture): technical architecture overview
+- [Market](https://flowdeck.biz/market): live market data and ticker research
+- [Newsroom](https://flowdeck.biz/newsroom): market news and analysis
+- [API Docs](https://flowdeck.biz/api-docs): public API reference
+
+## Legal
+- [Terms of Use](https://flowdeck.biz/terms)
+- [Privacy Policy](https://flowdeck.biz/privacy)

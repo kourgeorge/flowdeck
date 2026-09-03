@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -6,16 +7,17 @@ const today = new Date().toISOString().slice(0, 10);
 const SITEMAP_TICKERS = ['NVDA', 'AAPL', 'GOOGL', 'MSFT', 'AMZN', 'META', 'TSLA'];
 
 const staticRoutes = [
-  { path: '/', changefreq: 'daily', priority: '1.0' },
-  { path: '/market', changefreq: 'daily', priority: '0.9' },
-  { path: '/portfolio-pulse', changefreq: 'daily', priority: '0.8' },
-  { path: '/newsroom', changefreq: 'hourly', priority: '0.8' },
-  { path: '/how-it-works', changefreq: 'monthly', priority: '0.7' },
-  { path: '/tps', changefreq: 'monthly', priority: '0.6' },
-  { path: '/architecture', changefreq: 'monthly', priority: '0.6' },
-  { path: '/api-docs', changefreq: 'weekly', priority: '0.6' },
-  { path: '/terms', changefreq: 'yearly', priority: '0.3' },
-  { path: '/contact', changefreq: 'yearly', priority: '0.4' },
+  { path: '/', changefreq: 'daily', priority: '1.0', source: 'src/pages/HomePage.tsx' },
+  { path: '/market', changefreq: 'daily', priority: '0.9', source: 'src/pages/MarketPage.tsx' },
+  { path: '/portfolio-pulse', changefreq: 'daily', priority: '0.8', source: 'src/pages/PortfolioPulsePage.tsx' },
+  { path: '/newsroom', changefreq: 'hourly', priority: '0.8', source: 'src/pages/NewsroomPage.tsx' },
+  { path: '/how-it-works', changefreq: 'monthly', priority: '0.7', source: 'src/pages/HowItWorksPage.tsx' },
+  { path: '/tps', changefreq: 'monthly', priority: '0.6', source: 'src/pages/TpsPage.tsx' },
+  { path: '/architecture', changefreq: 'monthly', priority: '0.6', source: 'src/pages/ArchitecturePage.tsx' },
+  { path: '/api-docs', changefreq: 'weekly', priority: '0.6', source: 'src/pages/ApiDocsPage.tsx' },
+  { path: '/terms', changefreq: 'yearly', priority: '0.3', source: 'src/pages/TermsOfUsePage.tsx' },
+  { path: '/privacy', changefreq: 'yearly', priority: '0.3', source: 'src/pages/PrivacyPage.tsx' },
+  { path: '/contact', changefreq: 'yearly', priority: '0.4', source: 'src/pages/ContactUsPage.tsx' },
 ];
 
 const stocksPath = resolve('public', 'stocks.json');
@@ -31,11 +33,27 @@ function escapeXml(value) {
     .replace(/'/g, '&apos;');
 }
 
-function renderUrl(loc, changefreq, priority) {
+// Falls back to the build date if the file isn't tracked yet or git isn't
+// available in the build environment (e.g. a source archive without .git).
+function lastCommitDate(sourcePath) {
+  if (!sourcePath) return today;
+  try {
+    const output = execFileSync(
+      'git',
+      ['log', '-1', '--format=%cs', '--', sourcePath],
+      { cwd: resolve('.'), encoding: 'utf8' }
+    ).trim();
+    return output || today;
+  } catch {
+    return today;
+  }
+}
+
+function renderUrl(loc, changefreq, priority, lastmod) {
   return [
     '  <url>',
     `    <loc>${escapeXml(loc)}</loc>`,
-    `    <lastmod>${today}</lastmod>`,
+    `    <lastmod>${lastmod}</lastmod>`,
     `    <changefreq>${changefreq}</changefreq>`,
     `    <priority>${priority}</priority>`,
     '  </url>',
@@ -48,11 +66,15 @@ const availableTickers = new Set(
     .filter((ticker) => typeof ticker === 'string' && ticker.length > 0)
 );
 
+// Ticker pages show live market data with no meaningful "content last
+// changed" date of their own, so they keep the build-date stamp.
 const tickerUrls = SITEMAP_TICKERS
   .filter((ticker) => availableTickers.has(ticker))
-  .map((ticker) => renderUrl(`${SITE_URL}/tickers/${encodeURIComponent(ticker)}`, 'daily', '0.7'));
+  .map((ticker) => renderUrl(`${SITE_URL}/tickers/${encodeURIComponent(ticker)}`, 'daily', '0.7', today));
 
-const staticUrls = staticRoutes.map((route) => renderUrl(`${SITE_URL}${route.path}`, route.changefreq, route.priority));
+const staticUrls = staticRoutes.map((route) =>
+  renderUrl(`${SITE_URL}${route.path}`, route.changefreq, route.priority, lastCommitDate(route.source))
+);
 
 const xml = [
   '<?xml version="1.0" encoding="UTF-8"?>',

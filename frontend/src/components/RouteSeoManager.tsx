@@ -24,6 +24,21 @@ function isPrivateRoute(pathname: string): boolean {
   ].includes(pathname);
 }
 
+function techArticleSchema(headline: string, path: string) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'TechArticle',
+    headline,
+    author: { '@type': 'Organization', name: APP_NAME, url: absoluteUrl('/') },
+    publisher: {
+      '@type': 'Organization',
+      name: APP_NAME,
+      logo: { '@type': 'ImageObject', url: absoluteUrl('/logo.svg') },
+    },
+    mainEntityOfPage: absoluteUrl(path),
+  };
+}
+
 export default function RouteSeoManager() {
   const location = useLocation();
   const { user } = useAuth();
@@ -39,17 +54,15 @@ export default function RouteSeoManager() {
         jsonLd: [
           {
             '@context': 'https://schema.org',
-            '@type': 'Organization',
-            name: APP_NAME,
-            url: absoluteUrl('/'),
-            logo: absoluteUrl('/logo.svg'),
-          },
-          {
-            '@context': 'https://schema.org',
             '@type': 'WebSite',
             name: APP_NAME,
             url: absoluteUrl('/'),
             description: 'AI stock research, market intelligence, and portfolio monitoring platform.',
+            potentialAction: {
+              '@type': 'SearchAction',
+              target: `${absoluteUrl('/tickers/')}{search_term_string}`,
+              'query-input': 'required name=search_term_string',
+            },
           },
         ],
       };
@@ -57,11 +70,37 @@ export default function RouteSeoManager() {
 
     if (pathname.startsWith('/tickers/')) {
       const ticker = decodeURIComponent(pathname.slice('/tickers/'.length)).toUpperCase();
+      const title = `${ticker} Stock Analysis & AI Research`;
+      const description = `Live market data, AI-generated stock analysis, news, fundamentals, technical context, and recommendation signals for ${ticker}.`;
       return {
-        title: `${ticker} Stock Analysis & AI Research`,
-        description: `Live market data, AI-generated stock analysis, news, fundamentals, technical context, and recommendation signals for ${ticker}.`,
+        title,
+        description,
         path: pathname,
         type: 'article',
+        jsonLd: [
+          {
+            '@context': 'https://schema.org',
+            '@type': 'Article',
+            headline: title,
+            description,
+            author: { '@type': 'Organization', name: APP_NAME, url: absoluteUrl('/') },
+            publisher: {
+              '@type': 'Organization',
+              name: APP_NAME,
+              logo: { '@type': 'ImageObject', url: absoluteUrl('/logo.svg') },
+            },
+            mainEntityOfPage: absoluteUrl(pathname),
+          },
+          {
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            itemListElement: [
+              { '@type': 'ListItem', position: 1, name: 'Home', item: absoluteUrl('/') },
+              { '@type': 'ListItem', position: 2, name: 'Market', item: absoluteUrl('/market') },
+              { '@type': 'ListItem', position: 3, name: ticker, item: absoluteUrl(pathname) },
+            ],
+          },
+        ],
       };
     }
 
@@ -91,38 +130,46 @@ export default function RouteSeoManager() {
     }
 
     if (pathname === '/how-it-works') {
+      const title = 'How Flowdeck Works';
       return {
-        title: 'How Flowdeck Works',
+        title,
         description: 'Learn how Flowdeck combines live market data, specialist AI analysts, debate workflows, and risk checks to produce stock research and recommendations.',
         path: pathname,
         type: 'article',
+        jsonLd: [techArticleSchema(title, pathname)],
       };
     }
 
     if (pathname === '/tps') {
+      const title = 'Trading Plan Specification';
       return {
-        title: 'Trading Plan Specification',
+        title,
         description: 'Explore Flowdeck\'s trading plan specification framework and how the platform turns research into structured action plans.',
         path: pathname,
         type: 'article',
+        jsonLd: [techArticleSchema(title, pathname)],
       };
     }
 
     if (pathname === '/architecture') {
+      const title = 'Platform Architecture';
       return {
-        title: 'Platform Architecture',
+        title,
         description: 'Review the Flowdeck architecture behind AI analysis, market data workflows, and conversational research experiences.',
         path: pathname,
         type: 'article',
+        jsonLd: [techArticleSchema(title, pathname)],
       };
     }
 
     if (pathname === '/api-docs') {
+      const title = 'API Documentation';
       return {
-        title: 'API Documentation',
+        title,
         description: 'Browse Flowdeck API documentation for market data, AI analysis, and trading workflow integrations.',
         path: pathname,
         type: 'article',
+        jsonLd: [techArticleSchema(title, pathname)],
       };
     }
 
