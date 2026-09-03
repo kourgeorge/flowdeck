@@ -171,13 +171,11 @@ def _get_ticker_widgets_sync(
                 quote = TickerQuote(**quote_data)
             except Exception:
                 quote = None
-        if quote is None or getattr(quote, "currency", None) is None:
+        if quote is None:
             try:
                 single_quote_data = gw.get_quote(ticker)
                 if single_quote_data and isinstance(single_quote_data, dict):
-                    single_quote = TickerQuote(**single_quote_data)
-                    if quote is None or getattr(single_quote, "currency", None) is not None:
-                        quote = single_quote
+                    quote = TickerQuote(**single_quote_data)
             except Exception:
                 pass
 
