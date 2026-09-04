@@ -172,6 +172,7 @@ export default function BriefPage() {
 
   const [digest, setDigest] = useState<DigestResponse | null>(null);
   const [digestLoading, setDigestLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [digestError, setDigestError] = useState<string | null>(null);
   const [digestDates, setDigestDates] = useState<string[]>([]);
   const [digestCountByDate, setDigestCountByDate] = useState<Record<string, number>>({});
@@ -204,7 +205,7 @@ export default function BriefPage() {
           const latestSlot = dates[dates.length - 1];
           setSelectedDigestDate(latestSlot);
           setDigest(null);
-          setDigestLoading(true);
+          setHistoryLoading(true);
           try {
             const listRes = await digestApi.getDigestsForDate(latestSlot, browserTimezone);
             setDigestBriefsForDay(listRes.briefs);
@@ -213,7 +214,7 @@ export default function BriefPage() {
             setDigestBriefsForDay([]);
             setSelectedBrief(null);
           } finally {
-            setDigestLoading(false);
+            setHistoryLoading(false);
           }
         }
       } catch {
@@ -265,7 +266,7 @@ export default function BriefPage() {
 
   const handleSelectDigestDate = async (date: string) => {
     setDigestError(null);
-    setDigestLoading(true);
+    setHistoryLoading(true);
     setSelectedDigestDate(date);
     try {
       const res = await digestApi.getDigestsForDate(date, browserTimezone);
@@ -278,7 +279,7 @@ export default function BriefPage() {
       setDigestBriefsForDay([]);
       setSelectedBrief(null);
     } finally {
-      setDigestLoading(false);
+      setHistoryLoading(false);
     }
   };
 
@@ -593,6 +594,7 @@ export default function BriefPage() {
   const subscribedTickers = widgets.map((w) => w.ticker);
   const showEmptyDigestState =
     !digestLoading &&
+    !historyLoading &&
     !digestError &&
     !digest &&
     (!selectedDigestDate || digestBriefsForDay.length === 0);
@@ -863,7 +865,17 @@ export default function BriefPage() {
               )}
 
               <div className={`flex-1 min-w-0 rounded-xl border border-slate-800 overflow-hidden shadow-lg ${showEmptyDigestState ? 'bg-transparent' : 'bg-black'}`}>
-                <div className={`${digestLoading || showEmptyDigestState ? 'bg-transparent' : 'bg-slate-950'} min-h-[200px] px-4 sm:px-6 pt-3 sm:pt-4 pb-4 sm:pb-6 space-y-3`}>
+                <div className={`${digestLoading || historyLoading || showEmptyDigestState ? 'bg-transparent' : 'bg-slate-950'} min-h-[200px] px-4 sm:px-6 pt-3 sm:pt-4 pb-4 sm:pb-6 space-y-3`}>
+                  {historyLoading && !digestLoading && (
+                    <div className="flex flex-col items-center justify-center min-h-[280px] py-12 px-4">
+                      <svg className="w-6 h-6 text-emerald-300/80 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden>
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      <p className="mt-3 text-sm text-slate-400">Loading brief…</p>
+                    </div>
+                  )}
+
                   {digestLoading && (
                     <div className="flex flex-col items-center justify-center min-h-[280px] py-12 px-4">
                       <div className="relative">
@@ -891,7 +903,7 @@ export default function BriefPage() {
 
                   {digestError && <p className="text-sm text-red-400">{digestError}</p>}
 
-                  {!digestLoading && selectedDigestDate && digestBriefsForDay.length > 0 && selectedBrief && (
+                  {!digestLoading && !historyLoading && selectedDigestDate && digestBriefsForDay.length > 0 && selectedBrief && (
                     <div className="space-y-4">
                       <div className="flex items-center justify-between gap-2 flex-nowrap">
                         <span className="text-xs sm:text-sm text-gray-500 whitespace-nowrap shrink-0">
@@ -1095,7 +1107,7 @@ export default function BriefPage() {
                     </div>
                   )}
 
-                  {!digestLoading && digest && (!selectedDigestDate || digestBriefsForDay.length === 0) && (
+                  {!digestLoading && !historyLoading && digest && (!selectedDigestDate || digestBriefsForDay.length === 0) && (
                     <div className="space-y-4">
                       <div className="flex items-center justify-between gap-2 flex-nowrap">
                         <span className="text-xs sm:text-sm text-gray-500 whitespace-nowrap shrink-0">
