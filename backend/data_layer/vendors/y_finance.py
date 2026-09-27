@@ -13,6 +13,17 @@ try:
 except ImportError:
     StockstatsUtils = None  # Will be checked when used
 
+# ETFs/indexes/funds have no earnings dates or financial statements by construction.
+# Fetching them anyway makes yfinance's internal logger emit its own ERROR-level
+# log line (e.g. "possibly delisted; no earnings dates found") before our try/except
+# ever sees an exception, so the guard has to happen before the call, not after.
+_FUND_LIKE_QUOTE_TYPES = frozenset({"ETF", "ETN", "INDEX", "MUTUALFUND", "FUND"})
+
+
+def _is_fund_like(info: dict) -> bool:
+    return (info or {}).get("quoteType", "").upper() in _FUND_LIKE_QUOTE_TYPES
+
+
 def get_YFin_data_online(
     symbol: Annotated[str, "ticker symbol of the company"],
     start_date: Annotated[str, "Start date in yyyy-mm-dd format"],
@@ -305,11 +316,14 @@ def get_balance_sheet(
     try:
         ticker_obj = yf.Ticker(ticker.upper(), session=get_yf_session())
 
+        if _is_fund_like(ticker_obj.info):
+            return f"No balance sheet data found for symbol '{ticker}'"
+
         if freq.lower() == "quarterly":
             data = ticker_obj.quarterly_balance_sheet
         else:
             data = ticker_obj.balance_sheet
-            
+
         if data.empty:
             return f"No balance sheet data found for symbol '{ticker}'"
             
@@ -335,11 +349,14 @@ def get_cashflow(
     try:
         ticker_obj = yf.Ticker(ticker.upper(), session=get_yf_session())
 
+        if _is_fund_like(ticker_obj.info):
+            return f"No cash flow data found for symbol '{ticker}'"
+
         if freq.lower() == "quarterly":
             data = ticker_obj.quarterly_cashflow
         else:
             data = ticker_obj.cashflow
-            
+
         if data.empty:
             return f"No cash flow data found for symbol '{ticker}'"
             
@@ -365,11 +382,14 @@ def get_income_statement(
     try:
         ticker_obj = yf.Ticker(ticker.upper(), session=get_yf_session())
 
+        if _is_fund_like(ticker_obj.info):
+            return f"No income statement data found for symbol '{ticker}'"
+
         if freq.lower() == "quarterly":
             data = ticker_obj.quarterly_income_stmt
         else:
             data = ticker_obj.income_stmt
-            
+
         if data.empty:
             return f"No income statement data found for symbol '{ticker}'"
             
@@ -850,7 +870,7 @@ def get_future_events(ticker: str) -> dict:
             if ex_date >= today:
                 events.append({"date": ex_date.strftime("%Y-%m-%d"), "type": "ex_dividend", "label": "Ex-dividend date"})
         try:
-            ed = t.get_earnings_dates(limit=12)
+            ed = None if _is_fund_like(info) else t.get_earnings_dates(limit=12)
             if ed is not None and not ed.empty:
                 for idx, row in ed.iterrows():
                     d = idx
@@ -1320,9 +1340,12 @@ def get_financial_statements(
     result = {"ticker": ticker, "date": curr_date, "frequency": freq, "statements": {}}
     try:
         t = yf.Ticker(ticker, session=get_yf_session())
-        bs_ann, bs_qtr = t.balance_sheet, t.quarterly_balance_sheet
-        cf_ann, cf_qtr = t.cashflow, t.quarterly_cashflow
-        inc_ann, inc_qtr = t.income_stmt, t.quarterly_income_stmt
+        if _is_fund_like(t.info):
+            bs_ann = bs_qtr = cf_ann = cf_qtr = inc_ann = inc_qtr = pd.DataFrame()
+        else:
+            bs_ann, bs_qtr = t.balance_sheet, t.quarterly_balance_sheet
+            cf_ann, cf_qtr = t.cashflow, t.quarterly_cashflow
+            inc_ann, inc_qtr = t.income_stmt, t.quarterly_income_stmt
     except Exception as e:
         for key in ["balance_sheet", "cashflow", "income_statement"]:
             if statement_type in ("all", key):
@@ -1402,7 +1425,9 @@ def get_financial_charts(ticker: str, freq: str = "annual") -> dict:
     }
     try:
         t = yf.Ticker(ticker, session=get_yf_session())
-        if freq.lower() == "quarterly":
+        if _is_fund_like(t.info):
+            bs, cf, inc = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        elif freq.lower() == "quarterly":
             bs, cf, inc = t.quarterly_balance_sheet, t.quarterly_cashflow, t.quarterly_income_stmt
         else:
             bs, cf, inc = t.balance_sheet, t.cashflow, t.income_stmt
