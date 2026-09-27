@@ -18,6 +18,16 @@ from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, TypeVar,
 T = TypeVar("T")
 _MISSING = object()
 
+# Above the 28s batch-download guard (data_layer/vendors/quote.py) and the 30s
+# HTTP ceiling (yf_session.py) so it never fires in normal operation -- it only
+# catches a leader that is truly wedged (e.g. stuck in a retry loop outside
+# those guards).
+_FOLLOWER_WAIT_TIMEOUT_SEC = 35.0
+
+
+class _InflightTimeout(Exception):
+    """A follower gave up waiting on a single-flight leader that never resolved."""
+
 
 def _cache_dumps(obj: Any) -> str:
     """JSON encode cache values; support datetime/date for API responses."""
@@ -313,8 +323,9 @@ class _InflightCall(Generic[T]):
         self._error = error
         self._event.set()
 
-    def wait(self) -> Tuple[Union[T, object], bool]:
-        self._event.wait()
+    def wait(self, timeout: Optional[float] = None) -> Tuple[Union[T, object], bool]:
+        if not self._event.wait(timeout):
+            raise _InflightTimeout()
         if self._error is not None:
             raise self._error
         return self._value, self._from_cache
@@ -353,6 +364,19 @@ def _finish_inflight_error(key: str, call: _InflightCall[Any], error: BaseExcept
         if _inflight_calls.get(key) is call:
             del _inflight_calls[key]
     call.reject(error)
+
+
+def _abandon_inflight(key: str, call: _InflightCall[Any]) -> None:
+    """Evict a wedged single-flight entry so later callers don't also wait on it.
+
+    Safe even if the wedged leader eventually does return: its own
+    _finish_inflight_* call becomes a no-op on the dict (the identity check
+    fails once a new call has taken the key), and it only resolves an event
+    this follower has already given up on.
+    """
+    with _inflight_lock:
+        if _inflight_calls.get(key) is call:
+            del _inflight_calls[key]
 
 
 def _get_store() -> Union[_TTLStore, _SQLiteTTLStore]:
@@ -421,8 +445,13 @@ def get_cached_with_origin(
 
     call, is_leader = _begin_inflight(key)
     if not is_leader:
-        value, from_cache = call.wait()
-        return (value, from_cache)
+        try:
+            value, from_cache = call.wait(_FOLLOWER_WAIT_TIMEOUT_SEC)
+            return (value, from_cache)
+        except _InflightTimeout:
+            # The leader is wedged. Don't wait on it forever -- abandon the
+            # entry and fetch directly so this caller still gets a value.
+            _abandon_inflight(key, call)
 
     try:
         # Second-chance read: another thread/process may have filled the cache
@@ -529,9 +558,15 @@ def get_cached_batch(
         for key, (call, is_leader) in inflight_by_key.items():
             if is_leader:
                 continue
-            value, _from_cache = call.wait()
-            if value is not _MISSING:
-                result[key] = value
+            try:
+                value, _from_cache = call.wait(_FOLLOWER_WAIT_TIMEOUT_SEC)
+                if value is not _MISSING:
+                    result[key] = value
+            except _InflightTimeout:
+                # Leader is wedged. Omit this key rather than block the whole
+                # batch or duplicate-fetch it -- callers already handle
+                # missing keys (e.g. quote.py's `missing = [...]` check).
+                _abandon_inflight(key, call)
     return result
 
 

@@ -1,10 +1,12 @@
 """FastAPI application for ticker dashboard backend."""
 
+import asyncio
 import logging
 import os
 import signal
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from functools import partial
@@ -100,6 +102,18 @@ def _acquire_scheduler_leadership() -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize DB and start optional daily sync and market overview cache refresh."""
+    # asyncio.to_thread() otherwise shares Python's default executor, sized
+    # min(32, cpu_count+4) -- only 6 threads on prod's 2-CPU box. That's not
+    # enough headroom for the app's ~45 to_thread call sites (vendor HTTP
+    # fetches, SQLite cache I/O) to run concurrently without queuing behind
+    # each other for up to ~30s at a time.
+    loop = asyncio.get_running_loop()
+    io_executor = ThreadPoolExecutor(
+        max_workers=int(os.environ.get("FLOWDECK_THREAD_POOL_SIZE", "32")),
+        thread_name_prefix="flowdeck-io",
+    )
+    loop.set_default_executor(io_executor)
+
     init_db()
     from services.data_cache import ensure_data_cache
     ensure_data_cache()
@@ -313,6 +327,7 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass
     close_yf_session()
+    io_executor.shutdown(wait=False)
 
 
 app = FastAPI(

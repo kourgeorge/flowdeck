@@ -146,6 +146,77 @@ class TestDataCacheSingleFlight(unittest.TestCase):
         self.assertEqual(retry_calls, 1)
         self.assertEqual(retry_result, {"value": "ok"})
 
+    def test_get_cached_with_origin_recovers_when_leader_is_wedged(self) -> None:
+        started = threading.Event()
+        leader_release = threading.Event()
+
+        def wedged_fetch() -> dict:
+            started.set()
+            leader_release.wait(5.0)
+            return {"value": "leader-too-slow"}
+
+        leader = threading.Thread(
+            target=data_cache.get_cached, args=("sf:wedged", 60, wedged_fetch), daemon=True
+        )
+        leader.start()
+        self.assertTrue(started.wait(2.0), "Leader fetch did not start in time")
+
+        original_timeout = data_cache._FOLLOWER_WAIT_TIMEOUT_SEC
+        data_cache._FOLLOWER_WAIT_TIMEOUT_SEC = 0.2
+        self.addCleanup(setattr, data_cache, "_FOLLOWER_WAIT_TIMEOUT_SEC", original_timeout)
+
+        fallback_calls = 0
+
+        def fallback_fetch() -> dict:
+            nonlocal fallback_calls
+            fallback_calls += 1
+            return {"value": "fallback"}
+
+        value, from_cache = data_cache.get_cached_with_origin("sf:wedged", 60, fallback_fetch)
+
+        self.assertEqual(value, {"value": "fallback"})
+        self.assertFalse(from_cache)
+        self.assertEqual(fallback_calls, 1)
+        self.assertNotIn("sf:wedged", data_cache._inflight_calls)
+
+        leader_release.set()
+        leader.join(2.0)
+
+    def test_get_cached_batch_omits_wedged_key(self) -> None:
+        started = threading.Event()
+        leader_release = threading.Event()
+
+        def wedged_batch_fetch(keys: list[str]) -> dict:
+            started.set()
+            leader_release.wait(5.0)
+            return {k: {"value": "leader-too-slow"} for k in keys}
+
+        leader = threading.Thread(
+            target=data_cache.get_cached_batch,
+            args=([("sf:batch-wedged", 60)], wedged_batch_fetch),
+            daemon=True,
+        )
+        leader.start()
+        self.assertTrue(started.wait(2.0), "Leader batch fetch did not start in time")
+
+        original_timeout = data_cache._FOLLOWER_WAIT_TIMEOUT_SEC
+        data_cache._FOLLOWER_WAIT_TIMEOUT_SEC = 0.2
+        self.addCleanup(setattr, data_cache, "_FOLLOWER_WAIT_TIMEOUT_SEC", original_timeout)
+
+        def batch_fetch(keys: list[str]) -> dict:
+            return {k: {"value": "ok"} for k in keys if k != "sf:batch-wedged"}
+
+        result = data_cache.get_cached_batch(
+            [("sf:batch-wedged", 60), ("sf:batch-ok", 60)], batch_fetch
+        )
+
+        self.assertNotIn("sf:batch-wedged", result)
+        self.assertEqual(result.get("sf:batch-ok"), {"value": "ok"})
+        self.assertNotIn("sf:batch-wedged", data_cache._inflight_calls)
+
+        leader_release.set()
+        leader.join(2.0)
+
 
 if __name__ == "__main__":
     unittest.main()

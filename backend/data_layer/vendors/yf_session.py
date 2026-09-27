@@ -30,7 +30,10 @@ _session: curl_requests.Session | None = None
 def get_yf_session() -> curl_requests.Session:
     global _session
     if _session is None:
-        _session = curl_requests.Session(impersonate="chrome")
+        # timeout=30 is curl_cffi's own default; set explicitly so the ceiling
+        # on every vendor HTTP call is visible here instead of buried in a
+        # third-party default. yfinance overrides this per-call anyway.
+        _session = curl_requests.Session(impersonate="chrome", timeout=30)
     return _session
 
 
