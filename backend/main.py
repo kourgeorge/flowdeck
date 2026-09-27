@@ -243,7 +243,6 @@ async def lifespan(app: FastAPI):
                 scheduler = BackgroundScheduler()
 
             from services.scheduler import run_scheduled_jobs
-            import asyncio
 
             def _run_scheduled_jobs_sync():
                 """Wrapper to run async scheduled jobs in a thread-safe manner."""
