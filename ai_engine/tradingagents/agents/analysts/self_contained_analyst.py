@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List
 
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import HumanMessage, ToolMessage
 from pydantic import BaseModel
 
 from .helpers import _capture_usage, try_structured_response
@@ -172,11 +172,16 @@ def run_self_contained_analyst(
     total_usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost_usd": 0.0}
     resources_used = []
     agent_steps = []
-    # Empty string means the deterministic valuation tool produced usable output
-    # (or was never called).  Set to a human-readable reason when the tool errored
-    # or reported valuation_available=False.  Latest tool call wins, so a
-    # successful retry clears an earlier failure.
+    # Empty string means the deterministic valuation tool produced usable output.
+    # Set to a human-readable reason when the tool errored, reported
+    # valuation_available=False, or (see valuation_tool_called below) was never
+    # called at all.  Latest tool call wins, so a successful retry clears an
+    # earlier failure.
     valuation_unavailable_reason: str = ""
+    # Tracks whether calculate_multi_method_valuation actually ran this turn, so a
+    # model that skips it entirely isn't indistinguishable from one whose tool call
+    # succeeded.  Only meaningful when that tool is in tool_map (valuation analyst).
+    valuation_tool_called: bool = False
     
     # ReAct loop - all happens internally
     for iteration in range(max_iterations):
@@ -246,6 +251,7 @@ def run_self_contained_analyst(
                         )
                     )
                     if tool_name == "calculate_multi_method_valuation":
+                        valuation_tool_called = True
                         # The tool returns a JSON string, so parse before inspecting.
                         valuation_unavailable_reason = _valuation_unavailable_reason(
                             _parse_tool_output_snapshot(tool_result)
@@ -273,6 +279,7 @@ def run_self_contained_analyst(
                 except Exception as e:
                     logger.error(f"{agent_name} tool {tool_name} failed: {e}")
                     if tool_name == "calculate_multi_method_valuation":
+                        valuation_tool_called = True
                         valuation_unavailable_reason = (
                             f"calculate_multi_method_valuation tool failed: {e}"
                         )
@@ -300,7 +307,128 @@ def run_self_contained_analyst(
         
         # Observe: Add tool results to context
         local_messages.extend(tool_results)
-    
+
+    # The valuation analyst is the only one with calculate_multi_method_valuation in
+    # tool_map.  If it left the loop above without ever calling it (either it stopped
+    # asking for tools, or it exhausted max_iterations), give it one direct nudge and
+    # one extra think/act/observe cycle before accepting the loss.
+    if "calculate_multi_method_valuation" in tool_map and not valuation_tool_called:
+        logger.warning(f"{agent_name} never called calculate_multi_method_valuation, nudging")
+        local_messages.append(HumanMessage(content=(
+            "You have not called calculate_multi_method_valuation. It is the only "
+            "source of real valuation numbers. Call it now with the ticker before "
+            "writing any report."
+        )))
+
+        chain_with_tools = prompt | llm.bind_tools(tools)
+        result = chain_with_tools.invoke(local_messages)
+        usage = _capture_usage(result, llm)
+        if usage:
+            for key in ["input_tokens", "output_tokens", "total_tokens", "cost_usd"]:
+                total_usage[key] += usage.get(key, 0)
+        local_messages.append(result)
+
+        tool_calls = getattr(result, "tool_calls", [])
+        agent_steps.append(
+            make_agent_step(
+                agent=agent_name,
+                phase="analysis",
+                kind="llm_decision",
+                report_key=report_field,
+                iteration=max_iterations + 1,
+                status="tool_calls_requested" if tool_calls else "final_answer_ready",
+                summary=(
+                    f"{agent_name} requested {len(tool_calls)} tool call(s) after nudge"
+                    if tool_calls
+                    else f"{agent_name} ignored the calculator nudge"
+                ),
+                message_preview=getattr(result, "content", ""),
+                tool_calls=tool_calls,
+                usage=usage,
+            )
+        )
+
+        if tool_calls:
+            tool_results = []
+            for tool_call in tool_calls:
+                tool_name = tool_call["name"]
+                tool_args = tool_call["args"]
+                tool_id = tool_call["id"]
+
+                if tool_name in tool_map:
+                    try:
+                        tool_func = tool_map[tool_name]
+                        if hasattr(tool_func, 'invoke'):
+                            tool_result = tool_func.invoke(tool_args)
+                        else:
+                            tool_result = tool_func(**tool_args)
+
+                        tool_results.append(
+                            ToolMessage(
+                                content=str(tool_result),
+                                tool_call_id=tool_id,
+                                name=tool_name,
+                            )
+                        )
+                        if tool_name == "calculate_multi_method_valuation":
+                            valuation_tool_called = True
+                            valuation_unavailable_reason = _valuation_unavailable_reason(
+                                _parse_tool_output_snapshot(tool_result)
+                            )
+                        resources_used.extend(
+                            build_tool_resource_snapshots(tool_name, tool_args, tool_result)
+                        )
+                        agent_steps.append(
+                            make_agent_step(
+                                agent=agent_name,
+                                phase="analysis",
+                                kind="tool_result",
+                                report_key=report_field,
+                                iteration=max_iterations + 1,
+                                status="completed",
+                                summary=f"{tool_name} returned successfully",
+                                tool_name=tool_name,
+                                tool_args=tool_args,
+                                observation_preview=_format_tool_output_preview(
+                                    _parse_tool_output_snapshot(tool_result)
+                                ),
+                            )
+                        )
+                    except Exception as e:
+                        logger.error(f"{agent_name} tool {tool_name} failed: {e}")
+                        if tool_name == "calculate_multi_method_valuation":
+                            valuation_tool_called = True
+                            valuation_unavailable_reason = (
+                                f"calculate_multi_method_valuation tool failed: {e}"
+                            )
+                        tool_results.append(
+                            ToolMessage(
+                                content=f"Error: {str(e)}",
+                                tool_call_id=tool_id,
+                                name=tool_name,
+                            )
+                        )
+                        agent_steps.append(
+                            make_agent_step(
+                                agent=agent_name,
+                                phase="analysis",
+                                kind="tool_result",
+                                report_key=report_field,
+                                iteration=max_iterations + 1,
+                                status="error",
+                                summary=f"{tool_name} failed",
+                                tool_name=tool_name,
+                                tool_args=tool_args,
+                                observation_preview=str(e),
+                            )
+                        )
+            local_messages.extend(tool_results)
+
+        if not valuation_tool_called:
+            valuation_unavailable_reason = (
+                "calculate_multi_method_valuation was never called, so no valuation was computed"
+            )
+
     # Generate final structured report
     structured_chain = prompt | llm.with_structured_output(structured_output_class)
     report, score, final_usage, key_takeaways, structured_result = try_structured_response(
@@ -333,26 +461,40 @@ def run_self_contained_analyst(
                 extra_state = {}
             for key in ("report", report_field, score_field, "key_takeaways"):
                 extra_state.pop(key, None)
-        # Without trustworthy deterministic output the LLM invents fair_value_*
-        # numbers from its own heuristics (typically FCF/shares ≈ $6).  Replace them
-        # with the -1.0 sentinel (the Pydantic fields are non-optional floats) so
-        # callers can tell the values apart from a real valuation.
+        # Without trustworthy deterministic output the LLM invents plausible-looking
+        # numbers (or, worse, copies unfilled template placeholders like "$XX"
+        # verbatim). Blank every fabricated field to the same shape the deterministic
+        # tool itself returns for "unavailable" (_valuation_unavailable() in
+        # valuation_tools.py) so the analyst and tool layers agree, and replace the
+        # report body entirely rather than just flagging it — there is no reliable
+        # number in it to salvage.
         if valuation_unavailable_reason:
-            note = (
-                f"⚠️ VALUATION_UNAVAILABLE: {valuation_unavailable_reason}; "
-                "fair_value fields are set to sentinel -1.0 and must not "
-                "be used for investment decisions."
-            )
-            for fv_field in ("fair_value_base", "fair_value_bull", "fair_value_bear"):
+            note = f"⚠️ VALUATION_UNAVAILABLE: {valuation_unavailable_reason}"
+            # score_field (valuation_score) was already popped out of extra_state above,
+            # so blanking it there is a no-op — the returned score comes from the local
+            # `score` variable below instead.
+            score = None
+            for fv_field in ("fair_value_base", "fair_value_bull", "fair_value_bear", "current_discount_pct"):
                 if fv_field in extra_state:
-                    extra_state[fv_field] = -1.0
-            existing_assumptions = extra_state.get("valuation_key_assumptions")
-            extra_state["valuation_key_assumptions"] = [note] + (
-                list(existing_assumptions) if isinstance(existing_assumptions, list) else []
-            )
+                    extra_state[fv_field] = None
+            for method_field in ("dcf", "pe_comps", "ev_ebitda"):
+                if method_field in extra_state:
+                    extra_state[method_field] = {"bear": None, "base": None, "bull": None}
+            for empty_dict_field in (
+                "valuation_score_breakdown",
+                "valuation_bridge",
+                "valuation_sensitivity",
+                "probability_distribution",
+                "scenario_interpretation",
+            ):
+                if empty_dict_field in extra_state:
+                    extra_state[empty_dict_field] = {}
+            if "valuation_conviction" in extra_state:
+                extra_state["valuation_conviction"] = "UNAVAILABLE"
+            extra_state["valuation_key_assumptions"] = [note]
             report = (
-                f"[DATA UNAVAILABLE: {valuation_unavailable_reason} — "
-                "fair value estimates below are not reliable.]\n\n" + report
+                f"Valuation for {ticker} is unavailable: {valuation_unavailable_reason}. "
+                "No fair-value estimate could be computed from real data, so none is shown."
             )
         agent_steps.append(
             make_agent_step(
