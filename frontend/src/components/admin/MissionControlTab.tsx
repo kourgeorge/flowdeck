@@ -73,7 +73,7 @@ export default function MissionControlTab({
       {/* Running analyses: list + stop */}
       <div className="mb-4 rounded-lg border border-gray-700 bg-gray-800/80 p-4">
         <h3 className="mb-2 text-sm font-semibold text-gray-300">
-          Running analyses {runningAnalyses.length > 0 ? `(${runningAnalyses.length})` : ''}
+          Active and queued analyses {runningAnalyses.length > 0 ? `(${runningAnalyses.length})` : ''}
         </h3>
         {(missionLoading || runningAnalysesLoading) && runningAnalyses.length === 0 ? (
           <p className="text-sm text-gray-500">Loading…</p>
@@ -106,7 +106,7 @@ export default function MissionControlTab({
                       {r.created_at ? formatDate(r.created_at, true) : '—'}
                     </td>
                     <td className="px-3 py-2 text-gray-300">
-                      {r.current_agents && r.current_agents.length > 0
+                      {r.status === 'queued' ? 'Queued' : r.current_agents && r.current_agents.length > 0
                         ? r.current_agents.length === 1
                           ? r.current_agents[0]
                           : `${r.current_agents[0]} +${r.current_agents.length - 1}`
@@ -380,7 +380,7 @@ export default function MissionControlTab({
                   <td className="px-4 py-3">
                     {item.is_running ? (
                       <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-900/50 text-blue-300 border border-blue-700">
-                        Running
+                        {runningAnalyses.find((run) => run.analysis_run_id === item.running_analysis_id)?.status === 'queued' ? 'Queued' : 'Running'}
                       </span>
                     ) : item.last_status === 'completed' ? (
                       <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-900/50 text-green-300 border border-green-700">

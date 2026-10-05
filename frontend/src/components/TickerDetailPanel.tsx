@@ -2410,6 +2410,7 @@ export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptio
                     )}
                     {stockData.is_generating && !(selectedRunId && historicalReportsData) && (
                       <AIAnalysisLoadingView
+                        status={analysisProgress?.status}
                         existingReportKeys={Object.keys(stockData.reports || {})}
                         agentStatuses={analysisProgress?.agent_statuses ?? null}
                         currentAgent={analysisProgress?.current_agent ?? null}

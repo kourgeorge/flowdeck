@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import json
+import logging
 from datetime import date
 from typing import Dict, Any, Tuple, List, Optional
 
@@ -119,6 +120,33 @@ class TradingAgentsGraph:
             selected_analysts,
             parallel_analysts=self.config.get("parallel_analysts", True),
         )
+
+    def close(self) -> None:
+        """Close this run's synchronous LLM clients after the graph has stopped.
+
+        The analysts use invoke(), so these are the clients that open network
+        connections. Chroma's shared collections belong to the process and must
+        not be reset when an individual analysis finishes.
+        """
+        clients = [
+            getattr(self.deep_thinking_llm, "root_client", None),
+            getattr(self.quick_thinking_llm, "root_client", None),
+        ]
+        clients.extend(
+            memory.client for memory in (
+                self.bull_memory, self.bear_memory, self.neutral_memory,
+                self.trader_memory, self.invest_judge_memory,
+            )
+        )
+        closed = set()
+        for client in clients:
+            if client is None or id(client) in closed:
+                continue
+            closed.add(id(client))
+            try:
+                client.close()
+            except Exception:
+                logging.getLogger(__name__).exception("Failed to close analysis LLM client")
 
     # _create_tool_nodes removed - analysts are now self-contained and handle tools internally
 

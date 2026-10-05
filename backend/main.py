@@ -50,6 +50,7 @@ from data_layer import init_data_gateway
 from data_layer.market import MarketDataLayer
 from data_layer.vendors.yf_session import close_yf_session
 from services.analysis_service import AnalysisService
+from services.analysis_executor import shutdown_analysis_executor
 from services.report_service import ReportService
 from services.edgar_service import get_edgar_service
 
@@ -325,6 +326,12 @@ async def lifespan(app: FastAPI):
             scheduler.shutdown(wait=False)
         except Exception:
             pass
+    try:
+        analysis_service.request_stop_all()
+    except Exception:
+        logger.exception("Failed to signal active analyses during shutdown")
+    finally:
+        shutdown_analysis_executor()
     close_yf_session()
     io_executor.shutdown(wait=False)
 

@@ -97,10 +97,14 @@ EnvironmentFile=/opt/flowdeck/.env
 Environment=PYTHONPATH=/opt/flowdeck
 Environment=PORT=8002
 
-ExecStart=/opt/flowdeck/venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8002
+Environment=FLOWDECK_ANALYSIS_WORKERS=5
+Environment=FLOWDECK_ANALYSIS_QUEUE_SIZE=unlimited
+ExecStart=/opt/flowdeck/venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8002 --workers 1
 
 Restart=always
 RestartSec=5
+TimeoutStopSec=30
+KillMode=control-group
 
 [Install]
 WantedBy=multi-user.target
@@ -114,6 +118,36 @@ sudo systemctl enable flowdeck-backend
 sudo systemctl start flowdeck-backend
 sudo systemctl status flowdeck-backend
 ```
+
+For the home-directory deployment, [scripts/flowdeck-backend.service](../scripts/flowdeck-backend.service)
+is a starting template. Adjust its paths and user before installing it. In particular,
+for conda deployments, activate that environment and use
+`python -c 'import sys; print(sys.executable)'` to obtain the correct `ExecStart` Python
+path; the template's `.venv/bin/python` must be replaced. Stop the old backend before
+starting the service so both launchers do not compete for port 8002. Once systemd owns
+the backend, use `systemctl restart flowdeck-backend` instead of `start_flowdeck.sh`,
+which starts both frontend and backend. Read service logs with
+`journalctl -u flowdeck-backend`; journald preserves them across restarts.
+
+**Analysis capacity:** Use one Uvicorn worker with
+`FLOWDECK_ANALYSIS_WORKERS=5` (the default) to run up to five ticker analyses
+concurrently. This limits expensive ticker analyses across normal
+requests, Mission Control, and scheduled jobs within the process. Additional jobs
+wait with status `queued`, with no default queue-length cap
+(`FLOWDECK_ANALYSIS_QUEUE_SIZE=unlimited`). Graph construction, LLM clients, and data
+fetching begin only when a worker is available. To optionally cap the waiting
+queue, set `FLOWDECK_ANALYSIS_QUEUE_SIZE` to a nonnegative integer; 0 allows only
+active jobs. If a configured cap is exhausted, the start endpoint returns HTTP 503 with
+`Retry-After: 60`; Mission Control reports the rejected tickers in `failed`.
+Rejected charged runs are refunded. Completed and failed runs release their
+in-memory state. Measure peak RAM and swap before raising concurrency.
+
+Waiting jobs retain lightweight request/state metadata in memory, so a larger
+backlog still uses some RAM. The queue is not durable or shared across Uvicorn processes.
+Graceful shutdown cancels waiting jobs and refunds their charges. A hard kill
+cannot run cleanup: reconcile interrupted execution/status records before retrying
+them. Multiple API processes or durable retry require an external worker queue;
+increasing Uvicorn workers multiplies the analysis limit and memory usage.
 
 **Permissions:** Ensure the service user can read `.env` and write to `results/`:
 

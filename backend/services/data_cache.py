@@ -244,7 +244,7 @@ class _SQLiteTTLStore:
             ticker_upper = ticker.upper()
             for run_id, payload_json in rows:
                 data = json.loads(payload_json)
-                if data.get("status") == "running" and (data.get("ticker") or "").upper() == ticker_upper:
+                if data.get("status") in ("queued", "running") and (data.get("ticker") or "").upper() == ticker_upper:
                     return run_id
             return None
 
@@ -259,7 +259,7 @@ class _SQLiteTTLStore:
             result: List[Dict[str, Any]] = []
             for run_id, payload_json in rows:
                 data = json.loads(payload_json)
-                if data.get("status") != "running":
+                if data.get("status") not in ("queued", "running"):
                     continue
                 out = dict(data)
                 out["analysis_run_id"] = run_id

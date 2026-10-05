@@ -410,7 +410,7 @@ def refund_for_execution(user_id: int, execution_id: int, db: Session) -> None:
 
 def refund_for_failed_execution(execution_id: int, db: Session) -> bool:
     """
-    Refund COST_PER_ANALYSIS for a failed execution via transaction ledger.
+    Refund the original analysis charge for a failed execution via transaction ledger.
     Does NOT delete the execution (keeps it for audit trail with status='failed').
     Returns True if refund was successful, False otherwise.
     """
@@ -446,6 +446,11 @@ def refund_for_failed_execution(execution_id: int, db: Session) -> bool:
         )
         .first()
     )
+
+    # Admin and scheduled runs are recorded without a charge. Rejecting or
+    # cancelling one must not create free tokens in its creator's account.
+    if original_tx is None or original_tx.amount >= 0:
+        return False
     
     # Build refund metadata
     import json
@@ -462,7 +467,7 @@ def refund_for_failed_execution(execution_id: int, db: Session) -> bool:
     ticker_info = f" for {metadata.get('ticker', 'unknown')}" if "ticker" in metadata else ""
     tx = record_transaction(
         user_id=ex.creator_id,
-        amount=COST_PER_ANALYSIS,  # Positive amount = credit
+        amount=-original_tx.amount,  # Refund the amount actually charged.
         transaction_type="refund",
         related_entity_type="execution",
         related_entity_id=execution_id,

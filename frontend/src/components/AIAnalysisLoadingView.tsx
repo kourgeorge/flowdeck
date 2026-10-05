@@ -15,6 +15,7 @@ const ALL_AGENTS = [
 ] as const;
 
 interface AIAnalysisLoadingViewProps {
+  status?: string;
   existingReportKeys?: string[];
   agentStatuses?: Record<string, string> | null;
   currentAgent?: string | null;
@@ -54,6 +55,7 @@ function getActivityGlyph(kind: string | null | undefined): string {
 }
 
 export default function AIAnalysisLoadingView({
+  status = 'running',
   existingReportKeys = [],
   agentStatuses = null,
   currentAgent = null,
@@ -124,7 +126,12 @@ export default function AIAnalysisLoadingView({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-300/80">Live Analysis</p>
-          <h3 className="mt-1 text-lg font-semibold text-white">Multi-Agent Analysis Running</h3>
+          <h3 className="mt-1 text-lg font-semibold text-white">
+            {status === 'queued' ? 'Analysis queued' : 'Multi-Agent Analysis Running'}
+          </h3>
+          {status === 'queued' && (
+            <p className="mt-2 text-sm text-gray-400">Your analysis will start automatically when a slot is available.</p>
+          )}
         </div>
           <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
             <div className="rounded-xl border border-sky-400/20 bg-sky-500/10 px-3 py-2 text-sky-100">

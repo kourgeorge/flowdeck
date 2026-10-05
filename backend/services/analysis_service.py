@@ -19,8 +19,10 @@ from services.data_cache import (
     get_analysis_status as get_analysis_status_from_cache,
     get_stop_requested,
     set_analysis_status,
+    set_stop_requested,
 )
 from ai_engine.tradingagents.agents.utils.trace_utils import make_agent_step, preview_text, sort_agent_steps
+from services.analysis_executor import AnalysisExecutor, get_analysis_executor
 from services.report_service import save_report, update_execution_status
 from services.email_service import notify_subscribers_new_report
 
@@ -135,15 +137,16 @@ class AnalysisService:
     _MAX_LIVE_TRACE_STEPS = 120
     _MAX_ACTIVITY_FINGERPRINTS = 72
     
-    def __init__(self, results_dir: str = "results"):
+    def __init__(self, results_dir: str = "results", *, executor: Optional[AnalysisExecutor] = None):
         self.results_dir = Path(results_dir)
         if not self.results_dir.is_absolute():
             backend_dir = Path(__file__).parent.parent
             self.results_dir = backend_dir.parent / self.results_dir  # repo root
-        # Keep minimal in-memory state for active analysis context (callbacks, graph objects)
-        # Status queries read from filesystem only. Key = analysis_run_id (AnalysisRun.id).
+        # Keep state only for queued/active jobs; status queries use the shared
+        # cache and completed reports live in the database. Graphs stay worker-local.
         self.running_analyses: Dict[int, Dict] = {}
-        self._lock = threading.Lock()  # Lock to prevent race conditions
+        self._lock = threading.RLock()
+        self._executor = executor
 
     def _append_live_activity(
         self,
@@ -437,11 +440,12 @@ class AnalysisService:
     def get_running_analysis_run_id(self, ticker: str, analysis_date: str) -> Optional[int]:
         """Return analysis_run_id if an analysis is already running for this (ticker, date)."""
         ticker_upper = ticker.upper()
-        for run_id, info in self.running_analyses.items():
-            if info.get("status") == "running" and info.get("ticker") == ticker_upper and info.get("date") == analysis_date:
-                return run_id
+        with self._lock:
+            for run_id, info in self.running_analyses.items():
+                if info.get("status") in ("queued", "running") and info.get("ticker") == ticker_upper and info.get("date") == analysis_date:
+                    return run_id
         return None
-    
+
     def start_analysis(
         self,
         ticker: str,
@@ -456,19 +460,80 @@ class AnalysisService:
         progress_callback: Optional[Callable] = None,
         initiator_email: Optional[str] = None,
     ) -> tuple[int, bool]:
-        """Start a new analysis and return (analysis_run_id, existing). existing=True if already running for (ticker, date)."""
+        """Accept a lightweight job; expensive setup happens only inside a worker."""
         ticker = ticker.upper()
-        
-        # Use lock to prevent race condition when checking and starting analysis
         with self._lock:
             existing_run_id = self.get_running_analysis_run_id(ticker, analysis_date)
             if existing_run_id is not None:
-                logger.info(
-                    "Analysis already running analysis_run_id=%s ticker=%s date=%s",
-                    existing_run_id, ticker, analysis_date,
-                )
                 return (existing_run_id, True)
-            
+            self.running_analyses[analysis_run_id] = {
+                "ticker": ticker,
+                "date": analysis_date,
+                "analysis_run_id": analysis_run_id,
+                "status": "queued",
+                "progress_callback": progress_callback,
+                "initiator_email": initiator_email,
+                "agent_statuses": {},
+                "current_agents": [],
+                "live_activities": [],
+                "live_trace": [],
+                "reports": {},
+                "messages": [],
+                "tool_calls": [],
+                "activity_seq": 0,
+                "activity_fingerprints": [],
+                "created_at": _iso_utc_now(),
+            }
+            try:
+                self._append_live_activity(
+                    self.running_analyses[analysis_run_id],
+                    kind="status", status="queued",
+                    summary="Analysis queued; waiting for an available slot",
+                )
+                self._persist_analysis_status(analysis_run_id)
+                executor = self._executor or get_analysis_executor()
+                future = executor.submit(
+                    self._execute_analysis, analysis_run_id, ticker, analysis_date,
+                    list(analysts) if analysts is not None else None,
+                    research_depth, llm_provider, backend_url, shallow_thinker, deep_thinker,
+                )
+                # Shutdown can cancel a job before its worker/finally ever runs.
+                future.add_done_callback(
+                    lambda done: self._discard_cancelled_job(analysis_run_id) if done.cancelled() else None
+                )
+            except Exception as exc:
+                try:
+                    self._fail_analysis(analysis_run_id, str(exc))
+                finally:
+                    self.running_analyses.pop(analysis_run_id, None)
+                raise
+        return (analysis_run_id, False)
+
+    def _discard_cancelled_job(self, analysis_run_id: int) -> None:
+        try:
+            self._fail_analysis(analysis_run_id, "Server stopped before this analysis could start")
+        finally:
+            with self._lock:
+                self.running_analyses.pop(analysis_run_id, None)
+
+    def request_stop_all(self) -> None:
+        """Ask active graphs to stop at their next stream boundary on shutdown."""
+        with self._lock:
+            for run_id in self.running_analyses:
+                set_stop_requested(run_id)
+
+    def _execute_analysis(
+        self, analysis_run_id, ticker, analysis_date, analysts, research_depth,
+        llm_provider, backend_url, shallow_thinker, deep_thinker,
+    ) -> None:
+        graph = None
+        try:
+            if get_stop_requested(analysis_run_id):
+                self._fail_analysis(analysis_run_id, "Analysis cancelled before starting", cancelled=True)
+                return
+            analysis_info = self.running_analyses[analysis_run_id]
+            analysis_info["status"] = "running"
+            self._persist_analysis_status(analysis_run_id)
             logger.info(
                 "Starting analysis analysis_run_id=%s ticker=%s date=%s analysts=%s",
                 analysis_run_id, ticker, analysis_date, analysts,
@@ -571,71 +636,71 @@ class AnalysisService:
                 if first_selected:
                     agent_statuses[analyst_status_map[first_selected]] = "in_progress"
 
-            # Store analysis info immediately to prevent race condition
-            # This must be done within the lock before starting the background thread
-            self.running_analyses[analysis_run_id] = {
-                "ticker": ticker.upper(),
-                "date": analysis_date,
-                "analysis_run_id": analysis_run_id,
-                "status": "running",
-                "graph": graph,
+            analysis_info.update({
                 "results_dir": results_dir,
                 "report_dir": report_dir,
                 "log_file": log_file,
-                "progress_callback": progress_callback,
                 "agent_statuses": agent_statuses,
-                "current_agents": current_agents,  # Changed from current_agent to current_agents (list)
-                "live_activities": [],
-                "live_trace": [],
-                "reports": {},
+                "current_agents": current_agents,
                 "analysts": analysts,
-                "messages": [],
-                "tool_calls": [],
-                "initiator_email": initiator_email,
-                "parallel_analysts": parallel_analysts,  # Store mode for later reference
-                "activity_seq": 0,
-                "activity_fingerprints": [],
-                "created_at": _iso_utc_now(),
-            }
-
+                "parallel_analysts": parallel_analysts,
+            })
             for agent_name in current_agents:
                 self._append_agent_transition_activity(
-                    self.running_analyses[analysis_run_id],
-                    agent_name,
-                    "in_progress",
+                    analysis_info, agent_name, "in_progress",
                     summary=f"{agent_name} started",
                 )
-            
-            # Write initial status to file
             self._persist_analysis_status(analysis_run_id)
-        
-        # Start analysis in background
-        # Create a new event loop in a thread to run the async analysis
-        def run_async_analysis():
-            """Run the async analysis in a new event loop."""
+            if get_stop_requested(analysis_run_id):
+                self._fail_analysis(analysis_run_id, "Analysis cancelled before starting", cancelled=True)
+                return
+            asyncio.run(self._run_analysis(analysis_run_id, graph, ticker, analysis_date, analysts))
+        except Exception as exc:
+            logger.exception("Analysis failed to run analysis_run_id=%s ticker=%s", analysis_run_id, ticker)
+            self._fail_analysis(analysis_run_id, str(exc))
+        finally:
             try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(self._run_analysis(analysis_run_id, graph, ticker, analysis_date, analysts))
-            except Exception as e:
-                import traceback
-                logger.exception(
-                    "Analysis failed analysis_run_id=%s ticker=%s date=%s error=%s",
-                    analysis_run_id, ticker, analysis_date, e,
-                )
-                analysis_info = self.running_analyses.get(analysis_run_id)
-                if analysis_info:
-                    analysis_info["status"] = "error"
-                    analysis_info["error"] = str(e)
+                if graph is not None:
+                    graph.close()
+            except Exception:
+                logger.exception("Failed to close analysis resources analysis_run_id=%s", analysis_run_id)
             finally:
-                loop.close()
-        
-        # Start the analysis in a background thread
-        thread = threading.Thread(target=run_async_analysis, daemon=True)
-        thread.start()
-        
-        return (analysis_run_id, False)
-    
+                # Status and reports are persisted; completed jobs must not keep
+                # their reports, callbacks, or graph clients alive for process life.
+                with self._lock:
+                    self.running_analyses.pop(analysis_run_id, None)
+
+    def _fail_analysis(self, analysis_run_id: int, error: str, *, cancelled: bool = False) -> None:
+        """Persist failure and refund only an actual charge, including setup failures."""
+        try:
+            update_execution_status(analysis_run_id, "failed", error_message=error)
+            from database import SessionLocal
+            from services.token_service import refund_for_failed_execution
+            with SessionLocal() as db:
+                refund_for_failed_execution(analysis_run_id, db)
+        except Exception:
+            logger.exception("Failed to persist/refund analysis failure analysis_run_id=%s", analysis_run_id)
+        try:
+            info = self.running_analyses.get(analysis_run_id)
+            if info is not None:
+                info["status"] = "cancelled" if cancelled else "error"
+                info["error"] = error
+                self._append_live_activity(
+                    info, kind="status", status=info["status"],
+                    summary="Analysis cancelled" if cancelled else "Analysis failed",
+                    detail=_preview_activity_text(error),
+                )
+                if info.get("progress_callback"):
+                    info["progress_callback"]({"type": "error", "error": error}, info)
+        except Exception:
+            logger.exception("Failed to notify analysis failure analysis_run_id=%s", analysis_run_id)
+        finally:
+            try:
+                delete_analysis_status("ticker", analysis_run_id)
+                clear_stop_requested(analysis_run_id)
+            except Exception:
+                logger.exception("Failed to clear analysis status analysis_run_id=%s", analysis_run_id)
+
     async def _run_analysis(self, analysis_run_id: int, graph: TradingAgentsGraph, ticker: str, analysis_date: str, analysts: list):
         """Run the analysis and update status."""
         analysis_info = self.running_analyses.get(analysis_run_id)
@@ -898,16 +963,7 @@ class AnalysisService:
                         "Analysis stop requested analysis_run_id=%s ticker=%s",
                         analysis_run_id, ticker,
                     )
-                    analysis_info["status"] = "cancelled"
-                    self._append_live_activity(
-                        analysis_info,
-                        kind="status",
-                        status="cancelled",
-                        summary="Analysis cancelled",
-                    )
-                    self._persist_analysis_status(analysis_run_id)
-                    delete_analysis_status("ticker", analysis_run_id)
-                    clear_stop_requested(analysis_run_id)
+                    self._fail_analysis(analysis_run_id, "Analysis cancelled", cancelled=True)
                     break
                 last_chunk = chunk
                 # Process messages
@@ -1301,57 +1357,7 @@ class AnalysisService:
                 ar_id_safe, ticker, e,
             )
             
-            # Update execution status to failed
-            if isinstance(ar_id_safe, int):
-                try:
-                    update_execution_status(ar_id_safe, "failed", error_message=str(e))
-                except Exception as update_err:
-                    logger.warning("Failed to update execution status to failed: %s", update_err)
-                
-                # Refund tokens for failed execution
-                try:
-                    from database import SessionLocal
-                    from services.token_service import refund_for_failed_execution
-                    db = SessionLocal()
-                    try:
-                        refunded = refund_for_failed_execution(ar_id_safe, db)
-                        if refunded:
-                            logger.info(
-                                "Tokens refunded for failed analysis analysis_run_id=%s ticker=%s",
-                                ar_id_safe, ticker,
-                            )
-                        else:
-                            logger.warning(
-                                "Token refund failed or already processed analysis_run_id=%s ticker=%s",
-                                ar_id_safe, ticker,
-                            )
-                    finally:
-                        db.close()
-                except Exception as refund_err:
-                    logger.exception(
-                        "Failed to refund tokens for failed analysis analysis_run_id=%s error=%s",
-                        ar_id_safe, refund_err,
-                    )
-            
-            analysis_info = self.running_analyses.get(analysis_run_id)
-            if analysis_info:
-                analysis_info["status"] = "error"
-                analysis_info["error"] = str(e)
-                self._append_live_activity(
-                    analysis_info,
-                    kind="status",
-                    status="error",
-                    summary="Analysis failed",
-                    detail=_preview_activity_text(str(e)),
-                )
-                self._persist_analysis_status(analysis_run_id)
-                if analysis_info["progress_callback"]:
-                    try:
-                        analysis_info["progress_callback"]({"type": "error", "error": str(e)}, analysis_info)
-                    except Exception:
-                        pass
-                # Delete status file after error (analysis is done)
-                delete_analysis_status("ticker", analysis_run_id)
+            self._fail_analysis(analysis_run_id, str(e))
         finally:
             # Always close the log file handle to prevent file descriptor leaks
             if log_file_handle:

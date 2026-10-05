@@ -15,6 +15,7 @@ from auth import get_current_user, get_current_admin_user, decode_token
 from database import get_db, SessionLocal
 from models.db_models import User as UserModel
 from services.analysis_service import AnalysisService
+from services.analysis_executor import AnalysisQueueFull
 from services import token_service
 from data_layer import get_data_gateway
 from sync_major_stocks import get_missing_and_skipped, run_analyses_for_tickers
@@ -91,7 +92,7 @@ START_ANALYSIS_RESPONSES: Dict[Union[int, str], Dict[str, Any]] = {
             "application/json": {
                 "examples": {
                     "fresh_run": {
-                        "summary": "New run started",
+                        "summary": "New run accepted",
                         "value": {
                             "analysis_run_id": 1234,
                             "ticker": "AAPL",
@@ -115,6 +116,10 @@ START_ANALYSIS_RESPONSES: Dict[Union[int, str], Dict[str, Any]] = {
     400: {"content": {"application/json": {"example": {"detail": "Ticker is required"}}}},
     402: {"content": {"application/json": {"example": ERR_402}}},
     404: {"content": {"application/json": {"example": ERR_404_TICKER}}},
+    503: {
+        "description": "Analysis capacity is full. Retry after the Retry-After interval.",
+        "content": {"application/json": {"example": {"detail": "Analysis queue is full. Please try again later."}}},
+    },
     500: {
         "content": {
             "application/json": {
@@ -168,7 +173,11 @@ async def start_analysis(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Start a new analysis. Requires signed-in user; initiator is notified by email when the report is done. Costs 200 tokens.
+    """Queue a new analysis. Requires signed-in user; initiator is notified by email when the report is done. Costs 200 tokens.
+
+    Runs wait with status `queued` until capacity is available. There is no default
+    queue-length cap. If an optional configured cap is full, return HTTP 503 and
+    refund the rejected run's charge.
 
     Each analyst maps to one report key -- `social` produces `sentiment_report`, not
     `news_report`. Each run builds on the ticker's prior report and ends with a
@@ -257,6 +266,10 @@ async def start_analysis(
             token_service.refund_for_execution(current_user.id, analysis_run_id, db)
 
         return {"analysis_run_id": returned_run_id, "ticker": ticker, "date": analysis_date, "existing": existing}
+    except AnalysisQueueFull as e:
+        raise HTTPException(status_code=503, detail=str(e), headers={"Retry-After": "60"})
+    except HTTPException:
+        raise
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON in request body")
     except Exception as e:
