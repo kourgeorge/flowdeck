@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from config import RESULTS_DIR
 from data_layer import get_data_gateway
-from models.db_models import Execution, Report, ReportView, Subscription, User
+from models.db_models import Execution, Report, ReportView, Subscription, Usage, User
 from services.data_cache import get_cached_batch
 
 
@@ -78,7 +78,7 @@ def delete_user(db: Session, user_id: int) -> bool:
 def list_users(
     db: Session, limit: int, offset: int
 ) -> tuple[list[dict], int]:
-    """List users with subscription count. Returns (list of user dicts, total)."""
+    """List users with ledger balances and subscription counts. Returns (items, total)."""
     total = db.query(func.count(User.id)).scalar() or 0
     rows = (
         db.query(User)
@@ -88,6 +88,15 @@ def list_users(
         .all()
     )
     user_ids = [u.id for u in rows]
+    if not user_ids:
+        return [], total
+
+    balances = (
+        db.query(Usage.user_id, func.sum(Usage.amount))
+        .filter(Usage.user_id.in_(user_ids))
+        .group_by(Usage.user_id)
+    )
+    balance_by_user = {uid: int(balance) for uid, balance in balances}
     sub_counts = (
         db.query(Subscription.user_id, func.count(Subscription.id))
         .filter(Subscription.user_id.in_(user_ids))
@@ -100,7 +109,9 @@ def list_users(
             "id": u.id,
             "email": u.email,
             "name": u.name,
-            "token_balance": u.token_balance,
+            # The legacy column is only an opening balance for users whose
+            # ledger has not been initialized yet (e.g. immediately after signup).
+            "token_balance": balance_by_user.get(u.id, u.token_balance),
             "created_at": u.created_at,
             "subscription_count": count_by_user.get(u.id, 0),
         }

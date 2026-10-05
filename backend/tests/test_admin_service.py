@@ -10,14 +10,101 @@ import unittest
 import zipfile
 from unittest.mock import patch
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from database import Base
-from models.db_models import Execution, Report, User
-from services.admin_service import build_analysis_reports_zip
+from models.db_models import Execution, Report, Subscription, Usage, User
+from services.admin_service import build_analysis_reports_zip, list_users
+from services import token_service
+
+
+class TestAdminUsers(unittest.TestCase):
+    def setUp(self) -> None:
+        self.engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(bind=self.engine)
+        self.db = sessionmaker(bind=self.engine)()
+        self.db.add_all([
+            User(id=1, email="first@example.com", created_at=datetime(2026, 10, 1)),
+            User(id=2, email="second@example.com", created_at=datetime(2026, 10, 2)),
+            User(id=3, email="new@example.com", created_at=datetime(2026, 10, 3)),
+            User(id=4, email="system@example.com", token_balance=0, created_at=datetime(2026, 10, 4)),
+        ])
+        self.db.commit()
+
+    def tearDown(self) -> None:
+        self.db.close()
+        self.engine.dispose()
+
+    def test_users_have_independent_ledger_balances_and_subscription_counts(self) -> None:
+        token_service.record_transaction(1, 1000, "initial_balance", self.db)
+        token_service.record_transaction(1, -200, "analysis_cost", self.db)
+        token_service.record_transaction(1, -2, "chat_cost", self.db, llm_tokens=20000)
+        token_service.record_transaction(1, 200, "refund", self.db)
+        token_service.record_transaction(1, 3, "view_reward", self.db)
+        token_service.record_transaction(2, 1000, "initial_balance", self.db)
+        token_service.record_transaction(2, -1000, "analysis_cost", self.db)
+        self.db.add_all([
+            Subscription(user_id=1, ticker="AAPL"),
+            Subscription(user_id=1, ticker="MSFT"),
+            Subscription(user_id=2, ticker="NVDA"),
+        ])
+        self.db.commit()
+
+        items, total = list_users(self.db, limit=100, offset=0)
+        by_id = {item["id"]: item for item in items}
+
+        self.assertEqual(total, 4)
+        self.assertEqual(by_id[1]["token_balance"], 1001)
+        self.assertEqual(by_id[2]["token_balance"], 0)
+        self.assertEqual(by_id[1]["token_balance"], token_service.get_balance(1, self.db))
+        self.assertEqual(by_id[2]["token_balance"], token_service.get_balance(2, self.db))
+        self.assertEqual(by_id[1]["subscription_count"], 2)
+        self.assertEqual(by_id[2]["subscription_count"], 1)
+        self.assertEqual(by_id[3]["subscription_count"], 0)
+        # Transactions no longer update the old column.
+        self.assertEqual(self.db.get(User, 1).token_balance, 1000)
+        self.assertEqual(self.db.get(User, 2).token_balance, 1000)
+
+    def test_uninitialized_users_keep_their_opening_balance_without_writes(self) -> None:
+        items, _ = list_users(self.db, limit=100, offset=0)
+        balances = {item["id"]: item["token_balance"] for item in items}
+
+        self.assertEqual(balances, {1: 1000, 2: 1000, 3: 1000, 4: 0})
+        self.assertEqual(self.db.query(Usage).count(), 0)
+
+    def test_top_up_is_reflected_when_users_are_reloaded(self) -> None:
+        token_service.record_transaction(1, 1000, "initial_balance", self.db)
+        token_service.record_transaction(1, -200, "analysis_cost", self.db)
+        items, _ = list_users(self.db, limit=100, offset=0)
+        self.assertEqual(next(item for item in items if item["id"] == 1)["token_balance"], 800)
+
+        self.assertTrue(token_service.top_up(1, 500, self.db))
+        self.db.expire_all()
+        items, _ = list_users(self.db, limit=100, offset=0)
+
+        self.assertEqual(next(item for item in items if item["id"] == 1)["token_balance"], 1300)
+
+    def test_pagination_keeps_balances_with_the_right_users_and_batches_queries(self) -> None:
+        token_service.record_transaction(1, 120, "initial_balance", self.db)
+        token_service.record_transaction(2, 340, "initial_balance", self.db)
+        statements = []
+
+        def capture_statement(_conn, _cursor, statement, _parameters, _context, _executemany):
+            statements.append(statement)
+
+        event.listen(self.engine, "before_cursor_execute", capture_statement)
+        try:
+            items, total = list_users(self.db, limit=2, offset=2)
+        finally:
+            event.remove(self.engine, "before_cursor_execute", capture_statement)
+
+        self.assertEqual(total, 4)
+        self.assertEqual([(item["id"], item["token_balance"]) for item in items], [(2, 340), (1, 120)])
+        self.assertEqual(len(statements), 4)
+        self.assertEqual(list_users(self.db, limit=2, offset=4), ([], 4))
 
 
 class TestAdminService(unittest.TestCase):
