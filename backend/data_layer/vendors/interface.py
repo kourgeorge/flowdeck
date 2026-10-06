@@ -7,6 +7,7 @@ from .y_finance import get_YFin_data_online, get_stock_stats_indicators_window, 
 from .google import get_google_news, get_global_news_google
 from .openai import get_stock_news_openai, get_global_news_openai, get_fundamentals_openai
 from .serpapi_news import get_global_news_serpapi
+from .yahoo_news import get_global_news_yahoo
 from .alpha_vantage import (
     get_stock as get_alpha_vantage_stock,
     get_indicator as get_alpha_vantage_indicator,
@@ -105,6 +106,7 @@ VENDOR_METHODS = {
         "reddit_online": get_reddit_company_social_online,
     },
     "get_global_news": {
+        "yfinance": get_global_news_yahoo,
         "serpapi": get_global_news_serpapi,
         "openai": get_global_news_openai,
         "google": get_global_news_google,
@@ -274,18 +276,7 @@ def _route(method: str, *args, **kwargs):
     # Final result summary
     if not results:
         logger.error("FAILURE: All %s vendor attempts failed for method '%s'", vendor_attempt_count, method)
-        # For news methods, return a clear message instead of raising so the UI/LLM get something
-        if method == "get_global_news":
-            return (
-                "No global news could be retrieved from the configured sources (Google, OpenAI, or Reddit). "
-                "Possible causes: Google News scrape returned no results, OpenAI Responses API not in use or returned empty, "
-                "or Reddit not configured. Check backend logs for which vendor was tried and any errors."
-            )
-        if method == "get_news":
-            return (
-                "No company news could be retrieved for the given ticker and date range. "
-                "Check that the configured news vendor (OpenAI, Google, etc.) is set up and returning data."
-            )
+        # Propagate failure so the data cache never stores an outage as news.
         error_details = "\n".join(f"  - {err}" for err in vendor_errors) if vendor_errors else "  (No detailed error information available)"
         error_message = (
             f"All vendor implementations failed for method '{method}'. "

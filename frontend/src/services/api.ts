@@ -655,7 +655,11 @@ export const tickerApi = {
     const response = await getCachedRequest(
       `news:${ticker.toUpperCase()}`,
       2 * 60 * 1000,
-      () => api.get(`/api/data/news`, { params: { ticker } }),
+      async () => {
+        const result = await api.get(`/api/data/news`, { params: { ticker } });
+        if (result.data.error) throw new Error(result.data.error);
+        return result;
+      },
     );
     return response.data;
   },
@@ -675,11 +679,15 @@ export const tickerApi = {
       tickers: string[];
     }>;
     count: number;
+    errors?: Record<string, string>;
   }> => {
     if (tickers.length === 0) return { articles: [], count: 0 };
     const response = await api.get(`/api/data/news/batch`, {
       params: { tickers: tickers.slice(0, 50).join(',') },
     });
+    if (!response.data.count && Object.keys(response.data.errors ?? {}).length) {
+      throw new Error('News search is temporarily unavailable. Please try again.');
+    }
     return response.data;
   },
 
@@ -704,6 +712,7 @@ export const tickerApi = {
       completed_tickers: number;
       total_tickers: number;
       completed: boolean;
+      errors?: Record<string, string>;
     }) => void
   ): Promise<void> => {
     if (tickers.length === 0) {
@@ -711,8 +720,9 @@ export const tickerApi = {
       return;
     }
 
+    const params = new URLSearchParams({ tickers: tickers.slice(0, 50).join(',') });
     const response = await fetch(
-      `${API_BASE_URL}/api/data/news/batch/stream?tickers=${tickers.slice(0, 50).join(',')}`,
+      `${API_BASE_URL}/api/data/news/batch/stream?${params}`,
       {
         method: 'GET',
         headers: { 'Accept': 'application/x-ndjson' },
@@ -730,6 +740,13 @@ export const tickerApi = {
 
     const decoder = new TextDecoder();
     let buffer = '';
+    let completed = false;
+    const consume = (line: string) => {
+      if (!line.trim()) return;
+      const chunk = JSON.parse(line);
+      completed = completed || chunk.completed === true;
+      onChunk(chunk);
+    };
 
     try {
       while (true) {
@@ -741,16 +758,11 @@ export const tickerApi = {
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (line.trim()) {
-            try {
-              const chunk = JSON.parse(line);
-              onChunk(chunk);
-            } catch (e) {
-              console.error('Failed to parse NDJSON line:', e, line);
-            }
-          }
+          consume(line);
         }
       }
+      consume(buffer + decoder.decode());
+      if (!completed) throw new Error('News stream ended before all tickers finished. Please retry.');
     } finally {
       reader.releaseLock();
     }

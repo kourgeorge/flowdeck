@@ -37,6 +37,7 @@ from services.data_cache import get_cached, get_cached_batch, get_cached_with_or
 from data_layer.constants import MARKET_OVERVIEW_TICKERS, OVERVIEW_INTERNATIONAL_TICKERS
 from data_layer.vendors import quote as quote_vendor
 from data_layer.vendors import yahoo_query
+from data_layer.vendors.yahoo_news import CACHE_VERSION, YahooNewsError
 from data_layer.vendors.interface import (
     get_global_news as interface_get_global_news,
     get_indicators as interface_get_indicators,
@@ -80,14 +81,8 @@ def _cached(key: str, ttl: float, fetch: Callable[[], T]) -> T:
 
 
 def _news_cache_key(ticker: str, lookback_days: int) -> str:
-    # yfinance is the only news vendor actually wired up; the literal keeps
-    # cache keys byte-identical to when this was a (never-used) vendor param.
-    return f"news:{ticker.upper()}:yfinance:{lookback_days}"
-
-
-def _ticker_from_news_cache_key(cache_key: str) -> str:
-    parts = cache_key.split(":", 3)
-    return parts[1] if len(parts) > 1 else ""
+    # Bypass empty feeds cached by the retired Yahoo NCP endpoint.
+    return f"news:{ticker.strip().upper()}:{CACHE_VERSION}:{lookback_days}"
 
 
 def _quote_to_item(ticker: str, name: str, q: Optional[Dict]) -> Dict[str, Any]:
@@ -157,87 +152,53 @@ class MarketDataLayer:
                       lambda: yf_get_historical(ticker, period=period, interval=interval))
 
     def get_news(self, ticker: str, lookback_days: int = 7) -> Dict[str, Any]:
-        return _cached(_news_cache_key(ticker, lookback_days), DATA_CACHE_TTL_NEWS,
-                      lambda: yf_get_news(ticker, lookback_days=lookback_days))
+        ticker = ticker.strip().upper()
+
+        def fetch():
+            result = yf_get_news(ticker, lookback_days=lookback_days)
+            if result.get("error"):
+                raise YahooNewsError(result["error"])
+            return result
+
+        try:
+            return _cached(_news_cache_key(ticker, lookback_days), DATA_CACHE_TTL_NEWS, fetch)
+        except Exception as exc:
+            # Catch outside the cache: failed requests must be retried, not stored.
+            logger.warning("News search failed for %s", ticker, exc_info=True)
+            return {"ticker": ticker, "date": datetime.now().date().isoformat(),
+                    "articles": [], "count": 0, "error": str(exc)}
 
     def get_news_batch(self, tickers: List[str], lookback_days: int = 7) -> Dict[str, Any]:
-        if not tickers:
+        normalized = list(dict.fromkeys(t.strip().upper() for t in tickers if t.strip()))
+        if not normalized:
             return {"articles": [], "count": 0}
-        normalized_tickers: List[str] = []
-        seen_tickers = set()
-        for ticker in tickers:
-            ticker_upper = ticker.upper()
-            if ticker_upper and ticker_upper not in seen_tickers:
-                normalized_tickers.append(ticker_upper)
-                seen_tickers.add(ticker_upper)
+        # Use the same per-ticker cache and failure policy as streaming and agents.
+        results = {}
+        with ThreadPoolExecutor(max_workers=min(8, len(normalized))) as executor:
+            futures = {executor.submit(self.get_news, t, lookback_days): t for t in normalized}
+            for future in as_completed(futures):
+                results[futures[future]] = future.result()
 
-        key_ttl = [
-            (_news_cache_key(ticker, lookback_days), DATA_CACHE_TTL_NEWS)
-            for ticker in normalized_tickers
-        ]
-
-        def batch_fetch(missing_keys: List[str]) -> Dict[str, Dict[str, Any]]:
-            if not missing_keys:
-                return {}
-
-            results: Dict[str, Dict[str, Any]] = {}
-            work_items = [(cache_key, _ticker_from_news_cache_key(cache_key)) for cache_key in missing_keys]
-            max_workers = min(8, len(work_items))
-
-            def _fetch_one(ticker: str) -> Dict[str, Any]:
-                return yf_get_news(ticker, lookback_days=lookback_days)
-
-            if max_workers <= 1:
-                for cache_key, ticker in work_items:
-                    try:
-                        results[cache_key] = _fetch_one(ticker)
-                    except Exception as exc:
-                        logger.warning("News batch fetch failed for %s: %s", ticker, exc, exc_info=True)
-                        results[cache_key] = {
-                            "ticker": ticker,
-                            "date": datetime.now().strftime("%Y-%m-%d"),
-                            "articles": [],
-                            "count": 0,
-                            "error": str(exc),
-                        }
-                return results
-
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_to_item = {
-                    executor.submit(_fetch_one, ticker): (cache_key, ticker)
-                    for cache_key, ticker in work_items
-                }
-                for future in as_completed(future_to_item):
-                    cache_key, ticker = future_to_item[future]
-                    try:
-                        results[cache_key] = future.result()
-                    except Exception as exc:
-                        logger.warning("News batch fetch failed for %s: %s", ticker, exc, exc_info=True)
-                        results[cache_key] = {
-                            "ticker": ticker,
-                            "date": datetime.now().strftime("%Y-%m-%d"),
-                            "articles": [],
-                            "count": 0,
-                            "error": str(exc),
-                        }
-            return results
-
-        news_by_cache_key = get_cached_batch(key_ttl, batch_fetch)
         by_key: Dict[str, Dict] = {}
-        for ticker in normalized_tickers:
-            cache_key = _news_cache_key(ticker, lookback_days)
-            payload = news_by_cache_key.get(cache_key) or {}
-            for a in (payload.get("articles") or []):
-                key = a.get("uuid") or a.get("link") or ""
+        errors = {}
+        for ticker in normalized:
+            payload = results[ticker]
+            if payload.get("error"):
+                errors[ticker] = payload["error"]
+            for article in payload.get("articles") or []:
+                key = article.get("uuid") or article.get("link")
                 if not key:
                     continue
                 if key in by_key:
-                    if ticker not in (by_key[key].get("tickers") or []):
-                        by_key[key].setdefault("tickers", []).append(ticker)
+                    if ticker not in by_key[key]["tickers"]:
+                        by_key[key]["tickers"].append(ticker)
                 else:
-                    by_key[key] = {**a, "tickers": [ticker]}
-        articles = sorted(by_key.values(), key=lambda x: x.get("published_timestamp") or 0, reverse=True)
-        return {"articles": articles, "count": len(articles)}
+                    by_key[key] = {**article, "tickers": [ticker]}
+        articles = sorted(by_key.values(), key=lambda a: a.get("published_timestamp") or 0, reverse=True)
+        result = {"articles": articles, "count": len(articles)}
+        if errors:
+            result["errors"] = errors
+        return result
 
     def get_insider_transactions(self, ticker: str, limit: int = 50) -> Dict[str, Any]:
         return _cached(f"insider_transactions:{ticker.upper()}:{limit}", DATA_CACHE_TTL_INSIDER_TRANSACTIONS,
@@ -313,7 +274,7 @@ class MarketDataLayer:
                       lambda: interface_get_indicators(ticker, indicator, curr_date, look_back_days))
 
     def get_global_news(self, curr_date: str, lookback_days: int = 7, limit: int = 10, query: Optional[str] = None) -> str:
-        return _cached(f"global_news:{curr_date}:{lookback_days}:{limit}:{query or ''}", DATA_CACHE_TTL_GLOBAL_NEWS,
+        return _cached(f"global_news:{CACHE_VERSION}:{curr_date}:{lookback_days}:{limit}:{query or ''}", DATA_CACHE_TTL_GLOBAL_NEWS,
                       lambda: interface_get_global_news(curr_date, lookback_days, limit, query=query))
 
     def get_insider_sentiment(self, ticker: str, curr_date: str) -> str:

@@ -25,7 +25,7 @@ class NewsService:
 
         Args:
             ticker: Ticker symbol
-            lookback_days: Number of days to look back (yfinance does not filter by date; used for future providers)
+            lookback_days: Filter recent Yahoo search results to this many days
 
         Returns:
             Dict with ticker, date, articles, count (and optional error).

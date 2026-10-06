@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
 
@@ -80,13 +81,23 @@ def get_quote(ticker: str, base_url: Optional[str] = None) -> Optional[Dict[str,
 
 
 def get_news(ticker: str, start_date: str, end_date: str, base_url: Optional[str] = None, lookback_days: int = 7) -> str:
-    """Fetch news from info service. Returns JSON string with articles (same shape as vendor get_news)."""
+    """Fetch recent Yahoo search results and respect the requested inclusive dates."""
     base_url = base_url or _get_info_service_base_url()
     if not base_url:
         raise ValueError("Info service URL not configured (set INFO_SERVICE_URL or config info_service_url)")
-    params = {"ticker": ticker.upper(), "lookback_days": lookback_days}
+    start = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    end = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
+    if start >= end:
+        raise ValueError("start_date must be on or before end_date")
+    days = max(lookback_days, (datetime.now(timezone.utc) - start).days + 1)
+    params = {"ticker": ticker.upper(), "lookback_days": min(max(days, 1), 90)}
     data = _get(None, base_url, "/api/data/news", params=params, timeout=90)
     if isinstance(data, dict):
+        if data.get("error"):
+            raise RuntimeError(data["error"])
+        articles = [a for a in data.get("articles", [])
+                    if start.timestamp() <= (a.get("published_timestamp") or 0) < end.timestamp()]
+        data = {**data, "articles": articles, "count": len(articles)}
         return json.dumps(data)
     return data
 

@@ -448,6 +448,7 @@ export default function DashboardNewsSection({
     }
 
     setIsLoading(true);
+    setIsLoadingMore(false);
     setError(null);
     setLoadedTickerCount(0);
 
@@ -468,10 +469,16 @@ export default function DashboardNewsSection({
           thumbnail: article.thumbnail ?? null,
         }));
 
-        allArticles = [...allArticles, ...newArticles];
+        const byId = new Map(allArticles.map((article) => [article.uuid || article.link, article]));
+        for (const article of newArticles) byId.set(article.uuid || article.link, article);
+        allArticles = [...byId.values()];
+        const failedTickers = Object.keys(chunk.errors ?? {});
+        if (failedTickers.length) {
+          setError(`News could not be loaded for ${failedTickers.join(', ')}. Please retry.`);
+        }
 
         // Update UI immediately with new articles
-        setArticles(allArticles);
+        if (allArticles.length || !failedTickers.length) setArticles(allArticles);
         setLoadedTickerCount(chunk.completed_tickers);
 
         // Show content immediately after first chunk
@@ -483,6 +490,7 @@ export default function DashboardNewsSection({
 
         // Mark as complete when all tickers are done
         if (chunk.completed) {
+          setIsLoading(false);
           setIsLoadingMore(false);
           setLastUpdated(new Date());
           setDisplayCount(PAGE_SIZE);
@@ -781,7 +789,7 @@ export default function DashboardNewsSection({
 
         {error && (
           <div className="mt-5 rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-            Showing the last successful newsroom pull. Refresh failed: {error}
+            {error}
           </div>
         )}
       </div>

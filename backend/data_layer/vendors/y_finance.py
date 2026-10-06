@@ -902,66 +902,14 @@ def get_future_events(ticker: str) -> dict:
 
 def get_yfinance_news(
     ticker: Annotated[str, "ticker symbol of the company"],
-    start_date: Annotated[str, "Start date in yyyy-mm-dd format (not used by yfinance, but kept for API compatibility)"],
-    end_date: Annotated[str, "End date in yyyy-mm-dd format (not used by yfinance, but kept for API compatibility)"],
+    start_date: Annotated[str, "Start date in yyyy-mm-dd format"],
+    end_date: Annotated[str, "End date in yyyy-mm-dd format"],
 ) -> str:
-    """Get news articles for a ticker from yfinance.
-    
-    Note: yfinance.news doesn't support date filtering and returns the most recent news articles.
-    The start_date and end_date parameters are kept for API compatibility but are not used.
-    
-    Args:
-        ticker: Ticker symbol
-        start_date: Start date (not used, kept for compatibility)
-        end_date: End date (not used, kept for compatibility)
-    
-    Returns:
-        JSON string containing news articles
-    """
+    """Search recent Yahoo news, filtered to the requested dates."""
     import json
-    
-    try:
-        ticker_obj = yf.Ticker(ticker.upper(), session=get_yf_session())
-        news = ticker_obj.news
+    from .yahoo_news import get_ticker_news
 
-        if not news:
-            return json.dumps({
-                "ticker": ticker.upper(),
-                "articles": [],
-                "count": 0
-            })
-        
-        # Format news articles
-        articles = []
-        for article in news:
-            # Convert timestamp to readable date
-            pub_time = article.get('providerPublishTime', 0)
-            pub_date = datetime.fromtimestamp(pub_time).strftime("%Y-%m-%d %H:%M:%S") if pub_time else None
-            
-            articles.append({
-                "uuid": article.get('uuid', ''),
-                "title": article.get('title', ''),
-                "publisher": article.get('publisher', ''),
-                "link": article.get('link', ''),
-                "published_time": pub_date,
-                "published_timestamp": pub_time,
-                "type": article.get('type', ''),
-                "thumbnail": article.get('thumbnail', {}).get('resolutions', [{}])[0].get('url', '') if article.get('thumbnail') else None,
-            })
-        
-        return json.dumps({
-            "ticker": ticker.upper(),
-            "articles": articles,
-            "count": len(articles)
-        })
-        
-    except Exception as e:
-        return json.dumps({
-            "ticker": ticker.upper(),
-            "articles": [],
-            "count": 0,
-            "error": str(e)
-        })
+    return json.dumps(get_ticker_news(ticker, start_date=start_date, end_date=end_date))
 
 
 def get_analyst_recommendations(
@@ -1197,103 +1145,10 @@ def _to_json_safe_int(val: Any) -> int:
 
 
 def get_news_app_format(ticker: str, lookback_days: int = 7) -> dict:
-    """Fetch ticker news from yfinance and return app API shape: {ticker, date, articles, count}."""
-    from typing import Any, Dict, List
+    """Return app-format Yahoo search results; failures propagate past the cache."""
+    from .yahoo_news import get_ticker_news
 
-    ticker = ticker.upper()
-    curr_date = datetime.now().strftime("%Y-%m-%d")
-
-    def _safe_resolutions_first(thumb: dict) -> Any:
-        res = thumb.get("resolutions")
-        if isinstance(res, list) and res:
-            return res[0]
-        return None
-
-    def _parse_article(raw: Dict[str, Any]):
-        try:
-            content = raw.get("content")
-            if isinstance(content, dict):
-                uuid = raw.get("id") or content.get("id", "")
-                title = content.get("title", "")
-                link = ""
-                for key in ("canonicalUrl", "clickThroughUrl"):
-                    u = content.get(key)
-                    if isinstance(u, dict) and u.get("url"):
-                        link = u["url"]
-                        break
-                provider = content.get("provider")
-                publisher = provider.get("displayName", "") if isinstance(provider, dict) else ""
-                pub_date_str = content.get("pubDate") or ""
-                published_time = pub_date_str[:19].replace("T", " ") if pub_date_str else None
-                published_timestamp = 0
-                if pub_date_str:
-                    try:
-                        s = pub_date_str.replace("Z", "+00:00")
-                        dt = datetime.fromisoformat(s[:26])
-                        published_timestamp = _to_json_safe_int(dt.timestamp())
-                    except Exception:
-                        pass
-                thumb = content.get("thumbnail")
-                thumb_url = None
-                if isinstance(thumb, dict):
-                    thumb_url = thumb.get("originalUrl")
-                    if not thumb_url:
-                        first = _safe_resolutions_first(thumb)
-                        if isinstance(first, dict):
-                            thumb_url = first.get("url")
-                summary = content.get("summary") or content.get("description") or ""
-                return {
-                    "uuid": str(uuid),
-                    "title": title or "",
-                    "summary": summary if isinstance(summary, str) else "",
-                    "publisher": publisher or "",
-                    "link": link or "",
-                    "published_time": published_time,
-                    "published_timestamp": published_timestamp,
-                    "type": content.get("contentType", ""),
-                    "thumbnail": thumb_url,
-                }
-            pub_time = raw.get("providerPublishTime", 0)
-            pub_date = None
-            if pub_time:
-                try:
-                    pub_date = datetime.fromtimestamp(int(pub_time)).strftime("%Y-%m-%d %H:%M:%S")
-                except Exception:
-                    pass
-            thumb = raw.get("thumbnail")
-            thumb_url = None
-            if thumb and isinstance(thumb, dict):
-                first = _safe_resolutions_first(thumb)
-                if isinstance(first, dict):
-                    thumb_url = first.get("url")
-            summary = raw.get("summary") or raw.get("description") or ""
-            return {
-                "uuid": str(raw.get("uuid", raw.get("id", ""))),
-                "title": str(raw.get("title", "")),
-                "summary": summary if isinstance(summary, str) else "",
-                "publisher": str(raw.get("publisher", "")),
-                "link": str(raw.get("link", "")),
-                "published_time": pub_date,
-                "published_timestamp": _to_json_safe_int(pub_time),
-                "type": str(raw.get("type", "")),
-                "thumbnail": thumb_url,
-            }
-        except Exception:
-            return None
-
-    try:
-        ticker_obj = yf.Ticker(ticker, session=get_yf_session())
-        news = ticker_obj.news
-    except Exception as e:
-        return {"ticker": ticker, "date": curr_date, "articles": [], "count": 0, "error": str(e)}
-    if not news:
-        return {"ticker": ticker, "date": curr_date, "articles": [], "count": 0}
-    articles: List[Dict[str, Any]] = []
-    for raw in news:
-        item = _parse_article(raw)
-        if item:
-            articles.append(item)
-    return {"ticker": ticker, "date": curr_date, "articles": articles, "count": len(articles)}
+    return get_ticker_news(ticker, lookback_days=lookback_days)
 
 
 def get_financial_statements(

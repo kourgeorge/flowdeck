@@ -214,11 +214,13 @@ function PulseCard({
 function NewsBriefingPanel({
   articles,
   isLoading,
+  error,
   tickerChangeMap,
   compact = false,
 }: {
   articles: HeadlineArticle[];
   isLoading: boolean;
+  error?: string | null;
   tickerChangeMap: Record<string, number | null>;
   compact?: boolean;
 }) {
@@ -248,6 +250,7 @@ function NewsBriefingPanel({
           {isLoading ? 'Refreshing headlines' : `${articles.length} headlines`}
         </div>
       </div>
+      {error && <p role="status" className="mb-3 text-sm text-amber-200">{error}</p>}
       <RunningHeadlinesStrip
         articles={articles}
         isLoading={isLoading}
@@ -721,6 +724,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
   const [moversPaginationLoading, setMoversPaginationLoading] = useState<'gainers' | 'losers' | 'most_active' | null>(null);
   const [headlines, setHeadlines] = useState<HeadlineArticle[]>([]);
   const [headlinesLoading, setHeadlinesLoading] = useState(false);
+  const [headlinesError, setHeadlinesError] = useState<string | null>(null);
   const [mapRegions, setMapRegions] = useState<OverviewItem[]>([]);
   const [mapUsIndices, setMapUsIndices] = useState<OverviewItem[]>([]);
   const [mapDataLoading, setMapDataLoading] = useState(false);
@@ -781,8 +785,12 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
   const fetchHeadlines = useCallback(async () => {
     if (initialHeadlinesTickers.length === 0) return;
     setHeadlinesLoading(true);
+    setHeadlinesError(null);
     try {
-      const { articles } = await tickerApi.getNewsBatch(initialHeadlinesTickers);
+      const { articles, errors } = await tickerApi.getNewsBatch(initialHeadlinesTickers);
+      if (errors && Object.keys(errors).length) {
+        setHeadlinesError(`News unavailable for ${Object.keys(errors).join(', ')}. Please retry.`);
+      }
       const merged: HeadlineArticle[] = (articles ?? []).map((a) => ({
         uuid: a.uuid,
         title: a.title,
@@ -796,6 +804,8 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
         tickers: a.tickers ?? [],
       }));
       setHeadlines(merged);
+    } catch (error) {
+      setHeadlinesError(error instanceof Error ? error.message : 'Unable to load news. Please retry.');
     } finally {
       setHeadlinesLoading(false);
     }
@@ -1508,6 +1518,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
               <NewsBriefingPanel
                 articles={headlines}
                 isLoading={headlinesLoading}
+                error={headlinesError}
                 tickerChangeMap={tickerChangeMap}
               />
             </section>
@@ -1517,6 +1528,7 @@ export default function MarketView({ onSelectTicker }: MarketViewProps) {
             <NewsBriefingPanel
               articles={headlines}
               isLoading={headlinesLoading}
+              error={headlinesError}
               tickerChangeMap={tickerChangeMap}
             />
           </aside>

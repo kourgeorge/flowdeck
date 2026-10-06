@@ -559,6 +559,7 @@ export default function PortfolioPulseDashboard({
     most_active: MarketMoverRow[];
   }>({ gainers: [], losers: [], most_active: [] });
   const [portfolioNews, setPortfolioNews] = useState<NewsArticle[]>([]);
+  const [portfolioNewsError, setPortfolioNewsError] = useState<string | null>(null);
   const [latestBriefs, setLatestBriefs] = useState<{ daily: DigestBriefItem | null; weekly: DigestBriefItem | null }>({
     daily: null,
     weekly: null,
@@ -712,16 +713,22 @@ export default function PortfolioPulseDashboard({
     const fetchPortfolioNews = async () => {
       if (tickers.length === 0) {
         setPortfolioNews([]);
+        setPortfolioNewsError(null);
         setIsLoadingPortfolioNews(false);
         return;
       }
 
       setIsLoadingPortfolioNews(true);
+      setPortfolioNewsError(null);
       try {
         const newsResponse = await tickerApi.getNewsBatch(tickers);
-        if (!cancelled) setPortfolioNews(newsResponse.articles.slice(0, 20));
-      } catch {
-        if (!cancelled) setPortfolioNews([]);
+        if (!cancelled) {
+          setPortfolioNews(newsResponse.articles.slice(0, 20));
+          const failed = Object.keys(newsResponse.errors ?? {});
+          if (failed.length) setPortfolioNewsError(`News unavailable for ${failed.join(', ')}. Please retry.`);
+        }
+      } catch (error) {
+        if (!cancelled) setPortfolioNewsError(error instanceof Error ? error.message : 'Unable to load news. Please retry.');
       } finally {
         if (!cancelled) setIsLoadingPortfolioNews(false);
       }
@@ -1720,6 +1727,7 @@ export default function PortfolioPulseDashboard({
                   {selectedNewsTickers.length > 0 ? `${filteredPortfolioNews.length} filtered` : `${portfolioNews.length} items`}
                 </span>
               </div>
+              {portfolioNewsError && <p role="status" className="mb-3 px-2 text-sm text-amber-200">{portfolioNewsError}</p>}
               {newsFilterTickers.length > 0 && (
                 <div className="mb-3 px-2">
                   <div className="mb-2 flex items-center justify-end gap-3">

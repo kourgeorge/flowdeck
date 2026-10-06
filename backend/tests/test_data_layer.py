@@ -189,17 +189,10 @@ class TestMarketDataLayerNews(unittest.TestCase):
         clear_cache()
 
     @patch("data_layer.market.yf_get_news")
-    @patch("data_layer.market.get_cached_batch")
     def test_get_news_batch_dedupes_articles_and_tickers(
         self,
-        mock_get_cached_batch: object,
         mock_yf_get_news: object,
     ) -> None:
-        def cached_batch_impl(key_ttl, batch_fn):
-            keys = [key for key, _ in key_ttl]
-            return batch_fn(keys)
-
-        mock_get_cached_batch.side_effect = cached_batch_impl
         mock_yf_get_news.side_effect = lambda ticker, lookback_days=7: {
             "ticker": ticker,
             "articles": [
@@ -238,25 +231,25 @@ class TestMarketDataLayerNews(unittest.TestCase):
         shared = next(article for article in result["articles"] if article["uuid"] == "shared-story")
         self.assertEqual(shared["tickers"], ["AAPL", "MSFT"])
 
-    @patch("data_layer.market.get_cached_batch")
+    @patch("data_layer.market.get_cached")
     def test_get_news_batch_uses_news_cache_keys(
         self,
-        mock_get_cached_batch: object,
+        mock_get_cached: object,
     ) -> None:
         captured_keys: list[str] = []
 
-        def cached_batch_impl(key_ttl, batch_fn):
-            captured_keys.extend(key for key, _ in key_ttl)
+        def cached_impl(key, ttl, fetch):
+            captured_keys.append(key)
             return {}
 
-        mock_get_cached_batch.side_effect = cached_batch_impl
+        mock_get_cached.side_effect = cached_impl
 
         layer = MarketDataLayer()
         layer.get_news_batch(["AAPL", "MSFT"], lookback_days=5)
 
         self.assertEqual(
-            captured_keys,
-            ["news:AAPL:yfinance:5", "news:MSFT:yfinance:5"],
+            sorted(captured_keys),
+            ["news:AAPL:yahoo-search-v1:5", "news:MSFT:yahoo-search-v1:5"],
         )
 
 

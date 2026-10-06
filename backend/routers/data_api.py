@@ -262,82 +262,59 @@ async def data_news_batch_stream(
     Returns newline-delimited JSON (NDJSON) with progressive updates.
     Each line is a JSON object with articles from completed tickers.
     """
-    raw = [s.strip().upper() for s in tickers.split(",") if s.strip()]
-    if not raw:
-        async def empty_stream():
-            yield json.dumps({"articles": [], "count": 0, "completed": True}) + "\n"
-        return StreamingResponse(empty_stream(), media_type="application/x-ndjson")
-    
-    tickers_list = raw[:50]
-    
+    tickers_list = list(dict.fromkeys(s.strip().upper() for s in tickers.split(",") if s.strip()))[:50]
+
     async def news_stream():
-        """Stream news as each ticker completes."""
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        
         gw = _gateway()
-        all_articles = []
-        seen_uuids = set()
-        completed_count = 0
-        
-        def fetch_one_ticker(ticker: str):
-            try:
-                return gw.get_news(ticker, lookback_days=lookback_days)
-            except Exception as e:
-                logger.warning(f"Failed to fetch news for {ticker}: {e}")
-                return {"ticker": ticker, "articles": [], "count": 0, "error": str(e)}
-        
-        # Use ThreadPoolExecutor to fetch in parallel (increased from 8 to 16 workers)
-        max_workers = min(16, len(tickers_list))
-        
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_ticker = {
-                executor.submit(fetch_one_ticker, ticker): ticker
-                for ticker in tickers_list
-            }
-            
-            for future in as_completed(future_to_ticker):
-                ticker = future_to_ticker[future]
+        semaphore = asyncio.Semaphore(8)
+        by_key = {}
+        errors = {}
+
+        async def fetch_one(ticker):
+            async with semaphore:
                 try:
-                    result = await asyncio.get_event_loop().run_in_executor(None, future.result)
-                    completed_count += 1
-                    
-                    # Add new articles (dedupe by UUID)
-                    new_articles = []
-                    for article in result.get("articles", []):
-                        uuid = article.get("uuid")
-                        if uuid and uuid not in seen_uuids:
-                            seen_uuids.add(uuid)
-                            # Add ticker to article
-                            article_with_ticker = {**article, "tickers": [ticker]}
-                            new_articles.append(article_with_ticker)
-                            all_articles.append(article_with_ticker)
-                    
-                    # Stream this batch immediately
-                    if new_articles:
-                        chunk = {
-                            "articles": new_articles,
-                            "count": len(new_articles),
-                            "total_articles": len(all_articles),
-                            "completed_tickers": completed_count,
-                            "total_tickers": len(tickers_list),
-                            "completed": completed_count == len(tickers_list)
-                        }
-                        yield json.dumps(chunk) + "\n"
-                
-                except Exception as e:
-                    logger.error(f"Error processing news for {ticker}: {e}", exc_info=True)
-        
-        # Send final summary if no articles were streamed
-        if completed_count == len(tickers_list) and not all_articles:
+                    result = await asyncio.to_thread(gw.get_news, ticker, lookback_days=lookback_days)
+                    return ticker, result
+                except Exception as exc:
+                    logger.warning("News search failed for %s: %s", ticker, exc)
+                    return ticker, {"articles": [], "error": str(exc)}
+
+        tasks = [asyncio.create_task(fetch_one(ticker)) for ticker in tickers_list]
+        completed_count = 0
+        try:
+            for task in asyncio.as_completed(tasks):
+                ticker, result = await task
+                completed_count += 1
+                if result.get("error"):
+                    errors[ticker] = result["error"]
+                changed = {}
+                for article in result.get("articles") or []:
+                    key = article.get("uuid") or article.get("link")
+                    if not key:
+                        continue
+                    if key not in by_key:
+                        by_key[key] = {**article, "tickers": [ticker]}
+                        changed[key] = by_key[key]
+                    elif ticker not in by_key[key]["tickers"]:
+                        by_key[key]["tickers"].append(ticker)
+                        changed[key] = by_key[key]
+                # Updates may include an existing article with another matching ticker.
+                yield json.dumps({
+                    "articles": list(changed.values()), "count": len(changed),
+                    "total_articles": len(by_key), "completed_tickers": completed_count,
+                    "total_tickers": len(tickers_list), "completed": False, "errors": errors,
+                }) + "\n"
+            # Always terminate, including empty, partial and failed requests.
             yield json.dumps({
-                "articles": [],
-                "count": 0,
-                "total_articles": 0,
-                "completed_tickers": completed_count,
-                "total_tickers": len(tickers_list),
-                "completed": True
+                "articles": [], "count": 0, "total_articles": len(by_key),
+                "completed_tickers": completed_count, "total_tickers": len(tickers_list),
+                "completed": True, "errors": errors,
             }) + "\n"
-    
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+
     return StreamingResponse(news_stream(), media_type="application/x-ndjson")
 
 
