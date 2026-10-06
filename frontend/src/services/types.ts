@@ -107,6 +107,27 @@ export interface ModelsUsed {
   quick_think?: string;
 }
 
+export interface ValuationSensitivityRange {
+  parameter_name?: string;
+  base_value?: number | null;
+  delta_absolute?: number | null;
+  delta_percent?: number | null;
+  low_value?: number | null;
+  high_value?: number | null;
+  fair_value_low?: number | null;
+  fair_value_high?: number | null;
+  fair_value_range_pct?: number | null;
+  /** Legacy saved-report fields. */
+  delta?: number | null;
+  low?: number | null;
+  high?: number | null;
+}
+
+export type ValuationSensitivity = Partial<Record<
+  'fcf_growth_rate' | 'wacc' | 'terminal_growth' | 'exit_multiple',
+  ValuationSensitivityRange | null
+>>;
+
 export interface ReportData {
   content: string | null;
   score: number | null;
@@ -158,12 +179,7 @@ export interface ReportData {
     risk_discount?: number | null;
     fair_value?: number | null;
   } | null;
-  valuation_sensitivity?: {
-    fcf_growth_rate?: { delta?: number | null; low?: number | null; high?: number | null } | null;
-    wacc?: { delta?: number | null; low?: number | null; high?: number | null } | null;
-    terminal_growth?: { delta?: number | null; low?: number | null; high?: number | null } | null;
-    exit_multiple?: { delta?: number | null; low?: number | null; high?: number | null } | null;
-  } | null;
+  valuation_sensitivity?: ValuationSensitivity | null;
 }
 
 export interface AnalysisLiveActivity {

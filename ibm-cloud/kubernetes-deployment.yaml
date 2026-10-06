@@ -19,30 +19,11 @@ data:
   ENABLE_DAILY_SYNC: "false"
   ENABLE_MARKET_OVERVIEW_CACHE_REFRESH: "true"
   ENABLE_DIGEST_SCHEDULER: "false"
-  DATABASE_URL: "sqlite:///./data/flowdeck.db"
+  DATABASE_URL: "sqlite:////app/data/flowdeck.db"
   PAYPAL_MODE: "live"
 
----
-# Secret for sensitive data (create this separately with actual values)
-apiVersion: v1
-kind: Secret
-metadata:
-  name: flowdeck-secrets
-  namespace: flowdeck
-type: Opaque
-stringData:
-  OPENAI_API_KEY: "your-openai-key"
-  ALPHA_VANTAGE_API_KEY: "your-alpha-vantage-key"
-  JWT_SECRET: "your-jwt-secret"
-  GOOGLE_CLIENT_ID: "your-google-client-id"
-  GOOGLE_CLIENT_SECRET: "your-google-client-secret"
-  PAYPAL_CLIENT_ID: "your-paypal-client-id"
-  PAYPAL_CLIENT_SECRET: "your-paypal-client-secret"
-  SMTP_HOST: "your-smtp-host"
-  SMTP_PORT: "587"
-  SMTP_USER: "your-smtp-user"
-  SMTP_PASSWORD: "your-smtp-password"
-  SMTP_FROM: "noreply@your-domain.com"
+# Provision flowdeck-secrets separately. This manifest deliberately does not
+# create placeholder credentials or overwrite existing secrets.
 
 ---
 # PersistentVolumeClaim for data storage
@@ -70,7 +51,9 @@ metadata:
     app: flowdeck
     component: backend
 spec:
-  replicas: 2
+  replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: flowdeck
@@ -89,6 +72,12 @@ spec:
         - containerPort: 8002
           name: http
         env:
+        - name: FLOWDECK_ENV
+          value: production
+        - name: DATA_CACHE_PATH
+          value: /app/data/data_cache.sqlite
+        - name: RESULTS_DIR
+          value: /app/data/results
         - name: DATABASE_URL
           valueFrom:
             configMapKeyRef:
@@ -343,34 +332,6 @@ spec:
             name: flowdeck-frontend
             port:
               number: 80
-
----
-# HorizontalPodAutoscaler for backend
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: flowdeck-backend-hpa
-  namespace: flowdeck
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: flowdeck-backend
-  minReplicas: 2
-  maxReplicas: 10
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 80
 
 ---
 # HorizontalPodAutoscaler for frontend

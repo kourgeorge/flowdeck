@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -26,7 +27,8 @@ class _FakeChatService:
 
 class TestChatTurnService(unittest.TestCase):
     def setUp(self) -> None:
-        self.engine = create_engine("sqlite:///:memory:")
+        self.engine = create_engine("sqlite:///:memory:",
+            connect_args={"check_same_thread": False}, poolclass=StaticPool)
         self.SessionLocal = sessionmaker(bind=self.engine)
         Base.metadata.create_all(bind=self.engine)
         db = self.SessionLocal()
@@ -36,6 +38,7 @@ class TestChatTurnService(unittest.TestCase):
         self.service = ChatTurnService()
 
     def tearDown(self) -> None:
+        self.service._workers.shutdown(wait=True)
         Base.metadata.drop_all(bind=self.engine)
         self.engine.dispose()
 

@@ -78,8 +78,8 @@ class MarketResponse(BaseModel):
 
 class NarrativeSentiment(BaseModel):
     """Sentiment for a narrative category."""
-    sentiment: float = Field(ge=0, le=1)
-    confidence: float = Field(ge=0, le=1)
+    sentiment: Optional[float] = Field(default=None, ge=0, le=1)
+    confidence: Optional[float] = Field(default=None, ge=0, le=1)
     market_count: int
     trend: str
 
@@ -87,8 +87,8 @@ class NarrativeSentiment(BaseModel):
 class TickerSentimentResponse(BaseModel):
     """Aggregated sentiment response for a ticker."""
     ticker: str
-    overall_sentiment: float = Field(ge=0, le=1)
-    confidence: float = Field(ge=0, le=1)
+    overall_sentiment: Optional[float] = Field(default=None, ge=0, le=1)
+    confidence: Optional[float] = Field(default=None, ge=0, le=1)
     trend: str
     narratives: dict[str, NarrativeSentiment]
     top_markets: list[MarketResponse]

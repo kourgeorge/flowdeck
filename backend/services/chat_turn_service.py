@@ -11,14 +11,16 @@ import json
 import logging
 import queue
 import threading
+import os
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from database import SessionLocal
-from models.db_models import ChatMessage, ChatTurn
+from models.db_models import ChatMessage, ChatTurn, ChatReservation
 from services import token_service
 from services.chat_persistence import (
     create_session_for_user,
@@ -30,6 +32,14 @@ from services.chat_persistence import (
 from services.chat_service import get_chat_service
 
 logger = logging.getLogger(__name__)
+
+
+class InsufficientChatBalance(ValueError):
+    pass
+
+
+class ChatTurnConflict(ValueError):
+    pass
 
 
 def _parse_sse_event(raw_event: str) -> Optional[Dict[str, Any]]:
@@ -78,6 +88,8 @@ def get_active_turn_for_session(db: Session, session_id: int, user_id: int) -> O
 class ChatTurnService:
     def __init__(self) -> None:
         self._lock = threading.Lock()
+        self._workers = ThreadPoolExecutor(max_workers=4, thread_name_prefix="chat-turn")
+        self._slots = threading.BoundedSemaphore(8)
         self._subscribers: dict[int, list[queue.Queue[Optional[Dict[str, Any]]]]] = {}
 
     def subscribe(self, turn_id: int) -> queue.Queue[Optional[Dict[str, Any]]]:
@@ -98,6 +110,8 @@ class ChatTurnService:
     def _publish(self, turn_id: int, payload: Optional[Dict[str, Any]]) -> None:
         with self._lock:
             subscribers = list(self._subscribers.get(turn_id, []))
+            if payload is None:
+                self._subscribers.pop(turn_id, None)
         for q in subscribers:
             try:
                 q.put_nowait(payload)
@@ -113,9 +127,14 @@ class ChatTurnService:
     ) -> tuple[int, int, List[Dict[str, str]]]:
         db = SessionLocal()
         try:
+            token_service.ensure_user_balance(user_id, db)
+            db.execute(text("UPDATE users SET id=id WHERE id=:id"), {"id": user_id})
+            balance = token_service.get_balance_from_ledger(user_id, db)
             session = get_session_for_user(db, session_id, user_id) if session_id is not None else None
             if session_id is not None and session is None:
                 raise ValueError("Session not found")
+            if session is not None and get_active_turn_for_session(db, session.id, user_id):
+                raise ChatTurnConflict("A turn is already running in this session")
             if session is None:
                 session = create_session_for_user(db, user_id)
                 db.flush()
@@ -147,6 +166,13 @@ class ChatTurnService:
             )
             db.add(turn)
             db.flush()
+            reserve = min(balance, max(1, int(os.environ.get("CHAT_MAX_PLATFORM_TOKENS", "20"))))
+            if reserve < 1 or token_service.record_transaction(
+                user_id, -reserve, "chat_reserve", db, commit=False,
+                related_entity_type="chat_turn", related_entity_id=turn.id,
+            ) is None:
+                raise InsufficientChatBalance("Insufficient token balance for this turn")
+            db.add(ChatReservation(turn_id=turn.id, user_id=user_id, amount=reserve))
             db.commit()
             return turn.id, session.id, history
         except Exception:
@@ -164,19 +190,26 @@ class ChatTurnService:
         messages: List[Dict[str, str]],
         context: Optional[Dict[str, Any]],
     ) -> None:
-        thread = threading.Thread(
-            target=self._execute_turn,
-            kwargs={
+        if not self._slots.acquire(blocking=False):
+            with SessionLocal() as db:
+                self._publish(turn_id, self._fail_turn(db, turn_id, "Chat capacity is full; reserved tokens were released."))
+                self._publish(turn_id, None)
+            return
+        try:
+            future = self._workers.submit(self._execute_turn, **{
                 "turn_id": turn_id,
                 "session_id": session_id,
                 "user_id": user_id,
                 "messages": messages,
                 "context": context,
                 "publish_events": True,
-            },
-            daemon=True,
-        )
-        thread.start()
+            })
+            future.add_done_callback(lambda _future: self._slots.release())
+        except Exception:
+            self._slots.release()
+            with SessionLocal() as db:
+                self._publish(turn_id, self._fail_turn(db, turn_id, "Unable to start chat; reserved tokens were released."))
+                self._publish(turn_id, None)
 
     def run_turn_sync(
         self,
@@ -187,14 +220,19 @@ class ChatTurnService:
         messages: List[Dict[str, str]],
         context: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        return self._execute_turn(
-            turn_id=turn_id,
-            session_id=session_id,
-            user_id=user_id,
-            messages=messages,
-            context=context,
-            publish_events=False,
-        )
+        if not self._slots.acquire(blocking=False):
+            with SessionLocal() as db:
+                return self._fail_turn(db, turn_id, "Chat capacity is full; reserved tokens were released.")
+        try:
+            return self._workers.submit(
+                self._execute_turn, turn_id=turn_id, session_id=session_id,
+                user_id=user_id, messages=messages, context=context, publish_events=False,
+            ).result()
+        except Exception:
+            with SessionLocal() as db:
+                return self._fail_turn(db, turn_id, "Unable to start chat; reserved tokens were released.")
+        finally:
+            self._slots.release()
 
     def _set_turn_state(
         self,
@@ -207,7 +245,7 @@ class ChatTurnService:
         assistant_message_id: Optional[int] = None,
     ) -> None:
         turn = db.get(ChatTurn, turn_id)
-        if turn is None:
+        if turn is None or turn.status != "running":
             return
         if status is not None:
             turn.status = status
@@ -234,6 +272,14 @@ class ChatTurnService:
         charts: List[Dict[str, Any]],
         follow_up_questions: Optional[List[str]],
     ) -> Dict[str, Any]:
+        db.execute(text("UPDATE users SET id=id WHERE id=:id"), {"id": user_id})
+        turn = db.get(ChatTurn, turn_id, populate_existing=True)
+        if not turn or turn.status != "running" or turn.user_id != user_id or turn.session_id != session_id:
+            raise RuntimeError("Chat turn is no longer active for this session")
+        reservation = db.get(ChatReservation, turn_id, populate_existing=True)
+        charge = token_service.llm_tokens_to_platform_tokens(tokens_used)
+        if reservation is None or reservation.settled or charge > reservation.amount:
+            raise RuntimeError("Chat settlement failed: no sufficient unsettled reservation")
         next_sort_order = (
             db.query(func.max(ChatMessage.sort_order))
             .filter(ChatMessage.session_id == session_id)
@@ -254,8 +300,9 @@ class ChatTurnService:
             follow_up_questions=follow_up_questions,
         )
 
-        try:
-            token_service.deduct_for_chat(
+        token_service.record_transaction(user_id, reservation.amount, "chat_release", db, commit=False,
+            related_entity_type="chat_turn", related_entity_id=turn_id)
+        deducted = token_service.deduct_for_chat(
                 user_id,
                 tokens_used,
                 db,
@@ -264,9 +311,11 @@ class ChatTurnService:
                 input_tokens=int(model_metadata.get("input_tokens")) if model_metadata and model_metadata.get("input_tokens") is not None else None,
                 output_tokens=int(model_metadata.get("output_tokens")) if model_metadata and model_metadata.get("output_tokens") is not None else None,
                 commit=False,
-            )
-        except Exception:
-            logger.warning("Failed to deduct chat tokens for user_id=%s", user_id, exc_info=True)
+        )
+        if not deducted:
+            db.rollback()
+            raise RuntimeError("Chat settlement could not be committed")
+        reservation.settled = True
 
         update_session_after_messages(db, session_id)
         self._set_turn_state(
@@ -294,6 +343,16 @@ class ChatTurnService:
         }
 
     def _fail_turn(self, db: Session, turn_id: int, error_message: str) -> Dict[str, Any]:
+        db.rollback()
+        turn = db.get(ChatTurn, turn_id)
+        if turn is not None:
+            db.execute(text("UPDATE users SET id=id WHERE id=:id"), {"id": turn.user_id})
+            db.refresh(turn)
+        reservation = db.get(ChatReservation, turn_id, populate_existing=True)
+        if reservation and not reservation.settled:
+            token_service.record_transaction(reservation.user_id, reservation.amount, "chat_release", db,
+                commit=False, related_entity_type="chat_turn", related_entity_id=turn_id)
+            reservation.settled = True
         self._set_turn_state(
             db,
             turn_id,
@@ -328,6 +387,12 @@ class ChatTurnService:
         final_payload: Optional[Dict[str, Any]] = None
 
         try:
+            reservation = db.get(ChatReservation, turn_id)
+            if reservation is None or reservation.settled:
+                raise RuntimeError("Chat turn has no active reservation")
+            context = dict(context or {})
+            context["max_llm_tokens"] = reservation.amount * token_service.LLM_TOKENS_PER_PLATFORM_TOKEN
+            db.commit()
             stream = get_chat_service().chat_stream(messages, user_id=user_id, db=db, context=context)
             for raw_event in stream:
                 payload = _parse_sse_event(raw_event)

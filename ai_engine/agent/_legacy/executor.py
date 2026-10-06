@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from dataclasses import replace
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from typing import Any, Optional
 
@@ -107,10 +108,22 @@ class ToolExecutor:
             )
 
         # 3. Execute with timeout
+        if not ctx.budget.consume():
+            return ToolResult(ok=False, error={"code": "TOOL_BUDGET_EXCEEDED", "message": "Tool call budget exhausted."})
         timeout_s = ctx.time_budget_ms / 1000.0 if ctx.time_budget_ms else self.default_timeout_ms / 1000.0
 
+        # Never share the request's SQLAlchemy Session with parallel tool threads.
+        # The worker owns and closes its session, including after a timeout.
+        bind = ctx.db.get_bind() if ctx.db is not None else None
+        def invoke():
+            if bind is None:
+                return tool.execute(ctx, **kwargs)
+            from sqlalchemy.orm import Session
+            with Session(bind=bind) as tool_db:
+                return tool.execute(replace(ctx, db=tool_db), **kwargs)
+
         try:
-            future = _THREAD_POOL.submit(tool.execute, ctx, **kwargs)
+            future = _THREAD_POOL.submit(invoke)
             result: ToolResult = future.result(timeout=timeout_s)
         except FuturesTimeoutError:
             elapsed_ms = (time.monotonic() - start) * 1000
@@ -239,5 +252,4 @@ class SkillExecutor:
             len(getattr(result, "steps", [])),
         )
         return result
-
 

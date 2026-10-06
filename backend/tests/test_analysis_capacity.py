@@ -28,6 +28,12 @@ from services import analysis_service, data_cache, report_service, token_service
 from services.analysis_executor import AnalysisExecutor, AnalysisQueueFull
 
 
+COMPLETE_REPORTS = {key: "Synthetic persisted report" for key in (
+    "market_report", "sentiment_report", "fundamentals_report", "technical_report",
+    "sec_report", "valuation_report", "trader_investment_plan",
+)}
+
+
 @pytest.fixture
 def runtime(tmp_path, monkeypatch, request):
     engine = create_engine(f"sqlite:///{tmp_path / 'app.sqlite'}", connect_args={"check_same_thread": False})
@@ -77,7 +83,7 @@ def runtime(tmp_path, monkeypatch, request):
             if ticker in rt.streams:
                 yield from rt.streams[ticker]()
             else:
-                yield {}
+                yield dict(COMPLETE_REPORTS)
 
         def close(self):
             rt.closed.append(self.number)
@@ -106,7 +112,7 @@ def runtime(tmp_path, monkeypatch, request):
         def stream():
             entered.set()
             assert release.wait(10), "Test did not release blocked analysis"
-            yield {}
+            yield dict(COMPLETE_REPORTS)
         rt.streams[ticker] = stream
         return entered, release
 
@@ -205,7 +211,7 @@ def test_service_instances_share_process_capacity(runtime, monkeypatch, tmp_path
 
 def test_report_and_completion_callback_survive_state_cleanup(runtime):
     rt = runtime
-    rt.streams["REPORT"] = lambda: iter([{"market_report": "Persisted analysis result", "market_score": 4}])
+    rt.streams["REPORT"] = lambda: iter([{**COMPLETE_REPORTS, "market_report": "Persisted analysis result", "market_score": 4}])
     completed = []
     def callback(chunk, info):
         if chunk.get("type") == "completed":
@@ -423,3 +429,32 @@ def test_default_queue_accepts_large_batch_with_only_five_active(monkeypatch, qu
     finally:
         release.set()
         executor.shutdown(wait=True)
+
+
+def test_empty_graph_fails_refunds_and_preserves_terminal_status(runtime):
+    rt = runtime
+    rt.streams["EMPTY"] = lambda: iter([{}])
+    run_id = rt.start("EMPTY", charged=True)
+    rt.executor.shutdown(wait=True)
+    assert rt.execution(run_id)[0] == "failed"
+    assert rt.refunds(run_id) == [token_service.COST_PER_ANALYSIS]
+    assert rt.service.get_analysis_status(run_id)["status"] == "error"
+
+
+def test_report_persistence_failure_cannot_complete_a_paid_analysis(runtime, monkeypatch):
+    rt = runtime
+    monkeypatch.setattr(analysis_service, 'save_report', lambda *a, **kw: None)
+    run_id = rt.start("UNSAVED", charged=True)
+    rt.executor.shutdown(wait=True)
+    assert rt.execution(run_id)[0] == "failed"
+    assert rt.refunds(run_id) == [token_service.COST_PER_ANALYSIS]
+
+
+def test_durable_deduplication_across_service_instances(runtime, tmp_path):
+    rt = runtime
+    entered, release = rt.block("SHARED")
+    first = rt.start("SHARED")
+    assert entered.wait(5)
+    second = analysis_service.AnalysisService(str(tmp_path / "second"), executor=rt.executor)
+    assert second.start_analysis("SHARED", "2026-10-05", rt.record("SHARED")) == (first, True)
+    release.set()

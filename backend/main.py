@@ -58,6 +58,7 @@ from services.edgar_service import get_edgar_service
 # Holds the OS-level lock that elects a single scheduler-owning worker.
 # Kept at module scope so the flock is held for the entire process lifetime.
 _scheduler_lock_handle = None
+_runtime_lock_handle = None
 
 
 def _acquire_scheduler_leadership() -> bool:
@@ -103,6 +104,12 @@ def _acquire_scheduler_leadership() -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize DB and start optional daily sync and market overview cache refresh."""
+    from auth import validate_auth_configuration
+    validate_auth_configuration()
+    from database import engine
+    from services.runtime_lock import acquire_runtime_lock
+    global _runtime_lock_handle
+    _runtime_lock_handle = acquire_runtime_lock(engine)
     # asyncio.to_thread() otherwise shares Python's default executor, sized
     # min(32, cpu_count+4) -- only 6 threads on prod's 2-CPU box. That's not
     # enough headroom for the app's ~45 to_thread call sites (vendor HTTP
@@ -118,6 +125,15 @@ async def lifespan(app: FastAPI):
     init_db()
     from services.data_cache import ensure_data_cache
     ensure_data_cache()
+    from services.execution_recovery import recover_interrupted_work, reconcile_failed_charges
+    recover_interrupted_work()
+    # Financial reconciliation is required independently of optional content schedulers.
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from services.paypal_service import reconcile_payments
+    recovery_scheduler = BackgroundScheduler()
+    recovery_scheduler.add_job(reconcile_payments, 'interval', minutes=2, max_instances=1)
+    recovery_scheduler.add_job(reconcile_failed_charges, 'interval', minutes=2, max_instances=1)
+    recovery_scheduler.start()
     scheduler = None
     is_scheduler_leader = _acquire_scheduler_leadership()
     if is_scheduler_leader:
@@ -357,6 +373,7 @@ async def lifespan(app: FastAPI):
         shutdown_analysis_executor()
     close_yf_session()
     io_executor.shutdown(wait=False)
+    recovery_scheduler.shutdown(wait=False)
 
 
 app = FastAPI(

@@ -47,13 +47,13 @@ class UserContextTool(BaseTool):
 
     spec = _USER_CONTEXT_SPEC
 
-    def __init__(self, user_id: int, db: Any) -> None:
+    def __init__(self, user_id: Optional[int] = None, db: Any = None) -> None:
         self._user_id = user_id
         self._db = db
 
     def execute(self, ctx: ExecutionContext, **_) -> ToolResult:
         try:
-            result = _get_user_context(self._user_id, self._db)
+            result = _get_user_context((ctx.user_id if ctx.user_id is not None else self._user_id), (ctx.db if ctx.db is not None else self._db))
             return ToolResult(ok=True, data=result)
         except Exception as exc:
             logger.exception("UserContextTool error: %s", exc)
@@ -102,13 +102,13 @@ class UserSubscriptionsTool(BaseTool):
 
     spec = _USER_SUBSCRIPTIONS_SPEC
 
-    def __init__(self, user_id: int, db: Any) -> None:
+    def __init__(self, user_id: Optional[int] = None, db: Any = None) -> None:
         self._user_id = user_id
         self._db = db
 
     def execute(self, ctx: ExecutionContext, **_) -> ToolResult:
         try:
-            result = _get_user_subscriptions(self._user_id, self._db)
+            result = _get_user_subscriptions((ctx.user_id if ctx.user_id is not None else self._user_id), (ctx.db if ctx.db is not None else self._db))
             return ToolResult(ok=True, data=result)
         except Exception as exc:
             logger.exception("UserSubscriptionsTool error: %s", exc)
@@ -170,13 +170,13 @@ class PortfolioOverviewTool(BaseTool):
 
     spec = _PORTFOLIO_OVERVIEW_SPEC
 
-    def __init__(self, user_id: int, db: Any) -> None:
+    def __init__(self, user_id: Optional[int] = None, db: Any = None) -> None:
         self._user_id = user_id
         self._db = db
 
     def execute(self, ctx: ExecutionContext, **_) -> ToolResult:
         try:
-            result = _get_portfolio_overview(self._user_id, self._db)
+            result = _get_portfolio_overview((ctx.user_id if ctx.user_id is not None else self._user_id), (ctx.db if ctx.db is not None else self._db))
             return ToolResult(ok=True, data=result)
         except Exception as exc:
             logger.exception("PortfolioOverviewTool error: %s", exc)
@@ -294,7 +294,7 @@ class UpdateUserMemoryTool(BaseTool):
 
     spec = _UPDATE_USER_MEMORY_SPEC
 
-    def __init__(self, user_id: int, db: Any) -> None:
+    def __init__(self, user_id: Optional[int] = None, db: Any = None) -> None:
         self._user_id = user_id
         self._db = db
 
@@ -303,7 +303,7 @@ class UpdateUserMemoryTool(BaseTool):
             memory_note = kwargs.get("memory_note", "")
             if not memory_note:
                 return ToolResult(ok=False, error={"code": "MISSING_PARAM", "message": "memory_note is required"})
-            result = _update_user_memory(self._user_id, self._db, memory_note)
+            result = _update_user_memory((ctx.user_id if ctx.user_id is not None else self._user_id), (ctx.db if ctx.db is not None else self._db), memory_note)
             return ToolResult(ok=True, data=result)
         except Exception as exc:
             logger.exception("UpdateUserMemoryTool error: %s", exc)

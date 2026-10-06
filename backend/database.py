@@ -42,6 +42,7 @@ if _is_sqlite:
         cursor = dbapi_conn.cursor()
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -65,6 +66,8 @@ def init_db() -> None:
         WatchlistUpdate,
     )
     Base.metadata.create_all(bind=engine)
+    from schema_migrations import migrate
+    migrate(engine)
 
     # Ensure performance-critical indexes exist on the live DB.
     # CREATE INDEX IF NOT EXISTS is idempotent — safe to run on every startup.

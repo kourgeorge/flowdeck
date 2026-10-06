@@ -67,7 +67,7 @@ def register(email: str, password: str, db: Session) -> Tuple[str, int, str]:
         send_welcome_email(user.email)
     except Exception:
         pass
-    token = create_access_token(str(user.id))
+    token = create_access_token(user.auth_subject)
     return token, user.id, user.email
 
 
@@ -80,7 +80,7 @@ def login(email: str, password: str, db: Session) -> Tuple[str, int, str]:
     user = db.query(User).filter(User.email == email).first()
     if not user or not user.hashed_password or not verify_password(password, user.hashed_password):
         raise AuthError(401, "Invalid email or password")
-    token = create_access_token(str(user.id))
+    token = create_access_token(user.auth_subject)
     return token, user.id, user.email
 
 
@@ -143,7 +143,7 @@ def google_callback(
         "redirect_uri": redirect_uri,
         "grant_type": "authorization_code",
     }
-    token_response = http_requests.post(token_url, data=token_data)
+    token_response = http_requests.post(token_url, data=token_data, timeout=30)
     token_response.raise_for_status()
     tokens = token_response.json()
     id_token_jwt = tokens.get("id_token")
@@ -161,10 +161,14 @@ def google_callback(
     name = id_info.get("name")
     if not email:
         raise AuthError(400, "Email not provided by Google")
+    if id_info.get("email_verified") is not True:
+        raise AuthError(400, "Google email is not verified")
 
     user = db.query(User).filter(User.email == email).first()
     is_new_user = False
     if user:
+        if user.google_id and user.google_id != google_user_id:
+            raise AuthError(409, "Google identity does not match this account")
         if not user.google_id:
             user.google_id = google_user_id
             db.commit()
@@ -194,5 +198,5 @@ def google_callback(
         except Exception:
             pass
 
-    token = create_access_token(str(user.id))
+    token = create_access_token(user.auth_subject)
     return user, token, is_new_user

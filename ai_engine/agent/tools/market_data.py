@@ -64,7 +64,7 @@ _HISTORICAL_PRICES_SPEC = ToolSpec(
         "Use this — instead of get_ticker_data — whenever the user asks about price history beyond the last 30 days: "
         "e.g. year-to-date performance, 1-year or multi-year returns, correlation between two stocks over a year, "
         "historical volatility, drawdown analysis, or any calculation that requires more than 30 days of price data. "
-        "After fetching, pass the CSV to execute_python for calculations."
+        "Use the returned CSV as the source for price analysis."
     ),
     input_schema={
         "type": "object",
@@ -283,6 +283,5 @@ class SpecificIndicatorTool(BaseTool):
             return ToolResult(ok=True, data=result)
         except Exception as exc:
             return ToolResult(ok=False, error={"code": "TOOL_ERROR", "message": str(exc)})
-
 
 

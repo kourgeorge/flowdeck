@@ -24,10 +24,12 @@ class CreatePaymentResponse(BaseModel):
 async def create_payment(
     body: CreatePaymentRequest,
     current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """Create a PayPal payment."""
     try:
-        result = paypal_service.create_payment(current_user.id, body.package_id)
+        import asyncio
+        result = await asyncio.to_thread(paypal_service.create_payment, current_user.id, body.package_id, db)
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -44,8 +46,11 @@ async def execute_payment(
 ):
     """Execute PayPal payment and credit tokens."""
     try:
-        result = paypal_service.execute_payment(payment_id, payer_id, db)
+        import asyncio
+        result = await asyncio.to_thread(paypal_service.execute_payment, payment_id, payer_id, db, user_id=current_user.id)
         return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to execute payment: {str(e)}")
 
@@ -54,5 +59,4 @@ async def execute_payment(
 async def get_packages():
     """Get available token packages."""
     return paypal_service.get_packages()
-
 

@@ -32,7 +32,7 @@ _MULTI_HISTORICAL_PRICES_SPEC = ToolSpec(
         "comparing performance of multiple stocks, "
         "normalized performance charts (e.g. US vs Israeli market indices), "
         "or any multi-ticker return calculation. "
-        "After fetching, pass the JSON to execute_python for calculations and chart generation. "
+        "Use the returned prices for comparisons and chart generation. "
         "IMPORTANT: Always use this tool with REAL date ranges — never simulate or estimate returns."
     ),
     input_schema={
@@ -114,30 +114,25 @@ def _fetch_multi_historical_prices(
     if start_dt < max_start:
         start_dt = max_start
 
-    if start_dt >= end_dt:
-        return "Error: start_date must be before end_date."
+    if start_dt > end_dt:
+        return "Error: start_date must be on or before end_date."
 
-    tickers_upper = [t.strip().upper() for t in tickers[:20]]
+    tickers_upper = list(dict.fromkeys(t.strip().upper() for t in tickers))
+    if len(tickers_upper) > 20:
+        return "Error: at most 20 distinct tickers are supported per request."
     results: dict[str, str] = {}
     errors: dict[str, str] = {}
 
     for ticker in tickers_upper:
         try:
-            raw = get_ticker_data(ticker, start_dt.isoformat(), end_dt.isoformat())
+            raw = get_ticker_data(ticker, start_dt.isoformat(), (end_dt + datetime.timedelta(days=1)).isoformat())
             if not raw or not raw.strip():
                 errors[ticker] = f"No data found between {start_dt} and {end_dt}"
                 continue
             # Parse CSV, keep Date and Close, output CSV
-            reader = csv.DictReader(io.StringIO(raw))
-            rows = []
-            for row in reader:
-                date_val = row.get("Date", row.get("date", ""))
-                close_val = row.get("Close", row.get("close", ""))
-                if date_val and close_val:
-                    try:
-                        rows.append({"Date": str(date_val)[:10], "Close": round(float(close_val), 4)})
-                    except (ValueError, TypeError):
-                        pass
+            from ai_engine.price_series import parse_daily_closes
+            rows = [row for row in parse_daily_closes(raw)
+                    if start_dt.isoformat() <= row['Date'] <= end_dt.isoformat()]
             if not rows:
                 errors[ticker] = f"No valid rows between {start_dt} and {end_dt}"
                 continue
@@ -163,4 +158,3 @@ def _fetch_multi_historical_prices(
     }
 
     return json.dumps(output)
-

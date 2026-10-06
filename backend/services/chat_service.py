@@ -187,9 +187,9 @@ Always use **Yahoo Finance ticker symbols** when calling any tool that accepts a
 9. Call `get_global_news` for macro/market-wide news and trends.
 10. Call `get_insider_transactions` or `get_insider_sentiment` for insider trading activity.
 11. Call `web_search` to find breaking news, recent earnings, analyst upgrades/downgrades, regulatory filings, macroeconomic data releases, or any information not covered by the other tools. Use it for general financial questions or when you need the latest web information.
-12. Call `get_historical_prices` to fetch real daily OHLCV price data for a **single ticker** over a custom date range (up to 5 years). Use this — NOT simulation — whenever the user asks about year-to-date performance, 1-year returns, multi-year price history, historical volatility, or any analysis requiring more than 30 days of price data for one ticker. Always fetch real data first, then pass the CSV to `execute_python` for calculations.
-13. **Call `get_multi_historical_prices`** to fetch real closing prices for **multiple tickers at once** — use this whenever the user asks about: comparing two or more markets/stocks over a period (e.g. US vs Israeli market), top gainers/losers in a portfolio, normalized performance charts, or any multi-ticker return calculation. This is far more efficient than calling `get_historical_prices` repeatedly. After fetching, pass the JSON to `execute_python` for calculations and chart generation.
-14. Call `execute_python` to run calculations, financial modelling, statistical analysis, or data transformations where code gives a more precise answer than reasoning alone. Always use print() to output results. When working with price data from `get_historical_prices`, parse the CSV using the `csv` or `io` module (pandas is also available). When working with data from `get_multi_historical_prices`, parse the JSON using the `json` module.
+12. Call `get_historical_prices` to fetch real daily OHLCV price data for a **single ticker** over a custom date range (up to 5 years). Use this — NOT simulation — whenever the user asks about year-to-date performance, 1-year returns, multi-year price history, historical volatility, or any analysis requiring more than 30 days of price data for one ticker. Use the compare_stocks skill for deterministic period-return calculations.
+13. **Call `get_multi_historical_prices`** to fetch real closing prices for **multiple tickers at once** — use this whenever the user asks about: comparing two or more markets/stocks over a period (e.g. US vs Israeli market), top gainers/losers in a portfolio, normalized performance charts, or any multi-ticker return calculation. This is far more efficient than calling `get_historical_prices` repeatedly. Use the compare_stocks skill for deterministic returns and charts.
+14. Arbitrary Python execution is unavailable. Use the available deterministic tools and skills for calculations.
 15. **Research thoroughly:** call multiple tools in sequence (and, for research questions, multiple searches with different queries) to build the best possible answer. Prefer doing several tool rounds over answering from a single result when the topic warrants it.{user_ctx_section}{watchlist_section}
 
 ## When to Reuse vs When to Call Again
@@ -244,7 +244,7 @@ Rules:
 - Output the CHART_JSON line **bare** — not inside a code block, not wrapped in backticks.
 - You may write explanatory text before or after the CHART_JSON line.
 - When you already have the data (e.g. from get_historical_prices), output CHART_JSON directly — do NOT call execute_python just to produce a chart.
-- When you need to compute derived data first (e.g. rolling averages, correlations), call execute_python and have it print the CHART_JSON line.
+- Only chart values supported by retrieved data or deterministic tools; do not invent unavailable derived calculations.
 - **ALWAYS adapt the Y-axis range** to fit the data appropriately:
   - For percentage returns or changes: set appropriate min/max based on the data range (e.g., -10 to 30 for returns between -8% and 25%)
   - For prices: start Y-axis near the minimum price (with small padding) rather than zero
@@ -367,6 +367,7 @@ class ChatService:
             db=db,
             system_prompt=system_prompt,
             max_tool_calls=15,
+                max_llm_tokens=(context or {}).get("max_llm_tokens", 200000),
         )
         raw_reply = result.get("reply", "")
         follow_ups, cleaned_reply = _extract_follow_ups(raw_reply)
@@ -430,6 +431,7 @@ class ChatService:
                 db=db,
                 system_prompt=system_prompt,
                 max_tool_calls=15,
+                max_llm_tokens=(context or {}).get("max_llm_tokens", 200000),
             ):
                 # For token events: forward to client immediately so UI streams, then line-buffer for chart/follow_up extraction
                 if '"type":"token"' in event or '"type": "token"' in event:
@@ -467,8 +469,6 @@ class ChatService:
                             fu_remainder, cleaned_remainder = _extract_follow_ups(reply_buffer)
                             if fu_remainder:
                                 follow_ups_list = fu_remainder
-                            if cleaned_remainder.strip():
-                                yield f"data: {json.dumps({'type': 'token', 'content': cleaned_remainder.strip()})}\n\n"
                             payload = json.loads(event.removeprefix("data: ").strip())
                             payload["follow_up_questions"] = follow_ups_list
                             yield f"data: {json.dumps(payload)}\n\n"

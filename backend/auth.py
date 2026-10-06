@@ -1,6 +1,7 @@
 """JWT authentication utilities."""
 
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -14,7 +15,16 @@ from database import get_db
 from models.db_models import User
 
 # Secret for JWT signing. In production, use a strong env var.
-JWT_SECRET = os.environ.get("JWT_SECRET", "flowdeck-dev-secret-change-in-production")
+JWT_SECRET = os.environ.get("JWT_SECRET", "").strip()
+if not JWT_SECRET and os.environ.get("FLOWDECK_ENV") == "development":
+    JWT_SECRET = secrets.token_urlsafe(48)  # ephemeral development sessions
+
+
+def validate_auth_configuration() -> None:
+    if len(JWT_SECRET) < 32 or JWT_SECRET in {
+        "flowdeck-dev-secret-change-in-production", "your-secret-key-change-in-production"
+    }:
+        raise RuntimeError("Set JWT_SECRET to a strong random secret of at least 32 characters")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
@@ -30,12 +40,14 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_access_token(subject: str) -> str:
+    validate_auth_configuration()
     expire = datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRE_MINUTES)
     to_encode = {"sub": subject, "exp": expire}
     return jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
 def decode_token(token: str) -> Optional[str]:
+    validate_auth_configuration()
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         return payload.get("sub")
@@ -71,22 +83,21 @@ def get_current_user_optional(
         if api_key.expires_at and api_key.expires_at < datetime.utcnow():
             return None
         
+        user = db.query(User).filter(User.id == api_key.user_id).first()
+        if not user or not api_key.user_subject or api_key.user_subject != user.auth_subject:
+            return None
         # Update last_used_at
         api_key.last_used_at = datetime.utcnow()
         db.commit()
         
         # Return the user associated with this API key
-        return db.query(User).filter(User.id == api_key.user_id).first()
+        return user
     
     # Otherwise, treat as JWT token
     sub = decode_token(token)
     if not sub:
         return None
-    try:
-        user_id = int(sub)
-    except ValueError:
-        return None
-    return db.query(User).filter(User.id == user_id).first()
+    return db.query(User).filter(User.auth_subject == sub).first()
 
 
 def get_current_user(

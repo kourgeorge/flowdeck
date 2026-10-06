@@ -171,7 +171,16 @@ function buildAnalystHistoryPoints(points: HistoricalPriceEntry[] | null | undef
   return Array.from(monthlyPoints.values()).slice(-6);
 }
 
-export default function StockDetailPanel({ ticker, prefetchedData, onSubscriptionChange }: StockDetailPanelProps) {
+export default function StockDetailPanel(props: StockDetailPanelProps) {
+  const { user } = useAuth();
+  const ticker = props.ticker.toUpperCase();
+  const prefetchedData = props.prefetchedData?.ticker.toUpperCase() === ticker ? props.prefetchedData : null;
+  // Each ticker/account owns its state and async effects. Previous responses
+  // target an unmounted component, never the newly selected ticker's state.
+  return <StockDetailPanelBody key={`${user?.userId ?? 'guest'}:${ticker}`} {...props} ticker={ticker} prefetchedData={prefetchedData} />;
+}
+
+function StockDetailPanelBody({ ticker, prefetchedData, onSubscriptionChange }: StockDetailPanelProps) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();

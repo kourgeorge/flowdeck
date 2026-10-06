@@ -74,6 +74,7 @@ class TestAuthService(unittest.TestCase):
         fake_id_token.verify_oauth2_token = lambda *args, **kwargs: {
             "sub": "google-user-123",
             "email": "googleuser@example.com",
+            "email_verified": True,
             "name": "Google User",
         }
 

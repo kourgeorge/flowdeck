@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test:ownership": "node scripts/check-request-ownership.cjs",
     "dev": "vite",
     "generate:sitemap": "node scripts/generate-sitemap.mjs",
     "build": "node scripts/generate-sitemap.mjs && tsc && vite build && npm run prerender",

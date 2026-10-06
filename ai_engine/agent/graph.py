@@ -52,6 +52,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from ai_engine.agent.state import AgentState
+from ai_engine.agent.llm_budget import LLMBudgetExceeded
 
 logger = logging.getLogger(__name__)
 
@@ -571,7 +572,7 @@ def route_after_skill_router(state: AgentState) -> Literal["skill_node", "react_
 # Node: skill_node
 # ---------------------------------------------------------------------------
 
-def skill_node(state: AgentState) -> Dict[str, Any]:
+def skill_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
     """
     Run the matched skill's sequential workflow.
 
@@ -616,7 +617,7 @@ def skill_node(state: AgentState) -> Dict[str, Any]:
         logger.warning("skill_node | skill '%s' not found, falling back", skill_name)
         return {"skill_used": None}
 
-    ctx = ExecutionContext(user_id=user_id, db=db, max_tool_calls=max_tool_calls)
+    ctx = config["configurable"]["execution_context"]
 
     from ai_engine.agent.executor import SkillExecutor
     skill_executor = SkillExecutor(tool_executor=tool_executor)
@@ -736,7 +737,13 @@ def build_graph(tools: list) -> Any:
     Returns:
         A compiled LangGraph graph (CompiledStateGraph).
     """
-    tool_node = ToolNode(tools)
+    raw_tool_node = ToolNode(tools)
+
+    def tool_node(state: AgentState, config: RunnableConfig):
+        result = raw_tool_node.invoke(state, config)
+        ctx = config["configurable"]["execution_context"]
+        result["tool_calls_made"] = ctx.budget.used
+        return result
 
     graph = StateGraph(AgentState)
 
@@ -869,6 +876,8 @@ def _invoke_llm_with_streaming(
             record_usage_from_message(merged, llm, usage_list)
             return result
         except Exception as exc:
+            if isinstance(exc, LLMBudgetExceeded):
+                raise
             logger.warning("LLM stream failed, using invoke fallback: %s", exc)
             if tools:
                 try:
@@ -910,7 +919,7 @@ def _call_model_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any
     messages = list(state.get("messages", []))
 
     # Enforce max_tool_calls budget
-    tool_calls_made = state.get("tool_calls_made", 0)
+    tool_calls_made = cfg["execution_context"].budget.used
     max_tool_calls = state.get("max_tool_calls", 15)
 
     if tool_calls_made >= max_tool_calls:
@@ -919,7 +928,7 @@ def _call_model_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any
     else:
         response = _invoke_llm_with_streaming(llm, messages, tools or [], token_queue=token_queue, usage_list=usage_list)
 
-    return {"messages": [response]}
+    return {"messages": [response], "tool_calls_made": tool_calls_made}
 
 
 def _route_after_call_model(
@@ -975,12 +984,14 @@ class FlowDeckAgent:
         db: Any,
         system_prompt: str,
         max_tool_calls: int,
+        max_llm_tokens: int = 200000,
     ) -> RunnableConfig:
         """Build the RunnableConfig for a request."""
         from ai_engine.agent.tool import ExecutionContext
+        from ai_engine.agent.llm_budget import BudgetedLLM
         return {
             "configurable": {
-                "llm": self.llm,
+                "llm": BudgetedLLM(self.llm, max_llm_tokens),
                 "tools": tools,
                 "execution_context": ExecutionContext(
                     user_id=user_id,
@@ -1052,6 +1063,7 @@ class FlowDeckAgent:
         db: Any = None,
         system_prompt: str = "",
         max_tool_calls: int = 15,
+        max_llm_tokens: int = 200000,
     ) -> Dict[str, Any]:
         """
         Run a full agent turn (blocking).
@@ -1062,7 +1074,7 @@ class FlowDeckAgent:
         from ai_engine.agent.lc_tools import get_all_lc_tools
         tools = get_all_lc_tools(user_id=user_id, db=db)
         graph = self._get_graph(tools)
-        config = self._make_config(tools, user_id, db, system_prompt, max_tool_calls)
+        config = self._make_config(tools, user_id, db, system_prompt, max_tool_calls, max_llm_tokens)
         initial_state = self._make_initial_state(messages, user_id, db, system_prompt, max_tool_calls)
 
         try:
@@ -1108,6 +1120,7 @@ class FlowDeckAgent:
         db: Any = None,
         system_prompt: str = "",
         max_tool_calls: int = 15,
+        max_llm_tokens: int = 200000,
     ) -> Generator[str, None, None]:
         """
         Run a full agent turn and yield SSE events.
@@ -1129,7 +1142,7 @@ class FlowDeckAgent:
         from ai_engine.agent.lc_tools import get_all_lc_tools
         tools = get_all_lc_tools(user_id=user_id, db=db)
         graph = self._get_graph(tools)
-        config = self._make_config(tools, user_id, db, system_prompt, max_tool_calls)
+        config = self._make_config(tools, user_id, db, system_prompt, max_tool_calls, max_llm_tokens)
         initial_state = self._make_initial_state(messages, user_id, db, system_prompt, max_tool_calls)
 
         event_queue: queue.Queue = queue.Queue()
@@ -1258,4 +1271,3 @@ class FlowDeckAgent:
         except Exception as exc:
             logger.exception("FlowDeckAgent.stream | error | user_id=%s | %s", user_id, exc)
             yield f"data: {json.dumps({'type': 'error', 'content': str(exc)})}\n\n"
-

@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
-from models.db_models import ApiKey
+from models.db_models import ApiKey, User
 
 
 class ApiKeyNotFoundError(Exception):
@@ -26,6 +26,7 @@ def create(
     key_prefix = full_key[:16]
     api_key = ApiKey(
         user_id=user_id,
+        user_subject=db.get(User, user_id).auth_subject,
         key_hash=key_hash,
         key_prefix=key_prefix,
         name=name.strip(),
@@ -71,6 +72,8 @@ def set_active(db: Session, key_id: int, user_id: int, active: bool) -> ApiKey:
     api_key = get_by_id_for_user(db, key_id, user_id)
     if not api_key:
         raise ApiKeyNotFoundError("API key not found")
+    if active and not api_key.user_subject:
+        raise ApiKeyNotFoundError("Legacy key was revoked; create a new API key")
     api_key.is_active = active
     db.commit()
     db.refresh(api_key)

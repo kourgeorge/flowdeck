@@ -14,15 +14,24 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
+from sqlalchemy import event, text
 import secrets
 
 from database import Base
+
+
+class EntitySequence(Base):
+    """Persistent high-water marks for identities retained in the transaction ledger."""
+    __tablename__ = "entity_sequences"
+    name = Column(String(64), primary_key=True)
+    last_id = Column(Integer, nullable=False, default=0)
 
 
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    auth_subject = Column(String(64), nullable=False, unique=True, default=lambda: secrets.token_urlsafe(32))
     email = Column(String(255), unique=True, nullable=False, index=True)
     name = Column(String(255), nullable=True)
     hashed_password = Column(String(255), nullable=True)  # Nullable for Google OAuth users
@@ -199,6 +208,7 @@ class ApiKey(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_subject = Column(String(64), nullable=True)
     key_hash = Column(String(255), unique=True, nullable=False, index=True)  # SHA256 hash of the key
     key_prefix = Column(String(16), nullable=False)  # First 8 chars for display (e.g., "fd_live_12345678")
     name = Column(String(255), nullable=False)  # User-friendly name (e.g., "Production Bot", "Dev Testing")
@@ -243,6 +253,7 @@ class Usage(Base):
     __tablename__ = "usage"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    operation_key = Column(String(255), nullable=True, unique=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     
     # Platform tokens (what users see and spend)
@@ -272,6 +283,43 @@ class Usage(Base):
         Index("idx_token_tx_related_entity", "related_entity_type", "related_entity_id"),
     )
 
+
+
+class OAuthState(Base):
+    __tablename__ = "oauth_states"
+    nonce_hash = Column(String(64), primary_key=True)
+    expires_at = Column(DateTime, nullable=False)
+
+
+class PaymentOrder(Base):
+    __tablename__ = "payment_orders"
+    payment_id = Column(String(255), primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    package_id = Column(String(32), nullable=False)
+    tokens = Column(Integer, nullable=False)
+    amount = Column(String(32), nullable=False)
+    currency = Column(String(3), nullable=False, default="USD")
+    status = Column(String(32), nullable=False, default="created")
+    payer_id = Column(String(255), nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ChatReservation(Base):
+    __tablename__ = "chat_reservations"
+    turn_id = Column(Integer, ForeignKey("chat_turns.id", ondelete="CASCADE"), primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    amount = Column(Integer, nullable=False)
+    settled = Column(Boolean, nullable=False, default=False)
+
+
+class AnalysisJob(Base):
+    __tablename__ = "analysis_jobs"
+    execution_id = Column(Integer, ForeignKey("executions.id", ondelete="CASCADE"), primary_key=True)
+    active_key = Column(String(255), nullable=True, unique=True)
+    parameters_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
 
 class WatchlistUpdate(Base):
@@ -341,3 +389,36 @@ class UserSchedule(Base):
         UniqueConstraint("user_id", "schedule_type", name="uq_user_schedule_user_type"),
         Index("idx_user_schedules_type_enabled", "schedule_type", "enabled"),
     )
+
+
+def _allocate_persistent_id(_mapper, connection, target):
+    """Allocate under SQLite's writer lock, including deleted IDs in legacy ledgers.
+
+    Existing SQLite tables do not have AUTOINCREMENT. A separate high-water mark
+    avoids a destructive table rebuild and prevents deleted entities from sharing
+    an idempotency key or historical usage with newly created entities.
+    """
+    if connection.dialect.name != "sqlite":
+        return
+    table = target.__tablename__  # Fixed ORM names, never request input.
+    kind = {"executions": "execution", "chat_messages": "chat_message",
+            "chat_turns": "chat_turn"}.get(table, "")
+    connection.execute(text(
+        "INSERT INTO entity_sequences(name, last_id) VALUES (:name, 0) "
+        "ON CONFLICT(name) DO NOTHING"
+    ), {"name": table})
+    allocated = connection.execute(text(f"""
+        UPDATE entity_sequences
+        SET last_id = MAX(last_id, :explicit_id,
+            COALESCE((SELECT MAX(id) FROM "{table}"), 0),
+            COALESCE((SELECT MAX(related_entity_id) FROM usage
+                      WHERE related_entity_type=:kind), 0)) + :increment
+        WHERE name=:name RETURNING last_id
+    """), {"name": table, "kind": kind, "explicit_id": target.id or 0,
+           "increment": 1 if target.id is None else 0}).scalar_one()
+    if target.id is None:
+        target.id = allocated
+
+
+for _entity in (User, Execution, ChatSession, ChatMessage, ChatTurn):
+    event.listen(_entity, "before_insert", _allocate_persistent_id)

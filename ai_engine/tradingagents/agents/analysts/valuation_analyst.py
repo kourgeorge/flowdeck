@@ -3,7 +3,7 @@ Valuation Analyst - Multi-method fair value analysis with scenario modeling.
 """
 
 import logging
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -117,10 +117,10 @@ class ValuationSensitivityRange(BaseModel):
 
 
 class ValuationSensitivity(BaseModel):
-    fcf_growth_rate: ValuationSensitivityRange
-    wacc: ValuationSensitivityRange
-    terminal_growth: ValuationSensitivityRange
-    exit_multiple: ValuationSensitivityRange
+    fcf_growth_rate: Optional[ValuationSensitivityRange] = None
+    wacc: Optional[ValuationSensitivityRange] = None
+    terminal_growth: Optional[ValuationSensitivityRange] = None
+    exit_multiple: Optional[ValuationSensitivityRange] = None
 
 
 class ValuationAnalysisOutput(BaseModel):

@@ -85,8 +85,8 @@ def test_no_orphan_component_schemas():
 
 
 def test_public_surface_size():
-    assert len(SCHEMA["paths"]) == 76
-    assert sum(len(ops) for ops in SCHEMA["paths"].values()) == 83
+    assert len(SCHEMA["paths"]) == 77
+    assert sum(len(ops) for ops in SCHEMA["paths"].values()) == 85
 
 
 def test_optional_and_required_auth_partition():
@@ -103,7 +103,7 @@ def test_optional_and_required_auth_partition():
             assert sec == [{"HTTPBearer": []}]
             required += 1
     assert optional == 7
-    assert required == 39
+    assert required == 41
 
 
 def test_every_public_operation_has_a_description():

@@ -28,6 +28,8 @@ from services.chat_persistence import (
     list_sessions_for_user,
 )
 from services.chat_turn_service import (
+    InsufficientChatBalance,
+    ChatTurnConflict,
     get_active_turn_for_session,
     get_chat_turn_service,
     get_turn_for_user,
@@ -261,8 +263,11 @@ async def delete_session(
     db: Session = Depends(get_db),
 ):
     """Delete a session and all its messages. 404 if not found or not owned by user."""
-    if not delete_session_for_user(db, session_id, current_user.id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    try:
+        if not delete_session_for_user(db, session_id, current_user.id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -296,6 +301,10 @@ async def chat(
             body_messages=[{"role": m.role, "content": m.content} for m in body.messages],
             session_id=body.session_id,
         )
+    except ChatTurnConflict as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except InsufficientChatBalance as e:
+        raise HTTPException(status_code=402, detail=str(e))
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
     except Exception as e:
@@ -305,7 +314,7 @@ async def chat(
             detail="Failed to prepare chat turn",
         )
 
-    result = turn_service.run_turn_sync(
+    result = await asyncio.to_thread(turn_service.run_turn_sync,
         turn_id=turn_id,
         session_id=session_id,
         user_id=user_id,
@@ -393,6 +402,10 @@ async def chat_stream(
             body_messages=[{"role": m.role, "content": m.content} for m in body.messages],
             session_id=body.session_id,
         )
+    except ChatTurnConflict as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except InsufficientChatBalance as e:
+        raise HTTPException(status_code=402, detail=str(e))
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
     except Exception as e:
@@ -402,15 +415,18 @@ async def chat_stream(
             detail="Failed to prepare chat turn",
         )
 
+    # Worker ownership starts before response streaming, even if the client
+    # disconnects before consuming the first event.
+    subscriber = turn_service.subscribe(turn_id)
+    turn_service.run_turn_async(
+        turn_id=turn_id,
+        session_id=session_id,
+        user_id=user_id,
+        messages=messages,
+        context=context,
+    )
+
     async def event_generator() -> AsyncIterator[str]:
-        subscriber = turn_service.subscribe(turn_id)
-        turn_service.run_turn_async(
-            turn_id=turn_id,
-            session_id=session_id,
-            user_id=user_id,
-            messages=messages,
-            context=context,
-        )
         try:
             yield f"data: {json.dumps({'type': 'started', 'turn_id': turn_id, 'session_id': session_id, 'status': 'running'})}\n\n"
             while True:

@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional, Tuple
 
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from config import LLM_TOKENS_PER_PLATFORM_TOKEN
 from models.db_models import User, Execution, ReportView, Usage
@@ -47,6 +48,7 @@ def record_transaction(
     metadata: Optional[Dict] = None,
     description: Optional[str] = None,
     commit: bool = True,
+    operation_key: Optional[str] = None,
 ) -> Optional[Usage]:
     """
     Record a token transaction in the ledger (single source of truth).
@@ -62,10 +64,31 @@ def record_transaction(
     Returns:
         Usage record or None on failure
     """
-    # Lock user row to prevent concurrent transactions
-    user = db.query(User).filter(User.id == user_id).with_for_update().first()
+    # A real write acquires SQLite's writer lock before the balance read.
+    # FOR UPDATE alone is ignored by SQLite. This also locks the row on PostgreSQL.
+    db.execute(text("UPDATE users SET id=id WHERE id=:id"), {"id": user_id})
+    user = db.query(User).filter(User.id == user_id).first()
     if not user:
         return None
+
+    if operation_key is None:
+        if transaction_type == "initial_balance":
+            operation_key = f"initial_balance:{user_id}"
+        elif related_entity_id is not None and related_entity_type:
+            operation_key = f"{transaction_type}:{user_id}:{related_entity_type}:{related_entity_id}"
+    if operation_key:
+        existing = db.query(Usage).filter(Usage.operation_key == operation_key).first()
+        if existing is None and transaction_type == "initial_balance":
+            existing = db.query(Usage).filter_by(user_id=user_id, transaction_type=transaction_type).first()
+        if existing is None and related_entity_id is not None and related_entity_type and transaction_type != "view_reward":
+            existing = db.query(Usage).filter_by(user_id=user_id, transaction_type=transaction_type,
+                related_entity_type=related_entity_type, related_entity_id=related_entity_id).first()
+        if existing is not None:
+            if existing.user_id != user_id or existing.amount != amount or existing.transaction_type != transaction_type:
+                raise ValueError("Idempotency key reused with a different amount")
+            if commit:
+                db.commit()
+            return existing
     
     # Get current balance from ledger (single source of truth)
     current_balance = get_balance_from_ledger(user_id, db)
@@ -82,6 +105,7 @@ def record_transaction(
     # Create transaction record (this IS the balance update - no separate User.token_balance update)
     tx = Usage(
         user_id=user_id,
+        operation_key=operation_key,
         amount=amount,  # Platform tokens
         llm_tokens=llm_tokens,  # Raw LLM tokens (null for non-chat operations)
         balance_after=new_balance,  # Snapshot for verification
@@ -313,6 +337,8 @@ def record_view(execution_id: int, viewer_id: int, db: Session) -> bool:
     if not ex:
         return False
 
+    db.execute(text("UPDATE users SET id=id WHERE id=:id"), {"id": ex.creator_id})
+    db.refresh(ex)
     existing = (
         db.query(ReportView)
         .filter(
@@ -356,6 +382,7 @@ def record_view(execution_id: int, viewer_id: int, db: Session) -> bool:
             user_id=ex.creator_id,
             amount=EARNINGS_PER_UNIQUE_VIEW,
             transaction_type="view_reward",
+            operation_key=f"view_reward:{execution_id}:{viewer_id}",
             related_entity_type="execution",
             related_entity_id=execution_id,
             metadata={"viewer_id": viewer_id},
@@ -582,6 +609,8 @@ def refund_for_failed_digest(execution_id: int, db: Session) -> bool:
         )
         .first()
     )
+    if original_tx is None or original_tx.amount >= 0:
+        return False
     
     # Build refund metadata
     import json
@@ -598,7 +627,7 @@ def refund_for_failed_digest(execution_id: int, db: Session) -> bool:
     subject_info = f" for {metadata.get('subject_id', 'unknown')}" if "subject_id" in metadata else ""
     tx = record_transaction(
         user_id=ex.creator_id,
-        amount=COST_PER_DIGEST,  # Positive amount = credit
+        amount=-original_tx.amount,
         transaction_type="refund",
         related_entity_type="execution",
         related_entity_id=execution_id,

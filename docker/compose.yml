@@ -6,11 +6,17 @@ services:
       context: ..
       dockerfile: docker/backend.Dockerfile
     container_name: flowdeck-backend
+    networks:
+      default:
+        aliases: [flowdeck-backend]
     ports:
       - "8002:8002"
     environment:
       # Database
-      - DATABASE_URL=sqlite:///./data/flowdeck.db
+      - DATABASE_URL=sqlite:////app/data/flowdeck.db
+      - DATA_CACHE_PATH=/app/data/data_cache.sqlite
+      - RESULTS_DIR=/app/data/results
+      - FLOWDECK_ENV=production
       
       # API Keys (set these in .env file)
       - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -37,7 +43,7 @@ services:
       
       # Application settings
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3003,http://localhost:80}
-      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
+      - JWT_SECRET=${JWT_SECRET:?Set a strong random JWT_SECRET of at least 32 characters}
       - ENABLE_DAILY_SYNC=${ENABLE_DAILY_SYNC:-false}
       - ENABLE_MARKET_OVERVIEW_CACHE_REFRESH=${ENABLE_MARKET_OVERVIEW_CACHE_REFRESH:-true}
       - ENABLE_DIGEST_SCHEDULER=${ENABLE_DIGEST_SCHEDULER:-false}

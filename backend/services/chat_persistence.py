@@ -127,9 +127,14 @@ def delete_session_for_user(
     db: Session, session_id: int, user_id: int
 ) -> bool:
     """Delete session if it exists and belongs to user. Returns True if deleted."""
+    from sqlalchemy import text
+    from models.db_models import ChatTurn
+    db.execute(text("UPDATE users SET id=id WHERE id=:id"), {"id": user_id})
     session = get_session_for_user(db, session_id, user_id)
     if session is None:
         return False
+    if db.query(ChatTurn).filter_by(session_id=session_id, status="running").first():
+        raise ValueError("Wait for the running turn to finish before deleting this session")
     db.delete(session)
     db.commit()
     return True

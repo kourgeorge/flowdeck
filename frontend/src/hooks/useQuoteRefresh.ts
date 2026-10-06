@@ -14,6 +14,8 @@ export function useQuoteRefresh(
   const [quote, setQuote] = useState<TickerQuote | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+    setQuote(null);
     if (!ticker) {
       setQuote(null);
       return;
@@ -22,13 +24,13 @@ export function useQuoteRefresh(
     const fetchQuote = () => {
       tickerApi
         .getQuote(ticker)
-        .then(setQuote)
+        .then(value => { if (!cancelled) setQuote(value); })
         .catch((err) => console.error('Quote refresh failed:', err));
     };
 
     fetchQuote();
     const id = setInterval(fetchQuote, intervalMs);
-    return () => clearInterval(id);
+    return () => { cancelled = true; clearInterval(id); };
   }, [ticker, intervalMs]);
 
   return quote;

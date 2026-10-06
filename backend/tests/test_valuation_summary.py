@@ -16,6 +16,30 @@ from ai_engine.tradingagents.agents.utils.valuation_tools import (
 )
 
 
+def _sensitivity(name, base, delta, low, high):
+    return ValuationSensitivityRange(
+        parameter_name=name, base_value=base, delta_absolute=delta,
+        delta_percent=delta / base * 100, low_value=base - delta,
+        high_value=base + delta, fair_value_low=low, fair_value_high=high,
+        fair_value_range_pct=(high - low) / 50 * 100,
+    )
+
+
+def _distribution_fields():
+    return {
+        "valuation_score_breakdown": dict(method_agreement=1.5, sensitivity_stability=1.5,
+            data_quality=1.5, assumption_realism=1.5, peer_consistency=1.5,
+            total_score=4, explanation="Methods converge with adequate data."),
+        "probability_distribution": dict(p10=35, p25=40, p50=50, p75=60, p90=65,
+            expected_value=50, downside_risk_pct=20.45, upside_potential_pct=47.73,
+            risk_reward_ratio=2.33),
+        "scenario_interpretation": dict(market_implied_scenario="base",
+            market_implied_probability_pct=60, expected_return_pct=13.64,
+            downside_protection_pct=9.09, upside_capture_pct=36.36,
+            asymmetry_ratio=4, interpretation="Price is between bear and base values."),
+    }
+
+
 class TestValuationSummary(unittest.TestCase):
     def test_calculate_valuation_summary_is_deterministic(self):
         summary = calculate_valuation_summary(
@@ -40,6 +64,7 @@ class TestValuationSummary(unittest.TestCase):
             ev_ebitda={"bear": 38.0, "base": 47.0, "bull": 55.0},
         )
         result = ValuationAnalysisOutput(
+            **_distribution_fields(),
             report="Valuation report body.",
             valuation_score=4,
             fair_value_bear=40.0,
@@ -60,10 +85,10 @@ class TestValuationSummary(unittest.TestCase):
                 fair_value=49.40,
             ),
             valuation_sensitivity=ValuationSensitivity(
-                fcf_growth_rate=ValuationSensitivityRange(delta=0.02, low=46.0, high=53.0),
-                wacc=ValuationSensitivityRange(delta=0.01, low=45.0, high=54.0),
-                terminal_growth=ValuationSensitivityRange(delta=0.005, low=47.0, high=52.0),
-                exit_multiple=ValuationSensitivityRange(delta=2.0, low=48.0, high=51.0),
+                fcf_growth_rate=_sensitivity("fcf_growth_rate", 0.10, 0.02, 46, 53),
+                wacc=_sensitivity("wacc", 0.09, 0.01, 45, 54),
+                terminal_growth=_sensitivity("terminal_growth", 0.025, 0.005, 47, 52),
+                exit_multiple=_sensitivity("exit_multiple", 12, 2, 48, 51),
             ),
             key_takeaways=["Base case implies upside."],
         )
@@ -77,6 +102,7 @@ class TestValuationSummary(unittest.TestCase):
 
     def test_model_dump_uses_state_field_names(self):
         result = ValuationAnalysisOutput(
+            **_distribution_fields(),
             report="Report",
             valuation_score=3,
             fair_value_bear=40.0,
@@ -101,10 +127,10 @@ class TestValuationSummary(unittest.TestCase):
                 fair_value=50.00,
             ),
             valuation_sensitivity=ValuationSensitivity(
-                fcf_growth_rate=ValuationSensitivityRange(delta=0.02, low=47.0, high=53.0),
-                wacc=ValuationSensitivityRange(delta=0.01, low=46.0, high=54.0),
-                terminal_growth=ValuationSensitivityRange(delta=0.005, low=48.0, high=52.0),
-                exit_multiple=ValuationSensitivityRange(delta=2.0, low=49.0, high=51.0),
+                fcf_growth_rate=_sensitivity("fcf_growth_rate", 0.10, 0.02, 47, 53),
+                wacc=_sensitivity("wacc", 0.09, 0.01, 46, 54),
+                terminal_growth=_sensitivity("terminal_growth", 0.025, 0.005, 48, 52),
+                exit_multiple=_sensitivity("exit_multiple", 12, 2, 49, 51),
             ),
             key_takeaways=["Fair value above market."],
         )
@@ -115,7 +141,7 @@ class TestValuationSummary(unittest.TestCase):
         self.assertEqual(dumped["valuation_conviction"], "high")
         self.assertEqual(dumped["valuation_key_assumptions"], ["WACC 9%", "Terminal growth 3%"])
         self.assertEqual(dumped["valuation_bridge"]["fair_value"], 50.0)
-        self.assertEqual(dumped["valuation_sensitivity"]["exit_multiple"]["delta"], 2.0)
+        self.assertEqual(dumped["valuation_sensitivity"]["exit_multiple"]["delta_absolute"], 2.0)
 
     def test_multi_method_valuation_data_returns_non_zero_methods(self):
         fundamentals = {
@@ -189,17 +215,16 @@ class TestValuationSummary(unittest.TestCase):
         self.assertGreaterEqual(result["valuation_bridge"]["growth_premium"], 0.0)
         self.assertGreaterEqual(result["valuation_bridge"]["multiple_expansion"], 0.0)
         self.assertGreaterEqual(result["valuation_bridge"]["risk_discount"], 0.0)
-        self.assertLessEqual(result["valuation_sensitivity"]["fcf_growth_rate"]["low"], result["valuation_sensitivity"]["fcf_growth_rate"]["high"])
-        self.assertLessEqual(result["valuation_sensitivity"]["wacc"]["low"], result["valuation_sensitivity"]["wacc"]["high"])
-        self.assertLessEqual(result["valuation_sensitivity"]["terminal_growth"]["low"], result["valuation_sensitivity"]["terminal_growth"]["high"])
-        self.assertLessEqual(result["valuation_sensitivity"]["exit_multiple"]["low"], result["valuation_sensitivity"]["exit_multiple"]["high"])
+        validated = ValuationSensitivity(**result["valuation_sensitivity"])
+        for item in validated.model_dump().values():
+            self.assertLessEqual(item["low_value"], item["high_value"])
         self.assertAlmostEqual(
             result["valuation_bridge"]["current_price"]
             + result["valuation_bridge"]["growth_premium"]
             + result["valuation_bridge"]["multiple_expansion"]
             - result["valuation_bridge"]["risk_discount"],
             result["valuation_bridge"]["fair_value"],
-            places=6,
+            delta=0.02,  # Bridge components are reported in cents.
         )
 
 

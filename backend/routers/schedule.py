@@ -48,6 +48,7 @@ def get_watchlist_notifications(current_user=Depends(get_current_user), db: Sess
 @router.put("/watchlist/notifications", response_model=WatchlistUpdatePreferenceOut)
 def update_watchlist_notifications(payload: WatchlistUpdatePreference,
                                   current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Update the signed-in user's morning watchlist notifications and timezone."""
     from services.watchlist_update_service import set_preferences
     try:
         return set_preferences(db, current_user.id, enabled=payload.enabled, timezone_name=payload.timezone)

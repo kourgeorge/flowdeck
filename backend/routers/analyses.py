@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import re
 from datetime import datetime
 from typing import Any, Dict, Optional, Union
 
@@ -22,13 +23,9 @@ from sync_major_stocks import get_missing_and_skipped, run_analyses_for_tickers
 
 ANALYSTS = ["market", "social", "fundamentals", "technical", "sec", "valuation"]
 
-# Documentation-only: the real endpoint reads `await request.json()` directly
-# (see start_analysis below), not a Pydantic model -- unknown keys are accepted
-# and ignored today, and a validation error there is `400 {"detail": "Ticker is
-# required"}`, not FastAPI's 422. A response_model/request model would change
-# that behavior for every existing caller. openapi_extra is injected into the
-# schema verbatim and never validated against, so it documents the shape without
-# touching runtime behavior.
+# The endpoint validates JSON explicitly, preserving 400 for a missing ticker
+# and using 422 for invalid values or attempts to override server AI policy.
+# Keep this documentation schema aligned with that validation.
 START_ANALYSIS_REQUEST_BODY = {
     "required": True,
     "content": {
@@ -54,15 +51,14 @@ START_ANALYSIS_REQUEST_BODY = {
                     "research_depth": {
                         "type": "integer",
                         "default": 2,
-                        "description": "Debate/tool-call depth per analyst.",
+                        "minimum": 1,
+                        "maximum": 5,
+                        "description": "Debate/tool-call depth per analyst, from 1 to 5.",
                     },
                     "llm_provider": {
                         "type": "string",
-                        "description": "Defaults to the LLM_PROVIDER env var, or 'azure'.",
+                        "description": "Server-configured provider. If supplied, must match LLM_PROVIDER (default azure).",
                     },
-                    "backend_url": {"type": "string", "description": "Optional LLM backend override."},
-                    "shallow_thinker": {"type": "string", "description": "Optional model override, shallow-thinker role."},
-                    "deep_thinker": {"type": "string", "description": "Optional model override, deep-thinker role."},
                 },
             },
             "examples": {
@@ -184,28 +180,48 @@ async def start_analysis(
     `## What changed since {date}` section rather than starting from scratch.
     """
     analysis_service = app_services.get_analysis_service()
+    analysis_run_id = None
     try:
-        body = await request.json()
-        ticker = body.get("ticker", "").upper()
+        try:
+            body = await request.json()
+        except ValueError as exc:
+            raise HTTPException(422, "Request body must be a JSON object") from exc
+        if not isinstance(body, dict) or not isinstance(body.get("ticker", ""), str):
+            raise HTTPException(422, "Request body must contain a ticker string")
+        ticker = body.get("ticker", "").strip().upper()
         if not ticker:
             raise HTTPException(status_code=400, detail="Ticker is required")
+        if not re.fullmatch(r"[A-Z0-9.^=-]{1,32}", ticker):
+            raise HTTPException(422, "Invalid ticker symbol")
 
-        # Use data gateway for quote check (same as data API)
+        analysis_date = body.get("analysis_date") or datetime.now().strftime("%Y-%m-%d")
+        try:
+            if not isinstance(analysis_date, str) or datetime.strptime(analysis_date, "%Y-%m-%d").strftime("%Y-%m-%d") != analysis_date:
+                raise ValueError
+        except ValueError as exc:
+            raise HTTPException(422, "analysis_date must be YYYY-MM-DD") from exc
+        analysts = body.get("analysts", ["market", "social", "fundamentals", "technical", "sec", "valuation"])
+        research_depth = body.get("research_depth", 2)
+        if type(research_depth) is not int or not 1 <= research_depth <= 5:
+            raise HTTPException(422, "research_depth must be an integer between 1 and 5")
+        if not isinstance(analysts, list) or not analysts or any(a not in ANALYSTS for a in analysts):
+            raise HTTPException(422, "Select at least one supported analyst")
+        analysts = list(dict.fromkeys(analysts))
+        llm_provider = (os.environ.get("LLM_PROVIDER") or "azure").strip().lower()
+        if any(body.get(key) for key in ("backend_url", "shallow_thinker", "deep_thinker")):
+            raise HTTPException(422, "Provider endpoints and models are configured by the server")
+        if body.get("llm_provider") and body["llm_provider"] != llm_provider:
+            raise HTTPException(422, "Provider is configured by the server")
+        backend_url = shallow_thinker = deep_thinker = None
+        initiator_email = (current_user.email or "").strip() or None
+
+        # Validate policy before any vendor access, charge, or background work.
         quote = await asyncio.to_thread(get_data_gateway().get_quote, ticker)
         if quote is None:
             raise HTTPException(
                 status_code=404,
                 detail=f"Ticker '{ticker}' not found. Check the symbol and try again.",
             )
-
-        analysis_date = body.get("analysis_date") or datetime.now().strftime("%Y-%m-%d")
-        analysts = body.get("analysts", ["market", "social", "fundamentals", "technical", "sec", "valuation"])
-        research_depth = body.get("research_depth", 2)
-        llm_provider = (body.get("llm_provider") or os.environ.get("LLM_PROVIDER") or "azure").strip().lower()
-        backend_url = body.get("backend_url")
-        shallow_thinker = body.get("shallow_thinker")
-        deep_thinker = body.get("deep_thinker")
-        initiator_email = (current_user.email or "").strip() or None
 
         existing_run_id = analysis_service.get_running_analysis_run_id(ticker, analysis_date)
         if existing_run_id is not None:
@@ -273,6 +289,8 @@ async def start_analysis(
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON in request body")
     except Exception as e:
+        if analysis_run_id is not None:
+            analysis_service._fail_analysis(analysis_run_id, "Unable to start analysis")
         print(f"Error starting analysis: {e}")
         import traceback
         traceback.print_exc()
@@ -306,12 +324,7 @@ async def websocket_endpoint(websocket: WebSocket, analysis_run_id: str, token: 
 
     db = SessionLocal()
     try:
-        try:
-            user_id = int(sub)
-        except ValueError:
-            await websocket.close(code=4001, reason="Invalid token subject")
-            return
-        user = db.query(UserModel).filter(UserModel.id == user_id).first()
+        user = db.query(UserModel).filter(UserModel.auth_subject == sub).first()
         if not user:
             await websocket.close(code=4001, reason="User not found")
             return

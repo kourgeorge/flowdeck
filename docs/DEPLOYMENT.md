@@ -142,12 +142,22 @@ active jobs. If a configured cap is exhausted, the start endpoint returns HTTP 5
 Rejected charged runs are refunded. Completed and failed runs release their
 in-memory state. Measure peak RAM and swap before raising concurrency.
 
-Waiting jobs retain lightweight request/state metadata in memory, so a larger
-backlog still uses some RAM. The queue is not durable or shared across Uvicorn processes.
-Graceful shutdown cancels waiting jobs and refunds their charges. A hard kill
-cannot run cleanup: reconcile interrupted execution/status records before retrying
-them. Multiple API processes or durable retry require an external worker queue;
-increasing Uvicorn workers multiplies the analysis limit and memory usage.
+Waiting jobs retain lightweight metadata in memory; their parameters and admission
+are also persisted in SQLite. Graceful shutdown cancels waiting jobs and refunds
+their charges. On restart, recovery marks interrupted queued/running executions
+failed, refunds actual charges once, and releases unfinished chat reservations.
+It does not automatically rerun paid work. Terminal status comes from SQLite.
+
+One backend process/replica is required. A database-adjacent process lock rejects
+additional workers before recovery starts. Kubernetes uses one backend replica
+with `Recreate`; do not attach a backend HPA. Multiple API processes require a
+shared durable worker/ownership design, not just a larger Uvicorn worker count.
+
+**Upgrade from pre-October 2026 versions:** Follow the backup, data-path migration,
+credential rotation, and payment checks in
+[Critical/high remediation](CRITICAL_HIGH_REMEDIATION.md#deployment-notes).
+The container database, cache, and generated results now live under `/app/data`.
+Existing login tokens are invalidated and legacy API keys must be recreated.
 
 **Permissions:** Ensure the service user can read `.env` and write to `results/`:
 

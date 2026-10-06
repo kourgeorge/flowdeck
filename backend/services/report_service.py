@@ -10,7 +10,7 @@ from ai_engine.tradingagents.agents.utils.trace_utils import sort_agent_steps
 logger = logging.getLogger(__name__)
 
 from database import SessionLocal
-from models.db_models import Report, Execution
+from models.db_models import Report, Execution, AnalysisJob
 
 
 def update_execution_status(
@@ -40,6 +40,10 @@ def update_execution_status(
             elif status in ("completed", "failed"):
                 # Auto-set completed_at if not provided
                 execution.completed_at = datetime.utcnow()  # type: ignore
+            if status in ("completed", "failed"):
+                job = db.get(AnalysisJob, execution_id)
+                if job:
+                    job.active_key = None
             db.commit()
             logger.debug(
                 "Execution status updated execution_id=%s status=%s",

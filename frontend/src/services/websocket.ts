@@ -7,6 +7,7 @@ export class WebSocketClient {
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
   private manuallyClosed = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private listeners: Map<string, Set<(data: any) => void>> = new Map();
 
   constructor(analysisRunId: number) {
@@ -62,7 +63,9 @@ export class WebSocketClient {
   private reconnect(): void {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
-      setTimeout(() => {
+      this.reconnectTimer = setTimeout(() => {
+        this.reconnectTimer = null;
+        if (this.manuallyClosed) return;
         console.log(`Reconnecting... (attempt ${this.reconnectAttempts})`);
         this.connect();
       }, this.reconnectDelay * this.reconnectAttempts);
@@ -106,6 +109,8 @@ export class WebSocketClient {
 
   disconnect(): void {
     this.manuallyClosed = true;
+    if (this.reconnectTimer !== null) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
     if (this.ws) {
       this.ws.close();
       this.ws = null;

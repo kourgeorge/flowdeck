@@ -1,6 +1,7 @@
 """Service to trigger TradingAgents analysis."""
 
 import asyncio
+import json
 import logging
 import os
 import sys
@@ -138,7 +139,7 @@ class AnalysisService:
     _MAX_ACTIVITY_FINGERPRINTS = 72
     
     def __init__(self, results_dir: str = "results", *, executor: Optional[AnalysisExecutor] = None):
-        self.results_dir = Path(results_dir)
+        self.results_dir = Path(os.environ.get("RESULTS_DIR", results_dir))
         if not self.results_dir.is_absolute():
             backend_dir = Path(__file__).parent.parent
             self.results_dir = backend_dir.parent / self.results_dir  # repo root
@@ -466,6 +467,32 @@ class AnalysisService:
             existing_run_id = self.get_running_analysis_run_id(ticker, analysis_date)
             if existing_run_id is not None:
                 return (existing_run_id, True)
+            # Durable uniqueness and request parameters survive process loss.
+            from database import SessionLocal
+            from models.db_models import AnalysisJob, Execution
+            from sqlalchemy.exc import IntegrityError
+            active_key = f"{ticker}:{analysis_date}"
+            parameters = dict(ticker=ticker, analysis_date=analysis_date, analysts=analysts,
+                research_depth=research_depth, llm_provider=llm_provider, backend_url=backend_url,
+                shallow_thinker=shallow_thinker, deep_thinker=deep_thinker)
+            with SessionLocal() as job_db:
+                existing = job_db.query(AnalysisJob).filter_by(active_key=active_key).first()
+                if existing:
+                    return existing.execution_id, True
+                execution = job_db.get(Execution, analysis_run_id)
+                if execution is None:
+                    raise ValueError("Execution does not exist")
+                execution.status = "queued"
+                job_db.add(AnalysisJob(execution_id=analysis_run_id, active_key=active_key,
+                                       parameters_json=json.dumps(parameters)))
+                try:
+                    job_db.commit()
+                except IntegrityError:
+                    job_db.rollback()
+                    existing = job_db.query(AnalysisJob).filter_by(active_key=active_key).first()
+                    if existing:
+                        return existing.execution_id, True
+                    raise
             self.running_analyses[analysis_run_id] = {
                 "ticker": ticker,
                 "date": analysis_date,
@@ -532,6 +559,7 @@ class AnalysisService:
                 self._fail_analysis(analysis_run_id, "Analysis cancelled before starting", cancelled=True)
                 return
             analysis_info = self.running_analyses[analysis_run_id]
+            update_execution_status(analysis_run_id, "running")
             analysis_info["status"] = "running"
             self._persist_analysis_status(analysis_run_id)
             logger.info(
@@ -673,8 +701,13 @@ class AnalysisService:
     def _fail_analysis(self, analysis_run_id: int, error: str, *, cancelled: bool = False) -> None:
         """Persist failure and refund only an actual charge, including setup failures."""
         try:
-            update_execution_status(analysis_run_id, "failed", error_message=error)
             from database import SessionLocal
+            from models.db_models import Execution
+            with SessionLocal() as db:
+                execution = db.get(Execution, analysis_run_id)
+                if execution and execution.status == "completed":
+                    return
+            update_execution_status(analysis_run_id, "failed", error_message=error)
             from services.token_service import refund_for_failed_execution
             with SessionLocal() as db:
                 refund_for_failed_execution(analysis_run_id, db)
@@ -1270,7 +1303,22 @@ class AnalysisService:
                     except Exception as e:
                         logger.warning("Failed to save %s from final state: %s", report_key, e)
             
-            # Mark as completed
+            # Completion requires persisted, nonempty outputs, not only a finished graph.
+            from database import SessionLocal
+            from models.db_models import Report
+            report_keys = {"market": "market_report", "social": "sentiment_report",
+                "fundamentals": "fundamentals_report", "technical": "technical_report",
+                "sec": "sec_report", "valuation": "valuation_report"}
+            required = {report_keys[a] for a in analysts if a in report_keys}
+            required.add("trader_investment_plan")
+            with SessionLocal() as check_db:
+                persisted = {r.report_type for r in check_db.query(Report).filter_by(execution_id=analysis_run_id)
+                             if r.content and r.content.strip()}
+            missing = required - persisted
+            if missing:
+                raise RuntimeError("Analysis did not persist required reports: " + ", ".join(sorted(missing)))
+            # Commit the terminal state before publishing completion.
+            update_execution_status(analysis_run_id, "completed")
             analysis_info["status"] = "completed"
             self._append_live_activity(
                 analysis_info,
@@ -1278,7 +1326,10 @@ class AnalysisService:
                 status="completed",
                 summary="Analysis completed",
             )
-            self._persist_analysis_status(analysis_run_id)
+            try:
+                self._persist_analysis_status(analysis_run_id)
+            except Exception:
+                logger.warning("Unable to cache completed analysis status", exc_info=True)
             logger.info(
                 "Analysis completed analysis_run_id=%s ticker=%s reports=%s",
                 ar_id, ticker, list(analysis_info.get("reports", {}).keys()),
@@ -1288,12 +1339,6 @@ class AnalysisService:
                 file=sys.stderr,
                 flush=True,
             )
-            
-            # Update execution status to completed
-            try:
-                update_execution_status(analysis_run_id, "completed")
-            except Exception as e:
-                logger.warning("Failed to update execution status to completed: %s", e)
             
             # Update Usage entry with actual LLM usage from reports
             try:
@@ -1324,7 +1369,10 @@ class AnalysisService:
                 logger.warning("Failed to update Usage entry with LLM data: %s", e)
             
             # Delete status file after completion (analysis is done)
-            delete_analysis_status("ticker", analysis_run_id)
+            try:
+                delete_analysis_status("ticker", analysis_run_id)
+            except Exception:
+                logger.warning("Unable to clear completed analysis cache", exc_info=True)
 
             # Notify subscribed users and initiator by email (best-effort; do not fail analysis)
             try:
@@ -1379,9 +1427,20 @@ class AnalysisService:
         If current_agent is missing but some agent is in_progress, set current_agent to the
         first in pipeline order so the UI shows a deterministic value on refresh.
         """
-        status = get_analysis_status_from_cache("ticker", analysis_run_id)
-        if not status:
-            return None
+        from database import SessionLocal
+        from models.db_models import Execution, AnalysisJob
+        with SessionLocal() as db:
+            run = db.get(Execution, analysis_run_id)
+            if run is None or run.execution_type != "ticker":
+                return None
+            status = get_analysis_status_from_cache("ticker", analysis_run_id)
+            if not status or run.status in ("completed", "failed"):
+                job = db.get(AnalysisJob, analysis_run_id)
+                params = json.loads(job.parameters_json) if job else {}
+                return {"analysis_run_id": run.id, "ticker": run.subject_id,
+                        "date": params.get("analysis_date", run.created_at.date().isoformat()),
+                        "status": "error" if run.status == "failed" else run.status,
+                        "error": run.error_message, "agent_statuses": {}, "reports": {}}
         if status.get("current_agent"):
             return status
         agent_statuses = status.get("agent_statuses") or {}

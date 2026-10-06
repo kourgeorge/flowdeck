@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import TpsPlanCard from './TpsPlanCard';
 import { useAuth } from '../contexts/AuthContext';
 import MermaidBlock from './MermaidBlock';
+import type { ValuationSensitivity } from '../services/types';
 
 export interface ReportResource {
   type?: string;
@@ -74,12 +75,7 @@ interface ReportViewerProps {
     risk_discount?: number | null;
     fair_value?: number | null;
   } | null;
-  valuationSensitivity?: {
-    fcf_growth_rate?: { delta?: number | null; low?: number | null; high?: number | null } | null;
-    wacc?: { delta?: number | null; low?: number | null; high?: number | null } | null;
-    terminal_growth?: { delta?: number | null; low?: number | null; high?: number | null } | null;
-    exit_multiple?: { delta?: number | null; low?: number | null; high?: number | null } | null;
-  } | null;
+  valuationSensitivity?: ValuationSensitivity | null;
 }
 
 const REPORT_METADATA: Record<string, { title: string; contains: string; aspects: string; methodology: string }> = {
@@ -230,28 +226,28 @@ function buildDeterministicValuationBridgeMarkdown(
   ].join('\n');
 }
 
-function buildDeterministicValuationSensitivityMarkdown(
-  valuationSensitivity?: {
-    fcf_growth_rate?: { delta?: number | null; low?: number | null; high?: number | null } | null;
-    wacc?: { delta?: number | null; low?: number | null; high?: number | null } | null;
-    terminal_growth?: { delta?: number | null; low?: number | null; high?: number | null } | null;
-    exit_multiple?: { delta?: number | null; low?: number | null; high?: number | null } | null;
-  } | null,
+export function buildDeterministicValuationSensitivityMarkdown(
+  valuationSensitivity?: ValuationSensitivity | null,
 ): string | null {
-  if (!valuationSensitivity) return null;
-  const fcf = valuationSensitivity.fcf_growth_rate;
-  const wacc = valuationSensitivity.wacc;
-  const terminal = valuationSensitivity.terminal_growth;
-  const exit = valuationSensitivity.exit_multiple;
-  if (!fcf && !wacc && !terminal && !exit) return null;
-
-  return [
-    '### 5. Sensitivity Analysis',
-    `- FCF Growth Rate: ±2% -> Fair value range: ${formatCurrencyValue(fcf?.low)} to ${formatCurrencyValue(fcf?.high)}`,
-    `- WACC: ±1% -> Fair value range: ${formatCurrencyValue(wacc?.low)} to ${formatCurrencyValue(wacc?.high)}`,
-    `- Terminal Growth: ±0.5% -> Fair value range: ${formatCurrencyValue(terminal?.low)} to ${formatCurrencyValue(terminal?.high)}`,
-    `- Exit Multiple: ±2x -> Fair value range: ${formatCurrencyValue(exit?.low)} to ${formatCurrencyValue(exit?.high)}`,
-  ].join('\n');
+  if (!valuationSensitivity || Object.keys(valuationSensitivity).length === 0) return null;
+  const labels: Record<keyof ValuationSensitivity, string> = {
+    fcf_growth_rate: 'FCF Growth Rate', wacc: 'WACC',
+    terminal_growth: 'Terminal Growth', exit_multiple: 'Exit Multiple',
+  };
+  const rows = (Object.keys(labels) as Array<keyof ValuationSensitivity>).map(key => {
+    const item = valuationSensitivity[key];
+    const low = item?.fair_value_low ?? item?.low;
+    const high = item?.fair_value_high ?? item?.high;
+    if (typeof low !== 'number' || typeof high !== 'number' || !Number.isFinite(low) || !Number.isFinite(high)) {
+      return `- ${labels[key]}: Unavailable`;
+    }
+    const delta = item?.delta_absolute ?? item?.delta;
+    const change = typeof delta === 'number' && Number.isFinite(delta)
+      ? `±${key === 'exit_multiple' ? `${delta}x` : `${Number((delta * 100).toFixed(4))} percentage points`} -> `
+      : '';
+    return `- ${labels[key]}: ${change}Fair value range: ${formatCurrencyValue(Math.min(low, high))} to ${formatCurrencyValue(Math.max(low, high))}`;
+  });
+  return ['### 5. Sensitivity Analysis', ...rows].join('\n');
 }
 
 function replaceMarkdownSection(content: string, sectionHeading: string, replacement: string): string {

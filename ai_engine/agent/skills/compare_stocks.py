@@ -116,7 +116,7 @@ def _resolve_period(period: str) -> tuple[str, str, str]:
     return last_month_start.isoformat(), last_month_end.isoformat(), "Last Month"
 
 
-def _compute_returns(prices_json: str, tickers: list[str]) -> list[dict]:
+def _compute_returns(prices_json: str, tickers: list[str], start_date: Optional[str] = None, end_date: Optional[str] = None) -> list[dict]:
     """Parse multi-ticker price JSON and compute % returns."""
     import csv
     import io
@@ -134,8 +134,14 @@ def _compute_returns(prices_json: str, tickers: list[str]) -> list[dict]:
         if not csv_str:
             continue
         try:
-            reader = csv.DictReader(io.StringIO(csv_str))
-            rows = [r for r in reader if r.get("Close")]
+            from ai_engine.price_series import parse_daily_closes
+            rows = parse_daily_closes(csv_str)
+            if start_date:
+                previous = [r for r in rows if r['Date'] < start_date]
+                in_period = [r for r in rows if r['Date'] >= start_date and (not end_date or r['Date'] <= end_date)]
+                if not previous or not in_period:
+                    continue
+                rows = [previous[-1]] + in_period
             if len(rows) < 2:
                 continue
             first_close = float(rows[0]["Close"])
@@ -195,7 +201,7 @@ class CompareStocksSkill(BaseSkill):
             prices_result = call(
                 "get_multi_historical_prices",
                 tickers=tickers,
-                start_date=start_date,
+                start_date=(datetime.date.fromisoformat(start_date) - datetime.timedelta(days=14)).isoformat(),
                 end_date=end_date,
             )
 
@@ -203,7 +209,7 @@ class CompareStocksSkill(BaseSkill):
                 # Fall through to snapshot mode
                 period = None
             else:
-                returns = _compute_returns(prices_result.to_str(), tickers)
+                returns = _compute_returns(prices_result.to_str(), tickers, start_date, end_date)
 
                 if not returns:
                     return SkillResult(

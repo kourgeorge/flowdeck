@@ -4,123 +4,7 @@ import { API_BASE_URL } from '../services/api';
 
 // Collapsible info component
 function CalculationMethodology() {
-  const [isExpanded, setIsExpanded] = useState(false);
-  
-  return (
-    <div className="mb-4 bg-gray-700/30 rounded-lg overflow-hidden border border-gray-600/30">
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full p-3 flex items-center justify-between hover:bg-gray-700/50 transition-colors text-left"
-      >
-        <div className="flex items-center gap-2">
-          <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span className="text-sm font-medium text-gray-300">How are Sentiment & Confidence calculated?</span>
-        </div>
-        <svg
-          className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-      
-      {isExpanded && (
-        <div className="p-4 pt-0 space-y-4 text-sm text-gray-300">
-          {/* Overall Sentiment */}
-          <div>
-            <h4 className="font-semibold text-white mb-2 flex items-center gap-2">
-              <span className="w-2 h-2 bg-purple-400 rounded-full"></span>
-              Overall Sentiment (0-100%)
-            </h4>
-            <p className="text-gray-400 mb-2">
-              Aggregated probability from relevant Polymarket prediction markets, weighted by:
-            </p>
-            <ul className="space-y-1 ml-4 text-gray-400">
-              <li className="flex items-start gap-2">
-                <span className="text-blue-400 mt-1">•</span>
-                <span><strong className="text-gray-300">Trading Volume:</strong> Markets with higher volume (more money backing predictions) carry more weight</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-400 mt-1">•</span>
-                <span><strong className="text-gray-300">Relevance Score:</strong> How closely the market relates to the stock (direct mentions score higher)</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-400 mt-1">•</span>
-                <span><strong className="text-gray-300">Time Decay:</strong> Near-term markets (resolving soon) are weighted higher than long-term ones</span>
-              </li>
-            </ul>
-            <div className="mt-2 p-2 bg-gray-800/50 rounded text-xs text-gray-400">
-              <strong className="text-gray-300">Scale:</strong> 0-40% = Bearish, 40-60% = Neutral, 60-100% = Bullish
-            </div>
-          </div>
-
-          {/* Confidence */}
-          <div>
-            <h4 className="font-semibold text-white mb-2 flex items-center gap-2">
-              <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
-              Confidence (0-100%)
-            </h4>
-            <p className="text-gray-400 mb-2">
-              Measures the reliability of the sentiment signal based on:
-            </p>
-            <ul className="space-y-1 ml-4 text-gray-400">
-              <li className="flex items-start gap-2">
-                <span className="text-blue-400 mt-1">•</span>
-                <span><strong className="text-gray-300">Total Trading Volume:</strong> Higher total volume across all markets = higher confidence</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-400 mt-1">•</span>
-                <span><strong className="text-gray-300">Market Liquidity:</strong> More liquid markets indicate stronger conviction</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-400 mt-1">•</span>
-                <span><strong className="text-gray-300">Number of Markets:</strong> More relevant markets provide a more robust signal</span>
-              </li>
-            </ul>
-            <div className="mt-2 p-2 bg-gray-800/50 rounded text-xs text-gray-400">
-              <strong className="text-gray-300">Formula:</strong> Confidence = min(log₁₀(total_volume + 1) / 6, 1.0)
-              <br />
-              <span className="text-gray-500">Example: $1M volume ≈ 100% confidence, $100K ≈ 83% confidence</span>
-            </div>
-          </div>
-
-          {/* Market Selection */}
-          <div>
-            <h4 className="font-semibold text-white mb-2 flex items-center gap-2">
-              <span className="w-2 h-2 bg-green-400 rounded-full"></span>
-              Market Selection Process
-            </h4>
-            <ol className="space-y-1 ml-4 text-gray-400 list-decimal">
-              <li><strong className="text-gray-300">Narrative Mapping:</strong> Generate relevant search queries (company name, sector, macro factors)</li>
-              <li><strong className="text-gray-300">Market Fetching:</strong> Search Polymarket for markets matching these narratives</li>
-              <li><strong className="text-gray-300">Relevance Scoring:</strong> Score each market on keyword match, liquidity, time relevance, and clarity</li>
-              <li><strong className="text-gray-300">Diversity Filtering:</strong> Select top markets while ensuring topic diversity</li>
-              <li><strong className="text-gray-300">Sentiment Aggregation:</strong> Calculate weighted average of market probabilities</li>
-            </ol>
-          </div>
-
-          {/* Why This Matters */}
-          <div className="pt-3 border-t border-gray-600/30">
-            <h4 className="font-semibold text-white mb-2 flex items-center gap-2">
-              <svg className="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-              </svg>
-              Why Prediction Markets?
-            </h4>
-            <p className="text-gray-400">
-              Unlike social media sentiment, prediction markets represent <strong className="text-gray-300">money-backed forecasts</strong>.
-              Traders put real capital at risk, creating a more reliable signal than free opinions. Markets aggregate diverse
-              information sources and self-correct as new data emerges.
-            </p>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return <p className="mb-4 text-sm text-gray-400">Each percentage is the market's implied probability of its stated outcome. It does not indicate whether that outcome is bullish or bearish for this stock. Trading volume is not forecast confidence.</p>;
 }
 
 interface Market {
@@ -153,15 +37,15 @@ interface GroupedEvent {
 
 interface NarrativeSentiment {
   sentiment: number;
-  confidence: number;
+  confidence: number | null;
   market_count: number;
   trend: string;
 }
 
 interface PolymarketSentiment {
   ticker: string;
-  overall_sentiment: number;
-  confidence: number;
+  overall_sentiment: number | null;
+  confidence: number | null;
   trend: string;
   narratives: Record<string, NarrativeSentiment>;
   top_markets: Market[];
@@ -300,15 +184,6 @@ export default function PredictionMarketWidget({ ticker }: PredictionMarketWidge
     );
   }
 
-  const sentimentColor = 
-    data.overall_sentiment >= 0.6 ? 'text-green-400' :
-    data.overall_sentiment <= 0.4 ? 'text-red-400' :
-    'text-gray-400';
-
-  const sentimentBg = 
-    data.overall_sentiment >= 0.6 ? 'bg-green-500/20' :
-    data.overall_sentiment <= 0.4 ? 'bg-red-500/20' :
-    'bg-gray-500/20';
 
   return (
     <div className="bg-gray-800 rounded-lg p-6">
@@ -322,7 +197,7 @@ export default function PredictionMarketWidget({ ticker }: PredictionMarketWidge
           </div>
           <div>
             <h3 className="text-lg font-semibold text-white">Prediction Markets</h3>
-            <p className="text-xs text-gray-400">Money-backed sentiment from Polymarket</p>
+            <p className="text-xs text-gray-400">Event probabilities from Polymarket</p>
           </div>
         </div>
         <a
@@ -338,45 +213,7 @@ export default function PredictionMarketWidget({ ticker }: PredictionMarketWidge
       {/* Calculation Methodology - Collapsible */}
       <CalculationMethodology />
 
-      {/* Overall Sentiment */}
-      <div className="mb-6 p-4 bg-gray-700/50 rounded-lg">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-gray-400">Overall Sentiment</span>
-          <span className={`text-sm font-medium ${sentimentColor} capitalize`}>
-            {data.trend}
-          </span>
-        </div>
-        
-        {/* Sentiment Bar */}
-        <div className="relative h-2 bg-gray-700 rounded-full overflow-hidden mb-2">
-          <div
-            className={`absolute left-0 top-0 h-full ${sentimentBg} transition-all duration-500`}
-            style={{ width: `${data.overall_sentiment * 100}%` }}
-          />
-        </div>
-        
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-gray-500">Bearish</span>
-          <span className={`font-medium ${sentimentColor}`}>
-            {(data.overall_sentiment * 100).toFixed(0)}%
-          </span>
-          <span className="text-gray-500">Bullish</span>
-        </div>
-        
-        {/* Confidence */}
-        <div className="mt-3 flex items-center gap-2">
-          <span className="text-xs text-gray-400">Confidence:</span>
-          <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-blue-500/50 transition-all duration-500"
-              style={{ width: `${data.confidence * 100}%` }}
-            />
-          </div>
-          <span className="text-xs text-gray-300">
-            {(data.confidence * 100).toFixed(0)}%
-          </span>
-        </div>
-      </div>
+      <p className="mb-6 text-sm text-gray-400">Stock-price direction: unavailable. Review the individual events below.</p>
 
       {/* Top Markets - Grouped by Event */}
       <div className="space-y-4">
@@ -500,10 +337,7 @@ function EventGroup({ group }: { group: GroupedEvent }) {
 }
 
 function MarketCard({ market, compact }: { market: Market; compact?: boolean }) {
-  const probabilityColor = 
-    market.probability >= 0.6 ? 'text-green-400' :
-    market.probability <= 0.4 ? 'text-red-400' :
-    'text-gray-400';
+  const probabilityColor = 'text-blue-300';
 
   const changeColor = 
     market.change_24h > 0 ? 'text-green-400' :

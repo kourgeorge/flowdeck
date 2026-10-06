@@ -10,11 +10,26 @@ formatting.
 from __future__ import annotations
 
 import logging
+import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ToolBudget:
+    limit: int
+    used: int = 0
+    lock: Any = field(default_factory=threading.Lock, repr=False)
+
+    def consume(self) -> bool:
+        with self.lock:
+            if self.used >= self.limit:
+                return False
+            self.used += 1
+            return True
 
 
 # ---------------------------------------------------------------------------
@@ -38,6 +53,11 @@ class ExecutionContext:
     time_budget_ms: int = 60_000
     max_tool_calls: int = 10
     memory: Dict[str, Any] = field(default_factory=dict)
+    budget: Optional[ToolBudget] = None
+
+    def __post_init__(self) -> None:
+        if self.budget is None:
+            self.budget = ToolBudget(self.max_tool_calls)
 
 
 # ---------------------------------------------------------------------------
@@ -143,5 +163,4 @@ class BaseTool(ABC):
     def __repr__(self) -> str:
         status = "enabled" if self.enabled else "disabled"
         return f"<Tool {self.spec.name}@{self.spec.version} [{status}]>"
-
 

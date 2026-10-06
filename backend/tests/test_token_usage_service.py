@@ -181,7 +181,9 @@ class TestTokenUsageService(unittest.TestCase):
         self.assertEqual(payload["returned_operations"], 3)
 
         self.assertEqual(payload["items"][0]["kind"], "chat")
-        self.assertEqual(payload["items"][0]["chat_turn_id"], 401)
+        self.assertIsNone(payload["items"][0]["chat_turn_id"])
+        self.assertEqual(payload["items"][0]["chat_session_id"], 201)
+        self.assertEqual(payload["items"][0]["chat_turn_count"], 1)
         self.assertEqual(payload["items"][0]["platform_tokens"], platform_chat_tokens)
         self.assertEqual(payload["items"][1]["kind"], "digest")
         self.assertEqual(payload["items"][1]["subject_label"], "2026-04-05")

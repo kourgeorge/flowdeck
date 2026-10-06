@@ -14,7 +14,7 @@ MAJOR_TICKERS = [
 ]
 
 # Results directory path (in repo root; relative to backend or absolute)
-RESULTS_DIR = "results"
+RESULTS_DIR = os.environ.get("RESULTS_DIR", "results")
 
 # Market data cache TTL in seconds (legacy, used as fallback)
 MARKET_DATA_CACHE_TTL = 60  # 1 minute

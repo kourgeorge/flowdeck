@@ -340,12 +340,8 @@ def _build_index_etf_valuation(
         method_weights["Market Target"] = 0.7
 
     if not methods:
-        methods["Price Regime"] = {
-            "bear": current_price * 0.92,
-            "base": current_price,
-            "bull": current_price * 1.08,
-        }
-        method_weights["Price Regime"] = 1.0
+        return _valuation_unavailable(ticker, current_price,
+            "ETF valuation requires NAV/look-through fundamentals or supported relative valuation inputs")
 
     total_weight = sum(method_weights.values()) or 1.0
     normalized_weights = {method: weight / total_weight for method, weight in method_weights.items()}
@@ -403,7 +399,7 @@ def _build_index_etf_valuation(
         else:
             valuation_conviction = "low"
     else:
-        valuation_conviction = "high" if dispersion < 0.10 else "medium" if dispersion < 0.20 else "low"
+        valuation_conviction = "low"  # One method cannot establish cross-method confidence.
     
     valuation_score = _deterministic_score(current_discount_pct, valuation_conviction)
 
@@ -414,16 +410,9 @@ def _build_index_etf_valuation(
         "risk_discount": max(current_price - fair_value_base, 0.0),
         "fair_value": fair_value_base,
     }
-    valuation_sensitivity = {
-        "fcf_growth_rate": {"delta": 0.0, "low": fair_value_base, "high": fair_value_base},
-        "wacc": {
-            "delta": round(0.005 + (0.005 * abs(beta - 1.0)), 4),
-            "low": fair_value_base * 0.97,
-            "high": fair_value_base * 1.03,
-        },
-        "terminal_growth": {"delta": 0.0, "low": fair_value_base, "high": fair_value_base},
-        "exit_multiple": {"delta": 0.0, "low": fair_value_bear, "high": fair_value_bull},
-    }
+    # These relative scenarios do not model DCF parameter sensitivities.
+    valuation_sensitivity = {key: None for key in ("fcf_growth_rate", "wacc", "terminal_growth", "exit_multiple")}
+
 
     key_assumptions = [
         f"Instrument type: {quote_type} - aggregate valuation regime analysis used instead of single-company intrinsic DCF",

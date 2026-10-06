@@ -50,10 +50,9 @@ class PolymarketService:
             
         Returns:
             Dictionary with:
-            - overall_sentiment: 0-1 scale (0=bearish, 0.5=neutral, 1=bullish)
-            - confidence: 0-1 scale based on volume
-            - trend: "bullish", "neutral", or "bearish"
-            - narratives: Dict of narrative categories with sentiment
+            - overall_sentiment, confidence: None (direction is not inferred)
+            - trend: "unknown"
+            - narratives: Empty; event odds do not establish stock direction
             - top_markets: List of most relevant markets
             - last_updated: ISO timestamp
             - error: Optional error message if data unavailable
@@ -128,7 +127,7 @@ class PolymarketService:
             
             logger.info(
                 f"Polymarket sentiment for {ticker}: "
-                f"{sentiment_data['overall_sentiment']:.2f} ({sentiment_data['trend']})"
+                f"direction={sentiment_data['trend']}"
             )
             
             return response
@@ -193,98 +192,9 @@ class PolymarketService:
         Returns:
             Dict with overall_sentiment, confidence, trend, and narratives
         """
-        if not markets:
-            return {
-                "overall_sentiment": 0.5,
-                "confidence": 0.0,
-                "trend": "neutral",
-                "narratives": {}
-            }
-        
-        # Validate markets is a list of dicts
-        if not isinstance(markets, list):
-            logger.error(f"markets is not a list: {type(markets)}")
-            raise TypeError(f"markets must be a list, got {type(markets)}")
-        
-        # Calculate weighted sentiment
-        total_weight = 0
-        weighted_sum = 0
-        
-        logger.info(f"Aggregating sentiment from {len(markets)} markets")
-        
-        for idx, market in enumerate(markets):
-            # Validate each market is a dict
-            if not isinstance(market, dict):
-                logger.error(f"Market at index {idx} is not a dict: {type(market)}, value: {market}")
-                raise TypeError(f"Market at index {idx} must be a dict, got {type(market)}")
-            
-            # Extract probability (0-1 scale)
-            probability = self.vendor.extract_probability(market)
-            
-            # Calculate weight based on volume, liquidity, and relevance
-            try:
-                volume = float(market.get('volume', 0)) if market.get('volume') else 0
-            except (ValueError, TypeError):
-                volume = 0
-            
-            relevance = market.get('relevance_score', 0.5)
-            time_decay = self._time_decay_factor(market.get('end_date'))
-            
-            weight = (
-                math.log10(volume + 1) *  # Log scale for volume
-                relevance *  # Relevance score
-                time_decay  # Time decay
-            )
-            
-            weighted_sum += probability * weight
-            total_weight += weight
-            
-            # Log first 5 markets for debugging
-            if idx < 5:
-                question = market.get('question', market.get('event_title', 'N/A'))[:60]
-                logger.info(
-                    f"  Market {idx+1}: '{question}' - "
-                    f"prob={probability:.3f} ({probability*100:.1f}%), "
-                    f"vol=${volume:,.0f}, "
-                    f"relevance={relevance:.2f}, "
-                    f"time_decay={time_decay:.2f}, "
-                    f"weight={weight:.2f}"
-                )
-        
-        # Calculate overall sentiment
-        overall_sentiment = weighted_sum / total_weight if total_weight > 0 else 0.5
-        
-        # Calculate confidence based on total volume
-        total_volume = 0
-        for m in markets:
-            try:
-                vol = float(m.get('volume', 0)) if m.get('volume') else 0
-                total_volume += vol
-            except (ValueError, TypeError):
-                continue
-        confidence = min(math.log10(total_volume + 1) / 6, 1.0)  # Normalize to 0-1
-        
-        # Determine trend
-        if overall_sentiment >= 0.6:
-            trend = "bullish"
-        elif overall_sentiment <= 0.4:
-            trend = "bearish"
-        else:
-            trend = "neutral"
-        
-        logger.info(
-            f"Aggregation complete: overall_sentiment={overall_sentiment:.3f} ({overall_sentiment*100:.1f}%), "
-            f"confidence={confidence:.3f}, trend={trend}, "
-            f"total_volume=${total_volume:,.0f}, total_weight={total_weight:.2f}"
-        )
-        
-        # Return sentiment without narrative breakdown to avoid recursion
-        return {
-            "overall_sentiment": overall_sentiment,
-            "confidence": confidence,
-            "trend": trend,
-            "narratives": {}  # Empty dict to maintain API compatibility
-        }
+        # Event probability has no stock-return direction without an explicit
+        # outcome/exposure model. Preserve each market; do not invent an aggregate.
+        return {"overall_sentiment": None, "confidence": None, "trend": "unknown", "narratives": {}}
     
     def _group_by_narrative(
         self,
@@ -434,9 +344,9 @@ class PolymarketService:
         """
         response = {
             "ticker": ticker.upper(),
-            "overall_sentiment": 0.5,
-            "confidence": 0.0,
-            "trend": "neutral",
+            "overall_sentiment": None,
+            "confidence": None,
+            "trend": "unknown",
             "narratives": {},
             "top_markets": [],
             "last_updated": datetime.utcnow().isoformat() + "Z",
