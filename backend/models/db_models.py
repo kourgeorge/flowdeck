@@ -34,6 +34,7 @@ class User(Base):
 
     subscriptions = relationship("Subscription", back_populates="user", cascade="all, delete-orphan")
     profile = relationship("UserProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    watchlist_updates = relationship("WatchlistUpdate", cascade="all, delete-orphan")
 
 
 class UserProfile(Base):
@@ -271,6 +272,29 @@ class Usage(Base):
         Index("idx_token_tx_related_entity", "related_entity_type", "related_entity_id"),
     )
 
+
+
+class WatchlistUpdate(Base):
+    """Durable daily watchlist check and email delivery record."""
+
+    __tablename__ = "watchlist_updates"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    local_date = Column(String(10), nullable=False)
+    status = Column(String(24), nullable=False, default="pending")
+    attempts = Column(Integer, nullable=False, default=0)
+    available_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    moves_json = Column(Text, nullable=True)
+    article_json = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+    sent_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "local_date", name="uq_watchlist_update_user_day"),
+    )
 
 
 class UserSchedule(Base):

@@ -1269,6 +1269,30 @@ export const digestApi = {
   },
 };
 
+export type WatchlistNotificationPreferences = {
+  enabled: boolean;
+  timezone: string;
+  hour: number;
+};
+
+export const watchlistNotificationApi = {
+  get: async (): Promise<WatchlistNotificationPreferences> => {
+    const token = getStoredToken();
+    if (!token) throw new Error('Sign in to manage notifications');
+    const response = await api.get<WatchlistNotificationPreferences>('/api/watchlist/notifications', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data;
+  },
+  update: async (enabled: boolean, timezone: string): Promise<WatchlistNotificationPreferences> => {
+    const token = getStoredToken();
+    if (!token) throw new Error('Sign in to manage notifications');
+    const response = await api.put<WatchlistNotificationPreferences>('/api/watchlist/notifications',
+      { enabled, timezone }, { headers: { Authorization: `Bearer ${token}` } });
+    return response.data;
+  },
+};
+
 export const digestScheduleApi = {
   getSchedules: async (): Promise<DigestSchedulesResponse> => {
     const token = getStoredToken();

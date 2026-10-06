@@ -3,6 +3,7 @@ import type { MeProfile } from '../../services/authApi';
 import type { Subscription } from '../../services/subscriptionApi';
 import TokenPurchase from '../TokenPurchase';
 import UserStatsSection from '../UserStatsSection';
+import WatchlistNotifications from './WatchlistNotifications';
 import {
   PROFILE_MUTED_PANEL_CLASS,
   PROFILE_PANEL_CLASS,
@@ -104,13 +105,14 @@ export default function ProfileOverviewTab({
             Notifications
           </span>
           <h2 className="mt-4 text-xl font-semibold text-white">
-            Subscription email preferences
+            Watchlist email preferences
           </h2>
           <p className="mt-2 text-sm leading-6 text-slate-300">
-            Choose whether FlowDeck should email you when a new analysis report is
-            ready for each subscribed ticker.
+            Manage morning updates and choose which tickers can send you emails.
           </p>
         </div>
+
+        <WatchlistNotifications />
 
         <div className="mt-6">
           {subscriptionsLoading ? (
@@ -135,7 +137,7 @@ export default function ProfileOverviewTab({
                       {subscription.ticker}
                     </Link>
                     <p className="mt-1 text-xs text-slate-500">
-                      Report-ready email alerts
+                      Report and morning update emails
                     </p>
                   </div>
                   <label className="flex shrink-0 items-center gap-2 text-sm text-slate-400">

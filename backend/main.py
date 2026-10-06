@@ -320,6 +320,29 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"Failed to start event monitor scheduler: {e}")
 
+    # Morning movement articles are separate from paid, unconditional daily briefs.
+    if is_scheduler_leader and os.environ.get("ENABLE_WATCHLIST_UPDATES", "true").lower() in ("true", "1", "yes"):
+        try:
+            if scheduler is None:
+                from apscheduler.schedulers.background import BackgroundScheduler
+                scheduler = BackgroundScheduler()
+            from database import SessionLocal
+            from services.watchlist_update_service import run_watchlist_updates
+
+            def _run_watchlist_updates_job():
+                with SessionLocal() as db:
+                    logger.info("Morning watchlist updates: %s", run_watchlist_updates(db))
+
+            scheduler.add_job(
+                _run_watchlist_updates_job, "interval", minutes=15,
+                id="watchlist_updates", coalesce=True, max_instances=1,
+                misfire_grace_time=600,
+            )
+            if not scheduler.running:
+                scheduler.start()
+        except Exception:
+            logger.exception("Failed to start morning watchlist updates")
+
     yield
     if scheduler is not None:
         try:

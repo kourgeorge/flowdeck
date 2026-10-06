@@ -62,6 +62,7 @@ def init_db() -> None:
         User,
         UserProfile,
         UserSchedule,
+        WatchlistUpdate,
     )
     Base.metadata.create_all(bind=engine)
 

@@ -1,0 +1,39 @@
+{% extends "email_base.html" %}
+{% import "email_macros.html" as ui %}
+{% block preheader %}What moved in your watchlist, what drove it, and what to watch next.{% endblock %}
+{% block eyebrow %}<p style="color:#93c5fd;">Your morning watchlist · {{ local_date }}</p>{% endblock %}
+{% block title %}{{ article.headline }}{% endblock %}
+{% block intro %}<p style="margin:0;">{{ article.introduction }}</p>{% endblock %}
+{% block content %}
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:24px;">
+  {% for move in moves %}
+  <tr>
+    <td style="padding:12px 0;border-bottom:1px solid #e2e8f0;color:#334155;">
+      <strong>{{ move.ticker }}</strong><br><span style="font-size:12px;">Session {{ move.session_date }} · {{ move.price_basis }}</span>
+    </td>
+    <td style="padding:12px 0;text-align:right;border-bottom:1px solid #e2e8f0;font-weight:700;color:{{ '#059669' if move.change_percent > 0 else '#e11d48' }};">
+      {{ '%+.2f' | format(move.change_percent) }}%
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% for section in article.sections %}
+<h2 style="font-size:20px;color:#0f172a;margin:24px 0 10px;">{{ section.heading }}</h2>
+{% for paragraph in section.body.split('\n\n') %}
+<p style="font-size:15px;line-height:1.8;color:#334155;margin:0 0 14px;">{{ paragraph }}</p>
+{% endfor %}
+{% endfor %}
+<h2 style="font-size:20px;color:#0f172a;margin:24px 0 10px;">What to watch</h2>
+<p style="font-size:15px;line-height:1.8;color:#334155;">{{ article.watch_next }}</p>
+{% if article.sources %}
+<h3 style="font-size:14px;color:#64748b;margin-top:24px;">Sources</h3>
+<ul style="padding-left:20px;font-size:13px;line-height:1.7;color:#64748b;">
+{% for source in article.sources %}
+<li><a href="{{ source.url }}" style="color:#2563eb;">{{ source.title }}</a>{% if source.publisher %} — {{ source.publisher }}{% endif %}{% if source.published_time %} ({{ source.published_time }}){% endif %}</li>
+{% endfor %}
+</ul>
+{% endif %}
+{% endblock %}
+{% block actions %}{{ ui.button(profile_url, 'Manage watchlist notifications') }}{% endblock %}
+{% block footer_message %}You received this update because a stock you follow moved more than 6% and showed significant event signals. AI analysis may contain errors; check the linked sources.{% endblock %}
+{% block footer_extra %}<p style="margin-top:10px;"><a href="{{ profile_url }}" style="color:#2563eb;">Turn off morning watchlist updates</a></p>{% endblock %}

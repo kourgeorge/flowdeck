@@ -422,6 +422,8 @@ def _send_via_smtp(
     subject: str,
     text_body: str,
     html_body: str,
+    *,
+    timeout: Optional[float] = None,
 ) -> bool:
     """Send emails via SMTP. Returns True if at least one sent."""
     user = _get_smtp_user()
@@ -454,7 +456,7 @@ def _send_via_smtp(
                 logo_part.add_header("Content-Disposition", "inline", filename="flowdeck-logo.png")
                 msg.attach(logo_part)
 
-            with smtplib.SMTP_SSL(host, port) as server:
+            with smtplib.SMTP_SSL(host, port, timeout=timeout) as server:
                 server.login(user, password)
                 server.sendmail(user, [email], msg.as_string())
             sent += 1
@@ -489,6 +491,30 @@ def _send_via_api(
         except Exception:
             pass
     return sent > 0
+
+
+def send_watchlist_update_email(user_email: str, article: dict, moves: list, local_date: str) -> bool:
+    """Send one grounded morning article using escaped plain-prose template fields."""
+    profile_url = f"{_get_frontend_url()}/profile#overview"
+    subject = "Flowdeck watchlist: " + " ".join(str(article["headline"]).split())[:160]
+    html_body = _jinja_env.get_template("watchlist_update_email.html").render(
+        article=article, moves=moves, local_date=local_date, profile_url=profile_url,
+    )
+    paragraphs = [article["headline"], article["introduction"]]
+    paragraphs.extend(f"{m['ticker']}: {m['change_percent']:+.2f}% on {m['session_date']}" for m in moves)
+    for section in article["sections"]:
+        paragraphs.extend([section["heading"], section["body"]])
+    paragraphs.extend(["What to watch", article["watch_next"], "Sources"])
+    paragraphs.extend(f"{s['title']}: {s['url']}" for s in article.get("sources", []))
+    paragraphs.append(f"Manage or turn off morning watchlist updates: {profile_url}")
+    text_body = "\n\n".join(paragraphs)
+    # Select one transport. A timeout may occur after delivery, so do not fall back
+    # to a second transport and potentially send the same article twice.
+    if _get_smtp_password():
+        return _send_via_smtp([user_email], subject, text_body, html_body, timeout=30)
+    if _get_api_key():
+        return _send_via_api([user_email], subject, text_body, html_body)
+    return False
 
 
 def send_report_notification(

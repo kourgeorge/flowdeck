@@ -29,6 +29,32 @@ from services.schedule_service import (
 router = APIRouter(prefix="/api", tags=["Digests"])
 
 
+class WatchlistUpdatePreference(BaseModel):
+    enabled: bool = True
+    timezone: Optional[str] = Field(default=None, max_length=64)
+
+
+class WatchlistUpdatePreferenceOut(WatchlistUpdatePreference):
+    hour: int
+
+
+@router.get("/watchlist/notifications", response_model=WatchlistUpdatePreferenceOut)
+def get_watchlist_notifications(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Morning movement articles are enabled unless the user opts out."""
+    from services.watchlist_update_service import get_preferences
+    return get_preferences(db, current_user.id)
+
+
+@router.put("/watchlist/notifications", response_model=WatchlistUpdatePreferenceOut)
+def update_watchlist_notifications(payload: WatchlistUpdatePreference,
+                                  current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    from services.watchlist_update_service import set_preferences
+    try:
+        return set_preferences(db, current_user.id, enabled=payload.enabled, timezone_name=payload.timezone)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 class DigestScheduleMetadata(BaseModel):
     """Schedule-specific options used by the digest scheduler."""
 
@@ -194,4 +220,3 @@ def upsert_my_digest_schedule(
     )
 
     return _to_digest_schedule_out(schedule=schedule, schedule_type=schedule_type)
-
