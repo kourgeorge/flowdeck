@@ -247,6 +247,9 @@ kubectl exec -it deployment/flowdeck-backend -n flowdeck -- curl http://localhos
 # Check frontend
 curl https://your-domain.com/health
 
+# Check backend through the public domain (also checks the database)
+curl https://your-domain.com/api/health
+
 # View logs
 kubectl logs -f deployment/flowdeck-backend -n flowdeck
 kubectl logs -f deployment/flowdeck-frontend -n flowdeck

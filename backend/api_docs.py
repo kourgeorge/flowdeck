@@ -34,7 +34,7 @@ API_VERSION = "2.0.0"
 #                          ticker/financial data of any use to a third party
 #   /api/stats            platform-wide vanity counters for the homepage, same reasoning
 #   /api/polymarket/health  liveness of our internal Polymarket integration, not data
-#                          a third party would call for (use /health for API liveness)
+#                          a third party would call for (use /api/health for API liveness)
 REDACTED_PATH_PREFIXES: Tuple[str, ...] = (
     "/api/payments",
     "/api/contact",

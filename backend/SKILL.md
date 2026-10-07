@@ -106,7 +106,8 @@ Use these without a token for market research and data.
 
 ```bash
 GET /                    # {"message": "Stock Dashboard API", "status": "running"}
-GET /health              # {"status": "healthy", "service": "tradingagents-api"}
+GET /health              # {"status": "healthy", "service": "tradingagents-api"} (process only, not reachable via the public domain)
+GET /api/health          # same, plus "database": "ok"; 503 if the DB is unreachable. Use this for uptime monitors.
 GET /api/SKILL.md        # this file, as text/markdown
 ```
 
@@ -930,7 +931,7 @@ API keys do **not** work on the analysis WebSocket — its `?token=` parameter i
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/`, `/health` | No | Health and root |
+| GET | `/`, `/health`, `/api/health` | No | Health and root |
 | GET | `/api/SKILL.md` | No | This guide |
 | GET | `/api/share/{token}` | No | Public shared report or digest view |
 | POST | `/api/auth/register` | No | Register (email, password) |

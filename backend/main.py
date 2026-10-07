@@ -15,7 +15,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from scalar_fastapi import get_scalar_api_reference
+from sqlalchemy import text
 
 # Ensure backend loggers have sensible defaults (uvicorn configures root; our loggers propagate)
 logging.getLogger("services.analysis_service").setLevel(logging.INFO)
@@ -26,6 +28,7 @@ env_path = Path(__file__).parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 import app_services
+import database
 from config import CORS_ORIGINS
 from database import init_db
 from routers.analyses import run_sync_major_tickers_background, router as analyses_router, ws_router as analyses_ws_router
@@ -459,6 +462,34 @@ async def root():
 async def health():
     """Health check endpoint."""
     return {"status": "healthy", "service": "tradingagents-api"}
+
+
+@app.get(
+    "/api/health",
+    tags=["Platform"],
+    responses={503: {"description": "Backend is running but cannot reach its database."}},
+)
+def api_health():
+    """Readiness check for external uptime monitors.
+
+    /health is outside the /api prefix, so nginx never forwards it here and
+    flowdeck.biz/health returns the SPA instead. This route is reachable
+    publicly. Unlike /health it also queries the database, so a monitor goes
+    red when the process is alive but broken. /health stays process-only on
+    purpose: the Docker healthchecks use it, and a short DB hiccup shouldn't
+    make Docker restart the container.
+    """
+    try:
+        with database.engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception:
+        # Log the cause but don't return it: this route is public.
+        logger.exception("Health check: database unreachable")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unhealthy", "service": "tradingagents-api", "database": "unreachable"},
+        )
+    return {"status": "healthy", "service": "tradingagents-api", "database": "ok"}
 
 
 if __name__ == "__main__":
