@@ -30,6 +30,7 @@ import OverviewTab from '../components/admin/OverviewTab';
 import MissionControlTab from '../components/admin/MissionControlTab';
 import UsersTab from '../components/admin/UsersTab';
 import AnalyticsTab from '../components/admin/AnalyticsTab';
+import Pagination from '../components/admin/Pagination';
 
 type AdminTab = 'overview' | 'mission-control' | 'users' | 'analytics' | 'accuracy';
 const ADMIN_TAB_IDS: AdminTab[] = ['overview', 'mission-control', 'users', 'analytics', 'accuracy'];
@@ -38,7 +39,7 @@ type MissionSortDirection = 'asc' | 'desc';
 type ViewRunsSortKey = 'ticker' | 'analysis_run_id' | 'unique_views' | 'viewed';
 type ViewRunsSortDirection = 'asc' | 'desc';
 
-export default function AdminDashboardPage() {
+export function AdminDashboardContent() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
@@ -133,7 +134,18 @@ export default function AdminDashboardPage() {
   const [expandedSubscriptionUserIds, setExpandedSubscriptionUserIds] = useState<Set<number>>(new Set());
   const reportDetailsRef = useRef<Record<number, AdminReportDetail>>({});
   const reportDetailRequestRef = useRef(0);
-  const usersLoadedRef = useRef(false);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [usersRevision, setUsersRevision] = useState(0);
+  const [usersOffset, setUsersOffset] = useState(0);
+  const [usersSearch, setUsersSearch] = useState('');
+  const [subscriptionsOffset, setSubscriptionsOffset] = useState(0);
+  const [viewRunsOffset, setViewRunsOffset] = useState(0);
+  const [analysesOffset, setAnalysesOffset] = useState(0);
+  const [dashboardRevision, setDashboardRevision] = useState(0);
+  const missionRequestRef = useRef(0);
+  const runningRequestRef = useRef(0);
+
 
   // Sync URL -> tab state (reload / back restores tab)
   useEffect(() => {
@@ -321,7 +333,7 @@ export default function AdminDashboardPage() {
       const res = await adminApi.getViewsForRun(analysisRunId, 5000, 0);
       setViewsByRun((prev) => ({ ...prev, [runKey]: res.views }));
     } catch {
-      setViewsByRun((prev) => ({ ...prev, [runKey]: [] }));
+      setUsersError('Could not load report viewers. Collapse and expand the run to retry.');
     } finally {
       setLoadingRunViewKeys((prev) => {
         const next = new Set(prev);
@@ -349,14 +361,17 @@ export default function AdminDashboardPage() {
   };
 
   const refreshRunningAnalyses = async () => {
+    const request = ++runningRequestRef.current;
     setRunningAnalysesLoading(true);
     try {
       const list = await adminApi.getRunningAnalyses();
+      if (request !== runningRequestRef.current) return;
       setRunningAnalyses(list);
+      setMissionError(null);
     } catch {
-      setRunningAnalyses([]);
+      if (request === runningRequestRef.current) setMissionError('Could not refresh running analyses. The last known list is shown.');
     } finally {
-      setRunningAnalysesLoading(false);
+      if (request === runningRequestRef.current) setRunningAnalysesLoading(false);
     }
   };
 
@@ -365,12 +380,17 @@ export default function AdminDashboardPage() {
     try {
       await adminApi.stopRunningAnalysis(runId);
       await Promise.all([refreshRunningAnalyses(), refreshMissionControl()]);
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { detail?: string } } };
+      setMissionActionError(ax.response?.data?.detail ?? 'Could not stop analysis. Please retry.');
     } finally {
       setStoppingRunId(null);
     }
   };
 
   const refreshMissionControl = async () => {
+    const request = ++missionRequestRef.current;
+    const runningRequest = ++runningRequestRef.current;
     setMissionLoading(true);
     setMissionError(null);
     try {
@@ -378,17 +398,18 @@ export default function AdminDashboardPage() {
         adminApi.getMissionControl(),
         adminApi.getRunningAnalyses(),
       ]);
+      if (request !== missionRequestRef.current) return;
       setMissionItems(res.items);
-      setRunningAnalyses(running);
+      if (runningRequest === runningRequestRef.current) setRunningAnalyses(running);
       setSelectedMissionTickers((prev) => {
         const valid = new Set(res.items.map((item) => item.ticker));
         return prev.filter((ticker) => valid.has(ticker));
       });
     } catch (err: unknown) {
       const ax = err as { response?: { data?: { detail?: string } } };
-      setMissionError(ax.response?.data?.detail ?? 'Failed to load mission control');
+      if (request === missionRequestRef.current) setMissionError(ax.response?.data?.detail ?? 'Failed to load mission control');
     } finally {
-      setMissionLoading(false);
+      if (request === missionRequestRef.current) setMissionLoading(false);
     }
   };
 
@@ -526,116 +547,87 @@ export default function AdminDashboardPage() {
   };
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const [s, r, a] = await Promise.all([
-          adminApi.getStats(),
-          adminApi.getReports(50),
-          adminApi.getAnalyses(50, 0),
-        ]);
-        setStats(s);
-        setReports(r.reports);
-        setReportsTotal(r.total);
-        setAnalyses(a.analyses);
-        setAnalysesTotal(a.total);
-        setDailyAnalyses([]);
-        setDailyViews([]);
-      } catch (err: unknown) {
-        const ax = err as { response?: { data?: { detail?: string } } };
-        setError(ax.response?.data?.detail ?? 'Failed to load admin data');
-      } finally {
-        setLoading(false);
+    let current = true;
+    setLoading(true);
+    setError(null);
+    void Promise.allSettled([
+      adminApi.getStats(), adminApi.getReports(50),
+      adminApi.getAnalysesDaily(30), adminApi.getViewsDaily(30),
+    ]).then(([summary, recent, activity, views]) => {
+      if (!current) return;
+      if (summary.status === 'fulfilled') setStats(summary.value);
+      if (recent.status === 'fulfilled') { setReports(recent.value.reports); setReportsTotal(recent.value.total); }
+      if (activity.status === 'fulfilled') setDailyAnalyses(activity.value.data);
+      if (views.status === 'fulfilled') setDailyViews(views.value.data);
+      if ([summary, recent, activity, views].some(result => result.status === 'rejected')) {
+        setError('Some dashboard data could not be loaded. Retry to refresh it.');
       }
-    };
-    void fetchData();
-  }, []);
+      setLoading(false);
+    });
+    return () => { current = false; };
+  }, [dashboardRevision]);
 
   useEffect(() => {
-    if (activeTab === 'mission-control') {
-      void refreshMissionControl();
-      return;
-    }
-    if (activeTab === 'users' && !usersLoadedRef.current) {
-      usersLoadedRef.current = true;
-      const loadUsersTab = async () => {
-        try {
-          const [u, subs, vr] = await Promise.all([
-            adminApi.getUsers(100, 0),
-            adminApi.getSubscriptions(500, 0),
-            adminApi.getViewRuns(500),
-          ]);
-          setUsers(u.users);
-          setUsersTotal(u.total);
-          setSubscriptions(subs.subscriptions);
-          setSubscriptionsTotal(subs.total);
-          setViewRuns(vr.runs);
-          setViewRunsTotal(vr.total_runs_with_views);
-        } catch (err: unknown) {
-          const ax = err as { response?: { data?: { detail?: string } } };
-          setError(ax.response?.data?.detail ?? 'Failed to load users data');
-        }
-      };
-      void loadUsersTab();
-      return;
-    }
-    if (activeTab === 'accuracy') {
-      const loadAccuracy = async () => {
-        setAccuracyLoading(true);
-        setAccuracyError(null);
-        try {
-          const result = await adminApi.getAnalysisAccuracy(accuracyDays);
-          setAccuracyData(result);
-        } catch (err: unknown) {
-          const ax = err as { response?: { data?: { detail?: string } } };
-          setAccuracyError(ax.response?.data?.detail ?? 'Failed to load analysis accuracy');
-        } finally {
-          setAccuracyLoading(false);
-        }
-      };
-      void loadAccuracy();
-    }
+    if (activeTab !== 'overview') return;
+    let current = true;
+    setLoadingMoreAnalyses(true);
+    setAnalyses([]);
+    void adminApi.getAnalyses(50, analysesOffset, analysisTickerFilter, analysisCreatorFilter).then(result => {
+      if (!current) return;
+      setAnalyses(result.analyses);
+      setAnalysesTotal(result.total);
+      if (analysesOffset && analysesOffset >= result.total) setAnalysesOffset(Math.max(0, Math.floor((result.total - 1) / 50) * 50));
+    }).catch(() => { if (current) setError('Could not load analyses. Please retry.'); })
+      .finally(() => { if (current) setLoadingMoreAnalyses(false); });
+    return () => { current = false; };
+  }, [activeTab, analysesOffset, analysisTickerFilter, analysisCreatorFilter, dashboardRevision]);
+
+  useEffect(() => {
+    if (activeTab !== 'users') return;
+    let current = true;
+    setUsersLoading(true);
+    setUsersError(null);
+    setUsers([]); setSubscriptions([]); setViewRuns([]);
+    void Promise.allSettled([
+      adminApi.getUsers(50, usersOffset, usersSearch),
+      adminApi.getSubscriptions(50, subscriptionsOffset),
+      adminApi.getViewRuns(50, viewRunsOffset),
+    ]).then(([accounts, subs, views]) => {
+      if (!current) return;
+      if (accounts.status === 'fulfilled') {
+        setUsers(accounts.value.users); setUsersTotal(accounts.value.total);
+        if (usersOffset && usersOffset >= accounts.value.total) setUsersOffset(Math.max(0, Math.floor((accounts.value.total - 1) / 50) * 50));
+      }
+      if (subs.status === 'fulfilled') {
+        setSubscriptions(subs.value.subscriptions); setSubscriptionsTotal(subs.value.total);
+      }
+      if (views.status === 'fulfilled') {
+        setViewRuns(views.value.runs); setViewRunsTotal(views.value.total_runs_with_views);
+      }
+      const failed = [accounts.status === 'rejected' && 'users', subs.status === 'rejected' && 'subscriptions', views.status === 'rejected' && 'report views'].filter(Boolean);
+      if (failed.length) setUsersError(`Could not load ${failed.join(', ')}. Please retry.`);
+      setUsersLoading(false);
+    });
+    return () => { current = false; };
+  }, [activeTab, usersOffset, usersSearch, subscriptionsOffset, viewRunsOffset, usersRevision]);
+
+  useEffect(() => {
+    if (activeTab !== 'accuracy') return;
+    let current = true;
+    setAccuracyLoading(true); setAccuracyError(null); setAccuracyData(null);
+    void adminApi.getAnalysisAccuracy(accuracyDays).then(result => {
+      if (current) setAccuracyData(result);
+    }).catch(() => { if (current) setAccuracyError('Could not load analysis accuracy. Change period or reopen the tab to retry.'); })
+      .finally(() => { if (current) setAccuracyLoading(false); });
+    return () => { current = false; };
   }, [activeTab, accuracyDays]);
 
   useEffect(() => {
     if (activeTab !== 'mission-control') return;
-    const interval = setInterval(() => {
-      void refreshRunningAnalyses();
-    }, 10000);
-    return () => clearInterval(interval);
+    void refreshMissionControl();
+    const interval = setInterval(() => { void refreshRunningAnalyses(); }, 10000);
+    return () => { clearInterval(interval); ++missionRequestRef.current; ++runningRequestRef.current; };
   }, [activeTab]);
-
-  // Scroll handler for loading more analyses
-  const handleAnalysesScroll = useCallback(async () => {
-    const container = analysesContainerRef.current;
-    if (!container || loadingMoreAnalyses || analyses.length >= analysesTotal) return;
-
-    const { scrollTop, scrollHeight, clientHeight } = container;
-    const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
-
-    // Load more when scrolled 80% down
-    if (scrollPercentage > 0.8) {
-      setLoadingMoreAnalyses(true);
-      try {
-        const result = await adminApi.getAnalyses(50, analyses.length);
-        setAnalyses((prev) => [...prev, ...result.analyses]);
-        setAnalysesTotal(result.total);
-      } catch (err) {
-        console.error('Failed to load more analyses:', err);
-      } finally {
-        setLoadingMoreAnalyses(false);
-      }
-    }
-  }, [analyses.length, analysesTotal, loadingMoreAnalyses]);
-
-  useEffect(() => {
-    const container = analysesContainerRef.current;
-    if (!container) return;
-
-    container.addEventListener('scroll', handleAnalysesScroll);
-    return () => container.removeEventListener('scroll', handleAnalysesScroll);
-  }, [handleAnalysesScroll]);
 
   if (!user) {
     return (
@@ -673,6 +665,7 @@ export default function AdminDashboardPage() {
       <div className="min-h-screen p-8">
         <div className="max-w-lg mx-auto text-center text-gray-400">
           <p className="mb-4">{error}</p>
+          <button type="button" onClick={() => setDashboardRevision(value => value + 1)} className="mr-4 underline">Retry</button>
           <Link to="/" className="text-blue-400 hover:text-blue-300">
             Go to home
           </Link>
@@ -693,6 +686,7 @@ export default function AdminDashboardPage() {
       />
       <div className="flex-1 p-6 md:p-8">
         <div className="max-w-layout mx-auto">
+          {error && <div role="alert" className="mb-4 text-red-300">{error} <button type="button" className="underline" onClick={() => setDashboardRevision(value => value + 1)}>Retry</button></div>}
           <div className="border-b border-slate-700 mb-8">
             <div className="flex flex-wrap gap-0.5">
               <button
@@ -763,8 +757,8 @@ export default function AdminDashboardPage() {
               filteredAnalyses={filteredAnalyses}
               analysisTickerFilter={analysisTickerFilter}
               analysisCreatorFilter={analysisCreatorFilter}
-              setAnalysisTickerFilter={setAnalysisTickerFilter}
-              setAnalysisCreatorFilter={setAnalysisCreatorFilter}
+              setAnalysisTickerFilter={value => { setAnalysisTickerFilter(value); setAnalysesOffset(0); }}
+              setAnalysisCreatorFilter={value => { setAnalysisCreatorFilter(value); setAnalysesOffset(0); }}
               loadingMoreAnalyses={loadingMoreAnalyses}
               reports={reports}
               reportsTotal={reportsTotal}
@@ -773,11 +767,8 @@ export default function AdminDashboardPage() {
               openReportDetail={openReportDetail}
               onDownloadAnalysis={downloadAnalysis}
               downloadingAnalysisIds={downloadingAnalysisIds}
-              setStats={setStats}
-              setAnalyses={setAnalyses}
-              setAnalysesTotal={setAnalysesTotal}
-              setReports={setReports}
-              setReportsTotal={setReportsTotal}
+              onAnalysisDeleted={() => setDashboardRevision(value => value + 1)}
+              pagination={<Pagination label="Analyses" offset={analysesOffset} count={analyses.length} total={analysesTotal} pageSize={50} loading={loadingMoreAnalyses} onChange={setAnalysesOffset} />}
               analysesContainerRef={analysesContainerRef}
             />
           )}
@@ -816,7 +807,18 @@ export default function AdminDashboardPage() {
           )}
 
           {activeTab === 'users' && (
+            <div>
+            <label className="block mb-4 text-sm text-gray-300">Search users
+              <input aria-label="Search users" type="search" maxLength={255} value={usersSearch} onChange={event => { setUsersSearch(event.target.value); setUsersOffset(0); }} className="ml-3 rounded bg-gray-800 border border-gray-600 p-2" />
+            </label>
+            {usersLoading && <p role="status" className="mb-3 text-gray-300">Loading users and related records…</p>}
+            {usersError && <div role="alert" className="mb-4 text-red-300">{usersError} <button type="button" className="underline" onClick={() => setUsersRevision(value => value + 1)}>Retry users data</button></div>}
             <UsersTab
+              currentUserId={user.userId}
+              onUserDeleted={() => { setUsersRevision(value => value + 1); setDashboardRevision(value => value + 1); }}
+              usersPagination={<Pagination label="Users" offset={usersOffset} count={users.length} total={usersTotal} pageSize={50} loading={usersLoading} onChange={setUsersOffset} />}
+              subscriptionsPagination={<Pagination label="Subscriptions" offset={subscriptionsOffset} count={subscriptions.length} total={subscriptionsTotal} pageSize={50} loading={usersLoading} onChange={setSubscriptionsOffset} />}
+              viewRunsPagination={<Pagination label="Viewed runs" offset={viewRunsOffset} count={viewRuns.length} total={viewRunsTotal} pageSize={50} loading={usersLoading} onChange={setViewRunsOffset} />}
               users={users}
               usersTotal={usersTotal}
               addTokensError={addTokensError}
@@ -843,6 +845,7 @@ export default function AdminDashboardPage() {
               expandedSubscriptionUserIds={expandedSubscriptionUserIds}
               setExpandedSubscriptionUserIds={setExpandedSubscriptionUserIds}
             />
+            </div>
           )}
 
           {activeTab === 'analytics' && (
@@ -858,7 +861,7 @@ export default function AdminDashboardPage() {
                 <div>
                   <h2 className="text-lg font-semibold text-white">Prediction accuracy</h2>
                   <p className="mt-1 text-sm text-slate-400">
-                    Compares stored recommendation and analysis-time price against the latest batched quote.
+                    Compares the final recommendation of the latest completed run per ticker with its analysis-time price and the current quote. Returns use varying time horizons.
                     HOLD rows are shown but excluded from the accuracy percentage.
                   </p>
                 </div>
@@ -1145,3 +1148,10 @@ export default function AdminDashboardPage() {
 }
 
 // Made with Bob
+
+export default function AdminDashboardPage() {
+  const { user } = useAuth();
+  if (!user) return <div className="p-8 text-gray-300">Please log in to access the admin dashboard. <Link to="/">Go to home</Link></div>;
+  if (!user.is_admin) return <Navigate to="/" replace />;
+  return <AdminDashboardContent key={user.userId} />;
+}

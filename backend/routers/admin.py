@@ -4,17 +4,18 @@ import json
 import os
 from datetime import datetime, timedelta, timezone, date
 from typing import Any, Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, Field, field_serializer, field_validator
 from sqlalchemy.orm import Session
 
 from auth import get_current_admin_user
 from database import get_db
 import app_services
 from models.db_models import User
-from services import admin_service, analytics_service, token_service
+from services import admin_actions, admin_service, analytics_service, token_service
 from services.data_cache import delete_analysis_status, list_running_analyses, set_stop_requested
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -80,6 +81,7 @@ class AdminUserItem(TZAwareBaseModel):
     token_balance: int
     created_at: datetime
     subscription_count: int
+    is_admin: bool = False
 
 
 class AdminUsersResponse(TZAwareBaseModel):
@@ -212,7 +214,16 @@ class AdminReportViewsResponse(TZAwareBaseModel):
 
 
 class AdminAddTokensBody(BaseModel):
-    amount: int
+    amount: int = Field(ge=1, le=10000, strict=True)
+    request_id: UUID
+    reason: str = Field(default="Admin token grant", min_length=3, max_length=240)
+
+    @field_validator("reason")
+    @classmethod
+    def meaningful_reason(cls, value):
+        if len(value.strip()) < 3:
+            raise ValueError("Provide a reason for the grant")
+        return value.strip()
 
 
 class AdminAddTokensResponse(BaseModel):
@@ -240,7 +251,7 @@ class MissionControlResponse(TZAwareBaseModel):
 
 
 class MissionControlRunBody(BaseModel):
-    tickers: list[str] = Field(default_factory=list)
+    tickers: list[str] = Field(min_length=1, max_length=1000)
     force: bool = False
 
 
@@ -277,6 +288,19 @@ class RunningAnalysisItem(BaseModel):
 
 # --- Endpoints ---
 
+def _mutate(db, action, *args):
+    try:
+        return action(db, *args)
+    except LookupError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="The operation could not be completed") from exc
+
 @router.get("/stats", response_model=AdminStatsResponse)
 def get_admin_stats(
     _user: User = Depends(get_current_admin_user),
@@ -290,9 +314,10 @@ def get_admin_stats(
 @router.get("/running-analyses", response_model=list[RunningAnalysisItem])
 def get_running_analyses_list(
     _user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
 ):
-    """List all running analyses (from cache). For admin UI."""
-    items = list_running_analyses("ticker")
+    """List durable active analyses, enriched with cached progress."""
+    items = admin_service.list_active_analyses(db)
     return [
         RunningAnalysisItem(
             analysis_run_id=it.get("analysis_run_id", 0),
@@ -312,10 +337,16 @@ def get_running_analyses_list(
 def stop_running_analysis(
     run_id: int,
     _user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
 ):
-    """Signal the analysis to stop and remove it from the running list (cache)."""
+    """Request cooperative cancellation; keep the run visible until acknowledged."""
+    from models.db_models import Execution
+    execution = db.get(Execution, run_id)
+    if execution is None or execution.execution_type != "ticker":
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    if execution.status not in ("queued", "running"):
+        raise HTTPException(status_code=409, detail="Analysis has already finished")
     set_stop_requested(run_id)
-    delete_analysis_status("ticker", run_id)
     return {"ok": True, "run_id": run_id}
 
 
@@ -325,9 +356,10 @@ def get_admin_users(
     db: Session = Depends(get_db),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    search: str = Query("", max_length=255),
 ):
     """List users with subscription count. Paginated."""
-    items, total = admin_service.list_users(db, limit, offset)
+    items, total = admin_service.list_users(db, limit, offset, search)
     return AdminUsersResponse(
         users=[AdminUserItem(**u) for u in items],
         total=total,
@@ -342,12 +374,9 @@ def admin_add_tokens_to_user(
     db: Session = Depends(get_db),
 ):
     """Add tokens to a user's balance. Admin only. Use positive amount."""
-    if body.amount <= 0:
-        raise HTTPException(status_code=400, detail="Amount must be positive")
-    if not admin_service.get_user(db, user_id):
-        raise HTTPException(status_code=404, detail="User not found")
-    token_service.top_up(user_id, body.amount, db)
-    return AdminAddTokensResponse(token_balance=token_service.get_balance(user_id, db))
+    balance = _mutate(db, admin_actions.grant_tokens, user_id, _user.id, body.amount,
+                      str(body.request_id), body.reason.strip())
+    return AdminAddTokensResponse(token_balance=balance)
 
 
 @router.delete("/users/{user_id}")
@@ -357,8 +386,7 @@ def admin_delete_user(
     db: Session = Depends(get_db),
 ):
     """Delete a user account. Admin only. This action is irreversible."""
-    if not admin_service.delete_user(db, user_id):
-        raise HTTPException(status_code=404, detail="User not found")
+    _mutate(db, admin_actions.delete_user, user_id, _user.id)
     return {"ok": True, "id": user_id}
 
 
@@ -395,9 +423,11 @@ def get_admin_analyses(
     db: Session = Depends(get_db),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    ticker: str = Query("", max_length=255),
+    creator: str = Query("", max_length=255),
 ):
     """Recent analysis runs with creator email and sum of report tokens/cost."""
-    items, total = admin_service.list_analyses(db, limit, offset)
+    items, total = admin_service.list_analyses(db, limit, offset, ticker, creator)
     return AdminAnalysesResponse(
         analyses=[AdminAnalysisItem(**it) for it in items],
         total=total,
@@ -432,8 +462,8 @@ def delete_analysis_run(
     db: Session = Depends(get_db),
 ):
     """Delete an AI analysis run and its reports (admin only). Cascades to reports and report_views."""
+    _mutate(db, admin_actions.delete_analysis, analysis_run_id)
     delete_analysis_status("ticker", analysis_run_id)
-    token_service.delete_execution(analysis_run_id, db)
     return {"ok": True, "id": analysis_run_id}
 
 
@@ -493,9 +523,10 @@ def get_view_runs(
     _user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
     limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
 ):
     """Return report runs with unique view counts, ordered for hierarchy browsing."""
-    runs, total_runs_with_views = admin_service.get_view_runs(db, limit)
+    runs, total_runs_with_views = admin_service.get_view_runs(db, limit, offset)
     return AdminReportViewRunsResponse(
         runs=[AdminReportViewRunItem(**r) for r in runs],
         total_runs_with_views=total_runs_with_views,
@@ -577,7 +608,7 @@ def run_mission_control(
     mission_entries = admin_service.load_mission_control_entries()
     mission_tickers = [str(item.get("ticker") or "").upper() for item in mission_entries if item.get("ticker")]
     requested, invalid_tickers = _normalize_requested_tickers(body.tickers, mission_tickers)
-    running_by_ticker = admin_service.get_running_statuses_by_ticker(mission_tickers)
+    running_by_ticker = admin_service.get_running_statuses_by_ticker(mission_tickers, db)
     has_report_today = admin_service.get_tickers_with_report_on_date(db, date_str)
     
     # Read LLM provider from environment (same as regular analysis endpoint)
@@ -600,6 +631,7 @@ def run_mission_control(
             skipped_existing.append(ticker)
             continue
 
+        analysis_run_id = None
         try:
             analysis_run_id = token_service.record_analysis_run(_user.id, ticker, db)
             returned_run_id, existing = app_services.get_analysis_service().start_analysis(
@@ -618,6 +650,9 @@ def run_mission_control(
             else:
                 triggered.append(MissionControlRunItem(ticker=ticker, analysis_run_id=returned_run_id))
         except Exception as e:
+            if analysis_run_id is not None:
+                from services.report_service import update_execution_status
+                update_execution_status(analysis_run_id, "failed", error_message=str(e))
             failed.append(MissionControlRunErrorItem(ticker=ticker, error=str(e)))
 
     return MissionControlRunResponse(

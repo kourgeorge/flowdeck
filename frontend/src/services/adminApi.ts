@@ -42,6 +42,7 @@ export interface AdminUserItem {
   token_balance: number;
   created_at: string;
   subscription_count: number;
+  is_admin: boolean;
 }
 
 export interface AdminReportItem {
@@ -305,10 +306,11 @@ export const adminApi = {
   getUsers: async (
     limit = 50,
     offset = 0,
+    search = '',
   ): Promise<{ users: AdminUserItem[]; total: number }> => {
     const res = await api.get<{ users: AdminUserItem[]; total: number }>(
       '/api/admin/users',
-      { params: { limit, offset }, headers: authHeaders() },
+      { params: { limit, offset, search }, headers: authHeaders() },
     );
     return res.data;
   },
@@ -334,10 +336,12 @@ export const adminApi = {
   getAnalyses: async (
     limit = 50,
     offset = 0,
+    ticker = '',
+    creator = '',
   ): Promise<{ analyses: AdminAnalysisItem[]; total: number }> => {
     const res = await api.get<{ analyses: AdminAnalysisItem[]; total: number }>(
       '/api/admin/analyses',
-      { params: { limit, offset }, headers: authHeaders() },
+      { params: { limit, offset, ticker, creator }, headers: authHeaders() },
     );
     return res.data;
   },
@@ -383,10 +387,12 @@ export const adminApi = {
   addTokensToUser: async (
     userId: number,
     amount: number,
+    requestId: string,
+    reason = 'Admin token grant',
   ): Promise<{ token_balance: number }> => {
     const res = await api.post<{ token_balance: number }>(
       `/api/admin/users/${userId}/tokens`,
-      { amount },
+      { amount, request_id: requestId, reason },
       { headers: authHeaders() },
     );
     return res.data;
@@ -430,12 +436,13 @@ export const adminApi = {
 
   getViewRuns: async (
     limit = 100,
+    offset = 0,
   ): Promise<{ runs: AdminReportViewRunItem[]; total_runs_with_views: number }> => {
     const res = await api.get<{
       runs: AdminReportViewRunItem[];
       total_runs_with_views: number;
     }>('/api/admin/views/runs', {
-      params: { limit },
+      params: { limit, offset },
       headers: authHeaders(),
     });
     return res.data;

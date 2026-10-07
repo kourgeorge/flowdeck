@@ -144,7 +144,7 @@ def get_system_user_id(db: Session) -> int:
     return user.id
 
 
-def ensure_user_balance(user_id: int, db: Session) -> None:
+def ensure_user_balance(user_id: int, db: Session, *, commit: bool = True) -> None:
     """
     Ensure user has initial balance transaction if they have no transactions yet.
     This is for backward compatibility with users created before the ledger system.
@@ -161,14 +161,19 @@ def ensure_user_balance(user_id: int, db: Session) -> None:
     ) is not None
     
     if not has_transactions:
+        db.execute(text("UPDATE users SET id=id WHERE id=:id"), {"id": user_id})
+        if db.query(Usage).filter(Usage.user_id == user_id).first() is not None:
+            if commit:
+                db.commit()
+            return
         # Create initial balance transaction
         record_transaction(
             user_id=user_id,
-            amount=INITIAL_BALANCE,
+            amount=user.token_balance,
             transaction_type="initial_balance",
             description="Initial token balance",
             db=db,
-            commit=True,
+            commit=commit,
         )
 
 
@@ -718,6 +723,7 @@ def top_up(user_id: int, amount: int, db: Session, *, metadata: Optional[Dict] =
     if not user:
         return False
     
+    ensure_user_balance(user_id, db, commit=False)
     description = f"Token purchase: {amount} tokens"
     tx = record_transaction(
         user_id=user_id,

@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   type AdminStats,
@@ -20,6 +20,12 @@ interface SubscriptionsByUser {
 }
 
 interface UsersTabProps {
+  currentUserId: number;
+  onUserDeleted: () => void;
+  usersPagination: React.ReactNode;
+  subscriptionsPagination: React.ReactNode;
+  viewRunsPagination: React.ReactNode;
+
   users: AdminUserItem[];
   usersTotal: number;
   addTokensError: string | null;
@@ -48,6 +54,7 @@ interface UsersTabProps {
 }
 
 export default function UsersTab({
+  currentUserId, onUserDeleted, usersPagination, subscriptionsPagination, viewRunsPagination,
   users,
   usersTotal,
   addTokensError,
@@ -73,21 +80,27 @@ export default function UsersTab({
   expandedSubscriptionUserIds,
   setExpandedSubscriptionUserIds,
 }: UsersTabProps) {
+  const grants = useRef<Record<number, { amount: number; requestId: string }>>({});
+  const mutationPending = useRef(false);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<AdminUserItem | null>(null);
   const [deletingUserId, setDeletingUserId] = useState<number | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const handleDeleteUser = async (user: AdminUserItem) => {
+    if (mutationPending.current) return;
+    mutationPending.current = true;
     setDeleteError(null);
     setDeletingUserId(user.id);
     try {
       await adminApi.deleteUser(user.id);
       setUsers((prev) => prev.filter((u) => u.id !== user.id));
       setDeleteConfirmUser(null);
+      onUserDeleted();
     } catch (err: unknown) {
       const ax = err as { response?: { data?: { detail?: string } } };
       setDeleteError(ax.response?.data?.detail ?? 'Failed to delete user');
     } finally {
+      mutationPending.current = false;
       setDeletingUserId(null);
     }
   };
@@ -95,6 +108,7 @@ export default function UsersTab({
   return (
     <section className="space-y-10">
       <h2 className="text-lg font-semibold text-white">Users ({usersTotal})</h2>
+      {usersPagination}
       {addTokensError && (
         <div className="rounded-lg border border-red-800 bg-red-950/50 px-4 py-2 text-sm text-red-200">
           {addTokensError}
@@ -136,11 +150,12 @@ export default function UsersTab({
           <tbody>
             {users.map((u) => {
               const amountStr = addAmountByUser[u.id] ?? '200';
-              const amount = Math.max(1, parseInt(amountStr, 10) || 0);
+              const amount = Number(amountStr);
+              const validAmount = amountStr.trim() !== '' && Number.isInteger(amount) && amount >= 1 && amount <= 10000;
               const isAdding = addingForUserId === u.id;
               return (
                 <tr key={u.id} className="border-b border-gray-700/50">
-                  <td className="px-4 py-3 text-gray-300">{u.email}</td>
+                  <td className="px-4 py-3 text-gray-300">{u.email}{u.is_admin && <span className="ml-2 text-blue-300">Admin</span>}</td>
                   <td className="px-4 py-3 text-gray-300">{u.name ?? '—'}</td>
                   <td className="px-4 py-3 text-white">{u.token_balance.toLocaleString()}</td>
                   <td className="px-4 py-3 text-gray-300">{u.subscription_count}</td>
@@ -156,16 +171,22 @@ export default function UsersTab({
                           setAddAmountByUser((prev) => ({ ...prev, [u.id]: e.target.value }))
                         }
                         className="w-20 rounded border border-gray-600 bg-gray-700 px-2 py-1 text-white text-right"
-                        disabled={isAdding}
+                        disabled={addingForUserId !== null || deletingUserId !== null}
                         aria-label={`Tokens to add for ${u.email}`}
                       />
                       <button
                         type="button"
                         onClick={async () => {
+                          if (!validAmount || mutationPending.current) return;
+                          mutationPending.current = true;
                           setAddTokensError(null);
                           setAddingForUserId(u.id);
+                          if (grants.current[u.id]?.amount !== amount) {
+                            grants.current[u.id] = { amount, requestId: crypto.randomUUID() };
+                          }
                           try {
-                            const res = await adminApi.addTokensToUser(u.id, amount);
+                            const res = await adminApi.addTokensToUser(u.id, amount, grants.current[u.id].requestId);
+                            delete grants.current[u.id];
                             setUsers((prev) =>
                               prev.map((x) =>
                                 x.id === u.id ? { ...x, token_balance: res.token_balance } : x,
@@ -177,10 +198,11 @@ export default function UsersTab({
                               ax.response?.data?.detail ?? 'Failed to add tokens',
                             );
                           } finally {
+                            mutationPending.current = false;
                             setAddingForUserId(null);
                           }
                         }}
-                        disabled={isAdding || amount < 1}
+                        disabled={addingForUserId !== null || deletingUserId !== null || !validAmount}
                         className="rounded bg-blue-600 px-2 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                       >
                         {isAdding ? '…' : 'Add tokens'}
@@ -188,7 +210,7 @@ export default function UsersTab({
                       <button
                         type="button"
                         onClick={() => setDeleteConfirmUser(u)}
-                        disabled={isAdding || deletingUserId === u.id}
+                        disabled={addingForUserId !== null || deletingUserId !== null || u.id === currentUserId}
                         className="rounded bg-red-600 px-2 py-1 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
                         aria-label={`Delete user ${u.email}`}
                       >
@@ -206,6 +228,7 @@ export default function UsersTab({
         <h2 className="text-lg font-semibold text-white mb-4">
           Report views (runs: {viewRunsTotal}, views: {stats?.total_report_views ?? 0})
         </h2>
+        {viewRunsPagination}
         <div className="overflow-x-auto overflow-y-auto max-h-[36rem] rounded-lg border border-gray-700 bg-gray-800/80">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="sticky top-0 bg-gray-800 z-10">
@@ -322,6 +345,8 @@ export default function UsersTab({
       </section>
 
       <h2 className="text-lg font-semibold text-white">Subscriptions ({subscriptionsTotal})</h2>
+      {subscriptionsPagination}
+      <p className="text-sm text-gray-400">Subscriptions are grouped within the current page.</p>
       <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-800/80">
         <table className="w-full min-w-[400px] text-left text-sm">
           <thead className="sticky top-0 bg-gray-800 z-10">

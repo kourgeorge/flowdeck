@@ -896,6 +896,7 @@ class AnalysisService:
                         meta["output_tokens"] = llm_usage.get("output_tokens")
                         meta["total_tokens"] = llm_usage.get("total_tokens")
                         meta["cost_usd"] = llm_usage.get("cost_usd")
+                        meta["per_call"] = llm_usage.get("per_call", [])
                     if resources is not None:
                         meta["resources"] = resources
                     report_agent_steps = _get_report_agent_steps(chunk, key)
@@ -1209,6 +1210,7 @@ class AnalysisService:
                         inner["output_tokens"] = usage.get("output_tokens")
                         inner["total_tokens"] = usage.get("total_tokens")
                         inner["cost_usd"] = usage.get("cost_usd")
+                        inner["per_call"] = usage.get("per_call", [])
                     inner["resources"] = _get_report_resources(chunk, "investment_plan")
                     inner["agent_steps"] = _get_report_agent_steps(chunk, "investment_plan")
                     _written_reports.add("investment_plan")
@@ -1306,15 +1308,9 @@ class AnalysisService:
             # Completion requires persisted, nonempty outputs, not only a finished graph.
             from database import SessionLocal
             from models.db_models import Report
-            report_keys = {"market": "market_report", "social": "sentiment_report",
-                "fundamentals": "fundamentals_report", "technical": "technical_report",
-                "sec": "sec_report", "valuation": "valuation_report"}
-            required = {report_keys[a] for a in analysts if a in report_keys}
-            required.add("trader_investment_plan")
+            from services.analysis_outputs import missing_reports
             with SessionLocal() as check_db:
-                persisted = {r.report_type for r in check_db.query(Report).filter_by(execution_id=analysis_run_id)
-                             if r.content and r.content.strip()}
-            missing = required - persisted
+                missing = missing_reports(check_db.query(Report).filter_by(execution_id=analysis_run_id).all(), analysts)
             if missing:
                 raise RuntimeError("Analysis did not persist required reports: " + ", ".join(sorted(missing)))
             # Commit the terminal state before publishing completion.

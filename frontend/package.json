@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test:admin": "node scripts/check-admin.cjs",
     "test:ownership": "node scripts/check-request-ownership.cjs",
     "dev": "vite",
     "generate:sitemap": "node scripts/generate-sitemap.mjs",

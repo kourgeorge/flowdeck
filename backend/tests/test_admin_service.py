@@ -175,7 +175,7 @@ class TestAdminService(unittest.TestCase):
 
             self.assertEqual(
                 zf.read("reports/market_report.md").decode("utf-8"),
-                "Filesystem market report",
+                "Database market report",
             )
             self.assertEqual(
                 zf.read("reports/final_trade_decision.md").decode("utf-8"),

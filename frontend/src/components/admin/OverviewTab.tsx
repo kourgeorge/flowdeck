@@ -30,11 +30,8 @@ interface OverviewTabProps {
   openReportDetail: (report: AdminReportItem) => void;
   onDownloadAnalysis: (analysisRunId: number) => Promise<void>;
   downloadingAnalysisIds: Set<number>;
-  setStats: (stats: AdminStats) => void;
-  setAnalyses: (analyses: AdminAnalysisItem[]) => void;
-  setAnalysesTotal: (total: number) => void;
-  setReports: (reports: AdminReportItem[]) => void;
-  setReportsTotal: (total: number) => void;
+  onAnalysisDeleted: () => void;
+  pagination: React.ReactNode;
   analysesContainerRef: React.RefObject<HTMLDivElement>;
 }
 
@@ -42,7 +39,6 @@ export default function OverviewTab({
   stats,
   dailyAnalyses,
   dailyViews,
-  analyses,
   analysesTotal,
   filteredAnalyses,
   analysisTickerFilter,
@@ -57,11 +53,7 @@ export default function OverviewTab({
   openReportDetail,
   onDownloadAnalysis,
   downloadingAnalysisIds,
-  setStats,
-  setAnalyses,
-  setAnalysesTotal,
-  setReports,
-  setReportsTotal,
+  onAnalysisDeleted, pagination,
   analysesContainerRef,
 }: OverviewTabProps) {
   return (
@@ -149,6 +141,7 @@ export default function OverviewTab({
 
       <section className="mb-10">
         <h2 className="text-lg font-semibold text-white mb-2">Recent analyses ({analysesTotal})</h2>
+        {pagination}
         <div className="flex flex-wrap gap-3 mb-3 text-xs md:text-sm">
           <div className="flex items-center gap-2">
             <label htmlFor="analysis-ticker-filter" className="text-gray-400">
@@ -260,26 +253,15 @@ export default function OverviewTab({
                             if (!window.confirm(`Delete analysis run ${a.id} (${a.ticker})? This cannot be undone.`)) return;
                             try {
                               await adminApi.deleteAnalysis(a.id);
-                              // Optimistically remove from local state first for immediate UI update
-                              setAnalyses(analyses.filter((item) => item.id !== a.id));
-                              setAnalysesTotal(analysesTotal - 1);
-                              // Then fetch fresh data to ensure consistency
-                              const [s, aRes, rRes] = await Promise.all([
-                                adminApi.getStats(),
-                                adminApi.getAnalyses(50),
-                                adminApi.getReports(200),
-                              ]);
-                              setStats(s);
-                              setAnalyses(aRes.analyses);
-                              setAnalysesTotal(aRes.total);
-                              setReports(rRes.reports);
-                              setReportsTotal(rRes.total);
+                              onAnalysisDeleted();
                             } catch (error) {
                               console.error('Failed to delete analysis:', error);
                               window.alert('Failed to delete analysis. Please try again.');
                             }
                           }}
-                          className="text-red-400 hover:text-red-300 hover:underline text-sm font-medium"
+                          disabled={a.status === 'running' || a.status === 'queued'}
+                          title={a.status === 'running' || a.status === 'queued' ? 'Stop the analysis and wait for completion before deleting' : undefined}
+                          className="text-red-400 hover:text-red-300 hover:underline text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           Delete
                         </button>
@@ -301,17 +283,11 @@ export default function OverviewTab({
               {loadingMoreAnalyses && (
                 <tr>
                   <td colSpan={9} className="px-4 py-3 text-center text-gray-400">
-                    Loading more analyses...
+                    Loading analyses...
                   </td>
                 </tr>
               )}
-              {!loadingMoreAnalyses && analyses.length < analysesTotal && (
-                <tr>
-                  <td colSpan={9} className="px-4 py-3 text-center text-gray-500 text-xs">
-                    Scroll down to load more ({analyses.length} of {analysesTotal})
-                  </td>
-                </tr>
-              )}
+
             </tbody>
           </table>
         </div>

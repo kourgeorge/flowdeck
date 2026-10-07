@@ -58,6 +58,7 @@ class _MarketOnlyFetcher:
 
 
 class TestBuildDigestContext(unittest.TestCase):
+    @patch("ai_engine.briefing_agent.context_builder._fetch_polymarket_sentiment", return_value={})
     @patch("ai_engine.briefing_agent.context_builder._fetch_web_snippet", return_value="Macro snippet")
     @patch("ai_engine.briefing_agent.context_builder._fetch_global_news", return_value={"items": ["Fed", "CPI"]})
     @patch("ai_engine.briefing_agent.context_builder._get_user_context_snapshot", return_value="Long-term investor")
@@ -68,6 +69,7 @@ class TestBuildDigestContext(unittest.TestCase):
         _mock_user_context,
         _mock_global_news,
         _mock_web_snippet,
+        _mock_sentiment,
     ) -> None:
         result = build_digest_context(
             user_id=7,

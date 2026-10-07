@@ -169,7 +169,7 @@ def run_self_contained_analyst(
     # Initialize local message context
     local_messages = []
     tool_map = {(t.name if hasattr(t, 'name') else t.__name__): t for t in tools}
-    total_usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost_usd": 0.0}
+    total_usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost_usd": 0.0, "per_call": []}
     resources_used = []
     agent_steps = []
     # Empty string means the deterministic valuation tool produced usable output.
@@ -194,6 +194,7 @@ def run_self_contained_analyst(
         # Track usage
         usage = _capture_usage(result, llm)
         if usage:
+            total_usage["per_call"].extend(usage.get("per_call", []))
             for key in ["input_tokens", "output_tokens", "total_tokens", "cost_usd"]:
                 total_usage[key] += usage.get(key, 0)
 
@@ -324,6 +325,7 @@ def run_self_contained_analyst(
         result = chain_with_tools.invoke(local_messages)
         usage = _capture_usage(result, llm)
         if usage:
+            total_usage["per_call"].extend(usage.get("per_call", []))
             for key in ["input_tokens", "output_tokens", "total_tokens", "cost_usd"]:
                 total_usage[key] += usage.get(key, 0)
         local_messages.append(result)
@@ -449,6 +451,7 @@ def run_self_contained_analyst(
     
     # Track final usage
     if final_usage:
+        total_usage["per_call"].extend(final_usage.get("per_call", []))
         for key in ["input_tokens", "output_tokens", "total_tokens", "cost_usd"]:
             total_usage[key] += final_usage.get(key, 0)
     
@@ -531,6 +534,7 @@ def run_self_contained_analyst(
     )
     fallback_usage = _capture_usage(fallback_result, llm)
     if fallback_usage:
+        total_usage["per_call"].extend(fallback_usage.get("per_call", []))
         for key in ["input_tokens", "output_tokens", "total_tokens", "cost_usd"]:
             total_usage[key] += fallback_usage.get(key, 0)
     

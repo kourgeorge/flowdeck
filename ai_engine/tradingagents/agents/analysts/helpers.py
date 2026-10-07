@@ -24,7 +24,10 @@ def _capture_usage(message: Any, llm: Any) -> Optional[dict]:
     try:
         from ai_engine.llm_usage import record_usage_from_message, usage_record_to_metadata
         r = record_usage_from_message(message, llm, None)
-        return usage_record_to_metadata(r)
+        metadata = usage_record_to_metadata(r)
+        if metadata is not None:
+            metadata["per_call"] = [{**metadata, "model": r.model}]
+        return metadata
     except Exception:
         return None
 

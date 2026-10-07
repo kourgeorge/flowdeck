@@ -106,7 +106,7 @@ export default function MissionControlTab({
                       {r.created_at ? formatDate(r.created_at, true) : '—'}
                     </td>
                     <td className="px-3 py-2 text-gray-300">
-                      {r.status === 'queued' ? 'Queued' : r.current_agents && r.current_agents.length > 0
+                      {r.status === 'stopping' ? 'Stopping…' : r.status === 'queued' ? 'Queued' : r.current_agents && r.current_agents.length > 0
                         ? r.current_agents.length === 1
                           ? r.current_agents[0]
                           : `${r.current_agents[0]} +${r.current_agents.length - 1}`
@@ -117,10 +117,10 @@ export default function MissionControlTab({
                       <button
                         type="button"
                         onClick={() => void handleStopRunningAnalysis(r.analysis_run_id)}
-                        disabled={stoppingRunId === r.analysis_run_id}
+                        disabled={stoppingRunId !== null || r.status === 'stopping'}
                         className="rounded bg-red-700/80 px-2 py-1 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50"
                       >
-                        {stoppingRunId === r.analysis_run_id ? 'Stopping…' : 'Stop'}
+                        {stoppingRunId === r.analysis_run_id || r.status === 'stopping' ? 'Stopping…' : 'Stop'}
                       </button>
                     </td>
                   </tr>
@@ -380,7 +380,7 @@ export default function MissionControlTab({
                   <td className="px-4 py-3">
                     {item.is_running ? (
                       <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-900/50 text-blue-300 border border-blue-700">
-                        {runningAnalyses.find((run) => run.analysis_run_id === item.running_analysis_id)?.status === 'queued' ? 'Queued' : 'Running'}
+                        {runningAnalyses.find((run) => run.analysis_run_id === item.running_analysis_id)?.status === 'stopping' ? 'Stopping…' : runningAnalyses.find((run) => run.analysis_run_id === item.running_analysis_id)?.status === 'queued' ? 'Queued' : 'Running'}
                       </span>
                     ) : item.last_status === 'completed' ? (
                       <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-900/50 text-green-300 border border-green-700">

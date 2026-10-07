@@ -68,6 +68,8 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     from schema_migrations import migrate
     migrate(engine)
+    from services.cost_facts import backfill_cost_facts
+    backfill_cost_facts(engine)
 
     # Ensure performance-critical indexes exist on the live DB.
     # CREATE INDEX IF NOT EXISTS is idempotent — safe to run on every startup.

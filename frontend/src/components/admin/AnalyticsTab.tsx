@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   adminApi,
   type AnalyticsCostBreakdown,
@@ -126,17 +126,22 @@ export default function AnalyticsTab({ days, onDaysChange }: AnalyticsTabProps) 
   const [recommendations, setRecommendations] = useState<AnalyticsRecommendations | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestRef = useRef(0);
   const [activeSection, setActiveSection] = useState<AnalyticsSection>('overview');
 
   useEffect(() => {
     void loadAnalytics();
+    return () => { ++requestRef.current; };
   }, [days]);
 
   const loadAnalytics = async () => {
+    const request = ++requestRef.current;
+    setCostBreakdown(null); setCostPerUser(null); setExpensiveOps(null);
+    setUsageTrends(null); setModelDist(null); setRecommendations(null);
     setLoading(true);
     setError(null);
     try {
-      const [breakdown, perUser, expensive, trends, models, recs] = await Promise.all([
+      const [breakdown, perUser, expensive, trends, models, recs] = await Promise.allSettled([
         adminApi.getAnalyticsCostBreakdown(days),
         adminApi.getAnalyticsCostPerUser(days, 100),
         adminApi.getAnalyticsExpensiveOperations(days, 50),
@@ -144,16 +149,21 @@ export default function AnalyticsTab({ days, onDaysChange }: AnalyticsTabProps) 
         adminApi.getAnalyticsModelDistribution(days),
         adminApi.getAnalyticsRecommendations(days),
       ]);
-      setCostBreakdown(breakdown);
-      setCostPerUser(perUser);
-      setExpensiveOps(expensive);
-      setUsageTrends(trends);
-      setModelDist(models);
-      setRecommendations(recs);
+      if (request !== requestRef.current) return;
+      if (breakdown.status === 'fulfilled') setCostBreakdown(breakdown.value);
+      if (perUser.status === 'fulfilled') setCostPerUser(perUser.value);
+      if (expensive.status === 'fulfilled') setExpensiveOps(expensive.value);
+      if (trends.status === 'fulfilled') setUsageTrends(trends.value);
+      if (models.status === 'fulfilled') setModelDist(models.value);
+      if (recs.status === 'fulfilled') setRecommendations(recs.value);
+      const failed = [breakdown.status === 'rejected' && 'cost summary', perUser.status === 'rejected' && 'user costs',
+        expensive.status === 'rejected' && 'operations', trends.status === 'rejected' && 'trends',
+        models.status === 'rejected' && 'models', recs.status === 'rejected' && 'recommendations'].filter(Boolean);
+      if (failed.length) setError(`Could not load ${failed.join(', ')}. Other results are shown below.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load analytics');
+      if (request === requestRef.current) setError(err instanceof Error ? err.message : 'Failed to load analytics');
     } finally {
-      setLoading(false);
+      if (request === requestRef.current) setLoading(false);
     }
   };
 
@@ -197,25 +207,10 @@ export default function AnalyticsTab({ days, onDaysChange }: AnalyticsTabProps) 
     );
   }
 
-  if (error) {
-    return (
-      <div className="rounded-2xl border border-red-800/70 bg-red-950/40 p-5">
-        <p className="text-sm font-medium text-red-100">{error}</p>
-        <button
-          type="button"
-          onClick={() => {
-            void loadAnalytics();
-          }}
-          className="mt-3 rounded-lg border border-red-700/80 px-3 py-1.5 text-sm font-medium text-red-100 transition hover:border-red-600 hover:bg-red-900/40"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
+      {error && <div role="alert" className="rounded border border-red-800 p-4 text-red-200">{error} <button type="button" onClick={() => void loadAnalytics()} className="underline">Retry</button></div>}
+      <p className="text-xs text-gray-400">Saved usage is attributed to the start of each analysis or digest, and the assistant message time for chat. Historical costs remain after content deletion. Unattributed costs have no reliable model breakdown.</p>
       <section className="rounded-3xl border border-gray-700 bg-gradient-to-br from-slate-900 via-gray-900 to-gray-800 px-5 py-6 shadow-[0_18px_64px_rgba(2,6,23,0.32)]">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-2xl">

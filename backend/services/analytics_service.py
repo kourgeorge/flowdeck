@@ -1,788 +1,124 @@
-"""Admin analytics service for comprehensive token usage and cost tracking."""
+"""Consistent admin analytics from retained, content-free operation cost facts.
 
-from __future__ import annotations
-
+All views attribute an operation's saved costs to its start time (assistant
+message time for chat). One execution/turn is one operation in every view.
+"""
 import json
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
 
-from sqlalchemy import and_, func, case
 from sqlalchemy.orm import Session
-
-from models.db_models import ChatMessage, ChatTurn, Execution, Report, Usage, User
-
-
-def _parse_json(raw: Optional[str]) -> dict[str, Any]:
-    """Parse JSON string safely."""
-    if not raw:
-        return {}
-    try:
-        parsed = json.loads(raw)
-    except Exception:
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
+from typing import Any
+from models.db_models import OperationCost, User
 
 
-def _as_float(value: Any) -> Optional[float]:
-    """Convert value to float safely."""
-    if value is None or value == "":
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+KINDS = ("chat", "analysis", "digest")
 
 
-def get_cost_breakdown_by_operation(
-    db: Session,
-    days: int = 30,
-) -> dict[str, Any]:
-    """
-    Get LLM cost breakdown by operation type (chat, analysis, digest).
-    
-    Returns:
-        {
-            "period_days": int,
-            "total_cost_usd": float,
-            "total_llm_tokens": int,
-            "operations": [
-                {
-                    "operation_type": str,  # "chat", "analysis", "digest"
-                    "count": int,
-                    "total_cost_usd": float,
-                    "total_llm_tokens": int,
-                    "avg_cost_usd": float,
-                    "avg_llm_tokens": float
-                }
-            ]
-        }
-    """
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    
-    # Get chat costs from ChatMessage metadata
-    chat_messages_result = (
-        db.query(
-            func.count(ChatMessage.id).label("count"),
-        )
-        .join(ChatTurn, ChatTurn.assistant_message_id == ChatMessage.id)
-        .filter(
-            ChatMessage.created_at >= cutoff,
-            ChatMessage.role == "assistant",
-            ChatMessage.model_metadata_json.isnot(None),
-        )
-        .first()
-    )
-    
-    # Calculate chat costs from metadata
-    chat_cost = 0.0
-    chat_tokens = 0
-    chat_count = int(chat_messages_result[0] or 0) if chat_messages_result else 0
-    
-    # Get actual costs from chat messages
-    chat_msgs_with_cost = (
-        db.query(ChatMessage.model_metadata_json)
-        .join(ChatTurn, ChatTurn.assistant_message_id == ChatMessage.id)
-        .filter(
-            ChatMessage.created_at >= cutoff,
-            ChatMessage.role == "assistant",
-            ChatMessage.model_metadata_json.isnot(None),
-        )
-        .all()
-    )
-    
-    for (meta_json,) in chat_msgs_with_cost:
-        meta = _parse_json(meta_json)
-        cost = _as_float(meta.get("cost_usd"))
-        if cost:
-            chat_cost += cost
-    
-    # Get analysis costs from Report metadata
-    analysis_reports = (
-        db.query(Report.metadata_json)
-        .join(Execution, Report.execution_id == Execution.id)
-        .filter(
-            Execution.execution_type == "ticker",
-            Execution.created_at >= cutoff,
-            Report.metadata_json.isnot(None),
-        )
-        .all()
-    )
-    
-    analysis_cost = 0.0
-    analysis_tokens = 0
-    analysis_count = 0
-    
-    for (meta_json,) in analysis_reports:
-        meta = _parse_json(meta_json)
-        cost = _as_float(meta.get("cost_usd"))
-        tokens = meta.get("total_tokens")
-        if cost:
-            analysis_cost += cost
-        if tokens:
-            analysis_tokens += int(tokens)
-        analysis_count += 1
-    
-    # Get digest costs from Report metadata
-    digest_reports = (
-        db.query(Report.metadata_json)
-        .join(Execution, Report.execution_id == Execution.id)
-        .filter(
-            Execution.execution_type == "daily_digest",
-            Execution.created_at >= cutoff,
-            Report.metadata_json.isnot(None),
-        )
-        .all()
-    )
-    
-    digest_cost = 0.0
-    digest_tokens = 0
-    digest_count = 0
-    
-    for (meta_json,) in digest_reports:
-        meta = _parse_json(meta_json)
-        cost = _as_float(meta.get("cost_usd"))
-        tokens = meta.get("total_tokens")
-        if cost:
-            digest_cost += cost
-        if tokens:
-            digest_tokens += int(tokens)
-        digest_count += 1
-    
-    total_cost = chat_cost + analysis_cost + digest_cost
-    total_tokens = chat_tokens + analysis_tokens + digest_tokens
-    
-    operations = [
-        {
-            "operation_type": "chat",
-            "count": chat_count,
-            "total_cost_usd": round(chat_cost, 6),
-            "total_llm_tokens": chat_tokens,
-            "avg_cost_usd": round(chat_cost / chat_count, 6) if chat_count > 0 else 0.0,
-            "avg_llm_tokens": round(chat_tokens / chat_count, 2) if chat_count > 0 else 0.0,
-        },
-        {
-            "operation_type": "analysis",
-            "count": analysis_count,
-            "total_cost_usd": round(analysis_cost, 6),
-            "total_llm_tokens": analysis_tokens,
-            "avg_cost_usd": round(analysis_cost / analysis_count, 6) if analysis_count > 0 else 0.0,
-            "avg_llm_tokens": round(analysis_tokens / analysis_count, 2) if analysis_count > 0 else 0.0,
-        },
-        {
-            "operation_type": "digest",
-            "count": digest_count,
-            "total_cost_usd": round(digest_cost, 6),
-            "total_llm_tokens": digest_tokens,
-            "avg_cost_usd": round(digest_cost / digest_count, 6) if digest_count > 0 else 0.0,
-            "avg_llm_tokens": round(digest_tokens / digest_count, 2) if digest_count > 0 else 0.0,
-        },
-    ]
-    
-    return {
-        "period_days": days,
-        "total_cost_usd": round(total_cost, 6),
-        "total_llm_tokens": total_tokens,
-        "operations": operations,
-    }
+def _load_operations(db, days):
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    rows = db.query(OperationCost).filter(OperationCost.occurred_at >= cutoff).all()
+    operations = {}
+    for fact in rows:
+        key = (fact.operation_type, fact.operation_id)
+        op = operations.setdefault(key, {"operation_type": fact.operation_type,
+            "operation_id": fact.operation_id, "user_id": fact.user_id,
+            "subject": fact.subject, "created_at": fact.occurred_at,
+            "cost_usd": 0.0, "llm_tokens": 0, "models": []})
+        op["cost_usd"] += fact.cost_usd
+        op["llm_tokens"] += fact.total_tokens
+        op["models"].extend(json.loads(fact.model_usage_json))
+    return list(operations.values())
 
 
-def get_cost_per_user(
-    db: Session,
-    days: int = 30,
-    limit: int = 100,
-) -> dict[str, Any]:
-    """
-    Get cost per user over time period.
-    
-    Returns:
-        {
-            "period_days": int,
-            "users": [
-                {
-                    "user_id": int,
-                    "email": str,
-                    "total_cost_usd": float,
-                    "total_llm_tokens": int,
-                    "operation_count": int,
-                    "chat_count": int,
-                    "analysis_count": int,
-                    "digest_count": int
-                }
-            ]
-        }
-    """
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    
-    # Get all users with activity
-    users_data = {}
-    
-    # Chat costs per user
-    chat_data = (
-        db.query(
-            ChatTurn.user_id,
-            func.count(ChatTurn.id).label("count"),
-        )
-        .filter(
-            ChatTurn.created_at >= cutoff,
-            ChatTurn.status == "completed",
-        )
-        .group_by(ChatTurn.user_id)
-        .all()
-    )
-    
-    for user_id, count in chat_data:
-        if user_id not in users_data:
-            users_data[user_id] = {
-                "chat_count": 0,
-                "analysis_count": 0,
-                "digest_count": 0,
-                "total_cost": 0.0,
-                "total_tokens": 0,
-            }
-        users_data[user_id]["chat_count"] = count
-    
-    # Get chat costs and tokens
-    chat_messages = (
-        db.query(
-            ChatTurn.user_id,
-            ChatMessage.model_metadata_json,
-        )
-        .join(ChatMessage, ChatTurn.assistant_message_id == ChatMessage.id)
-        .filter(
-            ChatTurn.created_at >= cutoff,
-            ChatTurn.status == "completed",
-            ChatMessage.model_metadata_json.isnot(None),
-        )
-        .all()
-    )
-    
-    for user_id, meta_json in chat_messages:
-        meta = _parse_json(meta_json)
-        cost = _as_float(meta.get("cost_usd")) or 0.0
-        tokens = meta.get("total_tokens") or 0
-        if user_id in users_data:
-            users_data[user_id]["total_cost"] += cost
-            users_data[user_id]["total_tokens"] += int(tokens)
-    
-    # Analysis costs per user
-    analysis_data = (
-        db.query(
-            Execution.creator_id,
-            func.count(Execution.id).label("count"),
-        )
-        .filter(
-            Execution.execution_type == "ticker",
-            Execution.created_at >= cutoff,
-        )
-        .group_by(Execution.creator_id)
-        .all()
-    )
-    
-    for user_id, count in analysis_data:
-        if user_id not in users_data:
-            users_data[user_id] = {
-                "chat_count": 0,
-                "analysis_count": 0,
-                "digest_count": 0,
-                "total_cost": 0.0,
-                "total_tokens": 0,
-            }
-        users_data[user_id]["analysis_count"] = count
-    
-    # Get analysis costs and tokens
-    analysis_reports = (
-        db.query(
-            Execution.creator_id,
-            Report.metadata_json,
-        )
-        .join(Report, Report.execution_id == Execution.id)
-        .filter(
-            Execution.execution_type == "ticker",
-            Execution.created_at >= cutoff,
-            Report.metadata_json.isnot(None),
-        )
-        .all()
-    )
-    
-    for user_id, meta_json in analysis_reports:
-        meta = _parse_json(meta_json)
-        cost = _as_float(meta.get("cost_usd")) or 0.0
-        tokens = meta.get("total_tokens") or 0
-        if user_id in users_data:
-            users_data[user_id]["total_cost"] += cost
-            users_data[user_id]["total_tokens"] += int(tokens)
-    
-    # Digest costs per user
-    digest_data = (
-        db.query(
-            Execution.creator_id,
-            func.count(Execution.id).label("count"),
-        )
-        .filter(
-            Execution.execution_type == "daily_digest",
-            Execution.created_at >= cutoff,
-        )
-        .group_by(Execution.creator_id)
-        .all()
-    )
-    
-    for user_id, count in digest_data:
-        if user_id not in users_data:
-            users_data[user_id] = {
-                "chat_count": 0,
-                "analysis_count": 0,
-                "digest_count": 0,
-                "total_cost": 0.0,
-                "total_tokens": 0,
-            }
-        users_data[user_id]["digest_count"] = count
-    
-    # Get digest costs and tokens
-    digest_reports = (
-        db.query(
-            Execution.creator_id,
-            Report.metadata_json,
-        )
-        .join(Report, Report.execution_id == Execution.id)
-        .filter(
-            Execution.execution_type == "daily_digest",
-            Execution.created_at >= cutoff,
-            Report.metadata_json.isnot(None),
-        )
-        .all()
-    )
-    
-    for user_id, meta_json in digest_reports:
-        meta = _parse_json(meta_json)
-        cost = _as_float(meta.get("cost_usd")) or 0.0
-        tokens = meta.get("total_tokens") or 0
-        if user_id in users_data:
-            users_data[user_id]["total_cost"] += cost
-            users_data[user_id]["total_tokens"] += int(tokens)
-    
-    # Get user emails
-    user_ids = list(users_data.keys())
-    users = db.query(User.id, User.email).filter(User.id.in_(user_ids)).all()
-    user_emails = {uid: email for uid, email in users}
-    
-    # Build result
-    result_users = []
-    for user_id, data in users_data.items():
-        result_users.append({
-            "user_id": user_id,
-            "email": user_emails.get(user_id, f"[deleted user {user_id}]"),
-            "total_cost_usd": round(data["total_cost"], 6),
-            "total_llm_tokens": data["total_tokens"],
-            "operation_count": data["chat_count"] + data["analysis_count"] + data["digest_count"],
-            "chat_count": data["chat_count"],
-            "analysis_count": data["analysis_count"],
-            "digest_count": data["digest_count"],
-        })
-    
-    # Sort by total cost descending
-    result_users.sort(key=lambda x: x["total_cost_usd"], reverse=True)
-    
-    return {
-        "period_days": days,
-        "users": result_users[:limit],
-    }
+def _emails(db, operations):
+    ids = {op["user_id"] for op in operations}
+    return dict(db.query(User.id, User.email).filter(User.id.in_(ids)).all())
 
 
-def get_most_expensive_operations(
-    db: Session,
-    days: int = 30,
-    limit: int = 50,
-) -> dict[str, Any]:
-    """
-    Identify most expensive individual operations.
-    
-    Returns:
-        {
-            "period_days": int,
-            "operations": [
-                {
-                    "operation_type": str,
-                    "operation_id": int,
-                    "user_id": int,
-                    "user_email": str,
-                    "subject": str,
-                    "cost_usd": float,
-                    "llm_tokens": int,
-                    "created_at": str
-                }
-            ]
-        }
-    """
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    
-    operations = []
-    
-    # Get expensive chat operations
-    chat_messages = (
-        db.query(
-            ChatMessage.id,
-            ChatTurn.user_id,
-            ChatTurn.session_id,
-            ChatMessage.model_metadata_json,
-            ChatMessage.created_at,
-        )
-        .join(ChatTurn, ChatTurn.assistant_message_id == ChatMessage.id)
-        .filter(
-            ChatMessage.created_at >= cutoff,
-            ChatMessage.role == "assistant",
-            ChatMessage.model_metadata_json.isnot(None),
-        )
-        .all()
-    )
-    
-    for msg_id, user_id, session_id, meta_json, created_at in chat_messages:
-        meta = _parse_json(meta_json)
-        cost = _as_float(meta.get("cost_usd"))
-        tokens = meta.get("total_tokens")
-        if cost and cost > 0:
-            operations.append({
-                "operation_type": "chat",
-                "operation_id": msg_id,
-                "user_id": user_id,
-                "subject": f"Chat session {session_id}",
-                "cost_usd": cost,
-                "llm_tokens": int(tokens) if tokens else 0,
-                "created_at": created_at,
-            })
-    
-    # Get expensive analysis operations
-    analysis_reports = (
-        db.query(
-            Report.id,
-            Execution.creator_id,
-            Execution.subject_id,
-            Report.metadata_json,
-            Report.created_at,
-        )
-        .join(Execution, Report.execution_id == Execution.id)
-        .filter(
-            Execution.execution_type == "ticker",
-            Report.created_at >= cutoff,
-            Report.metadata_json.isnot(None),
-        )
-        .all()
-    )
-    
-    for report_id, user_id, ticker, meta_json, created_at in analysis_reports:
-        meta = _parse_json(meta_json)
-        cost = _as_float(meta.get("cost_usd"))
-        tokens = meta.get("total_tokens")
-        if cost and cost > 0:
-            operations.append({
-                "operation_type": "analysis",
-                "operation_id": report_id,
-                "user_id": user_id,
-                "subject": ticker or "Unknown",
-                "cost_usd": cost,
-                "llm_tokens": int(tokens) if tokens else 0,
-                "created_at": created_at,
-            })
-    
-    # Get expensive digest operations
-    digest_reports = (
-        db.query(
-            Report.id,
-            Execution.creator_id,
-            Execution.subject_id,
-            Report.metadata_json,
-            Report.created_at,
-        )
-        .join(Execution, Report.execution_id == Execution.id)
-        .filter(
-            Execution.execution_type == "daily_digest",
-            Report.created_at >= cutoff,
-            Report.metadata_json.isnot(None),
-        )
-        .all()
-    )
-    
-    for report_id, user_id, subject_id, meta_json, created_at in digest_reports:
-        meta = _parse_json(meta_json)
-        cost = _as_float(meta.get("cost_usd"))
-        tokens = meta.get("total_tokens")
-        if cost and cost > 0:
-            operations.append({
-                "operation_type": "digest",
-                "operation_id": report_id,
-                "user_id": user_id,
-                "subject": subject_id or "Unknown",
-                "cost_usd": cost,
-                "llm_tokens": int(tokens) if tokens else 0,
-                "created_at": created_at,
-            })
-    
-    # Get user emails
-    user_ids = list(set(op["user_id"] for op in operations))
-    users = db.query(User.id, User.email).filter(User.id.in_(user_ids)).all()
-    user_emails = {uid: email for uid, email in users}
-    
-    # Add emails and sort
+def get_cost_breakdown_by_operation(db, days=30, *, _ops=None):
+    operations = _load_operations(db, days) if _ops is None else _ops
+    result = []
+    for kind in KINDS:
+        selected = [op for op in operations if op["operation_type"] == kind]
+        count = len(selected)
+        cost = sum(op["cost_usd"] for op in selected)
+        tokens = sum(op["llm_tokens"] for op in selected)
+        result.append({"operation_type": kind, "count": count, "total_cost_usd": round(cost, 6),
+            "total_llm_tokens": tokens, "avg_cost_usd": round(cost/count, 6) if count else 0,
+            "avg_llm_tokens": round(tokens/count, 2) if count else 0})
+    return {"period_days": days, "total_cost_usd": round(sum(op["cost_usd"] for op in operations), 6),
+            "total_llm_tokens": sum(op["llm_tokens"] for op in operations), "operations": result}
+
+
+def get_cost_per_user(db, days=30, limit=100):
+    operations = _load_operations(db, days)
+    emails = _emails(db, operations)
+    users = {}
     for op in operations:
-        op["user_email"] = user_emails.get(op["user_id"], f"[deleted user {op['user_id']}]")
-        op["created_at"] = op["created_at"].isoformat() if op["created_at"] else None
-        op["cost_usd"] = round(op["cost_usd"], 6)
-    
-    operations.sort(key=lambda x: x["cost_usd"], reverse=True)
-    
-    return {
-        "period_days": days,
-        "operations": operations[:limit],
-    }
+        uid = op["user_id"]
+        user = users.setdefault(uid, {"user_id": uid, "email": emails.get(uid, f"[deleted user {uid}]"),
+            "total_cost_usd": 0.0, "total_llm_tokens": 0, "operation_count": 0,
+            "chat_count": 0, "analysis_count": 0, "digest_count": 0})
+        user["total_cost_usd"] += op["cost_usd"]
+        user["total_llm_tokens"] += op["llm_tokens"]
+        user["operation_count"] += 1
+        user[op["operation_type"] + "_count"] += 1
+    for user in users.values():
+        user["total_cost_usd"] = round(user["total_cost_usd"], 6)
+    return {"period_days": days, "users": sorted(users.values(),
+        key=lambda user: (-user["total_cost_usd"], user["user_id"]))[:limit]}
 
 
-def get_usage_trends(
-    db: Session,
-    days: int = 30,
-) -> dict[str, Any]:
-    """
-    Get token usage and cost trends over time (daily aggregation).
-    
-    Returns:
-        {
-            "period_days": int,
-            "daily_data": [
-                {
-                    "date": str,  # YYYY-MM-DD
-                    "total_cost_usd": float,
-                    "total_llm_tokens": int,
-                    "chat_cost": float,
-                    "analysis_cost": float,
-                    "digest_cost": float,
-                    "operation_count": int
-                }
-            ]
-        }
-    """
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    
-    # Initialize daily data structure
-    daily_data = {}
-    current = cutoff.date()
-    end = datetime.now(timezone.utc).date()
-    
-    while current <= end:
-        date_str = current.strftime("%Y-%m-%d")
-        daily_data[date_str] = {
-            "date": date_str,
-            "total_cost_usd": 0.0,
-            "total_llm_tokens": 0,
-            "chat_cost": 0.0,
-            "analysis_cost": 0.0,
-            "digest_cost": 0.0,
-            "operation_count": 0,
-        }
-        current += timedelta(days=1)
-    
-    # Get chat data by day
-    chat_messages = (
-        db.query(
-            func.date(ChatMessage.created_at).label("day"),
-            ChatMessage.model_metadata_json,
-        )
-        .join(ChatTurn, ChatTurn.assistant_message_id == ChatMessage.id)
-        .filter(
-            ChatMessage.created_at >= cutoff,
-            ChatMessage.role == "assistant",
-            ChatMessage.model_metadata_json.isnot(None),
-        )
-        .all()
-    )
-    
-    for day, meta_json in chat_messages:
-        date_str = str(day)
-        if date_str in daily_data:
-            meta = _parse_json(meta_json)
-            cost = _as_float(meta.get("cost_usd")) or 0.0
-            tokens = meta.get("total_tokens") or 0
-            daily_data[date_str]["chat_cost"] += cost
-            daily_data[date_str]["total_cost_usd"] += cost
-            daily_data[date_str]["total_llm_tokens"] += int(tokens)
-            daily_data[date_str]["operation_count"] += 1
-    
-    # Get analysis data by day
-    analysis_reports = (
-        db.query(
-            func.date(Report.created_at).label("day"),
-            Report.metadata_json,
-        )
-        .join(Execution, Report.execution_id == Execution.id)
-        .filter(
-            Execution.execution_type == "ticker",
-            Report.created_at >= cutoff,
-            Report.metadata_json.isnot(None),
-        )
-        .all()
-    )
-    
-    for day, meta_json in analysis_reports:
-        date_str = str(day)
-        if date_str in daily_data:
-            meta = _parse_json(meta_json)
-            cost = _as_float(meta.get("cost_usd")) or 0.0
-            tokens = meta.get("total_tokens") or 0
-            daily_data[date_str]["analysis_cost"] += cost
-            daily_data[date_str]["total_cost_usd"] += cost
-            daily_data[date_str]["total_llm_tokens"] += int(tokens)
-            daily_data[date_str]["operation_count"] += 1
-    
-    # Get digest data by day
-    digest_reports = (
-        db.query(
-            func.date(Report.created_at).label("day"),
-            Report.metadata_json,
-        )
-        .join(Execution, Report.execution_id == Execution.id)
-        .filter(
-            Execution.execution_type == "daily_digest",
-            Report.created_at >= cutoff,
-            Report.metadata_json.isnot(None),
-        )
-        .all()
-    )
-    
-    for day, meta_json in digest_reports:
-        date_str = str(day)
-        if date_str in daily_data:
-            meta = _parse_json(meta_json)
-            cost = _as_float(meta.get("cost_usd")) or 0.0
-            tokens = meta.get("total_tokens") or 0
-            daily_data[date_str]["digest_cost"] += cost
-            daily_data[date_str]["total_cost_usd"] += cost
-            daily_data[date_str]["total_llm_tokens"] += int(tokens)
-            daily_data[date_str]["operation_count"] += 1
-    
-    # Round costs
-    for data in daily_data.values():
-        data["total_cost_usd"] = round(data["total_cost_usd"], 6)
-        data["chat_cost"] = round(data["chat_cost"], 6)
-        data["analysis_cost"] = round(data["analysis_cost"], 6)
-        data["digest_cost"] = round(data["digest_cost"], 6)
-    
-    # Convert to sorted list
-    result = sorted(daily_data.values(), key=lambda x: x["date"])
-    
-    return {
-        "period_days": days,
-        "daily_data": result,
-    }
+def get_most_expensive_operations(db, days=30, limit=50, *, _ops=None):
+    operations = _load_operations(db, days) if _ops is None else _ops
+    emails = _emails(db, operations)
+    result = []
+    for op in sorted(operations, key=lambda op: (-op["cost_usd"], op["operation_id"]))[:limit]:
+        result.append({k: v for k, v in op.items() if k not in ("models", "created_at", "cost_usd")})
+        result[-1].update(cost_usd=round(op["cost_usd"], 6),
+            created_at=op["created_at"].replace(tzinfo=timezone.utc).isoformat(),
+            user_email=emails.get(op["user_id"], f"[deleted user {op['user_id']}]") )
+    return {"period_days": days, "operations": result}
 
 
-def get_model_usage_distribution(
-    db: Session,
-    days: int = 30,
-) -> dict[str, Any]:
-    """
-    Get distribution of LLM model usage.
-    
-    Returns:
-        {
-            "period_days": int,
-            "models": [
-                {
-                    "model": str,
-                    "provider": str,
-                    "count": int,
-                    "total_cost_usd": float,
-                    "total_tokens": int
-                }
-            ]
-        }
-    """
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    
-    model_data = {}
-    
-    # Get chat model usage
-    chat_messages = (
-        db.query(ChatMessage.model_metadata_json)
-        .join(ChatTurn, ChatTurn.assistant_message_id == ChatMessage.id)
-        .filter(
-            ChatMessage.created_at >= cutoff,
-            ChatMessage.role == "assistant",
-            ChatMessage.model_metadata_json.isnot(None),
-        )
-        .all()
-    )
-    
-    for (meta_json,) in chat_messages:
-        meta = _parse_json(meta_json)
-        model = meta.get("model", "unknown")
-        provider = meta.get("provider", "unknown")
-        cost = _as_float(meta.get("cost_usd")) or 0.0
-        tokens = meta.get("total_tokens") or 0
-        
-        key = f"{provider}:{model}"
-        if key not in model_data:
-            model_data[key] = {
-                "model": model,
-                "provider": provider,
-                "count": 0,
-                "total_cost_usd": 0.0,
-                "total_tokens": 0,
-            }
-        
-        model_data[key]["count"] += 1
-        model_data[key]["total_cost_usd"] += cost
-        model_data[key]["total_tokens"] += int(tokens)
-    
-    # Get analysis/digest model usage from reports
-    reports = (
-        db.query(Report.metadata_json)
-        .join(Execution, Report.execution_id == Execution.id)
-        .filter(
-            Report.created_at >= cutoff,
-            Report.metadata_json.isnot(None),
-        )
-        .all()
-    )
-    
-    for (meta_json,) in reports:
-        meta = _parse_json(meta_json)
-        
-        # Try to get model info from models_used dict first, then fall back to direct fields
-        models_used = meta.get("models_used", {})
-        if isinstance(models_used, dict):
-            model = models_used.get("model") or models_used.get("deep_think") or meta.get("model", "unknown")
-            provider = models_used.get("provider") or meta.get("provider", "unknown")
-        else:
-            model = meta.get("model", "unknown")
-            provider = meta.get("provider", "unknown")
-        
-        cost = _as_float(meta.get("cost_usd")) or 0.0
-        tokens = meta.get("total_tokens") or 0
-        
-        key = f"{provider}:{model}"
-        if key not in model_data:
-            model_data[key] = {
-                "model": model,
-                "provider": provider,
-                "count": 0,
-                "total_cost_usd": 0.0,
-                "total_tokens": 0,
-            }
-        
-        model_data[key]["count"] += 1
-        model_data[key]["total_cost_usd"] += cost
-        model_data[key]["total_tokens"] += int(tokens)
-    
-    # Round costs and convert to list
-    models = []
-    for data in model_data.values():
-        data["total_cost_usd"] = round(data["total_cost_usd"], 6)
-        models.append(data)
-    
-    # Sort by cost descending
-    models.sort(key=lambda x: x["total_cost_usd"], reverse=True)
-    
-    return {
-        "period_days": days,
-        "models": models,
-    }
+def get_usage_trends(db, days=30):
+    operations = _load_operations(db, days)
+    today = datetime.now(timezone.utc).date()
+    daily = {}
+    # Rolling windows include part of the first calendar day and today.
+    for i in range(days + 1):
+        day = (today - timedelta(days=i)).isoformat()
+        daily[day] = {"date": day, "total_cost_usd": 0.0, "total_llm_tokens": 0,
+                      "operation_count": 0, "chat_cost": 0.0, "analysis_cost": 0.0, "digest_cost": 0.0}
+    for op in operations:
+        data = daily[op["created_at"].date().isoformat()]
+        data["total_cost_usd"] += op["cost_usd"]
+        data[op["operation_type"] + "_cost"] += op["cost_usd"]
+        data["total_llm_tokens"] += op["llm_tokens"]
+        data["operation_count"] += 1
+    for data in daily.values():
+        for key in ("total_cost_usd", "chat_cost", "analysis_cost", "digest_cost"):
+            data[key] = round(data[key], 6)
+    return {"period_days": days, "daily_data": sorted(daily.values(), key=lambda data: data["date"])}
+
+
+def get_model_usage_distribution(db, days=30, *, _ops=None):
+    operations = _load_operations(db, days) if _ops is None else _ops
+    models = {}
+    for op in operations:
+        seen = set()
+        for part in op["models"]:
+            key = (part["provider"], part["model"])
+            model = models.setdefault(key, {"provider": key[0], "model": key[1], "count": 0,
+                                           "total_cost_usd": 0.0, "total_tokens": 0})
+            if key not in seen:
+                model["count"] += 1
+                seen.add(key)
+            model["total_cost_usd"] += part["cost_usd"]
+            model["total_tokens"] += part["total_tokens"]
+    for model in models.values():
+        model["total_cost_usd"] = round(model["total_cost_usd"], 6)
+    return {"period_days": days, "models": sorted(models.values(), key=lambda m: -m["total_cost_usd"])}
 
 
 def get_cost_optimization_recommendations(
@@ -807,13 +143,14 @@ def get_cost_optimization_recommendations(
         }
     """
     recommendations = []
+    operations = _load_operations(db, days)
     
     # Get cost breakdown
-    cost_breakdown = get_cost_breakdown_by_operation(db, days)
+    cost_breakdown = get_cost_breakdown_by_operation(db, days, _ops=operations)
     total_cost = cost_breakdown["total_cost_usd"]
     
     # Get most expensive operations
-    expensive_ops = get_most_expensive_operations(db, days, limit=10)
+    expensive_ops = get_most_expensive_operations(db, days, limit=10, _ops=operations)
     
     # Recommendation 1: High-cost operations
     if expensive_ops["operations"]:
@@ -829,7 +166,7 @@ def get_cost_optimization_recommendations(
     
     # Recommendation 2: Operation type balance
     for op in cost_breakdown["operations"]:
-        if op["count"] > 0 and op["total_cost_usd"] > total_cost * 0.5:
+        if total_cost > 0 and op["count"] > 0 and op["total_cost_usd"] > total_cost * 0.5:
             recommendations.append({
                 "priority": "medium",
                 "category": "operation_balance",
@@ -839,10 +176,10 @@ def get_cost_optimization_recommendations(
             })
     
     # Recommendation 3: Model usage
-    model_dist = get_model_usage_distribution(db, days)
+    model_dist = get_model_usage_distribution(db, days, _ops=operations)
     if model_dist["models"]:
         expensive_model = model_dist["models"][0]
-        if expensive_model["total_cost_usd"] > total_cost * 0.6:
+        if total_cost > 0 and expensive_model["model"] != "unattributed" and expensive_model["total_cost_usd"] > total_cost * 0.6:
             recommendations.append({
                 "priority": "medium",
                 "category": "model_selection",

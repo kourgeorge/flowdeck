@@ -7,13 +7,15 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from config import RESULTS_DIR
 from data_layer import get_data_gateway
-from models.db_models import Execution, Report, ReportView, Subscription, Usage, User
+from models.db_models import AnalysisJob, Execution, Report, ReportView, Subscription, Usage, User
 from services.data_cache import get_cached_batch
+from services.cost_facts import parse_metadata, number
+from services.analysis_outputs import missing_reports
 
 
 def get_stats(db: Session) -> dict:
@@ -62,27 +64,23 @@ def get_user(db: Session, user_id: int) -> Optional[User]:
     return db.query(User).filter(User.id == user_id).first()
 
 
-def delete_user(db: Session, user_id: int) -> bool:
-    """Delete a user by id. Returns True if user was found and deleted, False if not found."""
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        return False
-    
-    # The User model has cascade="all, delete-orphan" relationships, so related records
-    # (subscriptions, profile, etc.) will be automatically deleted
-    db.delete(user)
-    db.commit()
+def delete_user(db: Session, user_id: int, actor_id: int) -> bool:
+    from services.admin_actions import delete_user as guarded_delete
+    guarded_delete(db, user_id, actor_id)
     return True
 
 
 def list_users(
-    db: Session, limit: int, offset: int
+    db: Session, limit: int, offset: int, search: str = ""
 ) -> tuple[list[dict], int]:
     """List users with ledger balances and subscription counts. Returns (items, total)."""
-    total = db.query(func.count(User.id)).scalar() or 0
+    query = db.query(User)
+    if search.strip():
+        query = query.filter(or_(User.email.contains(search.strip(), autoescape=True),
+                                 User.name.contains(search.strip(), autoescape=True)))
+    total = query.count()
     rows = (
-        db.query(User)
-        .order_by(User.created_at.desc())
+        query.order_by(User.created_at.desc(), User.id.desc())
         .offset(offset)
         .limit(limit)
         .all()
@@ -114,6 +112,7 @@ def list_users(
             "token_balance": balance_by_user.get(u.id, u.token_balance),
             "created_at": u.created_at,
             "subscription_count": count_by_user.get(u.id, 0),
+            "is_admin": u.is_admin,
         }
         for u in rows
     ]
@@ -143,22 +142,17 @@ def list_reports(db: Session, limit: int) -> tuple[list[dict], int]:
     )
     items = []
     for r_id, _ex_fk, report_type, metadata_json, created_at, ex_id, subject_id in rows_with_run:
-        meta = {}
-        if metadata_json:
-            try:
-                meta = json.loads(metadata_json) or {}
-            except Exception:
-                pass
+        meta = parse_metadata(metadata_json)
         items.append({
             "id": r_id,
             "ticker": subject_id or "",
             "analysis_run_id": ex_id or 0,
             "report_type": report_type,
             "created_at": created_at,
-            "input_tokens": meta.get("input_tokens"),
-            "output_tokens": meta.get("output_tokens"),
-            "total_tokens": meta.get("total_tokens"),
-            "cost_usd": meta.get("cost_usd"),
+            "input_tokens": int(number(meta.get("input_tokens"))),
+            "output_tokens": int(number(meta.get("output_tokens"))),
+            "total_tokens": int(number(meta.get("total_tokens"))),
+            "cost_usd": number(meta.get("cost_usd")),
         })
     return items, total
 
@@ -190,12 +184,12 @@ def get_report_detail(db: Session, report_id: int) -> Optional[dict[str, Any]]:
         "report_type": report.report_type,
         "created_at": report.created_at,
         "content": report.content,
-        "metadata": metadata,
+        "metadata": metadata if isinstance(metadata, dict) else None,
         "metadata_raw": report.metadata_json,
-        "input_tokens": meta_for_costs.get("input_tokens"),
-        "output_tokens": meta_for_costs.get("output_tokens"),
-        "total_tokens": meta_for_costs.get("total_tokens"),
-        "cost_usd": meta_for_costs.get("cost_usd"),
+        "input_tokens": int(number(meta_for_costs.get("input_tokens"))),
+        "output_tokens": int(number(meta_for_costs.get("output_tokens"))),
+        "total_tokens": int(number(meta_for_costs.get("total_tokens"))),
+        "cost_usd": number(meta_for_costs.get("cost_usd")),
     }
 
 
@@ -220,7 +214,6 @@ def build_analysis_reports_zip(
     ticker = (execution.subject_id or "analysis").upper()
     filename = f"{ticker}_analysis_{analysis_run_id}_reports.zip"
 
-    results_report_dir = _results_root() / ticker / str(analysis_run_id) / "reports"
     zip_buffer = io.BytesIO()
 
     with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -244,11 +237,8 @@ def build_analysis_reports_zip(
                 for ch in (report.report_type or "report")
             )
             arcname = f"reports/{safe_report_type}.md"
-            filesystem_path = results_report_dir / f"{safe_report_type}.md"
 
             content = report.content or ""
-            if filesystem_path.exists() and filesystem_path.is_file():
-                content = filesystem_path.read_text(encoding="utf-8")
             zf.writestr(arcname, content)
 
             metadata: dict[str, Any] | None = None
@@ -269,6 +259,7 @@ def build_analysis_reports_zip(
                     "report_type": report.report_type,
                     "created_at": report.created_at.isoformat() if report.created_at else None,
                     "has_metadata": metadata is not None,
+                    "content_source": "database",
                 }
             )
 
@@ -280,13 +271,16 @@ def build_analysis_reports_zip(
     return zip_buffer.getvalue(), filename
 
 
-def list_analyses(db: Session, limit: int, offset: int) -> tuple[list[dict], int]:
+def list_analyses(db: Session, limit: int, offset: int, ticker: str = "", creator: str = "") -> tuple[list[dict], int]:
     """Recent analysis runs with creator email and token/cost sums. Returns (items, total)."""
-    total = db.query(func.count(Execution.status)).scalar() or 0
+    query = db.query(Execution, User.email).join(User, User.id == Execution.creator_id)
+    if ticker.strip():
+        query = query.filter(Execution.subject_id.contains(ticker.strip().upper(), autoescape=True))
+    if creator.strip():
+        query = query.filter(User.email.contains(creator.strip(), autoescape=True))
+    total = query.count()
     rows = (
-        db.query(Execution, User.email)
-        .join(User, User.id == Execution.creator_id)
-        .order_by(Execution.created_at.desc())
+        query.order_by(Execution.created_at.desc(), Execution.id.desc())
         .offset(offset)
         .limit(limit)
         .all()
@@ -302,21 +296,16 @@ def list_analyses(db: Session, limit: int, offset: int) -> tuple[list[dict], int
         for ex_id, meta_json in reports:
             if ex_id is None:
                 continue
-            meta = {}
-            if meta_json:
-                try:
-                    meta = json.loads(meta_json) or {}
-                except Exception:
-                    pass
+            meta = parse_metadata(meta_json)
             inp = meta.get("input_tokens")
             out = meta.get("output_tokens")
             cost = meta.get("cost_usd")
             if cost is not None:
-                cost = float(cost)
+                cost = number(cost)
             prev_inp, prev_out, prev_cost = sums_by_ex.get(ex_id, (0, 0, 0.0))
             sums_by_ex[ex_id] = (
-                prev_inp + (int(inp) if inp is not None else 0),
-                prev_out + (int(out) if out is not None else 0),
+                prev_inp + (int(number(inp))),
+                prev_out + (int(number(out))),
                 prev_cost + (cost if cost is not None else 0.0),
             )
 
@@ -349,7 +338,7 @@ def list_subscriptions(
     rows = (
         db.query(Subscription, User.email)
         .join(User, User.id == Subscription.user_id)
-        .order_by(Subscription.created_at.desc())
+        .order_by(Subscription.created_at.desc(), Subscription.id.desc())
         .offset(offset)
         .limit(limit)
         .all()
@@ -431,7 +420,7 @@ def get_views(db: Session, limit: int, offset: int) -> tuple[list[dict], int]:
     return items, total
 
 
-def get_view_runs(db: Session, limit: int) -> tuple[list[dict], int]:
+def get_view_runs(db: Session, limit: int, offset: int = 0) -> tuple[list[dict], int]:
     """Runs with unique view counts. Returns (runs, total_runs_with_views)."""
     rows = (
         db.query(
@@ -448,6 +437,7 @@ def get_view_runs(db: Session, limit: int) -> tuple[list[dict], int]:
             func.max(ReportView.viewed_at).desc(),
             func.count(ReportView.id).desc(),
         )
+        .offset(offset)
         .limit(limit)
         .all()
     )
@@ -557,7 +547,8 @@ def _normalize_recommendation(value: Any) -> Optional[str]:
 def _coerce_price(value: Any) -> Optional[float]:
     try:
         price = float(value)
-        if price <= 0:
+        import math
+        if not math.isfinite(price) or price <= 0:
             return None
         return round(price, 4)
     except (TypeError, ValueError):
@@ -565,42 +556,17 @@ def _coerce_price(value: Any) -> Optional[float]:
 
 
 def _extract_accuracy_inputs(report_rows: list[tuple[str, Optional[str]]]) -> tuple[Optional[str], Optional[float]]:
-    recommendation: Optional[str] = None
-    analysis_price: Optional[float] = None
-
-    preferred_report_order = (
-        "investment_plan",
-        "final_trade_decision",
-        "trader_investment_plan",
-    )
-    rows_by_type = {report_type: _parse_report_metadata(meta_json) for report_type, meta_json in report_rows}
-
-    for report_type in preferred_report_order:
-        meta = rows_by_type.get(report_type) or {}
-        if recommendation is None:
-            recommendation = _normalize_recommendation(
-                meta.get("recommendation") or meta.get("trader_recommendation")
-            )
-        if analysis_price is None:
-            analysis_price = _coerce_price(
-                meta.get("current_price") or meta.get("analysis_price") or meta.get("price")
-            )
-        if recommendation is not None and analysis_price is not None:
-            return recommendation, analysis_price
-
-    for meta in rows_by_type.values():
-        if recommendation is None:
-            recommendation = _normalize_recommendation(
-                meta.get("recommendation") or meta.get("trader_recommendation")
-            )
-        if analysis_price is None:
-            analysis_price = _coerce_price(
-                meta.get("current_price") or meta.get("analysis_price") or meta.get("price")
-            )
-        if recommendation is not None and analysis_price is not None:
-            break
-
-    return recommendation, analysis_price
+    rows = {kind: _parse_report_metadata(raw) for kind, raw in report_rows}
+    for kind in ("trader_investment_plan", "final_trade_decision", "investment_plan"):
+        meta = rows.get(kind)
+        if not meta:
+            continue
+        rec = _normalize_recommendation(meta.get("recommendation") or meta.get("trader_recommendation"))
+        price = _coerce_price(meta.get("current_price") or meta.get("analysis_price") or meta.get("price"))
+        # Once a final report exists, missing data is unavailable, not a reason
+        # to score an earlier and potentially contradictory recommendation.
+        return rec, price
+    return None, None
 
 
 def _get_current_quotes_for_accuracy(tickers: list[str]) -> dict[str, Optional[dict[str, Any]]]:
@@ -853,37 +819,38 @@ def load_mission_control_entries(path: Optional[Path] = None) -> list[dict[str, 
     return entries
 
 
-def get_running_statuses_by_ticker(tickers: list[str]) -> dict[str, dict]:
-    """Return currently running status payload keyed by ticker (from cache)."""
-    from services.data_cache import list_running_analyses
-    allowed_tickers = {t.upper() for t in tickers}
-    by_ticker: dict[str, dict] = {}
-    for item in list_running_analyses("ticker"):
-        ticker_upper = str(item.get("ticker") or "").upper()
-        if not ticker_upper or ticker_upper not in allowed_tickers:
-            continue
-        current = by_ticker.get(ticker_upper)
-        current_updated_at = str((current or {}).get("updated_at") or "")
-        candidate_updated_at = str(item.get("updated_at") or "")
-        if current is None or candidate_updated_at >= current_updated_at:
-            by_ticker[ticker_upper] = item
-    return by_ticker
+def list_active_analyses(db: Session) -> list[dict]:
+    from services.data_cache import list_running_analyses, get_stop_requested
+    cached = {row["analysis_run_id"]: row for row in list_running_analyses("ticker")}
+    rows = db.query(Execution, AnalysisJob).outerjoin(AnalysisJob, AnalysisJob.execution_id == Execution.id).filter(
+        Execution.execution_type == "ticker", Execution.status.in_(("queued", "running"))).all()
+    result = []
+    for ex, job in rows:
+        progress = cached.get(ex.id, {})
+        parameters = parse_metadata(job.parameters_json) if job else {}
+        result.append({**progress, "analysis_run_id": ex.id, "ticker": ex.subject_id,
+            "date": parameters.get("analysis_date") or progress.get("date") or ex.created_at.date().isoformat(),
+            "status": "stopping" if get_stop_requested(ex.id) else ex.status,
+            "created_at": ex.created_at.replace(tzinfo=timezone.utc).isoformat()})
+    return result
+
+
+def get_running_statuses_by_ticker(tickers: list[str], db: Session) -> dict[str, dict]:
+    allowed = {ticker.upper() for ticker in tickers}
+    return {row["ticker"].upper(): row for row in list_active_analyses(db) if row["ticker"].upper() in allowed}
 
 
 def get_tickers_with_report_on_date(db: Session, date_str: str) -> set[str]:
-    """Return set of ticker symbols that have a report for the given date (YYYY-MM-DD)."""
-    from sqlalchemy import func
-    rows = (
-        db.query(Execution.subject_id)
-        .join(Report, Report.execution_id == Execution.id)
-        .filter(
-            Execution.execution_type == "ticker",
-            func.date(Execution.created_at) == date_str,
-        )
-        .distinct()
-        .all()
-    )
-    return {str(r[0]).upper() for r in rows if r[0]}
+    rows = db.query(Execution, AnalysisJob).outerjoin(AnalysisJob, AnalysisJob.execution_id == Execution.id).filter(
+        Execution.execution_type == "ticker", Execution.status == "completed",
+        func.date(Execution.created_at) == date_str).all()
+    if not rows:
+        return set()
+    reports = {}
+    for report in db.query(Report).filter(Report.execution_id.in_([ex.id for ex, _ in rows])):
+        reports.setdefault(report.execution_id, []).append(report)
+    return {ex.subject_id.upper() for ex, job in rows if not missing_reports(
+        reports.get(ex.id, []), parse_metadata(job.parameters_json).get("analysts", []) if job else [], legacy=job is None)}
 
 
 def get_mission_control_items(db: Session) -> list[dict]:
@@ -897,18 +864,7 @@ def get_mission_control_items(db: Session) -> list[dict]:
     mission_tickers = [str(item.get("ticker") or "").upper() for item in mission_entries if item.get("ticker")]
     ticker_set = set(mission_tickers)
 
-    # Running statuses from cache
-    allowed_tickers = {t.upper() for t in mission_tickers}
-    by_ticker: dict[str, dict] = {}
-    for item in list_running_analyses("ticker"):
-        ticker_upper = str(item.get("ticker") or "").upper()
-        if not ticker_upper or ticker_upper not in allowed_tickers:
-            continue
-        current = by_ticker.get(ticker_upper)
-        current_updated_at = str((current or {}).get("updated_at") or "")
-        candidate_updated_at = str(item.get("updated_at") or "")
-        if current is None or candidate_updated_at >= current_updated_at:
-            by_ticker[ticker_upper] = item
+    by_ticker = get_running_statuses_by_ticker(mission_tickers, db)
 
     # Last completed per ticker from DB with report counts and status
     last_completed = {}
@@ -952,10 +908,13 @@ def get_mission_control_items(db: Session) -> list[dict]:
     ).all():
         ticker_upper = str(subject_id).upper()
         if ticker_upper in ticker_set:
-            if completed_at is not None:
-                last_completed[ticker_upper] = completed_at
             report_counts[ticker_upper] = report_count
             execution_statuses[ticker_upper] = status
+
+    for ticker, completed_at in db.query(Execution.subject_id, func.max(Execution.completed_at)).filter(
+        Execution.execution_type == "ticker", Execution.status == "completed").group_by(Execution.subject_id):
+        if ticker.upper() in ticker_set:
+            last_completed[ticker.upper()] = completed_at
 
     # Get subscription counts per ticker
     subscription_counts = {}

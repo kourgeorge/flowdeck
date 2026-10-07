@@ -7,6 +7,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Float,
     Index,
     Integer,
     String,
@@ -284,6 +285,25 @@ class Usage(Base):
     )
 
 
+class OperationCost(Base):
+    """Content-free usage facts, retained when an account or its content is deleted.
+
+    A source is a report within an execution or an assistant turn. Report upserts
+    refresh the same fact; they never create another operation. IDs intentionally
+    have no cascading foreign keys and use the persistent entity sequences.
+    """
+    __tablename__ = "operation_costs"
+    source_key = Column(String(255), primary_key=True)
+    operation_type = Column(String(24), nullable=False)
+    operation_id = Column(Integer, nullable=False)
+    user_id = Column(Integer, nullable=False, index=True)
+    subject = Column(String(255), nullable=False)
+    occurred_at = Column(DateTime, nullable=False, index=True)
+    cost_usd = Column(Float, nullable=False, default=0)
+    total_tokens = Column(Integer, nullable=False, default=0)
+    model_usage_json = Column(Text, nullable=False, default="[]")
+
+
 
 class OAuthState(Base):
     __tablename__ = "oauth_states"
@@ -422,3 +442,18 @@ def _allocate_persistent_id(_mapper, connection, target):
 
 for _entity in (User, Execution, ChatSession, ChatMessage, ChatTurn):
     event.listen(_entity, "before_insert", _allocate_persistent_id)
+
+
+def _capture_report_cost(_mapper, connection, report):
+    from services.cost_facts import capture_report
+    capture_report(connection, report)
+
+
+def _capture_turn_cost(_mapper, connection, turn):
+    from services.cost_facts import capture_turn
+    capture_turn(connection, turn)
+
+
+for _event in ("after_insert", "after_update"):
+    event.listen(Report, _event, _capture_report_cost)
+    event.listen(ChatTurn, _event, _capture_turn_cost)
