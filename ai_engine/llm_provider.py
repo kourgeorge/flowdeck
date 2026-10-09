@@ -91,6 +91,14 @@ def get_config_from_env(overrides: Optional[Dict[str, Any]] = None) -> Dict[str,
             or os.environ.get("CHAT_MODEL")
             or cfg["deep_think_llm"]  # fallback to deep_think_llm if CHAT_MODEL not set
         )
+    # Optional reasoning effort for OpenAI/Azure reasoning models (none, low, medium, high, ...)
+    reasoning_effort = (
+        overrides.get("reasoning_effort")
+        or os.environ.get("LLM_REASONING_EFFORT")
+        or ""
+    ).strip().lower()
+    if reasoning_effort:
+        cfg["reasoning_effort"] = reasoning_effort
     # Set backend_url from overrides or LLM_BACKEND_URL environment variable
     if overrides.get("backend_url"):
         cfg["backend_url"] = overrides["backend_url"]
@@ -113,18 +121,26 @@ _MODELS_NO_TEMPERATURE = frozenset(
     {"o1", "o1-mini", "o1-preview", "o3", "o3-mini", "o4-mini"}
 )
 
+# Model families that reject 'temperature' while reasoning is on (their default),
+# and accept it only with reasoning_effort="none" (e.g. gpt-6-luna)
+_REASONING_FAMILIES = ("gpt-5", "gpt-6")
 
-def _model_supports_temperature(model: str) -> bool:
+
+def _model_supports_temperature(model: str, reasoning_effort: Optional[str] = None) -> bool:
     """Return False if this model is known to reject the temperature parameter."""
     base = (model or "").strip().lower()
     if not base:
         return True
+    # Ignore proxy/provider prefixes such as "azure/" or "openai/" (LiteLLM)
+    base = base.rsplit("/", 1)[-1]
     # Check exact and prefix (e.g. "o1-2024-..." or deployment names)
     if base in _MODELS_NO_TEMPERATURE:
         return False
     for no_temp in _MODELS_NO_TEMPERATURE:
         if base.startswith(no_temp + "-") or base.startswith(no_temp + "."):
             return False
+    if base.startswith(_REASONING_FAMILIES):
+        return (reasoning_effort or "").strip().lower() == "none"
     return True
 
 
@@ -160,10 +176,11 @@ def get_llm(
     base_url = config.get(CONFIG_BACKEND_URL) or config.get("backend_url")
     timeout = request_timeout if request_timeout is not None else 600
     temp = temperature if temperature is not None else (0.0 if role == "deep" else 0.0)
+    reasoning_effort = config.get("reasoning_effort")
     # Skip temperature if model doesn't support it, or config explicitly disables it
     use_temp = (
         config.get("use_temperature", True)
-        and _model_supports_temperature(model)
+        and _model_supports_temperature(model, reasoning_effort)
     )
 
     if provider in ("openai", "ollama", "openrouter"):
@@ -173,6 +190,8 @@ def get_llm(
             kwargs["temperature"] = temp
         if max_tokens is not None:
             kwargs["max_tokens"] = max_tokens
+        if reasoning_effort:
+            kwargs["reasoning_effort"] = reasoning_effort
         return ChatOpenAI(**kwargs)
     if provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
@@ -215,6 +234,8 @@ def get_llm(
             kwargs["temperature"] = temp
         if max_tokens is not None:
             kwargs["max_tokens"] = max_tokens
+        if reasoning_effort:
+            kwargs["reasoning_effort"] = reasoning_effort
         return AzureChatOpenAI(**kwargs)
     if provider == "cerebras":
         from langchain_cerebras import ChatCerebras

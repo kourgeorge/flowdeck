@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 # Pricing USD per 1M tokens (input, output). Fill in for models you use.
 # Sources: OpenAI pricing page, Azure same as OpenAI for same models.
 _DEFAULT_PRICING: Dict[str, tuple[float, float]] = {
+    "gpt-6-luna": (0.10, 0.50),
     "gpt-4o": (2.50, 10.00),
     "gpt-4o-mini": (0.15, 0.60),
     "gpt-4o-2024-08-06": (2.50, 10.00),
