@@ -37,3 +37,14 @@ def test_get_embedding_sends_truncated_input():
     mem.get_embedding("word " * 20000)
     enc = tiktoken.get_encoding("cl100k_base")
     assert len(enc.encode(sent["input"])) <= memory_mod._EMBEDDING_MAX_TOKENS
+
+
+def test_empty_store_returns_nothing_without_embedding():
+    mem = memory_mod.FinancialSituationMemory.__new__(memory_mod.FinancialSituationMemory)
+    mem.situation_collection = type("Coll", (), {"count": lambda self: 0})()
+
+    def fail(_text):
+        raise AssertionError("empty store must not trigger an embedding call")
+
+    mem.get_embedding = fail
+    assert mem.get_memories("long analyst reports", n_matches=2) == []

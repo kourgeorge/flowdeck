@@ -133,6 +133,12 @@ class FinancialSituationMemory:
 
     def get_memories(self, current_situation, n_matches=1):
         """Find matching recommendations using OpenAI embeddings"""
+        # Nothing calls reflect_and_remember and the store is in-memory only, so in
+        # production the collection is always empty. Embedding the full analyst
+        # reports just to search it cost an API call per agent per run and caused the
+        # ALLO (run 3826) context-length failure, for a result that is always [].
+        if self.situation_collection.count() == 0:
+            return []
         query_embedding = self.get_embedding(current_situation)
 
         results = self.situation_collection.query(

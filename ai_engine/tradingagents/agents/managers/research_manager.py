@@ -74,6 +74,8 @@ def create_research_manager(llm, memory):
         past_memory_str = ""
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
+        if not past_memories:
+            past_memory_str = "No past memories found."
 
         # Build on the prior investment plan for this ticker (cumulative continuity).
         # The prior plan is seeded into state["prior_reports"] alongside the analyst reports;

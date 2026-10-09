@@ -29,6 +29,8 @@ def create_neutral_researcher(llm, memory):
         past_memory_str = ""
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
+        if not past_memories:
+            past_memory_str = "No past memories found."
 
         prompt = f"""You are a Neutral Analyst providing a balanced, moderate perspective in the debate over investing in the stock. Your role is to weigh both the bull and bear arguments critically, pointing out where each side may be overly optimistic or overly pessimistic, and to advocate for a well-rounded, sustainable view.
 
