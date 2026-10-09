@@ -3,6 +3,24 @@ import chromadb
 from chromadb.config import Settings
 from openai import OpenAI, AzureOpenAI
 
+# OpenAI embedding models reject inputs over 8192 tokens. The researchers embed every
+# analyst report joined together, which for ALLO (run 3826) went over and stopped
+# the whole analysis. A small margin covers tokenizer differences on non-OpenAI
+# backends such as Ollama.
+_EMBEDDING_MAX_TOKENS = 8000
+
+
+def _truncate_for_embedding(text):
+    # Only used to look up similar past situations, so embedding the first ~8k
+    # tokens is still a meaningful match key; failing the analysis is not worth it.
+    import tiktoken
+
+    enc = tiktoken.get_encoding("cl100k_base")
+    tokens = enc.encode(text or "", disallowed_special=())
+    if len(tokens) <= _EMBEDDING_MAX_TOKENS:
+        return text
+    return enc.decode(tokens[:_EMBEDDING_MAX_TOKENS])
+
 
 class FinancialSituationMemory:
     def __init__(self, name, config):
@@ -86,7 +104,7 @@ class FinancialSituationMemory:
         if self._local_embedder is not None:
             return self._local_embedder.encode(text, convert_to_numpy=True).tolist()
         response = self.client.embeddings.create(
-            model=self.embedding, input=text
+            model=self.embedding, input=_truncate_for_embedding(text)
         )
         return response.data[0].embedding
 
