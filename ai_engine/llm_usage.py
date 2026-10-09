@@ -13,7 +13,13 @@ from typing import Any, Dict, List, Optional
 # Pricing USD per 1M tokens (input, output). Fill in for models you use.
 # Sources: OpenAI pricing page, Azure same as OpenAI for same models.
 _DEFAULT_PRICING: Dict[str, tuple[float, float]] = {
+    "gpt-6-astra": (10.00, 50.00),
     "gpt-6-luna": (0.10, 0.50),
+    # gpt-5.6-sol is on promotional pricing through at least 2026-11-21; standard is (5.00, 30.00).
+    # Listed first among gpt-5.6 so the plain "gpt-5.6" alias (which routes to Sol) prices as Sol.
+    "gpt-5.6-sol": (4.00, 20.00),
+    "gpt-5.6-terra": (2.00, 12.00),
+    "gpt-5.6-luna": (0.20, 1.20),
     "gpt-4o": (2.50, 10.00),
     "gpt-4o-mini": (0.15, 0.60),
     "gpt-4o-2024-08-06": (2.50, 10.00),
@@ -33,8 +39,15 @@ def _normalize_model_for_pricing(model: Optional[str]) -> str:
     if not model:
         return "gpt-4o-mini"
     m = (model or "").strip().lower()
+    if m in _DEFAULT_PRICING:
+        return m
+    # Longest contained key wins, so "gpt-4o-mini-..." is not priced as "gpt-4o"
+    contained = [key for key in _DEFAULT_PRICING if key in m]
+    if contained:
+        return max(contained, key=len)
+    # Aliases shorter than a key (e.g. "gpt-5.6" -> first gpt-5.6 entry, Sol)
     for key in _DEFAULT_PRICING:
-        if key in m or m in key:
+        if m in key:
             return key
     if "gpt-4o" in m:
         return "gpt-4o"
