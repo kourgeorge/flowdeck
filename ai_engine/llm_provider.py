@@ -186,6 +186,13 @@ def get_llm(
     if provider in ("openai", "ollama", "openrouter"):
         from langchain_openai import ChatOpenAI
         kwargs = dict(model=model, base_url=base_url, request_timeout=timeout)
+        # Pass the key explicitly so it gets stripped. Left to itself, ChatOpenAI reads
+        # OPENAI_API_KEY raw, and a trailing newline from a .env/secret file ends up in
+        # the Authorization header; httpx then rejects it as an illegal header value,
+        # which the OpenAI SDK reports only as a vague "APIConnectionError".
+        openai_key = (os.environ.get("OPENAI_API_KEY") or "").strip()
+        if openai_key:
+            kwargs["api_key"] = openai_key
         if use_temp:
             kwargs["temperature"] = temp
         if max_tokens is not None:
@@ -196,6 +203,10 @@ def get_llm(
     if provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
         kwargs = dict(model=model, base_url=base_url, request_timeout=timeout)
+        # Same trailing-newline trap as OPENAI_API_KEY above.
+        anthropic_key = (os.environ.get("ANTHROPIC_API_KEY") or "").strip()
+        if anthropic_key:
+            kwargs["api_key"] = anthropic_key
         if use_temp:
             kwargs["temperature"] = temp
         if max_tokens is not None:
@@ -215,8 +226,8 @@ def get_llm(
         return ChatPerplexity(**kwargs)
     if provider == "azure":
         from langchain_openai import AzureChatOpenAI
-        azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-        azure_api_key = os.getenv("AZURE_OPENAI_API_KEY")
+        azure_endpoint = (os.getenv("AZURE_OPENAI_ENDPOINT") or "").strip()
+        azure_api_key = (os.getenv("AZURE_OPENAI_API_KEY") or "").strip()
         azure_api_version = os.getenv("OPENAI_API_VERSION", "2024-08-01-preview")
         if not azure_endpoint or not azure_api_key:
             raise ValueError(
