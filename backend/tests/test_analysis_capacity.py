@@ -347,15 +347,43 @@ def test_mission_control_batch_runs_automatically_with_bounded_concurrency(runti
 def test_graph_close_closes_owned_clients_once_without_resetting_shared_chroma():
     from ai_engine.tradingagents.graph.trading_graph import TradingAgentsGraph
     graph = TradingAgentsGraph.__new__(TradingAgentsGraph)
-    shared = Mock()
+    owned_http = Mock()
     memory_client = Mock()
-    graph.deep_thinking_llm = graph.quick_thinking_llm = SimpleNamespace(root_client=shared)
+    graph._http_client = owned_http
     for attr in ("bull_memory", "bear_memory", "neutral_memory", "trader_memory", "invest_judge_memory"):
         setattr(graph, attr, SimpleNamespace(client=memory_client, chroma_client=Mock()))
     graph.close()
-    shared.close.assert_called_once()
+    owned_http.close.assert_called_once()
     memory_client.close.assert_called_once()
     graph.bull_memory.chroma_client.reset.assert_not_called()
+
+
+@pytest.mark.parametrize("provider", ["openai", "azure"])
+def test_finished_run_does_not_close_llm_client_of_concurrent_or_later_runs(monkeypatch, provider):
+    # ChatOpenAI without an explicit http_client reuses langchain-openai's lru_cached
+    # httpx client, so closing root_client in one run's close() killed every other run
+    # with "Cannot send a request, as the client has been closed."
+    import ai_engine.tradingagents.graph.trading_graph as trading_graph
+    from ai_engine.llm_provider import get_llm
+    from ai_engine.tradingagents.default_config import DEFAULT_CONFIG
+
+    monkeypatch.setattr(trading_graph, "require_info_service", lambda: None)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com/")
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "azure-test-key")
+    cfg = {**DEFAULT_CONFIG, "llm_provider": provider, "info_service_url": "http://info.invalid"}
+
+    finished = trading_graph.TradingAgentsGraph(config=cfg)
+    concurrent = trading_graph.TradingAgentsGraph(config=cfg)
+    finished.close()
+
+    assert finished.deep_thinking_llm.root_client.is_closed()
+    assert finished.quick_thinking_llm.root_client.is_closed()
+    assert not concurrent.deep_thinking_llm.root_client.is_closed()
+    assert not concurrent.quick_thinking_llm.root_client.is_closed()
+    # Models built elsewhere in the process (chat, watchlist) still get a live client.
+    assert not get_llm("quick", cfg, request_timeout=120).root_client.is_closed()
+    concurrent.close()
 
 
 def test_executor_recovers_capacity_after_task_failure():

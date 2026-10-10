@@ -7,6 +7,7 @@ import logging
 from datetime import date
 from typing import Dict, Any, Tuple, List, Optional
 
+import openai
 from langgraph.prebuilt import ToolNode
 
 from ..agents import *
@@ -77,10 +78,20 @@ class TradingAgentsGraph:
             detect_support_resistance
         )
 
-        # Initialize LLMs via provider (deep thinker + quick thinking model)
+        # Initialize LLMs via provider (deep thinker + quick thinking model).
+        # This run owns its HTTP connection pool so close() can release it. Without
+        # it, ChatOpenAI shares langchain-openai's lru_cached httpx client with every
+        # other run in the process, and closing that when one analysis finished broke
+        # the other concurrent runs (and every later one) with "Cannot send a request,
+        # as the client has been closed."
+        self._http_client = openai.DefaultHttpxClient()
         llm_provider = LLMProvider(self.config)
-        self.deep_thinking_llm = llm_provider.get_deep_llm(request_timeout=120)
-        self.quick_thinking_llm = llm_provider.get_quick_llm(request_timeout=120)
+        self.deep_thinking_llm = llm_provider.get_deep_llm(
+            request_timeout=120, http_client=self._http_client
+        )
+        self.quick_thinking_llm = llm_provider.get_quick_llm(
+            request_timeout=120, http_client=self._http_client
+        )
         
         # Initialize memories
         self.bull_memory = FinancialSituationMemory("bull_memory", self.config)
@@ -122,16 +133,15 @@ class TradingAgentsGraph:
         )
 
     def close(self) -> None:
-        """Close this run's synchronous LLM clients after the graph has stopped.
+        """Close the network clients this run created, after the graph has stopped.
 
-        The analysts use invoke(), so these are the clients that open network
-        connections. Chroma's shared collections belong to the process and must
-        not be reset when an individual analysis finishes.
+        Only clients the run owns are closed: its own httpx pool (used by the
+        synchronous invoke() calls of both LLMs) and the per-memory embedding
+        clients. The LLMs' root_client is deliberately not closed, since for some
+        providers it wraps a client shared across the process. Chroma's shared
+        collections belong to the process and must not be reset either.
         """
-        clients = [
-            getattr(self.deep_thinking_llm, "root_client", None),
-            getattr(self.quick_thinking_llm, "root_client", None),
-        ]
+        clients = [getattr(self, "_http_client", None)]
         clients.extend(
             memory.client for memory in (
                 self.bull_memory, self.bear_memory, self.neutral_memory,

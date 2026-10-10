@@ -152,6 +152,7 @@ def get_llm(
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
     request_timeout: Optional[int] = 600,
+    http_client: Optional[Any] = None,
 ) -> BaseChatModel:
     """
     Return a chat model for the given role (or explicit model name) using config.
@@ -164,6 +165,10 @@ def get_llm(
         max_tokens: Optional cap on output tokens. Anthropic defaults to 1024 if unset, which
             silently truncates long output, so callers generating long-form content should set this.
         request_timeout: Request timeout in seconds (default 600).
+        http_client: Optional httpx.Client for the OpenAI-SDK-based providers (openai, ollama,
+            openrouter, azure, cerebras). Pass one when the caller wants to close the model's
+            connections: without it ChatOpenAI falls back to langchain-openai's process-wide
+            lru_cached httpx client, which must never be closed. Other providers ignore it.
 
     Returns:
         A LangChain-compatible chat model (BaseChatModel).
@@ -199,6 +204,8 @@ def get_llm(
             kwargs["max_tokens"] = max_tokens
         if reasoning_effort:
             kwargs["reasoning_effort"] = reasoning_effort
+        if http_client is not None:
+            kwargs["http_client"] = http_client
         return ChatOpenAI(**kwargs)
     if provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
@@ -247,6 +254,8 @@ def get_llm(
             kwargs["max_tokens"] = max_tokens
         if reasoning_effort:
             kwargs["reasoning_effort"] = reasoning_effort
+        if http_client is not None:
+            kwargs["http_client"] = http_client
         return AzureChatOpenAI(**kwargs)
     if provider == "cerebras":
         from langchain_cerebras import ChatCerebras
@@ -266,6 +275,8 @@ def get_llm(
         if model and "gpt-oss-120b" in model.lower():
             reasoning = config.get("reasoning_effort") or os.environ.get("CEREBRAS_REASONING_EFFORT") or "medium"
             kwargs["reasoning_effort"] = reasoning
+        if http_client is not None:
+            kwargs["http_client"] = http_client
         return ChatCerebras(**kwargs)
     raise ValueError(f"Unsupported LLM provider: {config.get(CONFIG_LLM_PROVIDER)}")
 
@@ -292,6 +303,7 @@ class LLMProvider:
         model_name: Optional[str] = None,
         temperature: Optional[float] = None,
         request_timeout: Optional[int] = 300,
+        http_client: Optional[Any] = None,
     ) -> BaseChatModel:
         """Return the chat model for the given role."""
         return get_llm(
@@ -300,6 +312,7 @@ class LLMProvider:
             model_name=model_name,
             temperature=temperature,
             request_timeout=request_timeout,
+            http_client=http_client,
         )
 
     def get_deep_llm(
@@ -308,6 +321,7 @@ class LLMProvider:
         model_name: Optional[str] = None,
         temperature: Optional[float] = None,
         request_timeout: Optional[int] = 300,
+        http_client: Optional[Any] = None,
     ) -> BaseChatModel:
         """Return the deep-thinking model (reasoning, judge, complex tasks)."""
         return self.get_llm(
@@ -315,6 +329,7 @@ class LLMProvider:
             model_name=model_name,
             temperature=temperature,
             request_timeout=request_timeout,
+            http_client=http_client,
         )
 
     def get_quick_llm(
@@ -323,6 +338,7 @@ class LLMProvider:
         model_name: Optional[str] = None,
         temperature: Optional[float] = None,
         request_timeout: Optional[int] = 300,
+        http_client: Optional[Any] = None,
     ) -> BaseChatModel:
         """Return the quick-thinking model (analysts, tools, routing)."""
         return self.get_llm(
@@ -330,4 +346,5 @@ class LLMProvider:
             model_name=model_name,
             temperature=temperature,
             request_timeout=request_timeout,
+            http_client=http_client,
         )
