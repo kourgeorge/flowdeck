@@ -201,9 +201,26 @@ def test_failed_or_incomplete_runs_do_not_block_retry(ctx):
     assert 'AAPL' in admin_service.get_tickers_with_report_on_date(db, datetime.utcnow().strftime('%Y-%m-%d'))
 
 
-def test_stop_preserves_monitoring_until_terminal_acknowledgement(ctx):
+class _ServiceWithWorkers:
+    """Real _fail_analysis, but liveness comes from an explicit set of run ids."""
+
+    def __init__(self, live=()):
+        self.live = set(live)
+        self.running_analyses = {}
+
+    def has_live_worker(self, run_id):
+        return run_id in self.live
+
+    def _fail_analysis(self, run_id, error, *, cancelled=False):
+        from services.analysis_service import AnalysisService
+        AnalysisService._fail_analysis(self, run_id, error, cancelled=cancelled)
+
+
+def test_stop_preserves_monitoring_until_terminal_acknowledgement(ctx, monkeypatch):
     db, client, headers = ctx
     ex = add_execution(db, status='running')
+    import app_services
+    monkeypatch.setattr(app_services, '_analysis_service', _ServiceWithWorkers(live={ex.id}))
     data_cache.set_analysis_status('ticker', ex.id, {'status': 'running', 'ticker': 'AAPL', 'analysis_run_id': ex.id})
     assert any(row['analysis_run_id'] == ex.id for row in client.get('/api/admin/running-analyses', headers=headers).json())
     assert client.post(f'/api/admin/running-analyses/{ex.id}/stop', headers=headers).status_code == 200
@@ -216,6 +233,30 @@ def test_stop_preserves_monitoring_until_terminal_acknowledgement(ctx):
     db.commit()
     assert client.get('/api/admin/running-analyses', headers=headers).json() == []
     assert client.post(f'/api/admin/running-analyses/{ex.id}/stop', headers=headers).status_code == 409
+
+
+def test_stop_fails_orphaned_run_so_it_can_be_deleted(ctx, monkeypatch):
+    # A worker whose terminal write hit a DB outage leaves the row "running" with
+    # nothing left to honour a cooperative stop; stop must settle it directly.
+    db, client, headers = ctx
+    ok, run = token_service.deduct_for_analysis(2, 'AAPL', db)
+    assert ok
+    db.get(Execution, run).status = 'running'
+    db.add(AnalysisJob(execution_id=run, active_key='orphan:AAPL', parameters_json='{}'))
+    db.commit()
+    import app_services
+    monkeypatch.setattr(app_services, '_analysis_service', _ServiceWithWorkers(live=()))
+    assert client.delete(f'/api/admin/analyses/{run}', headers=headers).status_code == 409
+
+    response = client.post(f'/api/admin/running-analyses/{run}/stop', headers=headers)
+    assert response.status_code == 200 and response.json()['finalized'] is True
+    db.expire_all()
+    assert db.get(Execution, run).status == 'failed'
+    assert db.get(AnalysisJob, run).active_key is None
+    assert not data_cache.get_stop_requested(run)
+    assert token_service.get_balance(2, db) == 1000  # charge refunded
+    assert client.get('/api/admin/running-analyses', headers=headers).json() == []
+    assert client.delete(f'/api/admin/analyses/{run}', headers=headers).status_code == 200
 
 
 def test_grants_are_idempotent_and_audited(ctx):

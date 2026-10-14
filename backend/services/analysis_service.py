@@ -438,6 +438,16 @@ class AnalysisService:
         }
         set_analysis_status("ticker", analysis_run_id, status_data)
 
+    def has_live_worker(self, analysis_run_id: int) -> bool:
+        """True if this process is still queuing or executing the run.
+
+        running_analyses is filled by start_analysis and emptied in _execute_analysis's
+        finally, so a run missing from it has no worker here that could ever honour a
+        cooperative stop.
+        """
+        with self._lock:
+            return analysis_run_id in self.running_analyses
+
     def get_running_analysis_run_id(self, ticker: str, analysis_date: str) -> Optional[int]:
         """Return analysis_run_id if an analysis is already running for this (ticker, date)."""
         ticker_upper = ticker.upper()

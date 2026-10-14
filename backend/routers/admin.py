@@ -339,13 +339,31 @@ def stop_running_analysis(
     _user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ):
-    """Request cooperative cancellation; keep the run visible until acknowledged."""
+    """Request cooperative cancellation; keep the run visible until acknowledged.
+
+    A run with no live worker is failed (and refunded) on the spot instead. The worker's
+    own terminal write swallows DB errors, so when it couldn't reach the DB -- e.g. the
+    QueuePool exhaustion of 2026-10-14 -- the row stayed "running" with nobody left to
+    acknowledge a stop, and admin delete refused it until the next restart's recovery.
+    The server is single-instance (see execution_recovery), so "not in this process"
+    means "not running anywhere".
+    """
     from models.db_models import Execution
     execution = db.get(Execution, run_id)
     if execution is None or execution.execution_type != "ticker":
         raise HTTPException(status_code=404, detail="Analysis not found")
     if execution.status not in ("queued", "running"):
         raise HTTPException(status_code=409, detail="Analysis has already finished")
+    analysis_service = app_services.get_analysis_service()
+    if not analysis_service.has_live_worker(run_id):
+        # Release this request's connection; _fail_analysis writes with its own sessions.
+        db.close()
+        analysis_service._fail_analysis(run_id, "Stopped by an administrator after its worker was lost")
+        # _fail_analysis logs and swallows DB errors, so confirm the write actually landed.
+        if db.get(Execution, run_id).status in ("queued", "running"):
+            raise HTTPException(status_code=503, detail="Could not mark the analysis as failed; try again")
+        delete_analysis_status("ticker", run_id)
+        return {"ok": True, "run_id": run_id, "finalized": True}
     set_stop_requested(run_id)
     return {"ok": True, "run_id": run_id}
 
