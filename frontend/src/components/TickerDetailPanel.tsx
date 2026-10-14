@@ -762,12 +762,19 @@ function StockDetailPanelBody({ ticker, prefetchedData, onSubscriptionChange }: 
     
     const hasWebSocket = wsClientRef.current?.isConnected() ?? false;
     const pollInterval = hasWebSocket ? 6000 : 3500; // 6s with WS, 3.5s without
-    
-    const interval = setInterval(() => {
+
+    // Schedule the next poll only after this one settles. A fixed setInterval kept
+    // firing while the server was slow, so with three analyses running the overlapping
+    // ticker-page requests used up the backend's DB connection pool (QueuePool
+    // timeouts on every endpoint, 2026-10-14).
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = () => {
       Promise.all([
         tickerApi.getTickerPage(ticker),
         tickerApi.getAnalysisStatus(activeRunId).catch(() => null),
       ]).then(([data, status]) => {
+        if (cancelled) return;
         setStockData(data);
         if (!viewingHistoricalRunRef.current && data.reports && Object.keys(data.reports).length > 0) {
           const keys = Object.keys(data.reports);
@@ -782,9 +789,15 @@ function StockDetailPanelBody({ ticker, prefetchedData, onSubscriptionChange }: 
         if (!data.is_generating) {
           setAnalysisProgress(null);
         }
-      }).catch(() => {});
-    }, pollInterval);
-    return () => clearInterval(interval);
+      }).catch(() => {}).finally(() => {
+        if (!cancelled) timer = setTimeout(poll, pollInterval);
+      });
+    };
+    timer = setTimeout(poll, pollInterval);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [ticker, stockData?.is_generating, stockData?.generation_analysis_run_id, updateAnalysisProgress]);
 
   useEffect(() => {

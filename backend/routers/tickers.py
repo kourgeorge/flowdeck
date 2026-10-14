@@ -597,6 +597,13 @@ async def get_ticker_page(
 ):
     """Get complete ticker page data. Accessible without authentication. Runs in thread pool (non-blocking). Views are recorded for creator rewards when user is logged in."""
     ticker = ticker.upper()
+    # The auth lookup left this session holding a pooled connection, which would stay
+    # checked out for the whole (slow) page build while _get_ticker_page_sync opens its
+    # own sessions -- two connections per request. Under overlapping polls that exhausted
+    # the pool (QueuePool limit reached, 2026-10-14). close() hands the connection back;
+    # the session reconnects on demand for record_view below, and current_user stays
+    # readable because close() detaches without expiring.
+    db.close()
     try:
         result = await asyncio.to_thread(_get_ticker_page_sync, ticker)
         if result.report_run_id is not None and current_user is not None:
