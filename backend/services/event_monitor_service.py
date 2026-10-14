@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from ai_engine.llm_provider import configured_provider
 from models.db_models import Execution, Report, Subscription
 from services import token_service
 
@@ -54,7 +55,6 @@ COOLDOWN_HOURS = 72
 
 RERUN_ANALYSTS = ["market", "social", "fundamentals", "technical", "sec", "valuation"]
 RERUN_RESEARCH_DEPTH = 5
-RERUN_LLM_PROVIDER = "azure"
 
 
 def should_rerun(current_score: float, baseline_score: float) -> Tuple[bool, str]:
@@ -173,7 +173,7 @@ def _start_rerun(
         analysis_date=analysis_date,
         analysts=RERUN_ANALYSTS,
         research_depth=RERUN_RESEARCH_DEPTH,
-        llm_provider=RERUN_LLM_PROVIDER,
+        llm_provider=configured_provider(),
         progress_callback=None,
         analysis_run_id=analysis_run_id,
     )

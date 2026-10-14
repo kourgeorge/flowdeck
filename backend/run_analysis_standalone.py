@@ -29,7 +29,7 @@ for p in (str(REPO_ROOT), str(BACKEND_DIR)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from ai_engine.llm_provider import get_config_from_env
+from ai_engine.llm_provider import configured_provider, get_config_from_env
 from ai_engine.tradingagents.graph.trading_graph import TradingAgentsGraph
 from ai_engine.tradingagents.default_config import DEFAULT_CONFIG
 from ai_engine.tradingagents.agents.utils.trace_utils import sort_agent_steps
@@ -101,7 +101,7 @@ def main() -> None:
     parser.add_argument("--analysis-date", required=True, help="Analysis date YYYY-MM-DD")
     parser.add_argument("--analysts", default="market,social,news,fundamentals,technical", help="Comma-separated analysts (social = sentiment/social media)")
     parser.add_argument("--research-depth", type=int, default=2, help="Max debate rounds")
-    parser.add_argument("--llm-provider", default="azure", help="LLM provider")
+    parser.add_argument("--llm-provider", default="", help="LLM provider (default: LLM_PROVIDER from the environment)")
     parser.add_argument("--results-dir", default="results", help="Results directory (absolute or relative to repo)")
     parser.add_argument("--info-service-url", required=True, help="Node backend URL for /api/data")
     parser.add_argument("--shallow-thinker", default="", help="Override quick-thinking model for this run (optional)")
@@ -140,7 +140,7 @@ def main() -> None:
     config["max_risk_discuss_rounds"] = args.research_depth
     config["results_dir"] = str(results_dir)
     config["info_service_url"] = args.info_service_url.strip().rstrip("/")
-    env_cfg = get_config_from_env(overrides={"llm_provider": args.llm_provider.lower()})
+    env_cfg = get_config_from_env(overrides={"llm_provider": args.llm_provider.strip().lower() or configured_provider()})
     config.update(env_cfg)
     if args.shallow_thinker:
         config["quick_think_llm"] = args.shallow_thinker

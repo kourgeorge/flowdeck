@@ -29,6 +29,17 @@ CONFIG_CHAT_MODEL = "chat_model"
 CONFIG_BACKEND_URL = "backend_url"
 
 
+def configured_provider() -> str:
+    """
+    The provider the server is configured to use, from LLM_PROVIDER (default azure).
+    Every entry point that starts an analysis must resolve the provider through here:
+    event-monitor re-runs and the major-ticker sync once hardcoded "azure", so on a
+    deployment configured for another provider they failed on missing AZURE_OPENAI_*
+    credentials while user-started runs worked.
+    """
+    return (os.environ.get("LLM_PROVIDER") or "").strip().lower() or "azure"
+
+
 def get_config_from_env(overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Build config dict for get_llm(role, config) from environment variables.

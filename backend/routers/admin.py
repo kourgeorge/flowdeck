@@ -1,7 +1,6 @@
 """Admin-only API: stats, users, reports, analyses, subscriptions."""
 
 import json
-import os
 from datetime import datetime, timedelta, timezone, date
 from typing import Any, Optional
 from uuid import UUID
@@ -11,6 +10,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_serializer, field_validator
 from sqlalchemy.orm import Session
 
+from ai_engine.llm_provider import configured_provider
 from auth import get_current_admin_user
 from database import get_db
 import app_services
@@ -612,7 +612,7 @@ def run_mission_control(
     has_report_today = admin_service.get_tickers_with_report_on_date(db, date_str)
     
     # Read LLM provider from environment (same as regular analysis endpoint)
-    llm_provider = os.environ.get("LLM_PROVIDER", "azure").strip().lower()
+    llm_provider = configured_provider()
 
     triggered: list[MissionControlRunItem] = []
     already_running: list[MissionControlRunItem] = []

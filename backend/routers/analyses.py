@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-import os
 import re
 from datetime import datetime
 from typing import Any, Dict, Optional, Union
@@ -19,6 +18,7 @@ from services.analysis_service import AnalysisService
 from services.analysis_executor import AnalysisQueueFull
 from services import token_service
 from data_layer import get_data_gateway
+from ai_engine.llm_provider import configured_provider
 from sync_major_stocks import get_missing_and_skipped, run_analyses_for_tickers
 
 ANALYSTS = ["market", "social", "fundamentals", "technical", "sec", "valuation"]
@@ -147,7 +147,7 @@ def run_sync_major_tickers_background(analysis_date: str, analysis_service: Anal
             creator_id=None,
             analysts=["market", "social", "fundamentals", "technical", "sec", "valuation"],
             research_depth=5,
-            llm_provider="azure",
+            llm_provider=configured_provider(),
             wait_for_completion=True,
             poll_interval_seconds=10.0,
             completion_timeout_seconds=3600.0,
@@ -207,7 +207,7 @@ async def start_analysis(
         if not isinstance(analysts, list) or not analysts or any(a not in ANALYSTS for a in analysts):
             raise HTTPException(422, "Select at least one supported analyst")
         analysts = list(dict.fromkeys(analysts))
-        llm_provider = (os.environ.get("LLM_PROVIDER") or "azure").strip().lower()
+        llm_provider = configured_provider()
         if any(body.get(key) for key in ("backend_url", "shallow_thinker", "deep_thinker")):
             raise HTTPException(422, "Provider endpoints and models are configured by the server")
         if body.get("llm_provider") and body["llm_provider"] != llm_provider:

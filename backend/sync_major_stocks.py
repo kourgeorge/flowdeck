@@ -6,6 +6,8 @@ from typing import List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
+from ai_engine.llm_provider import configured_provider
+
 from config import MAJOR_TICKERS, RESULTS_DIR
 from database import SessionLocal
 from services.report_service import ReportService
@@ -42,7 +44,7 @@ def run_analyses_for_tickers(
     creator_id: Optional[int] = None,
     analysts: List[str] = None,
     research_depth: int = 5,
-    llm_provider: str = "azure",
+    llm_provider: Optional[str] = None,
     wait_for_completion: bool = True,
     poll_interval_seconds: float = 10.0,
     completion_timeout_seconds: float = 3600.0,
@@ -55,6 +57,8 @@ def run_analyses_for_tickers(
         analysts = ["market", "social", "fundamentals", "technical", "sec", "valuation"]
     if creator_id is None:
         creator_id = token_service.get_system_user_id(db)
+    if llm_provider is None:
+        llm_provider = configured_provider()
     for ticker in tickers:
         analysis_run_id = token_service.record_analysis_run(creator_id, ticker, db)
         returned_run_id, existing = analysis_service.start_analysis(
@@ -81,7 +85,7 @@ def run_sync(
     analysis_date: str = None,
     analysts: List[str] = None,
     research_depth: int = 5,
-    llm_provider: str = "azure",
+    llm_provider: Optional[str] = None,
     wait_for_completion: bool = True,
     poll_interval_seconds: float = 10.0,
     completion_timeout_seconds: float = 3600.0,
