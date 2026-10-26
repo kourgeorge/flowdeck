@@ -7,6 +7,7 @@ It handles fetching markets, prices, and historical data with caching and error 
 API Documentation: https://docs.polymarket.com/
 """
 
+import json
 import os
 import time
 import logging
@@ -569,6 +570,13 @@ def extract_probability(market: Dict, outcome_index: int = 0) -> float:
     
     # Try outcomePrices array (string values that need conversion)
     outcome_prices = market.get('outcomePrices', [])
+    # Gamma API returns this as a JSON-encoded string ('["0.53", "0.47"]'), not a
+    # list, so indexing it yields the '[' character and every market fails to parse.
+    if isinstance(outcome_prices, str):
+        try:
+            outcome_prices = json.loads(outcome_prices)
+        except ValueError:
+            outcome_prices = []
     if outcome_prices and outcome_index < len(outcome_prices):
         try:
             price_str = outcome_prices[outcome_index]

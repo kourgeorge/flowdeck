@@ -33,16 +33,27 @@ def _format_polymarket_sentiment(ticker: str, data: Optional[dict]) -> str:
             "Treat prediction-market signal as neutral / unavailable."
         )
 
-    overall = data.get("overall_sentiment", 0.5)
-    confidence = data.get("confidence", 0.0)
-    trend = data.get("trend", "neutral")
+    overall = data.get("overall_sentiment")
+    confidence = data.get("confidence")
+    trend = data.get("trend") or "unknown"
+
+    # polymarket_service deliberately returns None here: event odds do not establish
+    # stock direction, so it no longer infers one. Say so instead of formatting None.
+    if isinstance(overall, (int, float)):
+        overall_line = f"- Overall sentiment: {overall:.2f} on a 0 (bearish) .. 0.5 (neutral) .. 1 (bullish) scale"
+    else:
+        overall_line = "- Overall sentiment: not inferred (event odds do not establish stock direction)"
+    if isinstance(confidence, (int, float)):
+        confidence_line = f"- Confidence: {confidence:.2f} (0..1; driven by trading volume — low volume = weak signal)"
+    else:
+        confidence_line = "- Confidence: not available"
 
     lines = [
         f"# Polymarket prediction-market sentiment for {ticker.upper()}",
         "",
-        f"- Overall sentiment: {overall:.2f} on a 0 (bearish) .. 0.5 (neutral) .. 1 (bullish) scale",
+        overall_line,
         f"- Trend: {trend}",
-        f"- Confidence: {confidence:.2f} (0..1; driven by trading volume — low volume = weak signal)",
+        confidence_line,
         f"- Relevant markets found: {market_count}",
         "",
         "Prediction markets aggregate real-money bets and are a forward-looking, "
