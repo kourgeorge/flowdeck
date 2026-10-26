@@ -20,6 +20,38 @@ from ..utils.trace_utils import make_agent_step
 
 logger = logging.getLogger(__name__)
 
+_FINAL_REPORT_INSTRUCTION = (
+    "You have finished gathering data. Write the complete final report now, "
+    "using only the tool results above."
+)
+
+
+def _structured_llm(llm: Any, schema: type) -> Any:
+    """Bind the final-report schema in a way the configured backend actually honours.
+
+    ChatOpenAI defaults to method="json_schema" (response_format). The LiteLLM
+    chatgpt/ route accepts that parameter but does not enforce it: gpt-6-luna and
+    gpt-6.1-sol both returned markdown or ad-hoc JSON keys with no score (NVDA runs
+    2617/2618), so every analyst lost its score. A forced tool call returns the
+    schema's fields on that same route, so use it for every OpenAI-compatible model.
+    """
+    from langchain_openai.chat_models.base import BaseChatOpenAI
+
+    if isinstance(llm, BaseChatOpenAI):
+        return llm.with_structured_output(schema, method="function_calling")
+    return llm.with_structured_output(schema)
+
+
+def _message_text(message: Any) -> str:
+    """Text of an AIMessage, including Responses-API style list-of-blocks content."""
+    content = getattr(message, "content", message)
+    if isinstance(content, list):
+        return "".join(
+            block.get("text", "") if isinstance(block, dict) else str(block)
+            for block in content
+        )
+    return content if isinstance(content, str) else str(content)
+
 
 def _json_safe(value: Any) -> Any:
     """Convert arbitrary values into JSON-safe data for persistence."""
@@ -432,7 +464,7 @@ def run_self_contained_analyst(
             )
 
     # Generate final structured report
-    structured_chain = prompt | llm.with_structured_output(structured_output_class)
+    structured_chain = prompt | _structured_llm(llm, structured_output_class)
     report, score, final_usage, key_takeaways, structured_result = try_structured_response(
         structured_chain,
         local_messages,
@@ -526,17 +558,28 @@ def run_self_contained_analyst(
     
     # Fallback: generate narrative response
     logger.warning(f"{agent_name} falling back to narrative response")
-    fallback_result = (prompt | llm).invoke(local_messages)
-    fallback_report = (
-        fallback_result.content
-        if hasattr(fallback_result, "content")
-        else str(fallback_result)
-    )
-    fallback_usage = _capture_usage(fallback_result, llm)
-    if fallback_usage:
-        total_usage["per_call"].extend(fallback_usage.get("per_call", []))
-        for key in ["input_tokens", "output_tokens", "total_tokens", "cost_usd"]:
-            total_usage[key] += fallback_usage.get(key, 0)
+    fallback_report = ""
+    fallback_usage = None
+    # gpt-6.1-sol on the LiteLLM chatgpt/ route answered a 9k-45k token history
+    # that ends on tool results / its own prior turn with ~17 tokens of empty
+    # content (NVDA run 2618), and re-sending the identical history got the
+    # identical empty reply. An explicit closing instruction gets a real report,
+    # so retry once with it rather than persisting an empty report.
+    for attempt_messages in (
+        local_messages,
+        local_messages + [HumanMessage(content=_FINAL_REPORT_INSTRUCTION)],
+    ):
+        fallback_result = (prompt | llm).invoke(attempt_messages)
+        fallback_report = _message_text(fallback_result)
+        attempt_usage = _capture_usage(fallback_result, llm)
+        if attempt_usage:
+            fallback_usage = attempt_usage
+            total_usage["per_call"].extend(attempt_usage.get("per_call", []))
+            for key in ["input_tokens", "output_tokens", "total_tokens", "cost_usd"]:
+                total_usage[key] += attempt_usage.get(key, 0)
+        if fallback_report.strip():
+            break
+        logger.warning(f"{agent_name} narrative response was empty")
     
     # Use explicit score_field instead of string manipulation
     score_state_key = score_field
