@@ -151,7 +151,8 @@ def run_narrative_composer(
 
     try:
         llm = _get_llm()
-        structured = llm.with_structured_output(NarrativeOutput)
+        from ai_engine.llm_provider import structured_output
+        structured = structured_output(llm, NarrativeOutput)
         out = structured.invoke([HumanMessage(content=prompt)])
         if isinstance(out, NarrativeOutput):
             return _append_web_provenance(out, web_research_output)

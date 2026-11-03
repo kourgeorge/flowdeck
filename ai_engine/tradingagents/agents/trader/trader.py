@@ -7,6 +7,8 @@ from typing import List, Literal, Optional, Union
 from langchain_core.messages import AIMessage, BaseMessage
 from pydantic import BaseModel, Field
 
+from ai_engine.llm_provider import structured_output
+
 from ..analysts.helpers import _UsageCaptureCallback, _capture_usage
 from ..utils.trace_utils import make_agent_step
 from ...datasources.info_service_client import get_quote, require_info_service
@@ -300,7 +302,7 @@ def create_trader(llm, memory):
         usage_meta = None
         usage_cb = _UsageCaptureCallback()
         try:
-            structured_llm = llm.with_structured_output(TraderOutput)
+            structured_llm = structured_output(llm, TraderOutput)
             structured_response = structured_llm.invoke(
                 messages, config={"callbacks": [usage_cb]}
             )

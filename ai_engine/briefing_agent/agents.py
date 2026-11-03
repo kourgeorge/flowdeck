@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import HumanMessage
 
+from ai_engine.llm_provider import structured_output
 from ai_engine.tradingagents.agents.utils.trace_utils import make_agent_step
 from backend.processing import build_important_events
 
@@ -295,7 +296,7 @@ def run_focus_selector(
     message = HumanMessage(content=prompts.FOCUS_SELECTOR_SYSTEM + "\n\n" + prompt_text)
 
     try:
-        chain = llm.with_structured_output(FocusSelection)
+        chain = structured_output(llm, FocusSelection)
         result = chain.invoke([message])
         tickers = list(getattr(result, "focus_tickers", []) or [])
     except Exception as e:
@@ -387,7 +388,7 @@ def run_ticker_interpreter(
             )
             message = HumanMessage(content=prompts.TICKER_INTERPRETER_SYSTEM + "\n\n" + prompt_text)
             logger.info("Digest: invoking LLM for ticker_interpreter %s", ticker)
-            chain = llm.with_structured_output(TickerInterpretation)
+            chain = structured_output(llm, TickerInterpretation)
             try:
                 result = _invoke_with_timeout(chain, [message], timeout_seconds=180)
             except FuturesTimeoutError:
@@ -497,7 +498,7 @@ def run_market_interpreter(
     )
     message = HumanMessage(content=prompts.MARKET_INTERPRETER_SYSTEM + "\n\n" + prompt_text)
     try:
-        chain = llm.with_structured_output(MarketInterpretation)
+        chain = structured_output(llm, MarketInterpretation)
         result = chain.invoke([message])
         if isinstance(result, MarketInterpretation):
             interpretation = result
@@ -588,7 +589,7 @@ def run_recent_briefs_summarizer(
                 )
             )
 
-        chain = llm.with_structured_output(_RecentBriefsSummaryOut)
+        chain = structured_output(llm, _RecentBriefsSummaryOut)
         result = chain.invoke([message])
         summary = getattr(result, "summary", "") or ""
         clean_summary = summary.strip() or None
@@ -744,7 +745,7 @@ def run_narrative_writer(
                     ),
                 )
 
-            chain = llm.with_structured_output(_NarrativeOutStructured)
+            chain = structured_output(llm, _NarrativeOutStructured)
             result = chain.invoke([message])
             market_highlights = getattr(result, "market_highlights", "") or ""
             key_signals = getattr(result, "key_signals", "") or ""
@@ -779,7 +780,7 @@ def run_narrative_writer(
                     ),
                 )
 
-            chain = llm.with_structured_output(_NarrativeOutBasic)
+            chain = structured_output(llm, _NarrativeOutBasic)
             result = chain.invoke([message])
             narrative = getattr(result, "narrative", "") or ""
             what_to_watch = getattr(result, "what_to_watch", "") or ""

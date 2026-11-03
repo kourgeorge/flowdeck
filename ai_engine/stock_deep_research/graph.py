@@ -31,7 +31,7 @@ from .state import (
     SupervisorState,
 )
 from .tools import get_all_tools
-from ai_engine.llm_provider import get_config_from_env, get_llm
+from ai_engine.llm_provider import get_config_from_env, get_llm, structured_output
 
 
 def _split_provider_model(model: str) -> tuple[str, str]:
@@ -72,8 +72,10 @@ async def write_research_brief(state: AgentState, config: RunnableConfig) -> Com
         date=_get_today_str(),
     )
     model = (
-        _get_chat_model(cfg.research_model, cfg.research_model_max_tokens, config)
-        .with_structured_output(StockResearchQuestion)
+        structured_output(
+            _get_chat_model(cfg.research_model, cfg.research_model_max_tokens, config),
+            StockResearchQuestion,
+        )
         .with_retry(stop_after_attempt=cfg.max_structured_output_retries)
     )
     response = await model.ainvoke([SystemMessage(content=RESEARCH_BRIEF_SYSTEM), HumanMessage(content=prompt_content)])

@@ -16,9 +16,9 @@ from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
+from ai_engine.llm_provider import structured_output
 from ai_engine.tradingagents.agents.analysts.self_contained_analyst import (
     _FINAL_REPORT_INSTRUCTION,
-    _structured_llm,
     run_self_contained_analyst,
 )
 
@@ -114,7 +114,7 @@ def test_list_of_blocks_content_is_read_as_text():
 def test_openai_compatible_models_use_function_calling():
     llm = ChatOpenAI(model="chatgpt/gpt-6.1-sol", api_key="test", base_url="http://localhost:1")
 
-    bound = _structured_llm(llm, _Output)
+    bound = structured_output(llm, _Output)
 
     # with_structured_output returns model.bind(...) | parser; the binding carries
     # a forced tool choice for function_calling and a response_format for json_schema.
@@ -131,5 +131,5 @@ def test_non_openai_models_keep_their_default_method():
             calls.append(kwargs)
             return "bound"
 
-    assert _structured_llm(_OtherProvider(), _Output) == "bound"
+    assert structured_output(_OtherProvider(), _Output) == "bound"
     assert calls == [{}]

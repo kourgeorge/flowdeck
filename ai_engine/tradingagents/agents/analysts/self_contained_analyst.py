@@ -13,6 +13,8 @@ from typing import Any, Callable, Dict, List
 from langchain_core.messages import HumanMessage, ToolMessage
 from pydantic import BaseModel
 
+from ai_engine.llm_provider import structured_output
+
 from .helpers import _capture_usage, try_structured_response
 from ..utils.resource_extraction import extract_resources_from_tool
 from ..utils.trace_utils import make_agent_step
@@ -24,22 +26,6 @@ _FINAL_REPORT_INSTRUCTION = (
     "You have finished gathering data. Write the complete final report now, "
     "using only the tool results above."
 )
-
-
-def _structured_llm(llm: Any, schema: type) -> Any:
-    """Bind the final-report schema in a way the configured backend actually honours.
-
-    ChatOpenAI defaults to method="json_schema" (response_format). The LiteLLM
-    chatgpt/ route accepts that parameter but does not enforce it: gpt-6-luna and
-    gpt-6.1-sol both returned markdown or ad-hoc JSON keys with no score (NVDA runs
-    2617/2618), so every analyst lost its score. A forced tool call returns the
-    schema's fields on that same route, so use it for every OpenAI-compatible model.
-    """
-    from langchain_openai.chat_models.base import BaseChatOpenAI
-
-    if isinstance(llm, BaseChatOpenAI):
-        return llm.with_structured_output(schema, method="function_calling")
-    return llm.with_structured_output(schema)
 
 
 def _message_text(message: Any) -> str:
@@ -464,7 +450,7 @@ def run_self_contained_analyst(
             )
 
     # Generate final structured report
-    structured_chain = prompt | _structured_llm(llm, structured_output_class)
+    structured_chain = prompt | structured_output(llm, structured_output_class)
     report, score, final_usage, key_takeaways, structured_result = try_structured_response(
         structured_chain,
         local_messages,

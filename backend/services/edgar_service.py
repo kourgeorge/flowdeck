@@ -22,6 +22,7 @@ import requests
 from bs4 import BeautifulSoup
 from pydantic import BaseModel, Field
 
+from ai_engine.llm_provider import structured_output
 from ai_engine.tradingagents.agents.utils.sec_section_anchors import extract_all_sections
 
 # SEC iXBRL documents are XML-ish; parsing them with an HTML parser (here and
@@ -478,7 +479,7 @@ Filing text:
 """
         try:
             llm = self._get_extraction_llm()
-            chain = llm.with_structured_output(ExtractedSECSections)
+            chain = structured_output(llm, ExtractedSECSections)
             result = chain.invoke(prompt + text)
             return {
                 "risk_factors": _truncate(result.risk_factors or "", MAX_SECTION_CHARS),

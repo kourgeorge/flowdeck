@@ -3,6 +3,8 @@
 from typing import List, Any, Optional
 from pydantic import BaseModel, Field
 
+from ai_engine.llm_provider import structured_output
+
 
 class KeyTakeawaysOutput(BaseModel):
     """Structured output schema for extracting 3-5 key takeaways from a report."""
@@ -41,7 +43,7 @@ def extract_key_takeaways_structured(
         max_chars = 12000
         if len(content) > max_chars:
             content = content[:max_chars] + "\n\n[... report truncated ...]"
-        structured_llm = llm.with_structured_output(KeyTakeawaysOutput)
+        structured_llm = structured_output(llm, KeyTakeawaysOutput)
         prompt = EXTRACT_TAKEAWAYS_PROMPT.format(content=content)
         out = structured_llm.invoke(prompt)
         if out and getattr(out, "key_takeaways", None):

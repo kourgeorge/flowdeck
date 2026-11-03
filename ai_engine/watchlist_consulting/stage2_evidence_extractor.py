@@ -52,7 +52,8 @@ def _extract_one_llm(llm: Any, entry: Dict[str, Any]) -> EvidencePacket:
     text = _entry_to_text(entry)
     ticker = (entry.get("ticker") or "").upper()
 
-    structured_llm = llm.with_structured_output(EvidencePacket)
+    from ai_engine.llm_provider import structured_output
+    structured_llm = structured_output(llm, EvidencePacket)
     prompt = (
         "You are an analyst extracting structured evidence from a single stock's report summary. "
         "Output only the requested structure. Use the ticker from the input. "

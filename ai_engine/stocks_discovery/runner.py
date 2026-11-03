@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from ai_engine.briefing_agent.context_builder import build_digest_context
 from ai_engine.briefing_agent.state import DigestContext, DigestWorkflowState
-from ai_engine.llm_provider import get_config_from_env, get_llm
+from ai_engine.llm_provider import get_config_from_env, get_llm, structured_output
 from ai_engine.tradingagents.agents.utils.trace_utils import make_agent_step
 from backend.processing import build_important_events
 
@@ -134,7 +134,7 @@ def _run_llm_writer(
     text = ""
     if get_openai_callback is not None:
         with get_openai_callback() as cb:  # type: ignore[misc]
-            chain = llm.with_structured_output(_Out)
+            chain = structured_output(llm, _Out)
             result = chain.invoke([message])
             text = (getattr(result, "markdown_report", None) or "").strip()
             input_tokens = getattr(cb, "prompt_tokens", None)
@@ -142,7 +142,7 @@ def _run_llm_writer(
             total_tokens = getattr(cb, "total_tokens", None)
             cost_usd = getattr(cb, "total_cost", None)
     else:
-        chain = llm.with_structured_output(_Out)
+        chain = structured_output(llm, _Out)
         result = chain.invoke([message])
         text = (getattr(result, "markdown_report", None) or "").strip()
 

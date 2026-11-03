@@ -1,6 +1,8 @@
 from typing import Optional, List, Literal
 from pydantic import BaseModel, Field
 
+from ai_engine.llm_provider import structured_output
+
 from ..analysts.helpers import _UsageCaptureCallback, _capture_usage
 from ..utils.trace_utils import make_agent_step
 
@@ -151,7 +153,7 @@ Debate History:
         usage_meta = None
         usage_cb = _UsageCaptureCallback()
         try:
-            structured_llm = llm.with_structured_output(ResearchManagerOutput)
+            structured_llm = structured_output(llm, ResearchManagerOutput)
             structured_response = structured_llm.invoke(
                 prompt, config={"callbacks": [usage_cb]}
             )

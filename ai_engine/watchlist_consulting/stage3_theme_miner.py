@@ -75,7 +75,8 @@ def _themes_and_risks_llm(evidence_packets: List[EvidencePacket]) -> tuple[List[
 
     try:
         llm = _get_llm()
-        structured = llm.with_structured_output(ThemeOutput)
+        from ai_engine.llm_provider import structured_output
+        structured = structured_output(llm, ThemeOutput)
         prompt = (
             "You are a theme analyst. Given per-ticker thesis bullets and key risks, output:\n"
             "dominant_themes: list of {theme: string, supporting_tickers: list of ticker symbols}. "

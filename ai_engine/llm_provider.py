@@ -155,6 +155,23 @@ def _model_supports_temperature(model: str, reasoning_effort: Optional[str] = No
     return True
 
 
+def structured_output(llm: Any, schema: type) -> Any:
+    """Bind a Pydantic schema in a way the configured backend actually honours.
+
+    ChatOpenAI defaults to method="json_schema" (response_format). The LiteLLM
+    chatgpt/ route accepts that parameter but does not enforce it: gpt-6-luna and
+    gpt-6.1-sol return markdown or ad-hoc JSON keys instead (NVDA analyst runs
+    2617/2618; the 2026-11-02 daily brief failed every step with json_invalid on a
+    '## narrative' reply). A forced tool call returns the schema's fields on that
+    same route, so use it for every OpenAI-compatible model.
+    """
+    from langchain_openai.chat_models.base import BaseChatOpenAI
+
+    if isinstance(llm, BaseChatOpenAI):
+        return llm.with_structured_output(schema, method="function_calling")
+    return llm.with_structured_output(schema)
+
+
 def get_llm(
     role: LLMRole,
     config: Dict[str, Any],

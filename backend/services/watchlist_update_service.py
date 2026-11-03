@@ -143,7 +143,7 @@ def _safe_url(value: Any) -> Optional[str]:
 
 def research_article(gateway: Any, moves: list[dict], watchlist: list[str]) -> dict:
     """Read current news and article bodies, analyze causes, then write an original article."""
-    from ai_engine.llm_provider import get_config_from_env, get_llm
+    from ai_engine.llm_provider import get_config_from_env, get_llm, structured_output
     from ai_engine.tradingagents.agents.utils.article_fetcher import enrich_articles_with_content
     from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -185,7 +185,7 @@ def research_article(gateway: Any, moves: list[dict], watchlist: list[str]) -> d
         "company versus wider drivers, implications for this watchlist, alternative explanations, "
         "and what would confirm or overturn the explanation. Cite supplied source titles.\n" + context
     ))])
-    result = llm.with_structured_output(WatchlistArticle).invoke([
+    result = structured_output(llm, WatchlistArticle).invoke([
         system, HumanMessage(content=(
             "Write one engaging, clear 600–1000 word article for this user, covering ALL qualifying tickers. "
             "Explain what happened and why, connect relevant themes, and end with concrete things to watch. "
