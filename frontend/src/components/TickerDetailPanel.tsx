@@ -497,7 +497,17 @@ function StockDetailPanelBody({ ticker, prefetchedData, onSubscriptionChange }: 
     if (data.is_generating && data.generation_analysis_run_id != null) {
       setAnalysisProgress(null);
       const client = new WebSocketClient(data.generation_analysis_run_id);
+      // Run states the backend uses once a run is over: `error` and `cancelled` come from
+      // the live run, `failed` from a run read back from the database.
+      const RUN_ENDED_STATUSES = new Set(['completed', 'failed', 'error', 'cancelled']);
       client.on('status', (msg: any) => {
+        // A viewer who connects after the run ended never gets a `completed`/`failed`
+        // frame (those only go to clients connected at the end), so the status frame
+        // sent on connect is the only sign the run is over.
+        if (RUN_ENDED_STATUSES.has(msg?.data?.status)) {
+          onRunEnded();
+          return;
+        }
         updateAnalysisProgress(msg?.data);
       });
       client.on('progress', (msg: any) => {
@@ -519,8 +529,19 @@ function StockDetailPanelBody({ ticker, prefetchedData, onSubscriptionChange }: 
       // The server sends a top-level `completed` or `failed` frame when the run ends.
       // Either way the run is over, so drop the live progress and reload the page data,
       // which then shows the new report or the previous one.
+      let runEnded = false;
       const onRunEnded = () => {
+        // Can fire twice: the server sends a status frame on connect and again in reply
+        // to the client's `get_status`.
+        if (runEnded) return;
+        runEnded = true;
         setAnalysisProgress(null);
+        // Close after the current frame is handled; disconnect() clears the listener
+        // set that is being iterated right now.
+        setTimeout(() => {
+          client.disconnect();
+          if (wsClientRef.current === client) wsClientRef.current = null;
+        }, 0);
         void loadStockData({ showGlobalLoading: false, refreshSupportingData: false });
       };
       client.on('completed', onRunEnded);
