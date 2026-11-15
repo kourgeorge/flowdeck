@@ -106,8 +106,7 @@ Two credential types, used identically: `Authorization: Bearer <token>`.
   HS256, expires after 7 days, subject is the stringified user id.
 - **API key** -- created via `POST /api/api-keys`, shown once as `fd_live_` followed by 43
   URL-safe base64 characters (51 characters total). Use it exactly like a JWT on the same
-  header -- not `X-API-Key`. It also works as the `token` query parameter on the analysis
-  WebSocket.
+  header -- not `X-API-Key`. It does not work on the analysis WebSocket, which takes a JWT only.
 
 ### Why a 401 is ambiguous
 
