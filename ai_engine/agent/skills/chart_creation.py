@@ -165,7 +165,12 @@ class CreateChartSkill(BaseSkill):
                 steps=steps,
             )
 
-        y_keys = [t for t in tickers if t in (chart_data[0] if chart_data else {})]
+        # Rows are the union of all tickers' dates, so the first row is just the
+        # earliest date any ticker traded. A ticker that listed later (or had a
+        # holiday that day) is missing from row 0 but still has data, so look
+        # across every row instead.
+        y_keys = [t for t in tickers if any(t in row for row in chart_data)]
+        missing = [t for t in tickers if t not in y_keys]
         if not y_keys:
             return SkillResult(
                 ok=False,
@@ -194,11 +199,13 @@ class CreateChartSkill(BaseSkill):
         }
         chart_json_str = json.dumps(chart)
 
-        tickers_str = ", ".join(tickers)
+        tickers_str = ", ".join(y_keys)
         summary = (
             f"Line chart of **{tickers_str}** over {period_label} ({start_date} → {end_date}). "
             f"Data points: {len(chart_data)}."
         )
+        if missing:
+            summary += f" No price data found for {', '.join(missing)} in this period, so not plotted."
         data_blob = summary + "\n\n" + f"CHART_JSON:{chart_json_str}"
 
         return SkillResult(
