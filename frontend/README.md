@@ -128,10 +128,14 @@ MAJOR_STOCKS = [
 
 To ensure every major stock has a report for the current day, you can trigger a sync manually or on a schedule.
 
+**Auth:** `POST /api/sync/major-stocks` is admin-only. Send an admin user's API key (`fd_live_...`, see [API_KEY_AUTHENTICATION.md](../docs/API_KEY_AUTHENTICATION.md)) as `Authorization: Bearer ...`. The examples below read it from the `FLOWDECK_ADMIN_API_KEY` environment variable; never paste the key into committed files. An admin JWT also works but expires, so use an API key for cron.
+
 **Manual trigger:** Call the sync API (backend must be running):
 
 ```bash
-curl -X POST http://localhost:8002/api/sync/major-stocks -H "Content-Type: application/json" -d "{}"
+curl -X POST http://localhost:8002/api/sync/major-stocks \
+  -H "Authorization: Bearer $FLOWDECK_ADMIN_API_KEY" \
+  -H "Content-Type: application/json" -d "{}"
 ```
 
 **Cron (recommended):** Run the provided script daily so reports are generated even when the dashboard is not open. The backend must be running when the cron job runs (e.g. run the backend as a service).
@@ -139,14 +143,17 @@ curl -X POST http://localhost:8002/api/sync/major-stocks -H "Content-Type: appli
 From the repository root (TradingAgents):
 
 ```bash
+# Required: admin API key; the script exits with an error if it is missing
+export FLOWDECK_ADMIN_API_KEY=fd_live_...
 # Optional: set if backend is not on localhost:8002
 export BACKEND_URL=http://localhost:8002
 ./scripts/sync_major_stocks_daily.sh
 ```
 
-Example crontab (run at 6:00 AM every day; adjust path and ensure backend is up):
+Example crontab (run at 6:00 AM every day; adjust path and ensure backend is up). Cron does not load your shell profile, so set the key in the crontab itself (`crontab` files are private to your user):
 
 ```cron
+FLOWDECK_ADMIN_API_KEY=fd_live_...
 0 6 * * * /path/to/TradingAgents/scripts/sync_major_stocks_daily.sh
 ```
 
@@ -196,7 +203,7 @@ RESULTS_DIR = "results"  # Resolved to repo root (TradingAgents/results)
 - `WS /ws/analyses/{analysis_run_id}` - WebSocket for real-time updates
 
 **Sync API:**
-- `POST /api/sync/major-stocks` - Ensure each major stock has a report for today (or optional `analysis_date` in body). Returns immediately with `triggered` / `skipped`; analyses run in background.
+- `POST /api/sync/major-stocks` (admin only) - Ensure each major stock has a report for today (or optional `analysis_date` in body). Returns immediately with `triggered` / `skipped`; analyses run in background.
 
 ## Technology Stack
 
@@ -279,7 +286,7 @@ You should see: `INFO: Uvicorn running on http://0.0.0.0:8002`
 7. **Test API directly**: Try accessing the API directly in your browser:
    - `http://localhost:8002/health` - Should return JSON with status
    - `http://localhost:8002/api/tickers/widgets` - Should return widget data
-   - `http://localhost:8002/docs` - FastAPI interactive docs
+   - `http://localhost:8002/api/docs` - FastAPI interactive docs
 
 8. **Check CORS**: If you see CORS errors in the browser console, the backend CORS is configured to allow `localhost:3003`, but verify the backend is actually running
 

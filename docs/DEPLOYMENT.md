@@ -285,15 +285,17 @@ sudo systemctl restart flowdeck-backend
 
 ## Optional: daily sync via cron
 
-Instead of (or in addition to) in-process sync, you can call the sync endpoint daily:
+Instead of (or in addition to) in-process sync, you can call the sync endpoint daily. The endpoint is admin-only, so set `FLOWDECK_ADMIN_API_KEY` to an admin user's API key (`fd_live_...`, see [API_KEY_AUTHENTICATION.md](API_KEY_AUTHENTICATION.md)) at the top of the crontab; without it every call gets a 401:
 
 ```cron
-0 6 * * * curl -s -X POST http://127.0.0.1:8002/api/sync/major-stocks -H "Content-Type: application/json" -d '{}'
+FLOWDECK_ADMIN_API_KEY=fd_live_...
+0 6 * * * curl -s -X POST http://127.0.0.1:8002/api/sync/major-stocks -H "Authorization: Bearer $FLOWDECK_ADMIN_API_KEY" -H "Content-Type: application/json" -d '{}'
 ```
 
-Or use the script (set `BACKEND_URL` if needed):
+Or use the script (set `BACKEND_URL` if needed; it exits with an error if `FLOWDECK_ADMIN_API_KEY` is missing):
 
 ```cron
+FLOWDECK_ADMIN_API_KEY=fd_live_...
 0 6 * * * BACKEND_URL=http://127.0.0.1:8002 /opt/flowdeck/scripts/sync_major_stocks_daily.sh
 ```
 

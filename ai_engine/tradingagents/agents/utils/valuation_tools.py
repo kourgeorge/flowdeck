@@ -2329,8 +2329,14 @@ def get_growth_estimates(
     require_info_service()
     
     # Get fundamental data and financial statements
-    fundamentals_str = get_fundamentals_via_service(ticker)
-    fundamentals = _json_loads_maybe(fundamentals_str)
+    # /api/data/fundamentals always wraps the yfinance fields as
+    # {"ticker", "date", "fundamentals": {...}} (even on error), so read from the
+    # inner dict like the other valuation tools; reading the top level found no
+    # SharesOutstanding, Beta, RevenueTTM, etc. for any ticker.
+    fundamentals_payload = _json_loads_maybe(get_fundamentals_via_service(ticker))
+    fundamentals = fundamentals_payload.get("fundamentals") or {}
+    if not isinstance(fundamentals, dict):
+        fundamentals = {}
     income_data = get_financial_statements(ticker, statement_type="income_statement", freq="annual")
     
     # Extract analyst growth estimates from fundamentals
@@ -2418,8 +2424,14 @@ def get_wacc_inputs(
     require_info_service()
     
     # Get fundamental data and financial statements
-    fundamentals_str = get_fundamentals_via_service(ticker)
-    fundamentals = _json_loads_maybe(fundamentals_str)
+    # /api/data/fundamentals always wraps the yfinance fields as
+    # {"ticker", "date", "fundamentals": {...}} (even on error), so read from the
+    # inner dict like the other valuation tools; reading the top level found no
+    # SharesOutstanding, Beta, RevenueTTM, etc. for any ticker.
+    fundamentals_payload = _json_loads_maybe(get_fundamentals_via_service(ticker))
+    fundamentals = fundamentals_payload.get("fundamentals") or {}
+    if not isinstance(fundamentals, dict):
+        fundamentals = {}
     balance_sheet_data = get_financial_statements(ticker, statement_type="balance_sheet", freq="quarterly")
     income_data = get_financial_statements(ticker, statement_type="income_statement", freq="annual")
     
@@ -2572,20 +2584,50 @@ def get_dcf_inputs(
     require_info_service()
     
     # Get all necessary financial data
-    fundamentals_str = get_fundamentals_via_service(ticker)
-    fundamentals = _json_loads_maybe(fundamentals_str)
+    # /api/data/fundamentals always wraps the yfinance fields as
+    # {"ticker", "date", "fundamentals": {...}} (even on error), so read from the
+    # inner dict like the other valuation tools; reading the top level found no
+    # SharesOutstanding, Beta, RevenueTTM, etc. for any ticker.
+    fundamentals_payload = _json_loads_maybe(get_fundamentals_via_service(ticker))
+    fundamentals = fundamentals_payload.get("fundamentals") or {}
+    if not isinstance(fundamentals, dict):
+        fundamentals = {}
     cashflow_data = get_financial_statements(ticker, statement_type="cashflow", freq="annual")
     cashflow_quarterly = get_financial_statements(ticker, statement_type="cashflow", freq="quarterly")
     income_data = get_financial_statements(ticker, statement_type="income_statement", freq="annual")
     balance_sheet_data = get_financial_statements(ticker, statement_type="balance_sheet", freq="quarterly")
     
     # Extract shares outstanding
+    balance_sheet_annual = _statement_reports(balance_sheet_data, "balance_sheet", "annualReports") if balance_sheet_data else []
+    balance_sheet_quarterly = _statement_reports(balance_sheet_data, "balance_sheet", "quarterlyReports") if balance_sheet_data else []
     shares_outstanding = _first_numeric(fundamentals, "SharesOutstanding", "sharesOutstanding")
+    shares_outstanding_source = "fundamentals_SharesOutstanding"
+    if shares_outstanding is None:
+        # Same balance-sheet fallback as calculate_multi_method_valuation_data,
+        # so both tools agree on the share count; the gate below still applies.
+        shares_outstanding = _latest_numeric(
+            balance_sheet_quarterly or balance_sheet_annual, "shareIssued", "ordinarySharesNumber"
+        )
+        shares_outstanding_source = "balance_sheet_shareIssued_or_ordinarySharesNumber"
+    # Same gate as calculate_multi_method_valuation_data: a count above the
+    # plausibility ceiling is a dollar figure misread as shares, and the analyst
+    # would otherwise divide equity value by it. Hand back no count plus the
+    # reason rather than a number that looks usable.
+    shares_outstanding_note = None
+    if (
+        shares_outstanding is None
+        or shares_outstanding <= 0
+        or shares_outstanding > _MAX_PLAUSIBLE_SHARES_OUTSTANDING
+    ):
+        shares_outstanding_note = (
+            f"shares_outstanding could not be reliably resolved (got: {shares_outstanding}); "
+            "per-share DCF value must not be computed"
+        )
+        logger.warning("[%s] get_dcf_inputs: %s", ticker, shares_outstanding_note)
+        shares_outstanding = None
     
     # Calculate net debt
-    net_debt = _net_debt(fundamentals,
-                        _statement_reports(balance_sheet_data, "balance_sheet", "annualReports") if balance_sheet_data else [],
-                        _statement_reports(balance_sheet_data, "balance_sheet", "quarterlyReports") if balance_sheet_data else [])
+    net_debt = _net_debt(fundamentals, balance_sheet_annual, balance_sheet_quarterly)
     
     # Get cashflow data
     cf_reports = []
@@ -2699,26 +2741,26 @@ def get_dcf_inputs(
     
     # Calculate FCF growth rate from historical data
     fcf_growth_rate = None
+    growth_data_source = []
     if len(historical_fcf) >= 3:
         fcf_values = [item["fcf"] for item in historical_fcf if item["fcf"] > 0]
         if len(fcf_values) >= 2:
-            fcf_growth_rate = _cagr([{"fcf": v} for v in reversed(fcf_values)], "fcf")
-    
-    # Use revenue growth as fallback
-    if fcf_growth_rate is None:
-        fcf_growth_rate = revenue_cagr_3y or revenue_growth
-    
-    # Track data source for growth rate
-    growth_data_source = []
+            # _cagr expects newest-first reports (like income_reports) and
+            # reverses internally; pre-reversing here turned growth into decline.
+            fcf_growth_rate = _cagr([{"fcf": v} for v in fcf_values], "fcf")
     if fcf_growth_rate is not None:
         growth_data_source.append("historical_fcf_cagr")
+
+    # Revenue growth is only a stand-in for FCF growth, so it is labelled as a
+    # fallback; the source is recorded at the point of choice because labelling
+    # it afterwards made a one-year revenue number look like an FCF CAGR.
     elif revenue_cagr_3y is not None:
-        growth_data_source.append("revenue_cagr_3y")
+        fcf_growth_rate = revenue_cagr_3y
+        growth_data_source.extend(["revenue_cagr_3y", "FALLBACK_ESTIMATE"])
     elif revenue_growth is not None:
-        growth_data_source.append("revenue_growth_yoy")
-    
-    # Use fallback only if no data available
-    if fcf_growth_rate is None:
+        fcf_growth_rate = revenue_growth
+        growth_data_source.extend(["revenue_growth", "FALLBACK_ESTIMATE"])
+    else:
         fcf_growth_rate = 0.10 if is_high_growth else 0.05
         growth_data_source.append("FALLBACK_ESTIMATE")
     
@@ -2773,6 +2815,8 @@ def get_dcf_inputs(
         "data_sources": {
             "current_fcf": fcf_data_source if fcf_data_source else ["NOT_AVAILABLE"],
             "fcf_growth_rate": growth_data_source,
+            "shares_outstanding": ["NOT_AVAILABLE"] if shares_outstanding is None else [shares_outstanding_source],
+            "shares_outstanding_note": shares_outstanding_note,
             "wacc": wacc_data_source,
             "note": "FALLBACK_ESTIMATE or estimated values indicate missing data - analyst must explicitly state this limitation"
         },

@@ -621,6 +621,17 @@ def run_recent_briefs_summarizer(
         return None
 
 
+class NarrativeWriterError(Exception):
+    """The narrative writer produced no brief.
+
+    Deliberately not a RuntimeError: routers/digest.py maps RuntimeError to
+    402 "Insufficient token balance", which would be the wrong message here.
+    The message is shown to users (via the router and Execution.error_message),
+    so it must never carry the raw LLM error, which can include the internal
+    LiteLLM URL. The original exception is kept as __cause__ for logs.
+    """
+
+
 def run_narrative_writer(
     state: DigestWorkflowState,
     llm: Any,
@@ -762,7 +773,9 @@ def run_narrative_writer(
                 f"## {title}\n{token}\n{body.strip()}" for title, token, body in sections if body.strip()
             ).strip()
             if not narrative:
-                narrative = market_highlights or key_signals or "Brief unavailable."
+                # A placeholder like "Brief unavailable." would be saved as a
+                # completed brief and charged; fail so the digest is refunded.
+                raise NarrativeWriterError("The brief writer returned an empty brief.")
             state.references = list(getattr(result, "references", None) or [])
         else:
             class _NarrativeOutBasic(BaseModel):
@@ -782,8 +795,12 @@ def run_narrative_writer(
 
             chain = structured_output(llm, _NarrativeOutBasic)
             result = chain.invoke([message])
-            narrative = getattr(result, "narrative", "") or ""
+            # result is None when the model skips the forced tool call; an
+            # empty brief must fail rather than be saved and charged.
+            narrative = (getattr(result, "narrative", "") or "").strip()
             what_to_watch = getattr(result, "what_to_watch", "") or ""
+            if not narrative:
+                raise NarrativeWriterError("The brief writer returned an empty brief.")
             state.references = list(getattr(result, "references", None) or [])
 
         if not state.references and resources_text:
@@ -817,10 +834,6 @@ def run_narrative_writer(
         return narrative, what_to_watch
     except Exception as e:
         logger.warning("Digest: narrative_writer failed: %s", e)
-        fallback = (
-            f"Digest unavailable: {e}. Ticker summaries: " + ticker_interpretations_text[:500],
-            "Check back later for updates.",
-        )
         _append_agent_step(
             state,
             agent="Narrative Writer",
@@ -829,10 +842,11 @@ def run_narrative_writer(
             status="failed",
             summary="Narrative Writer failed",
             message_preview=message.content,
-            output_preview={
-                "narrative": fallback[0],
-                "what_to_watch": fallback[1],
-            },
+            output_preview=None,
             extra={"structured_output": use_structured, "error": str(e)},
         )
-        return fallback
+        if isinstance(e, NarrativeWriterError):
+            raise
+        # Raising (instead of returning a made-up "Digest unavailable: <error>"
+        # narrative) lets digest_service mark the run failed and refund it.
+        raise NarrativeWriterError("The brief writer could not produce a brief.") from e
