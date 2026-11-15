@@ -14,6 +14,13 @@ dependencies = [
     "scalar-fastapi>=1.8.2",
     "uvicorn[standard]>=0.24.0",
     "websockets>=12.0",
+    # Database & auth
+    "aiohttp>=3.12.0",
+    "bcrypt>=4.3.0",
+    "email-validator>=2.0.0",
+    "google-auth>=2.40.0",
+    "python-jose[cryptography]>=3.3.0",
+    "sqlalchemy>=2.0.0",
     # LangChain / LLM
     "chromadb>=1.0.12",
     "sentence-transformers>=3.0.0",
@@ -22,6 +29,7 @@ dependencies = [
     "langchain-experimental>=0.3.4",
     "langchain-google-genai>=2.1.5",
     "langchain-openai>=0.3.23",
+    "langchain-perplexity>=0.1.2",
     "langgraph>=0.4.8",
     # Data & markets
     "akshare>=1.16.98",
@@ -34,17 +42,23 @@ dependencies = [
     "yfinance>=0.2.63",
     "yahooquery>=2.4.1",
     # News / social / feeds
+    "beautifulsoup4>=4.13.0",
+    "duckduckgo-search>=8.0.0",
     "feedparser>=6.0.11",
     "grip>=4.6.2",
     "parsel>=1.10.0",
     "praw>=7.8.1",
+    "markdown>=3.9",
     "requests>=2.32.4",
     "sec2md>=0.1.23",
+    "trafilatura>=2.0.0",
     # CLI / UX
     "chainlit>=2.5.5",
     "questionary>=2.1.0",
     "rich>=14.0.0",
     "tqdm>=4.67.1",
+    # Payments
+    "paypalrestsdk>=1.13.1",
     # Infra
     "pytz>=2025.2",
     "redis>=6.2.0",
