@@ -384,9 +384,10 @@ If you prefer cron over the in-process scheduler:
 crontab -e
 ```
 
-Add (adjust path to your deploy directory):
+Add (adjust path to your deploy directory). The sync endpoint is admin-only, so set `FLOWDECK_ADMIN_API_KEY` to an admin user's API key (`fd_live_...`, see [API_KEY_AUTHENTICATION.md](API_KEY_AUTHENTICATION.md)). The script sends it as `Authorization: Bearer ...` and exits with an error if it is missing:
 
 ```cron
+FLOWDECK_ADMIN_API_KEY=fd_live_...
 0 6 * * * /opt/flowdeck/scripts/sync_major_stocks_daily.sh
 ```
 

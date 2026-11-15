@@ -9,6 +9,7 @@ Streams NDJSON progress to stdout. Writes reports to DB via save_report. Logs go
 
 import argparse
 import asyncio
+import functools
 import json
 import logging
 import os
@@ -16,7 +17,6 @@ import sys
 import threading
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
 
 HEARTBEAT_INTERVAL_SEC = 5
 
@@ -32,32 +32,34 @@ for p in (str(REPO_ROOT), str(BACKEND_DIR)):
 from ai_engine.llm_provider import configured_provider, get_config_from_env
 from ai_engine.tradingagents.graph.trading_graph import TradingAgentsGraph
 from ai_engine.tradingagents.default_config import DEFAULT_CONFIG
-from ai_engine.tradingagents.agents.utils.trace_utils import sort_agent_steps
 
 # Backend services for report saving, and email notifications
 from services.report_service import save_report
 from services.email_service import notify_subscribers_new_report
 from database import init_db
-
-def _normalize_takeaway_list(val) -> list:
-    if not val:
-        return []
-    if not isinstance(val, (list, tuple)):
-        return []
-    return [str(x).strip() for x in val if x and str(x).strip()][:5]
+from services import analysis_report_helpers as report_helpers
 
 
-_REPORT_TO_STATE_TAKEAWAYS_KEY = {
-    "market_report": "market_key_takeaways",
-    "sentiment_report": "sentiment_key_takeaways",
-    "fundamentals_report": "fundamentals_key_takeaways",
-    "technical_report": "technical_key_takeaways",
-    "sec_report": "sec_key_takeaways",
-    "valuation_report": "valuation_key_takeaways",
-    "investment_plan": "investment_plan_key_takeaways",
-    "trader_investment_plan": "trader_key_takeaways",
-    "final_trade_decision": "final_report_key_takeaways",
-}
+def _ensure_data_gateway() -> None:
+    """Set up the shared data gateway, which only backend/main.py does on import.
+
+    Without it every get_data_gateway() call raises, so the quote and event-signal lookups
+    quietly come back empty. An empty event signal means trader_investment_plan is saved
+    without event_score, and the event monitor then skips this ticker for lack of a baseline.
+    """
+    from data_layer import get_data_gateway, init_data_gateway
+    try:
+        get_data_gateway()
+        return
+    except RuntimeError:
+        pass
+    try:
+        from data_layer.market import MarketDataLayer
+        from services.edgar_service import get_edgar_service
+        from services.report_service import ReportService
+        init_data_gateway(market=MarketDataLayer(), reports=ReportService(), edgar=get_edgar_service())
+    except Exception as e:
+        logger.warning("Could not initialize data gateway; quote and event signal will be missing: %s", e)
 
 
 def _progress_log(msg: str) -> None:
@@ -118,6 +120,7 @@ def main() -> None:
     os.environ["INFO_SERVICE_URL"] = args.info_service_url.strip().rstrip("/")
 
     init_db()  # Ensure SQLite tables exist
+    _ensure_data_gateway()
     from services import token_service
     from database import SessionLocal
     db = SessionLocal()
@@ -191,51 +194,22 @@ def main() -> None:
     # Store extracted takeaways to avoid re-extraction
     _report_takeaways = {}
 
-    def _get_or_extract_takeaways(report_key, content, chunk=None):
-        """Use graph structured takeaways only."""
-        if report_key in _report_takeaways:
-            logger.info(
-                "Key takeaways skipped (cached) analysis_run_id=%s report_type=%s",
-                analysis_run_id, report_key,
-            )
-            return _report_takeaways[report_key]
-        state_key = _REPORT_TO_STATE_TAKEAWAYS_KEY.get(report_key)
-        if chunk is not None and state_key:
-            preferred = _normalize_takeaway_list(chunk.get(state_key))
-            if preferred:
-                _report_takeaways[report_key] = preferred
-                return preferred
-        takeaways: list = []
-        _report_takeaways[report_key] = takeaways
-        return takeaways
+    _get_or_extract_takeaways = functools.partial(
+        report_helpers.get_or_extract_takeaways,
+        _report_takeaways,
+        analysis_run_id=analysis_run_id,
+    )
+    _build_report_json = functools.partial(
+        report_helpers.build_report_json,
+        analysis_date=analysis_date,
+        generated_at=generated_at,
+        models_used=models_used,
+    )
+    _get_report_resources = report_helpers.get_report_resources
+    _get_report_agent_steps = report_helpers.get_report_agent_steps
 
-    def _build_report_json(content, score, score_label, key_takeaways_list, **extra):
-        meta = {"score_label": score_label or "Score", "analysis_date": analysis_date, "generated_at": generated_at, "models_used": models_used}
-        if score is not None:
-            meta["score"] = score
-        if key_takeaways_list:
-            meta["key_takeaways"] = [str(t or "").strip() for t in key_takeaways_list[:5] if t]
-        meta.update({k: v for k, v in extra.items() if v is not None})
-        return {"metadata": meta, "content": content or ""}
-
-    def _get_analysis_quote_meta() -> dict[str, object]:
-        try:
-            from data_layer import get_data_gateway
-            quote = get_data_gateway().get_quote(ticker)
-        except Exception:
-            return {}
-        if not isinstance(quote, dict):
-            return {}
-        current_price = quote.get("current_price")
-        currency = quote.get("currency")
-        meta: dict[str, object] = {}
-        if isinstance(current_price, (int, float)):
-            meta["current_price"] = float(current_price)
-        if isinstance(currency, str) and currency.strip():
-            meta["currency"] = currency.strip().upper()
-        return meta
-
-    analysis_quote_meta = _get_analysis_quote_meta()
+    analysis_quote_meta = report_helpers.get_analysis_quote_meta(ticker)
+    analysis_event_meta = report_helpers.get_analysis_event_meta(ticker, analysis_date)
 
     def _write_report(key, content, score, label, llm_usage=None, resources=None, chunk=None, **extra):
         try:
@@ -261,30 +235,6 @@ def main() -> None:
         except Exception as e:
             logger.exception("Failed to save report ticker=%s report_type=%s error=%s", ticker, key, e)
             raise
-
-    def _get_report_resources(
-        chunk: Optional[Dict[str, Any]],
-        report_key: str,
-    ) -> List[Dict[str, Any]]:
-        if not isinstance(chunk, dict):
-            return []
-        by_report = chunk.get("report_resources_by_report")
-        if isinstance(by_report, dict):
-            specific = by_report.get(report_key)
-            if isinstance(specific, list):
-                return specific
-        resources = chunk.get("report_resources")
-        return resources if isinstance(resources, list) else []
-
-    def _get_report_agent_steps(chunk: dict | None, report_key: str) -> list[dict]:
-        if not isinstance(chunk, dict):
-            return []
-        by_report = chunk.get("report_steps_by_report")
-        if isinstance(by_report, dict):
-            specific = by_report.get(report_key)
-            if isinstance(specific, list):
-                return sort_agent_steps(specific)
-        return []
 
     async def run() -> None:
         stop_heartbeat = threading.Event()
@@ -439,6 +389,10 @@ def main() -> None:
                         recommendation=chunk.get("trader_recommendation"),
                         resources=_get_report_resources(chunk, "trader_investment_plan"),
                         chunk=chunk,
+                        # Same fields analysis_service stores: the event monitor reads event_score
+                        # from this report as its baseline and skips tickers that lack it.
+                        event_score=analysis_event_meta.get("event_score"),
+                        dominant_events=analysis_event_meta.get("dominant_events"),
                     )
                     # Trader is the terminal node; the run ends here.
                     _progress_log(f"Trader completed → {final_recommendation or ''} → analysis finished")
