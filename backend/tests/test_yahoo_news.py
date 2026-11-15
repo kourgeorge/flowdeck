@@ -16,7 +16,6 @@ from data_layer.vendors import yahoo_news as yahoo
 from data_layer.vendors.y_finance import get_news_app_format, get_yfinance_news
 from routers.data_api import data_news_batch_stream, news_router
 from services import data_cache
-from services.news_fetcher import get_news_yahoo
 
 
 def article(uuid="one", timestamp=None):
@@ -121,7 +120,7 @@ class TestNewsCache(unittest.TestCase):
         good = {"ticker": "AAPL", "articles": [yahoo.parse_article(article())], "count": 1}
         fetch.side_effect = [yahoo.YahooNewsError("unavailable"), good]
         self.assertIn("error", self.layer.get_news("AAPL"))
-        self.assertEqual(get_news_yahoo("AAPL"), good)
+        self.assertEqual(self.layer.get_news("AAPL"), good)
         self.assertEqual(self.layer.get_news("AAPL"), good)
         self.assertEqual(fetch.call_count, 2)
 

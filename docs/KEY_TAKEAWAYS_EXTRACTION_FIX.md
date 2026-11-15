@@ -114,6 +114,5 @@ To verify the fix:
 
 - `backend/services/analysis_service.py` - Main analysis service
 - `backend/run_analysis_standalone.py` - Standalone analysis script
-- `ai_engine/tradingagents/agents/utils/insight_extraction.py` - Extraction utility
 - `ai_engine/tradingagents/agents/analysts/sec_analyst.py` - SEC analyst with built-in takeaways
 - `ai_engine/tradingagents/agents/managers/risk_manager.py` - Risk manager with structured output

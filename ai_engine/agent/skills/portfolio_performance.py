@@ -23,8 +23,9 @@ from typing import Any
 from ai_engine.agent.skill import BaseSkill, SkillResult, SkillSpec, SkillStep
 from ai_engine.agent.tool import ExecutionContext
 from ai_engine.agent.skills._periods import (
-    compute_period_returns,
+    compute_period_returns_with_reasons,
     fetch_start_date,
+    format_skipped_line,
     resolve_period,
 )
 
@@ -118,14 +119,18 @@ class PortfolioPerformanceSkill(BaseSkill):
         # ----------------------------------------------------------------
         # Step 4: Compute returns in-process (no subprocess needed)
         # ----------------------------------------------------------------
-        returns_table, chart_spec = _build_returns_report(prices_json, period_label, start_date, end_date)
+        returns_table, chart_spec, measured = _returns_report(
+            prices_json, period_label, start_date, end_date, tickers
+        )
 
         # Build summary
         sections = [
             f"# 📈 Portfolio Performance — {period_label}",
             "",
             f"**Period:** {start_date} → {end_date}",
-            f"**Tickers analysed:** {len(tickers)}",
+            # Count only the stocks that actually got a return, so a skipped
+            # recent IPO doesn't inflate the number next to a shorter table.
+            f"**Tickers analysed:** {measured}",
             "",
             "## Real-Data Returns",
             returns_table,
@@ -141,7 +146,7 @@ class PortfolioPerformanceSkill(BaseSkill):
             steps=steps,
             metrics={
                 "tool_calls": len(steps),
-                "tickers": len(tickers),
+                "tickers": measured,
                 "period": period_label,
             },
         )
@@ -168,30 +173,49 @@ def _build_returns_report(
     start_date: str,
     end_date: str,
 ) -> tuple[str, str]:
+    """Returns (table_text, chart_json_str); see _returns_report."""
+    table_text, chart_json_str, _ = _returns_report(prices_json, period_label, start_date, end_date)
+    return table_text, chart_json_str
+
+
+def _returns_report(
+    prices_json: str,
+    period_label: str,
+    start_date: str,
+    end_date: str,
+    tickers: list[str] | None = None,
+) -> tuple[str, str, int]:
     """
     Parse multi-ticker price JSON, compute % returns, and build:
-      - A markdown table string
+      - A markdown table string (plus a line naming any skipped tickers)
       - A CHART_JSON string (bar chart)
 
-    Returns (table_text, chart_json_str).
+    Returns (table_text, chart_json_str, number_of_tickers_measured).
     """
     try:
         raw = json.loads(prices_json)
     except Exception:
-        return "Error: could not parse price data.", ""
+        return "Error: could not parse price data.", "", 0
 
     data = raw.get("data", {})
     if not data:
         failed = raw.get("tickers_failed", {})
-        return f"No price data returned. Failures: {failed}", ""
+        return f"No price data returned. Failures: {failed}", "", 0
 
+    results, skipped = compute_period_returns_with_reasons(prices_json, tickers, start_date, end_date)
     returns = [
         (r["ticker"], r["return_pct"], r["start_price"], r["end_price"])
-        for r in compute_period_returns(prices_json, None, start_date, end_date)
+        for r in results
     ]
+    # A stock with no close before the start (e.g. a recent IPO) gets no
+    # return at all; name it so it isn't silently missing from the table.
+    skipped_line = format_skipped_line(skipped)
 
     if not returns:
-        return "No valid price data found for the requested period.", ""
+        text = "No valid price data found for the requested period."
+        if skipped_line:
+            text += "\n\n" + skipped_line
+        return text, "", 0
 
     # Build markdown table
     lines = [
@@ -202,11 +226,18 @@ def _build_returns_report(
         sign = "+" if pct >= 0 else ""
         lines.append(f"| {ticker:<12} | {start_p:>12.2f} | {end_p:>10.2f} | {sign}{pct:>8.2f}% |")
 
-    top = returns[0]
-    bottom = returns[-1]
-    lines.append("")
-    lines.append(f"**🏆 Top gainer:** {top[0]} ({'+' if top[1] >= 0 else ''}{top[1]:.2f}%)")
-    lines.append(f"**📉 Top loser:** {bottom[0]} ({'+' if bottom[1] >= 0 else ''}{bottom[1]:.2f}%)")
+    # With one measured stock, "top gainer" and "top loser" would name the
+    # same stock, which reads as a ranking that never happened.
+    if len(returns) >= 2:
+        top = returns[0]
+        bottom = returns[-1]
+        lines.append("")
+        lines.append(f"**🏆 Top gainer:** {top[0]} ({'+' if top[1] >= 0 else ''}{top[1]:.2f}%)")
+        lines.append(f"**📉 Top loser:** {bottom[0]} ({'+' if bottom[1] >= 0 else ''}{bottom[1]:.2f}%)")
+
+    if skipped_line:
+        lines.append("")
+        lines.append(skipped_line)
 
     table_text = "\n".join(lines)
 
@@ -222,5 +253,5 @@ def _build_returns_report(
     }
     chart_json_str = json.dumps(chart)
 
-    return table_text, chart_json_str
+    return table_text, chart_json_str, len(returns)
 

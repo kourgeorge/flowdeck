@@ -71,6 +71,5 @@ To verify the fix:
 
 - `ai_engine/tradingagents/agents/analysts/sec_analyst.py` - SEC analyst implementation
 - `ai_engine/tradingagents/agents/analysts/prompts.py` - SEC analyst prompt with section 5 definition
-- `ai_engine/tradingagents/agents/utils/insight_extraction.py` - Key takeaway extraction utility
 - `backend/services/analysis_service.py` - Main analysis service (fixed)
 - `backend/run_analysis_standalone.py` - Standalone analysis script (fixed)
