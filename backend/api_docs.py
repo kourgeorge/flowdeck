@@ -173,8 +173,21 @@ operation itself, since OpenAPI can't express any of them.
 
 `WS /ws/analyses/{analysis_run_id}?token=YOUR_ACCESS_TOKEN`
 
-Connect after starting an analysis to receive `{"type": "progress", "data": {...}}` frames (and
-an initial `{"type": "status"}`). **JWT only** -- the `token` query parameter is decoded as a
+Connect after starting an analysis. Any number of clients can watch the same run; each gets
+every frame. Frames are JSON objects with a top-level `type`:
+
+| `type` | When | `data` |
+|--------|------|--------|
+| `status` | Right after connecting, and in reply to sending the text `get_status` | `status`, `ticker`, `date`, `agent_statuses`, `current_agent(s)`, `live_activities`, `live_trace` |
+| `progress` | Each step of the run, and once more as it ends | the same fields plus `reports` and `chunk` (a string form of the raw step) |
+| `completed` | Once, when the report is saved | `analysis_run_id`, `ticker`, `date`, `status: "completed"` |
+| `failed` | Once, if the run fails or is cancelled | `analysis_run_id`, `ticker`, `date`, `status` (`"failed"` or `"cancelled"`), `error` |
+| `pong` | In reply to sending the text `ping` | none |
+| `error` | In reply to `get_status` when the run isn't found | none; carries `message` instead |
+
+A `completed` or `failed` frame is only sent to clients connected when the run ends. If you
+connect late, check `status` in the first `status` frame (`completed` or `error` means the run
+is already over). **JWT only** -- the `token` query parameter is decoded as a
 JWT; an `fd_live_...` API key is not accepted here (WebSockets can't set an `Authorization`
 header, and there's no separate API-key check on this path). The connection closes with code
 **4001** if the token is missing or invalid.

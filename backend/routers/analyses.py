@@ -129,7 +129,117 @@ router = APIRouter(prefix="/api", tags=["Analyses"])
 # WebSocket at /ws/... (no /api prefix); included separately in main
 ws_router = APIRouter(tags=["Analyses"])
 
-active_connections: dict[str, WebSocket] = {}
+# Every viewer of a run gets its own socket. Runs are shared (a second start for the
+# same ticker/date returns `existing: True`) and every signed-in visitor of a
+# generating ticker page subscribes, so one socket per run would let viewer B's
+# connect silently cut viewer A off, and A's disconnect leave B with nothing.
+active_connections: dict[str, set[WebSocket]] = {}
+_send_locks: dict[str, asyncio.Lock] = {}
+
+# The loop that owns the sockets. Progress callbacks fire from analysis worker
+# threads (services/analysis_executor.py thread pool), where there is no loop; a
+# socket can only be written from the loop that accepted it, so sends are handed
+# here with run_coroutine_threadsafe instead of spinning up throwaway loops.
+_main_loop: Optional[asyncio.AbstractEventLoop] = None
+
+
+def remember_main_loop() -> None:
+    """Record the running loop. Call from async code on the server loop."""
+    global _main_loop
+    try:
+        _main_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+
+
+def add_connection(run_id_key: str, websocket: WebSocket) -> None:
+    active_connections.setdefault(run_id_key, set()).add(websocket)
+
+
+def remove_connection(run_id_key: str, websocket: WebSocket) -> None:
+    sockets = active_connections.get(run_id_key)
+    if not sockets:
+        return
+    sockets.discard(websocket)
+    if not sockets:
+        active_connections.pop(run_id_key, None)
+        _send_locks.pop(run_id_key, None)
+
+
+async def _send_to_viewers(run_id_key: str, messages: list[dict]) -> None:
+    # The lock keeps frames in callback order: each send awaits the transport, so
+    # without it a later progress frame could overtake an earlier one or land
+    # after `completed`.
+    lock = _send_locks.setdefault(run_id_key, asyncio.Lock())
+    async with lock:
+        for websocket in list(active_connections.get(run_id_key, ())):
+            for message in messages:
+                try:
+                    await websocket.send_json(message)
+                except Exception:
+                    # A closed tab often surfaces here before the receive loop notices.
+                    remove_connection(run_id_key, websocket)
+                    break
+
+
+def broadcast_to_run(run_id_key: str, messages: list[dict]) -> None:
+    """Send frames to every viewer of a run. Safe to call from any thread."""
+    loop = _main_loop
+    if loop is None or loop.is_closed() or not active_connections.get(run_id_key):
+        return
+    asyncio.run_coroutine_threadsafe(_send_to_viewers(run_id_key, messages), loop)
+
+
+def build_progress_frames(chunk: Any, analysis_info: dict) -> list[dict]:
+    """The `progress` frame (shape kept for older clients) plus a top-level
+    `completed`/`failed` frame when the service signals the end of the run.
+
+    The service ends a run by calling back with `{"type": "completed"}` or
+    `{"type": "error", "error": ...}` as the chunk; before this, that only showed up
+    stringified inside `data.chunk`, so clients listening for `completed` never fired.
+    """
+    status = analysis_info.get("status", "running")
+    frames: list[dict] = [{
+        "type": "progress",
+        "data": {
+            "chunk": str(chunk),
+            "agent_statuses": analysis_info.get("agent_statuses", {}),
+            "current_agent": analysis_info.get("current_agent"),
+            "current_agents": analysis_info.get("current_agents", []),
+            "live_activities": analysis_info.get("live_activities", []),
+            "live_trace": analysis_info.get("live_trace", []),
+            "reports": analysis_info.get("reports", {}),
+            "status": status,
+        },
+    }]
+    end_type = chunk.get("type") if isinstance(chunk, dict) else None
+    base = {
+        "analysis_run_id": analysis_info.get("analysis_run_id"),
+        "ticker": analysis_info.get("ticker"),
+        "date": analysis_info.get("date"),
+    }
+    if end_type == "completed":
+        frames.append({"type": "completed", "data": {**base, "status": "completed"}})
+    elif end_type == "error":
+        # Named `failed`, not `error`: the browser client already emits its own
+        # `error` event for transport errors, and `error` frames here mean
+        # "run not found" in reply to get_status.
+        frames.append({"type": "failed", "data": {
+            **base,
+            "status": "cancelled" if status == "cancelled" else "failed",
+            "error": chunk.get("error"),
+        }})
+    return frames
+
+
+def progress_callback(chunk: Any, analysis_info: dict) -> None:
+    run_id = analysis_info.get("analysis_run_id")
+    if run_id is None:
+        return
+    try:
+        broadcast_to_run(str(run_id), build_progress_frames(chunk, analysis_info))
+    except Exception as e:
+        print(f"Error sending WebSocket message: {e}")
 
 
 def run_sync_major_tickers_background(analysis_date: str, analysis_service: AnalysisService) -> None:
@@ -234,36 +344,7 @@ async def start_analysis(
                 detail="Insufficient token balance. Need 200 tokens to create a report.",
             )
 
-        def progress_callback(chunk, analysis_info):
-            run_id = analysis_info.get("analysis_run_id")
-            run_id_key = str(run_id) if run_id is not None else None
-            if run_id_key and run_id_key in active_connections:
-                ws = active_connections[run_id_key]
-                try:
-                    message = {
-                        "type": "progress",
-                        "data": {
-                            "chunk": str(chunk),
-                            "agent_statuses": analysis_info.get("agent_statuses", {}),
-                            "current_agent": analysis_info.get("current_agent"),
-                            "current_agents": analysis_info.get("current_agents", []),
-                            "live_activities": analysis_info.get("live_activities", []),
-                            "live_trace": analysis_info.get("live_trace", []),
-                            "reports": analysis_info.get("reports", {}),
-                            "status": analysis_info.get("status", "running"),
-                        }
-                    }
-                    try:
-                        loop = asyncio.get_event_loop()
-                        if loop.is_running():
-                            asyncio.create_task(ws.send_json(message))
-                    except RuntimeError:
-                        new_loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(new_loop)
-                        new_loop.run_until_complete(ws.send_json(message))
-                        new_loop.close()
-                except Exception as e:
-                    print(f"Error sending WebSocket message: {e}")
+        remember_main_loop()
 
         returned_run_id, existing = analysis_service.start_analysis(
             ticker=ticker,
@@ -332,7 +413,8 @@ async def websocket_endpoint(websocket: WebSocket, analysis_run_id: str, token: 
         db.close()
 
     await websocket.accept()
-    active_connections[analysis_run_id] = websocket
+    remember_main_loop()
+    add_connection(analysis_run_id, websocket)
 
     analysis_service = app_services.get_analysis_service()
     try:
@@ -384,8 +466,7 @@ async def websocket_endpoint(websocket: WebSocket, analysis_run_id: str, token: 
     except Exception:
         pass
     finally:
-        if analysis_run_id in active_connections:
-            del active_connections[analysis_run_id]
+        remove_connection(analysis_run_id, websocket)
 
 
 @router.post("/sync/major-stocks")

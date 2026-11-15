@@ -516,9 +516,17 @@ function StockDetailPanelBody({ ticker, prefetchedData, onSubscriptionChange }: 
           }
         }).catch(() => {});
       });
-      client.on('completed', () => {
+      // The server sends a top-level `completed` or `failed` frame when the run ends.
+      // Either way the run is over, so drop the live progress and reload the page data,
+      // which then shows the new report or the previous one.
+      const onRunEnded = () => {
         setAnalysisProgress(null);
         void loadStockData({ showGlobalLoading: false, refreshSupportingData: false });
+      };
+      client.on('completed', onRunEnded);
+      client.on('failed', (msg: any) => {
+        console.warn('Analysis run ended without a report:', msg?.data?.error ?? msg?.data?.status);
+        onRunEnded();
       });
       client.connect();
       wsClientRef.current = client;
