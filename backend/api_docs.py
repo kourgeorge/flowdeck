@@ -103,7 +103,7 @@ told to check for new endpoints or behavior changes.
 Two credential types, used identically: `Authorization: Bearer <token>`.
 
 - **JWT** -- returned by `POST /api/auth/register` or `/api/auth/login` as `access_token`.
-  HS256, expires after 7 days, subject is the stringified user id.
+  HS256, expires after 7 days, the subject (`sub`) is an opaque identifier. Do not parse it. Use `user_id` from the login response instead.
 - **API key** -- created via `POST /api/api-keys`, shown once as `fd_live_` followed by 43
   URL-safe base64 characters (51 characters total). Use it exactly like a JWT on the same
   header -- not `X-API-Key`. It does not work on the analysis WebSocket, which takes a JWT only.
