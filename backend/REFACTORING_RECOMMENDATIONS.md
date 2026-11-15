@@ -103,7 +103,7 @@ Per workspace rule “No Excessive Defensive Programming”: avoid broad `try/ex
 
 ## 5. Service registry vs ad‑hoc wiring
 
-- **app_services:** Only registers `report_service`, `market_data_service`, `analysis_service`. Other services (auth, token, email, paypal, chat, edgar, info_fetcher) are imported directly in routers or created inside modules (e.g. `get_info_fetcher()`, `get_edgar_service()`).
+- **app_services:** Only registers `report_service`, `analysis_service`. Other services (auth, token, email, paypal, chat, edgar, info_fetcher) are imported directly in routers or created inside modules (e.g. `get_info_fetcher()`, `get_edgar_service()`).
 
 **Recommendation (optional):** If you want uniform dependency injection and easier testing, extend `app_services` (or a small container) to hold token_service, email_service, auth_service, etc., and set them at startup. Routers then depend on getters instead of importing services from multiple modules. Lower priority than fixing layer skips and duplication.
 
