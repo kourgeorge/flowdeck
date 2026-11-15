@@ -1,6 +1,17 @@
 import { useState, useEffect } from 'react';
 import { apiKeyApi, type ApiKey, type CreateApiKeyResponse } from '../services/authApi';
 
+// <input type="date"> gives a bare "YYYY-MM-DD". The backend rejects datetimes
+// without a time zone (it stores expiry in UTC), so turn the picked day into the
+// end of that day in the user's own time zone and send it as a UTC ISO string.
+function endOfLocalDayIso(dateStr: string): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
+  if (!match) return null;
+  const [, y, m, d] = match;
+  const date = new Date(Number(y), Number(m) - 1, Number(d), 23, 59, 59);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 export default function ApiKeyManagement() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,12 +56,21 @@ export default function ApiKeyManagement() {
       return;
     }
     
+    let expiresAtIso: string | null = null;
+    if (expiresAt.trim()) {
+      expiresAtIso = endOfLocalDayIso(expiresAt);
+      if (!expiresAtIso) {
+        setCreateError('Please pick a valid expiration date');
+        return;
+      }
+    }
+
     setCreating(true);
     setCreateError(null);
     try {
       const body = {
         name: keyName.trim(),
-        expires_at: expiresAt.trim() || null,
+        expires_at: expiresAtIso,
       };
       const created = await apiKeyApi.create(body);
       setNewKey(created);
@@ -59,8 +79,16 @@ export default function ApiKeyManagement() {
       setShowCreateForm(false);
       await loadKeys();
     } catch (err: any) {
-      const msg = err?.response?.data?.detail;
-      setCreateError(typeof msg === 'string' ? msg : 'Failed to create API key');
+      // FastAPI sends a string for HTTPException (e.g. the 400 for a bad expiry)
+      // but a list of {msg} objects for request validation errors (422).
+      const detail = err?.response?.data?.detail;
+      let msg: string | null = null;
+      if (typeof detail === 'string') {
+        msg = detail;
+      } else if (Array.isArray(detail)) {
+        msg = detail.map((d: any) => d?.msg).filter(Boolean).join('; ') || null;
+      }
+      setCreateError(msg || 'Failed to create API key');
     } finally {
       setCreating(false);
     }
