@@ -79,17 +79,28 @@ def create_api_key(
     expires_at = None
     if req.expires_at:
         try:
-            expires_at = datetime.fromisoformat(req.expires_at.replace('Z', '+00:00'))
-            if expires_at < datetime.now(timezone.utc):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Expiration date must be in the future"
-                )
+            parsed = datetime.fromisoformat(req.expires_at.replace('Z', '+00:00'))
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid expiration date format. Use ISO 8601 (e.g., '2026-12-31T23:59:59Z')"
             )
+        # A date with no time zone could mean the caller's local time or UTC;
+        # guessing wrong makes the key expire hours early or late, so refuse it.
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Expiration date must include a time zone (e.g., '2026-12-31T23:59:59Z' or '+00:00')"
+            )
+        if parsed <= datetime.now(timezone.utc):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Expiration date must be in the future"
+            )
+        # The column is a naive DateTime and auth.py compares it with naive
+        # utcnow(), so store UTC with the tzinfo dropped. Saving the original
+        # offset's wall-clock time made -05:00 keys expire at once.
+        expires_at = parsed.astimezone(timezone.utc).replace(tzinfo=None)
     api_key, full_key = api_key_service.create(
         db, current_user.id, req.name.strip(), expires_at=expires_at
     )
