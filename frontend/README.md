@@ -286,7 +286,7 @@ You should see: `INFO: Uvicorn running on http://0.0.0.0:8002`
 7. **Test API directly**: Try accessing the API directly in your browser:
    - `http://localhost:8002/health` - Should return JSON with status
    - `http://localhost:8002/api/tickers/widgets` - Should return widget data
-   - `http://localhost:8002/docs` - FastAPI interactive docs
+   - `http://localhost:8002/api/docs` - FastAPI interactive docs
 
 8. **Check CORS**: If you see CORS errors in the browser console, the backend CORS is configured to allow `localhost:3003`, but verify the backend is actually running
 

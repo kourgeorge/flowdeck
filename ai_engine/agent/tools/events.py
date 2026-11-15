@@ -9,6 +9,11 @@ from typing import Any
 
 from ai_engine.agent.tool import BaseTool, ExecutionContext, ToolResult, ToolSpec
 
+# The chat agent and the trading agents must render events identically, so the
+# formatter lives once in the trading-agents tools. Imported at module level
+# because backend/tests/test_agent_event_tools.py imports it from here.
+from ai_engine.tradingagents.agents.utils.events_tools import _format_events_payload
+
 
 def _ensure_backend_importable() -> None:
     """Add the backend directory to sys.path if it isn't already there."""
@@ -85,77 +90,3 @@ def _fetch_events(ticker: str) -> str:
 
     return _format_events_payload(ticker_upper, payload or {})
 
-
-def _format_events_payload(ticker: str, payload: dict[str, Any]) -> str:
-    error = str(payload.get("error") or "").strip()
-    event_score = payload.get("event_score", 0.0)
-    event_count = payload.get("event_count", 0)
-    dominant_events = payload.get("dominant_events") or []
-    events = payload.get("events") or []
-
-    lines = [f"# Events for {ticker}"]
-    if error:
-        lines.append(f"Warning: {error}")
-        lines.append("")
-
-    lines.append(f"Event score: {_format_scalar(event_score)}")
-    lines.append(f"Event count: {_format_scalar(event_count)}")
-    lines.append(
-        "Dominant events: "
-        + (", ".join(str(item) for item in dominant_events[:8]) if dominant_events else "none")
-    )
-    lines.append("")
-
-    if not events:
-        lines.append(f"No active events were detected for {ticker}.")
-        return "\n".join(lines)
-
-    lines.append("## Active events")
-    for idx, event in enumerate(events[:12], 1):
-        if not isinstance(event, dict):
-            continue
-        event_type = str(event.get("event_type") or "unknown")
-        domain = str(event.get("domain") or "unknown")
-        strength = str(event.get("strength") or "unknown")
-        detected_on = str(event.get("detected_on") or "unknown")
-        description = str(event.get("description") or "").strip()
-        metric_value = event.get("metric_value")
-        threshold_value = event.get("threshold_value")
-        metadata = event.get("metadata") or {}
-
-        lines.append(f"{idx}. {event_type} | domain={domain} | strength={strength} | detected_on={detected_on}")
-        if description:
-            lines.append(f"   Description: {description}")
-        if metric_value is not None or threshold_value is not None:
-            lines.append(
-                "   Trigger: "
-                f"metric={_format_scalar(metric_value)}, threshold={_format_scalar(threshold_value)}"
-            )
-        metadata_summary = _summarize_metadata(metadata)
-        if metadata_summary:
-            lines.append(f"   Metadata: {metadata_summary}")
-
-    remaining = len(events) - 12
-    if remaining > 0:
-        lines.append(f"... and {remaining} more event(s).")
-
-    return "\n".join(lines)
-
-
-def _summarize_metadata(metadata: Any) -> str:
-    if not isinstance(metadata, dict) or not metadata:
-        return ""
-    parts: list[str] = []
-    for key, value in list(metadata.items())[:5]:
-        parts.append(f"{key}={_format_scalar(value)}")
-    return ", ".join(parts)
-
-
-def _format_scalar(value: Any) -> str:
-    if value is None:
-        return "n/a"
-    if isinstance(value, float):
-        return f"{value:.4f}".rstrip("0").rstrip(".")
-    if isinstance(value, list):
-        return ", ".join(str(item) for item in value[:5]) if value else "[]"
-    return str(value)
