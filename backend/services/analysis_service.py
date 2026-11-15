@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 import datetime
+import functools
 import threading
 from typing import Dict, Optional, Callable, Any, List
 from pathlib import Path
@@ -26,6 +27,7 @@ from ai_engine.tradingagents.agents.utils.trace_utils import make_agent_step, pr
 from services.analysis_executor import AnalysisExecutor, get_analysis_executor
 from services.report_service import save_report, update_execution_status
 from services.email_service import notify_subscribers_new_report
+from services import analysis_report_helpers as report_helpers
 
 # Load environment variables from .env file (backend or repo root)
 env_path = Path(__file__).parent.parent / '.env'
@@ -75,29 +77,6 @@ def _progress_log(msg: str) -> None:
     """Print a progress line to stderr with timestamp."""
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[Progress]:\t {ts} - {msg}", file=sys.stderr, flush=True)
-
-
-def _normalize_takeaway_list(val) -> list:
-    """Non-empty strings only, max 5 (from graph structured fields or similar)."""
-    if not val:
-        return []
-    if not isinstance(val, (list, tuple)):
-        return []
-    return [str(x).strip() for x in val if x and str(x).strip()][:5]
-
-
-# Saved report type -> AgentState key produced by the graph (avoid a second LLM for takeaways).
-_REPORT_TO_STATE_TAKEAWAYS_KEY = {
-    "market_report": "market_key_takeaways",
-    "sentiment_report": "sentiment_key_takeaways",
-    "fundamentals_report": "fundamentals_key_takeaways",
-    "technical_report": "technical_key_takeaways",
-    "sec_report": "sec_key_takeaways",
-    "valuation_report": "valuation_key_takeaways",
-    "investment_plan": "investment_plan_key_takeaways",
-    "trader_investment_plan": "trader_key_takeaways",
-    "final_trade_decision": "final_report_key_takeaways",
-}
 
 
 def extract_content_string(content):
@@ -809,53 +788,14 @@ class AnalysisService:
                 "quick_think": graph.config.get("quick_think_llm", "unknown"),
             }
 
-            def _build_report_json(content, score, score_label, key_takeaways_list, **extra):
-                meta = {"score_label": score_label or "Score", "analysis_date": analysis_date, "generated_at": generated_at, "models_used": models_used}
-                if score is not None:
-                    meta["score"] = score
-                if key_takeaways_list:
-                    meta["key_takeaways"] = [str(t or "").strip() for t in key_takeaways_list[:5] if t]
-                meta.update({k: v for k, v in extra.items() if v is not None})
-                return {"metadata": meta, "content": content or ""}
-
-            def _get_analysis_quote_meta() -> Dict[str, Any]:
-                try:
-                    from data_layer import get_data_gateway
-                    quote = get_data_gateway().get_quote(ticker)
-                except Exception:
-                    return {}
-                if not isinstance(quote, dict):
-                    return {}
-                current_price = quote.get("current_price")
-                currency = quote.get("currency")
-                meta: Dict[str, Any] = {}
-                if isinstance(current_price, (int, float)):
-                    meta["current_price"] = float(current_price)
-                if isinstance(currency, str) and currency.strip():
-                    meta["currency"] = currency.strip().upper()
-                return meta
-
-            def _get_analysis_event_meta() -> Dict[str, Any]:
-                """Deterministic event signal as of this analysis, for the event monitor.
-
-                Recorded now because it cannot be recomputed later: extract_price_technical_events
-                windows its *events* by end_date but derives prefix stats and 52-week extremes from
-                every bar it is handed, so replaying a past date leaks the future.
-                """
-                try:
-                    from data_layer import get_data_gateway
-                    from processing import get_ticker_event_summary
-                    summary = get_ticker_event_summary(get_data_gateway(), ticker, as_of_date=analysis_date)
-                except Exception as e:
-                    logger.warning("Failed to read event signal for %s: %s", ticker, e)
-                    return {}
-                return {
-                    "event_score": float(summary.event_score or 0.0),
-                    "dominant_events": list(summary.dominant_events or []),
-                }
-
-            analysis_quote_meta = _get_analysis_quote_meta()
-            analysis_event_meta = _get_analysis_event_meta()
+            _build_report_json = functools.partial(
+                report_helpers.build_report_json,
+                analysis_date=analysis_date,
+                generated_at=generated_at,
+                models_used=models_used,
+            )
+            analysis_quote_meta = report_helpers.get_analysis_quote_meta(ticker)
+            analysis_event_meta = report_helpers.get_analysis_event_meta(ticker, analysis_date)
 
             def _write_report_to_filesystem(key, content, report_dir: Path):
                 """Write report content as a markdown file in the results folder."""
@@ -873,27 +813,13 @@ class AnalysisService:
                         analysis_run_id, key, e,
                     )
 
-            def _get_or_extract_takeaways(report_key, content, chunk=None):
-                """Use structured takeaways from graph state only; no content scraping or extra LLM."""
-                if report_key in _report_takeaways:
-                    logger.info(
-                        "Key takeaways extraction skipped (cached) analysis_run_id=%s report_type=%s",
-                        analysis_run_id, report_key,
-                    )
-                    return _report_takeaways[report_key]
-                state_key = _REPORT_TO_STATE_TAKEAWAYS_KEY.get(report_key)
-                if chunk is not None and state_key:
-                    preferred = _normalize_takeaway_list(chunk.get(state_key))
-                    if preferred:
-                        _report_takeaways[report_key] = preferred
-                        logger.info(
-                            "Key takeaways from graph state analysis_run_id=%s report_type=%s items=%s",
-                            analysis_run_id, report_key, len(preferred),
-                        )
-                        return preferred
-                takeaways: list = []
-                _report_takeaways[report_key] = takeaways
-                return takeaways
+            # Store extracted takeaways to avoid re-extraction across chunks
+            _report_takeaways: Dict[str, list] = {}
+            _get_or_extract_takeaways = functools.partial(
+                report_helpers.get_or_extract_takeaways,
+                _report_takeaways,
+                analysis_run_id=analysis_run_id,
+            )
 
             def _write_report(key, content, score, label, llm_usage=None, resources=None, chunk=None, **extra):
                 try:
@@ -932,32 +858,8 @@ class AnalysisService:
                     )
                     raise
 
-            def _get_report_resources(
-                chunk: Optional[Dict[str, Any]],
-                report_key: str,
-            ) -> List[Dict[str, Any]]:
-                if not isinstance(chunk, dict):
-                    return []
-                by_report = chunk.get("report_resources_by_report")
-                if isinstance(by_report, dict):
-                    specific = by_report.get(report_key)
-                    if isinstance(specific, list):
-                        return specific
-                resources = chunk.get("report_resources")
-                return resources if isinstance(resources, list) else []
-
-            def _get_report_agent_steps(
-                chunk: Optional[Dict[str, Any]],
-                report_key: str,
-            ) -> List[Dict[str, Any]]:
-                if not isinstance(chunk, dict):
-                    return []
-                by_report = chunk.get("report_steps_by_report")
-                if isinstance(by_report, dict):
-                    specific = by_report.get(report_key)
-                    if isinstance(specific, list):
-                        return sort_agent_steps(specific)
-                return []
+            _get_report_resources = report_helpers.get_report_resources
+            _get_report_agent_steps = report_helpers.get_report_agent_steps
 
             # Determine when analyst phase is complete (last selected analyst report saved).
             analyst_to_report_key = {
@@ -993,9 +895,6 @@ class AnalysisService:
 
             # Track which reports have been written to avoid duplicate processing across chunks
             _written_reports = set()
-
-            # Store extracted takeaways to avoid re-extraction across chunks
-            _report_takeaways = {}
 
             # Stream the analysis
             _progress_log(f"Analysis started analysis_run_id={ar_id} ticker={ticker}")
