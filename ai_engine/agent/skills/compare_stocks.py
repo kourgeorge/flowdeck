@@ -13,12 +13,16 @@ and selects this skill; no regex or keyword matching is used.
 
 from __future__ import annotations
 
-import datetime
 import json
 from typing import Any, Optional
 
 from ai_engine.agent.skill import BaseSkill, SkillResult, SkillSpec, SkillStep
 from ai_engine.agent.tool import ExecutionContext
+from ai_engine.agent.skills._periods import (
+    compute_period_returns,
+    fetch_start_date,
+    resolve_period,
+)
 
 
 _SPEC = SkillSpec(
@@ -58,110 +62,9 @@ _SPEC = SkillSpec(
 )
 
 
-def _resolve_period(period: str) -> tuple[str, str, str]:
-    """Resolve a period string to (start_date, end_date, label)."""
-    today = datetime.date.today()
-    p = period.lower().strip()
-
-    if ":" in p:
-        parts = p.split(":", 1)
-        try:
-            start = datetime.date.fromisoformat(parts[0].strip())
-            end = datetime.date.fromisoformat(parts[1].strip())
-            return start.isoformat(), end.isoformat(), f"{start} to {end}"
-        except ValueError:
-            pass
-
-    if p in ("week", "last week", "1w"):
-        days_since_monday = today.weekday()
-        last_monday = today - datetime.timedelta(days=days_since_monday + 7)
-        last_friday = last_monday + datetime.timedelta(days=4)
-        return last_monday.isoformat(), last_friday.isoformat(), "Last Week"
-
-    if p in ("this week", "current week"):
-        days_since_monday = today.weekday()
-        this_monday = today - datetime.timedelta(days=days_since_monday)
-        return this_monday.isoformat(), today.isoformat(), "This Week"
-
-    if p in ("month", "last month", "1m"):
-        first_of_this_month = today.replace(day=1)
-        last_month_end = first_of_this_month - datetime.timedelta(days=1)
-        last_month_start = last_month_end.replace(day=1)
-        return last_month_start.isoformat(), last_month_end.isoformat(), "Last Month"
-
-    if p in ("this month", "current month"):
-        start = today.replace(day=1)
-        return start.isoformat(), today.isoformat(), "This Month"
-
-    if p in ("ytd", "year to date"):
-        start = today.replace(month=1, day=1)
-        return start.isoformat(), today.isoformat(), "Year-to-Date"
-
-    if p in ("1y", "1 year", "one year", "past year", "last year"):
-        start = today - datetime.timedelta(days=365)
-        return start.isoformat(), today.isoformat(), "Past 1 Year"
-
-    if p in ("3m", "3 months", "three months"):
-        start = today - datetime.timedelta(days=90)
-        return start.isoformat(), today.isoformat(), "Past 3 Months"
-
-    if p in ("6m", "6 months", "six months"):
-        start = today - datetime.timedelta(days=180)
-        return start.isoformat(), today.isoformat(), "Past 6 Months"
-
-    # Default: last month
-    first_of_this_month = today.replace(day=1)
-    last_month_end = first_of_this_month - datetime.timedelta(days=1)
-    last_month_start = last_month_end.replace(day=1)
-    return last_month_start.isoformat(), last_month_end.isoformat(), "Last Month"
-
-
-def _compute_returns(prices_json: str, tickers: list[str], start_date: Optional[str] = None, end_date: Optional[str] = None) -> list[dict]:
-    """Parse multi-ticker price JSON and compute % returns."""
-    import csv
-    import io
-
-    try:
-        raw = json.loads(prices_json)
-    except Exception:
-        return []
-
-    data = raw.get("data", {})
-    results = []
-
-    for ticker in tickers:
-        csv_str = data.get(ticker) or data.get(ticker.upper())
-        if not csv_str:
-            continue
-        try:
-            from ai_engine.price_series import parse_daily_closes
-            rows = parse_daily_closes(csv_str)
-            if start_date:
-                previous = [r for r in rows if r['Date'] < start_date]
-                in_period = [r for r in rows if r['Date'] >= start_date and (not end_date or r['Date'] <= end_date)]
-                if not previous or not in_period:
-                    continue
-                rows = [previous[-1]] + in_period
-            if len(rows) < 2:
-                continue
-            first_close = float(rows[0]["Close"])
-            last_close = float(rows[-1]["Close"])
-            if first_close == 0:
-                continue
-            pct = (last_close - first_close) / first_close * 100
-            results.append({
-                "ticker": ticker,
-                "start_price": round(first_close, 2),
-                "end_price": round(last_close, 2),
-                "return_pct": round(pct, 2),
-                "start_date": rows[0].get("Date", ""),
-                "end_date": rows[-1].get("Date", ""),
-            })
-        except Exception:
-            continue
-
-    results.sort(key=lambda x: x["return_pct"], reverse=True)
-    return results
+# Kept as module names because tests and older callers import them from here.
+_resolve_period = resolve_period
+_compute_returns = compute_period_returns
 
 
 class CompareStocksSkill(BaseSkill):
@@ -196,12 +99,12 @@ class CompareStocksSkill(BaseSkill):
         # Mode 1: Historical comparison (period specified)
         # ----------------------------------------------------------------
         if period:
-            start_date, end_date, period_label = _resolve_period(period)
+            start_date, end_date, period_label = resolve_period(period, default="month")
 
             prices_result = call(
                 "get_multi_historical_prices",
                 tickers=tickers,
-                start_date=(datetime.date.fromisoformat(start_date) - datetime.timedelta(days=14)).isoformat(),
+                start_date=fetch_start_date(start_date),
                 end_date=end_date,
             )
 
@@ -209,7 +112,7 @@ class CompareStocksSkill(BaseSkill):
                 # Fall through to snapshot mode
                 period = None
             else:
-                returns = _compute_returns(prices_result.to_str(), tickers, start_date, end_date)
+                returns = compute_period_returns(prices_result.to_str(), tickers, start_date, end_date)
 
                 if not returns:
                     return SkillResult(

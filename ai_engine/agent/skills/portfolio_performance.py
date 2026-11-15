@@ -16,12 +16,17 @@ and selects this skill; no regex or keyword matching is used.
 
 from __future__ import annotations
 
-import datetime
+import json
 import re
 from typing import Any
 
 from ai_engine.agent.skill import BaseSkill, SkillResult, SkillSpec, SkillStep
 from ai_engine.agent.tool import ExecutionContext
+from ai_engine.agent.skills._periods import (
+    compute_period_returns,
+    fetch_start_date,
+    resolve_period,
+)
 
 
 _SPEC = SkillSpec(
@@ -88,15 +93,17 @@ class PortfolioPerformanceSkill(BaseSkill):
         # ----------------------------------------------------------------
         # Step 2: Resolve date range from period
         # ----------------------------------------------------------------
-        start_date, end_date, period_label = _resolve_period(period)
+        start_date, end_date, period_label = resolve_period(period, default="week")
 
         # ----------------------------------------------------------------
         # Step 3: Fetch real historical prices for ALL tickers at once
         # ----------------------------------------------------------------
+        # Fetch from before start_date so the return can be measured from the
+        # previous session's close; otherwise the first day's move is lost.
         prices_result = call(
             "get_multi_historical_prices",
             tickers=tickers,
-            start_date=start_date,
+            start_date=fetch_start_date(start_date),
             end_date=end_date,
         )
         if not prices_result.ok:
@@ -111,7 +118,7 @@ class PortfolioPerformanceSkill(BaseSkill):
         # ----------------------------------------------------------------
         # Step 4: Compute returns in-process (no subprocess needed)
         # ----------------------------------------------------------------
-        returns_table, chart_spec = _compute_returns(prices_json, period_label, start_date, end_date)
+        returns_table, chart_spec = _build_returns_report(prices_json, period_label, start_date, end_date)
 
         # Build summary
         sections = [
@@ -155,75 +162,7 @@ def _parse_tickers(subs_text: str) -> list[str]:
     return result
 
 
-def _resolve_period(period: str) -> tuple[str, str, str]:
-    """
-    Resolve a period string to (start_date, end_date, label).
-
-    Supports: 'week', 'month', 'ytd', '1y', '3m', '6m',
-              or explicit 'YYYY-MM-DD:YYYY-MM-DD'.
-    """
-    today = datetime.date.today()
-    end = today
-
-    # Explicit range
-    if ":" in period:
-        parts = period.split(":", 1)
-        try:
-            start = datetime.date.fromisoformat(parts[0].strip())
-            end = datetime.date.fromisoformat(parts[1].strip())
-            return start.isoformat(), end.isoformat(), f"{start} to {end}"
-        except ValueError:
-            pass
-
-    p = period.lower().strip()
-
-    if p in ("week", "last week", "1w"):
-        # Last full Mon–Fri week
-        # Find last Monday
-        days_since_monday = today.weekday()
-        last_monday = today - datetime.timedelta(days=days_since_monday + 7)
-        last_friday = last_monday + datetime.timedelta(days=4)
-        return last_monday.isoformat(), last_friday.isoformat(), "Last Week"
-
-    if p in ("this week", "current week"):
-        days_since_monday = today.weekday()
-        this_monday = today - datetime.timedelta(days=days_since_monday)
-        return this_monday.isoformat(), today.isoformat(), "This Week"
-
-    if p in ("month", "last month", "1m"):
-        first_of_this_month = today.replace(day=1)
-        last_month_end = first_of_this_month - datetime.timedelta(days=1)
-        last_month_start = last_month_end.replace(day=1)
-        return last_month_start.isoformat(), last_month_end.isoformat(), "Last Month"
-
-    if p in ("this month", "current month"):
-        start = today.replace(day=1)
-        return start.isoformat(), today.isoformat(), "This Month"
-
-    if p in ("ytd", "year to date"):
-        start = today.replace(month=1, day=1)
-        return start.isoformat(), today.isoformat(), "Year-to-Date"
-
-    if p in ("1y", "1 year", "one year", "past year", "last year"):
-        start = today - datetime.timedelta(days=365)
-        return start.isoformat(), today.isoformat(), "Past 1 Year"
-
-    if p in ("3m", "3 months", "three months"):
-        start = today - datetime.timedelta(days=90)
-        return start.isoformat(), today.isoformat(), "Past 3 Months"
-
-    if p in ("6m", "6 months", "six months"):
-        start = today - datetime.timedelta(days=180)
-        return start.isoformat(), today.isoformat(), "Past 6 Months"
-
-    # Default: last week
-    days_since_monday = today.weekday()
-    last_monday = today - datetime.timedelta(days=days_since_monday + 7)
-    last_friday = last_monday + datetime.timedelta(days=4)
-    return last_monday.isoformat(), last_friday.isoformat(), "Last Week"
-
-
-def _compute_returns(
+def _build_returns_report(
     prices_json: str,
     period_label: str,
     start_date: str,
@@ -236,10 +175,6 @@ def _compute_returns(
 
     Returns (table_text, chart_json_str).
     """
-    import json
-    import csv
-    import io
-
     try:
         raw = json.loads(prices_json)
     except Exception:
@@ -250,27 +185,13 @@ def _compute_returns(
         failed = raw.get("tickers_failed", {})
         return f"No price data returned. Failures: {failed}", ""
 
-    returns: list[tuple[str, float, float, float]] = []
-
-    for ticker, csv_str in data.items():
-        try:
-            reader = csv.DictReader(io.StringIO(csv_str))
-            rows = [r for r in reader if r.get("Close")]
-            if len(rows) < 2:
-                continue
-            first_close = float(rows[0]["Close"])
-            last_close = float(rows[-1]["Close"])
-            if first_close == 0:
-                continue
-            pct = (last_close - first_close) / first_close * 100
-            returns.append((ticker, round(pct, 2), round(first_close, 2), round(last_close, 2)))
-        except Exception:
-            continue
+    returns = [
+        (r["ticker"], r["return_pct"], r["start_price"], r["end_price"])
+        for r in compute_period_returns(prices_json, None, start_date, end_date)
+    ]
 
     if not returns:
         return "No valid price data found for the requested period.", ""
-
-    returns.sort(key=lambda x: x[1], reverse=True)
 
     # Build markdown table
     lines = [

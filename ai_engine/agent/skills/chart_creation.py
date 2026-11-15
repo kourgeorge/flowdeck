@@ -11,13 +11,13 @@ Skill discovery and activation: chart-creation/SKILL.md (agentskills.io standard
 from __future__ import annotations
 
 import csv
-import datetime
 import io
 import json
 from typing import Any, Optional
 
 from ai_engine.agent.skill import BaseSkill, SkillResult, SkillSpec, SkillStep
 from ai_engine.agent.tool import ExecutionContext
+from ai_engine.agent.skills._periods import resolve_period
 
 
 _SPEC = SkillSpec(
@@ -43,7 +43,7 @@ _SPEC = SkillSpec(
             "period": {
                 "type": "string",
                 "description": (
-                    "Time period: '1y', '6m', '3m', 'month', 'this month', 'ytd', "
+                    "Time period: 'week', 'this week', '1y', '6m', '3m', 'month', 'this month', 'ytd', "
                     "or 'YYYY-MM-DD:YYYY-MM-DD'. Default '1y'."
                 ),
             },
@@ -60,41 +60,7 @@ _CHART_COLORS = ["#60a5fa", "#f97316", "#22c55e", "#e879f9", "#eab308", "#06b6d4
 
 def _resolve_period(period: Optional[str]) -> tuple[str, str, str]:
     """Return (start_date, end_date, label). Default 1y."""
-    today = datetime.date.today()
-    p = (period or "1y").strip().lower()
-
-    if ":" in p:
-        parts = p.split(":", 1)
-        try:
-            start = datetime.date.fromisoformat(parts[0].strip())
-            end = datetime.date.fromisoformat(parts[1].strip())
-            return start.isoformat(), end.isoformat(), f"{start} to {end}"
-        except ValueError:
-            pass
-
-    if p in ("month", "last month", "1m"):
-        first = today.replace(day=1)
-        last_end = first - datetime.timedelta(days=1)
-        last_start = last_end.replace(day=1)
-        return last_start.isoformat(), last_end.isoformat(), "Last Month"
-    if p in ("this month", "current month"):
-        start = today.replace(day=1)
-        return start.isoformat(), today.isoformat(), "This Month"
-    if p in ("ytd", "year to date"):
-        start = today.replace(month=1, day=1)
-        return start.isoformat(), today.isoformat(), "Year-to-Date"
-    if p in ("1y", "1 year", "one year", "past year", "last year", ""):
-        start = today - datetime.timedelta(days=365)
-        return start.isoformat(), today.isoformat(), "Past 1 Year"
-    if p in ("3m", "3 months"):
-        start = today - datetime.timedelta(days=90)
-        return start.isoformat(), today.isoformat(), "Past 3 Months"
-    if p in ("6m", "6 months"):
-        start = today - datetime.timedelta(days=180)
-        return start.isoformat(), today.isoformat(), "Past 6 Months"
-
-    start = today - datetime.timedelta(days=365)
-    return start.isoformat(), today.isoformat(), "Past 1 Year"
+    return resolve_period(period, default="1y")
 
 
 def _prices_to_line_chart_data(prices_json: str, tickers: list[str]) -> list[dict]:
