@@ -3,7 +3,8 @@
 Test regional-view tickers for range data (1W, 1M, 6M, YTD).
 
 Three sources:
-  - yfinance (default): direct MarketDataService (batch + retry, 1-row ok).
+  - yfinance (default): data_layer.vendors.quote.get_quotes_batch_with_range, the same
+    function the backend uses (yfinance batches of 25, yahooquery fallback for missing).
   - yahooquery: direct yahooquery Ticker().history(period=..., interval='1d').
   - backend: HTTP GET /api/data/market-overview (live backend).
 
@@ -32,7 +33,7 @@ _backend = _repo_root / "backend"
 if _backend.is_dir() and str(_backend) not in sys.path:
     sys.path.insert(0, str(_backend))
 
-# Range -> period for yahooquery (yfinance/backend use MarketDataService.MARKET_RANGE_PERIODS; 1w uses 5d there too)
+# Range -> period for yahooquery (yfinance/backend use data_layer.vendors.quote.MARKET_RANGE_PERIODS; 1w uses 5d there too)
 YAHOOQUERY_PERIOD = {"1w": "5d", "1mo": "1mo", "6mo": "6mo", "ytd": "ytd"}
 OFFSET_SESSIONS = {"1w": 6, "1mo": 22, "6mo": 126, "ytd": None}  # None = use first row of year
 
@@ -232,14 +233,17 @@ def fetch_with_yahooquery(
 
 
 def run_yfinance(tickers: list[str], ranges: tuple[str, ...]) -> dict[str, tuple[int, list[str]]]:
-    """Use MarketDataService (same as backend). Returns range -> (valid_count, missing_list)."""
-    from services.market_data_service import MarketDataService
+    """Use data_layer quote vendor (same as backend). Returns range -> (valid_count, missing_list)."""
+    from data_layer.vendors.quote import get_quotes_batch_with_range
 
     range_results: dict[str, tuple[int, list[str]]] = {}
     for range_ in ranges:
-        quotes = MarketDataService.get_multiple_quotes_batch_with_range(tickers, range_)
-        valid = sum(1 for q in quotes.values() if q is not None and q.current_price is not None)
-        missing = [t for t in tickers if quotes.get(t) is None or quotes.get(t).current_price is None]
+        # Returns plain dicts (TickerQuote.model_dump()), not TickerQuote objects.
+        quotes = get_quotes_batch_with_range(tickers, range_)
+        valid = sum(1 for q in quotes.values() if q is not None and q.get("current_price") is not None)
+        missing = [
+            t for t in tickers if quotes.get(t) is None or quotes.get(t).get("current_price") is None
+        ]
         range_results[range_] = (valid, missing)
     return range_results
 
@@ -397,7 +401,7 @@ def run_compare(
         if all_three:
             print("  Missing in all three:", sorted(all_three))
     print()
-    print("Done. Backend uses same logic as yfinance (MarketDataService).")
+    print("Done. Backend uses same logic as yfinance (data_layer.vendors.quote).")
 
 
 def main() -> None:
@@ -455,7 +459,7 @@ def main() -> None:
             print("  Source: yahooquery Ticker().history(period=..., interval='1d'), batch 25 + single-ticker retry")
         else:
             print("Regional map data test (yfinance)")
-            print("  Source: MarketDataService (batch 25 + single-ticker retry, 1-row accepted as 0%% change)")
+            print("  Source: data_layer.vendors.quote (yfinance batch 25, yahooquery fallback for missing)")
         print(f"  Tickers: {total} (international from MARKET_OVERVIEW_TICKERS)")
         print("  Ranges: 1W, 1M, 6M, YTD")
         print()
