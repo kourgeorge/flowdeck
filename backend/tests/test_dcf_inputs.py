@@ -15,8 +15,12 @@ def _statements(kind, report_key, reports):
     return {"statements": {kind: {"data": {report_key: reports}}}}
 
 
-def _install_fake_service(monkeypatch, shares, cashflow_years, revenues):
-    """revenues and cashflow_years are newest first."""
+def _install_fake_service(monkeypatch, shares, cashflow_years, revenues, balance_sheet=None, beta=None):
+    """revenues and cashflow_years are newest first.
+
+    The fake fundamentals use the real /api/data/fundamentals shape, which nests
+    the fields under "fundamentals" (backend/data_layer/market.py).
+    """
     income = [
         {"fiscalDateEnding": f"{2025 - i}-12-31", "totalRevenue": str(r)}
         for i, r in enumerate(revenues)
@@ -35,11 +39,16 @@ def _install_fake_service(monkeypatch, shares, cashflow_years, revenues):
             return _statements("cashflow", "annualReports", cashflow)
         if statement_type == "income_statement":
             return _statements("income_statement", "annualReports", income)
+        if statement_type == "balance_sheet" and balance_sheet is not None:
+            return _statements("balance_sheet", "quarterlyReports", balance_sheet)
         return None
 
     fundamentals = {} if shares is None else {"SharesOutstanding": shares}
+    if beta is not None:
+        fundamentals["Beta"] = beta
+    payload = {"ticker": "TEST", "date": "2026-01-02", "fundamentals": fundamentals}
     monkeypatch.setattr(vt, "require_info_service", lambda: None)
-    monkeypatch.setattr(vt, "get_fundamentals_via_service", lambda t: json.dumps(fundamentals))
+    monkeypatch.setattr(vt, "get_fundamentals_via_service", lambda t: json.dumps(payload))
     monkeypatch.setattr(vt, "get_financial_statements", fake_statements)
 
 
@@ -66,7 +75,52 @@ def test_valid_share_count_passes(monkeypatch):
     _install_fake_service(monkeypatch, "15000000000", [(50, 10)], [120, 100])
     result = _run()
     assert result["dcf_inputs"]["shares_outstanding"] == 15_000_000_000
+    assert result["data_sources"]["shares_outstanding"] == ["fundamentals_SharesOutstanding"]
     assert result["data_sources"]["shares_outstanding_note"] is None
+
+
+def test_top_level_share_count_is_ignored(monkeypatch):
+    # The service never returns a flat shape; a stray top-level key must not be
+    # mistaken for the real nested value.
+    monkeypatch.setattr(vt, "require_info_service", lambda: None)
+    monkeypatch.setattr(
+        vt,
+        "get_fundamentals_via_service",
+        lambda t: json.dumps({"ticker": "TEST", "SharesOutstanding": "15000000000", "fundamentals": {}}),
+    )
+    monkeypatch.setattr(vt, "get_financial_statements", lambda *a, **k: None)
+    result = _run()
+    assert result["dcf_inputs"]["shares_outstanding"] is None
+
+
+def test_nested_beta_drives_wacc(monkeypatch):
+    _install_fake_service(monkeypatch, "1000000", [(50, 10)], [120, 100], beta="1.2")
+    result = _run()
+    assert abs(result["dcf_inputs"]["wacc"] - (0.045 + 1.2 * 0.075)) < 1e-9
+    assert result["data_sources"]["wacc"] == ["beta_based_calculation"]
+
+
+def test_balance_sheet_share_count_fallback(monkeypatch):
+    _install_fake_service(
+        monkeypatch, None, [(50, 10)], [120, 100],
+        balance_sheet=[{"fiscalDateEnding": "2025-12-31", "shareIssued": "2000000000"}],
+    )
+    result = _run()
+    assert result["dcf_inputs"]["shares_outstanding"] == 2_000_000_000
+    assert result["data_sources"]["shares_outstanding"] == [
+        "balance_sheet_shareIssued_or_ordinarySharesNumber"
+    ]
+    assert result["data_sources"]["shares_outstanding_note"] is None
+
+
+def test_implausible_balance_sheet_share_count_is_refused(monkeypatch):
+    _install_fake_service(
+        monkeypatch, None, [(50, 10)], [120, 100],
+        balance_sheet=[{"fiscalDateEnding": "2025-12-31", "ordinarySharesNumber": "7.0E14"}],
+    )
+    result = _run()
+    assert result["dcf_inputs"]["shares_outstanding"] is None
+    assert result["data_sources"]["shares_outstanding"] == ["NOT_AVAILABLE"]
 
 
 def test_one_year_revenue_growth_is_labelled_fallback(monkeypatch):
