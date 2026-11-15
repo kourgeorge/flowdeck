@@ -73,29 +73,8 @@ def _has_fundamental_data(ticker: str) -> bool:
         return False
 
 
-def _progress_log(msg: str) -> None:
-    """Print a progress line to stderr with timestamp."""
-    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[Progress]:\t {ts} - {msg}", file=sys.stderr, flush=True)
-
-
-def extract_content_string(content):
-    """Extract string content from various message formats."""
-    if isinstance(content, str):
-        return content
-    elif isinstance(content, list):
-        text_parts = []
-        for item in content:
-            if isinstance(item, dict):
-                if item.get('type') == 'text':
-                    text_parts.append(item.get('text', ''))
-                elif item.get('type') == 'tool_use':
-                    text_parts.append(f"[Tool: {item.get('name', 'unknown')}]")
-            else:
-                text_parts.append(str(item))
-        return ' '.join(text_parts)
-    else:
-        return str(content)
+_progress_log = report_helpers.progress_log
+extract_content_string = report_helpers.extract_content_string
 
 
 def _iso_utc_now() -> str:

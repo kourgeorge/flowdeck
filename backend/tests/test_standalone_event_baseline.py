@@ -18,8 +18,20 @@ import run_analysis_standalone as standalone
 from services import token_service
 
 
-def _run_standalone(monkeypatch, tmp_path, *, event_summary):
+_DEFAULT_CHUNKS = [
+    {"investment_plan": "Plan", "recommendation": "BUY", "recommendation_score": 4},
+    {
+        "trader_investment_plan": "Trader plan",
+        "trader_recommendation": "BUY",
+        "trader_key_takeaways": ["Buy the dip"],
+    },
+]
+
+
+def _run_standalone(monkeypatch, tmp_path, *, event_summary, chunks=None, notified=None):
     saved = {}
+    chunks = _DEFAULT_CHUNKS if chunks is None else chunks
+    notified = [] if notified is None else notified
     gateway = SimpleNamespace(get_quote=lambda _ticker: {"current_price": 101.5, "currency": "usd"})
     event_calls = []
 
@@ -36,14 +48,7 @@ def _run_standalone(monkeypatch, tmp_path, *, event_summary):
                 create_initial_state=lambda ticker, date: {"ticker": ticker},
                 get_graph_args=lambda **kw: {},
             )
-            self.graph = SimpleNamespace(stream=lambda state, **kw: iter([
-                {"investment_plan": "Plan", "recommendation": "BUY", "recommendation_score": 4},
-                {
-                    "trader_investment_plan": "Trader plan",
-                    "trader_recommendation": "BUY",
-                    "trader_key_takeaways": ["Buy the dip"],
-                },
-            ]))
+            self.graph = SimpleNamespace(stream=lambda state, **kw: iter(chunks))
 
     class FakeSession:
         def close(self):
@@ -60,7 +65,7 @@ def _run_standalone(monkeypatch, tmp_path, *, event_summary):
     monkeypatch.setattr(token_service, "record_analysis_run", lambda uid, ticker, db: 4242)
     monkeypatch.setattr(standalone, "get_config_from_env", lambda overrides: {})
     monkeypatch.setattr(standalone, "TradingAgentsGraph", FakeGraph)
-    monkeypatch.setattr(standalone, "notify_subscribers_new_report", lambda **kw: None)
+    monkeypatch.setattr(standalone, "notify_subscribers_new_report", lambda **kw: notified.append(kw))
     monkeypatch.setattr(standalone, "save_report", lambda run_id, key, content, metadata: saved.__setitem__(key, (run_id, content, metadata)))
     monkeypatch.setattr(data_layer, "get_data_gateway", lambda: gateway)
     monkeypatch.setattr(processing, "get_ticker_event_summary", fake_event_summary)
@@ -92,3 +97,50 @@ def test_standalone_omits_event_baseline_when_signal_unavailable(monkeypatch, tm
     # Honest emptiness: no made-up 0.0 baseline when the signal could not be read.
     assert "event_score" not in meta
     assert "dominant_events" not in meta
+
+
+def test_standalone_investment_plan_metadata_is_flat(monkeypatch, tmp_path):
+    chunks = [
+        {
+            "investment_plan": "Plan",
+            "recommendation": "SELL",
+            "recommendation_score": 2,
+            "bull_summary": ["bull point"],
+            "report_usage": {"investment_plan": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15, "cost_usd": 0.01}},
+        },
+    ]
+    saved, _, _ = _run_standalone(monkeypatch, tmp_path, event_summary=RuntimeError("n/a"), chunks=chunks)
+
+    meta = saved["investment_plan"][2]
+    # Same shape analysis_service saves: fields at the top level, not under metadata.metadata.
+    assert "metadata" not in meta
+    assert meta["recommendation"] == "SELL"
+    assert meta["score"] == 2
+    assert meta["confidence"] == 0.4
+    assert meta["score_label"] == "Conviction Score"
+    assert meta["current_price"] == 101.5
+    assert meta["total_tokens"] == 15
+    assert meta["bull_viewpoint"] == ["bull point"]
+    assert "resources" in meta and "agent_steps" in meta
+
+
+def test_standalone_email_sent_with_plan_recommendation(monkeypatch, tmp_path):
+    notified = []
+    _run_standalone(monkeypatch, tmp_path, event_summary=RuntimeError("n/a"), notified=notified)
+
+    assert len(notified) == 1
+    assert notified[0]["recommendation"] == "BUY"
+    assert notified[0]["confidence"] == 0.8
+
+
+def test_standalone_email_without_investment_plan(monkeypatch, tmp_path):
+    notified = []
+    chunks = [{"trader_investment_plan": "Trader plan", "trader_recommendation": "HOLD"}]
+    saved, _, _ = _run_standalone(monkeypatch, tmp_path, event_summary=RuntimeError("n/a"), chunks=chunks, notified=notified)
+
+    assert "investment_plan" not in saved
+    assert "trader_investment_plan" in saved
+    # No plan means no Research Manager recommendation: send without one, never a made-up value.
+    assert len(notified) == 1
+    assert notified[0]["recommendation"] is None
+    assert notified[0]["confidence"] is None

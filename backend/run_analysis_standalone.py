@@ -62,27 +62,8 @@ def _ensure_data_gateway() -> None:
         logger.warning("Could not initialize data gateway; quote and event signal will be missing: %s", e)
 
 
-def _progress_log(msg: str) -> None:
-    """Print a progress line to stderr with timestamp."""
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[Progress]:\t {ts} - {msg}", file=sys.stderr, flush=True)
-
-
-def extract_content_string(content):
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        text_parts = []
-        for item in content:
-            if isinstance(item, dict):
-                if item.get("type") == "text":
-                    text_parts.append(item.get("text", ""))
-                elif item.get("type") == "tool_use":
-                    text_parts.append(f"[Tool: {item.get('name', 'unknown')}]")
-            else:
-                text_parts.append(str(item))
-        return " ".join(text_parts)
-    return str(content)
+_progress_log = report_helpers.progress_log
+extract_content_string = report_helpers.extract_content_string
 
 
 def emit(line: dict) -> None:
@@ -237,6 +218,10 @@ def main() -> None:
             raise
 
     async def run() -> None:
+        # Assigned when the investment_plan chunk arrives; without this they would be
+        # locals of run() and the trader log line and email step would raise
+        # UnboundLocalError on a run that never produced an investment plan.
+        nonlocal final_recommendation, final_confidence
         stop_heartbeat = threading.Event()
         heartbeat_thread = None
 
@@ -349,6 +334,9 @@ def main() -> None:
                     rec_score = chunk.get("recommendation_score")
                     final_recommendation = chunk.get("recommendation") or chunk.get("trader_recommendation")
                     final_confidence = (rec_score / 5.0) if rec_score is not None else None
+                    # build_report_json returns {"metadata": ..., "content": ...}; save only the
+                    # inner metadata, as analysis_service does, or every field lands under
+                    # metadata.metadata and the frontend finds no score/recommendation.
                     meta = _build_report_json(
                         content, rec_score, "Conviction Score", inv_takeaways,
                         recommendation=final_recommendation,
@@ -358,20 +346,22 @@ def main() -> None:
                         bull_case_return_pct=chunk.get("bull_case_return_pct"),
                         current_price=analysis_quote_meta.get("current_price"),
                         currency=analysis_quote_meta.get("currency"),
-                    )
+                    )["metadata"]
                     usage = (chunk.get("report_usage") or {}).get("investment_plan")
                     if usage:
                         meta["input_tokens"] = usage.get("input_tokens")
                         meta["output_tokens"] = usage.get("output_tokens")
                         meta["total_tokens"] = usage.get("total_tokens")
                         meta["cost_usd"] = usage.get("cost_usd")
+                        meta["per_call"] = usage.get("per_call", [])
+                    meta["resources"] = _get_report_resources(chunk, "investment_plan")
                     meta["agent_steps"] = _get_report_agent_steps(chunk, "investment_plan")
                     _written_reports.add("investment_plan")
                     save_report(
                         analysis_run_id,
                         "investment_plan",
                         content=content,
-                        metadata={**meta, "bull_viewpoint": bull, "bear_viewpoint": bear, "neutral_viewpoint": neutral, "resources": _get_report_resources(chunk, "investment_plan")},
+                        metadata={**meta, "bull_viewpoint": bull, "bear_viewpoint": bear, "neutral_viewpoint": neutral},
                     )
                     _progress_log(f"Investment plan ready → {final_recommendation or ''} → saved")
 

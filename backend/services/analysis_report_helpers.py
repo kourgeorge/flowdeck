@@ -11,11 +11,37 @@ cache) are plain parameters, so callers bind them with functools.partial.
 """
 
 import logging
+import sys
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from ai_engine.tradingagents.agents.utils.trace_utils import sort_agent_steps
 
 logger = logging.getLogger(__name__)
+
+
+def progress_log(msg: str) -> None:
+    """Print a progress line to stderr with timestamp."""
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[Progress]:\t {ts} - {msg}", file=sys.stderr, flush=True)
+
+
+def extract_content_string(content) -> str:
+    """Flatten LangChain message content (str or list of content blocks) to plain text."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        text_parts = []
+        for item in content:
+            if isinstance(item, dict):
+                if item.get("type") == "text":
+                    text_parts.append(item.get("text", ""))
+                elif item.get("type") == "tool_use":
+                    text_parts.append(f"[Tool: {item.get('name', 'unknown')}]")
+            else:
+                text_parts.append(str(item))
+        return " ".join(text_parts)
+    return str(content)
 
 
 def normalize_takeaway_list(val) -> list:
