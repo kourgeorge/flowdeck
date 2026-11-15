@@ -53,7 +53,7 @@ docker compose -f docker/compose.yml ps
 
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8002
-- **API Docs**: http://localhost:8002/docs
+- **API Docs**: http://localhost:8002/api/docs
 
 ### 4. Stop Services
 

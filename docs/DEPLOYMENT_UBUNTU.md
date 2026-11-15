@@ -443,7 +443,7 @@ sudo chmod 640 /opt/flowdeck/.env
 
 1. **Backend health (from server):** `curl http://127.0.0.1:8002/health`
 2. **Frontend:** Open `https://your-domain.com` (or `http://` before SSL) in a browser
-3. **API docs:** `https://your-domain.com/api/docs` (or `/api/redoc`) if exposed
+3. **API docs:** `https://your-domain.com/api/docs` if exposed
 4. **Generate report:** Search a ticker and trigger analysis to confirm end-to-end flow
 5. **SEC EDGAR (optional):** For US tickers, the SEC Filings tab and SEC analyst use SEC.gov (no API key). Rate limit: 10 requests/second. Extracted sections (risk factors, MD&A) use the same LLM as analysis (OpenAI/Azure).
 
