@@ -454,13 +454,17 @@ async def api_docs():
 
 @app.get("/", tags=["Platform"])
 async def root():
-    """Liveness marker. Not versioned; use /health for readiness checks."""
+    """Liveness marker. Not versioned; use /api/health for readiness checks."""
     return {"message": "Stock Dashboard API", "status": "running"}
 
 
 @app.get("/health", tags=["Platform"])
 async def health():
-    """Health check endpoint."""
+    """Process-only check, for internal use (Docker healthchecks).
+
+    It only shows the process is up. It is not reachable through the public
+    domain. For uptime monitors, use /api/health.
+    """
     return {"status": "healthy", "service": "tradingagents-api"}
 
 
