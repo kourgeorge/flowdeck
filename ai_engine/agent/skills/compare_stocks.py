@@ -20,7 +20,9 @@ from ai_engine.agent.skill import BaseSkill, SkillResult, SkillSpec, SkillStep
 from ai_engine.agent.tool import ExecutionContext
 from ai_engine.agent.skills._periods import (
     compute_period_returns,
+    compute_period_returns_with_reasons,
     fetch_start_date,
+    format_skipped_line,
     resolve_period,
 )
 
@@ -112,18 +114,25 @@ class CompareStocksSkill(BaseSkill):
                 # Fall through to snapshot mode
                 period = None
             else:
-                returns = compute_period_returns(prices_result.to_str(), tickers, start_date, end_date)
+                returns, skipped = compute_period_returns_with_reasons(
+                    prices_result.to_str(), tickers, start_date, end_date
+                )
 
                 if not returns:
+                    message = f"No price data found for {tickers_str} in period {period_label}."
+                    if skipped:
+                        message += " " + format_skipped_line(skipped)
                     return SkillResult(
                         ok=False,
-                        error={"code": "NO_DATA", "message": f"No price data found for {tickers_str} in period {period_label}."},
+                        error={"code": "NO_DATA", "message": message},
                         steps=steps,
                     )
 
-                # Build markdown table
+                # Title and chart name only the measured tickers; an
+                # unmeasured one is listed separately with its reason.
+                measured_str = " vs ".join(r["ticker"] for r in returns)
                 lines = [
-                    f"# ⚖️ Market Comparison: {tickers_str}",
+                    f"# ⚖️ Market Comparison: {measured_str}",
                     f"**Period:** {period_label} ({start_date} → {end_date})",
                     "",
                     f"| {'Ticker':<12} | {'Start Price':>12} | {'End Price':>10} | {'Return':>10} |",
@@ -135,17 +144,24 @@ class CompareStocksSkill(BaseSkill):
                         f"| {r['ticker']:<12} | {r['start_price']:>12.2f} | {r['end_price']:>10.2f} | {sign}{r['return_pct']:>8.2f}% |"
                     )
 
-                if returns:
+                # One measured stock would be named both best and worst.
+                if len(returns) >= 2:
                     best = returns[0]
                     worst = returns[-1]
                     lines.append("")
                     lines.append(f"**🏆 Best performer:** {best['ticker']} ({'+' if best['return_pct'] >= 0 else ''}{best['return_pct']:.2f}%)")
                     lines.append(f"**📉 Worst performer:** {worst['ticker']} ({'+' if worst['return_pct'] >= 0 else ''}{worst['return_pct']:.2f}%)")
 
+                # Stocks without a close before the start get no return rather
+                # than one measured from a later day; say so instead of hiding them.
+                if skipped:
+                    lines.append("")
+                    lines.append(format_skipped_line(skipped))
+
                 # Build chart spec
                 chart_data = [{"ticker": r["ticker"], "return_pct": r["return_pct"]} for r in returns]
                 chart = {
-                    "title": f"% Return: {tickers_str} — {period_label}",
+                    "title": f"% Return: {measured_str} — {period_label}",
                     "type": "bar",
                     "xKey": "ticker",
                     "yKeys": ["return_pct"],
@@ -159,7 +175,7 @@ class CompareStocksSkill(BaseSkill):
                     ok=True,
                     data="\n".join(lines),
                     steps=steps,
-                    metrics={"tool_calls": len(steps), "tickers_compared": len(tickers), "period": period_label},
+                    metrics={"tool_calls": len(steps), "tickers_compared": len(returns), "period": period_label},
                 )
 
         # ----------------------------------------------------------------

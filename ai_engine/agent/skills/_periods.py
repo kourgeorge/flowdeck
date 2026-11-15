@@ -116,38 +116,86 @@ def compute_period_returns(
 ) -> list[dict]:
     """Parse multi-ticker price JSON and compute % returns, best first.
 
+    Same as compute_period_returns_with_skipped, without the skipped list.
+    """
+    return compute_period_returns_with_skipped(prices_json, tickers, start_date, end_date)[0]
+
+
+def compute_period_returns_with_skipped(
+    prices_json: str,
+    tickers: Optional[list[str]] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> tuple[list[dict], list[str]]:
+    """Compute % returns, best first, and list the tickers that were not measured.
+
+    Same as compute_period_returns_with_reasons, with just the skipped names.
+    """
+    results, reasons = compute_period_returns_with_reasons(prices_json, tickers, start_date, end_date)
+    return results, list(reasons)
+
+
+# Why a ticker got no return. Shown to the user next to the ticker name.
+NO_DATA = "no data at all"
+NO_PRICE_BEFORE_START = "no price before the start"
+NO_PRICE_IN_PERIOD = "no price in the period"
+NOT_ENOUGH_PRICES = "not enough prices"
+
+
+def compute_period_returns_with_reasons(
+    prices_json: str,
+    tickers: Optional[list[str]] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> tuple[list[dict], dict[str, str]]:
+    """Compute % returns, best first, plus {ticker: reason} for those not measured.
+
     With a start_date, the return runs from the last close before that date
     to the last close on or before end_date, so the first session's move is
-    counted. A ticker with no close before start_date is skipped rather than
-    measured from a later day. `tickers=None` means every ticker in the data.
+    counted. A ticker with no close before start_date (e.g. a recent IPO) is
+    skipped rather than measured from a later day. The skipped tickers come
+    back with the reason, so callers can name them instead of hiding them;
+    no return is ever made up for them. `tickers=None` means every ticker in
+    the data. The reasons dict keeps the order of `tickers`.
     """
     try:
         raw = json.loads(prices_json)
     except Exception:
-        return []
+        return [], {t: NO_DATA for t in (tickers or [])}
 
     data = raw.get("data", {}) or {}
     if tickers is None:
         tickers = list(data.keys())
     results = []
+    reasons: dict[str, str] = {}
 
     for ticker in tickers:
         csv_str = data.get(ticker) or data.get(ticker.upper())
         if not csv_str:
+            reasons[ticker] = NO_DATA
             continue
         try:
             rows = parse_daily_closes(csv_str)
             if start_date:
                 previous = [r for r in rows if r["Date"] < start_date]
                 in_period = [r for r in rows if r["Date"] >= start_date and (not end_date or r["Date"] <= end_date)]
-                if not previous or not in_period:
+                if not previous and not in_period:
+                    reasons[ticker] = NO_DATA
+                    continue
+                if not previous:
+                    reasons[ticker] = NO_PRICE_BEFORE_START
+                    continue
+                if not in_period:
+                    reasons[ticker] = NO_PRICE_IN_PERIOD
                     continue
                 rows = [previous[-1]] + in_period
             if len(rows) < 2:
+                reasons[ticker] = NOT_ENOUGH_PRICES
                 continue
             first_close = float(rows[0]["Close"])
             last_close = float(rows[-1]["Close"])
             if first_close == 0:
+                reasons[ticker] = NOT_ENOUGH_PRICES
                 continue
             pct = (last_close - first_close) / first_close * 100
             results.append({
@@ -159,7 +207,16 @@ def compute_period_returns(
                 "end_date": rows[-1].get("Date", ""),
             })
         except Exception:
+            reasons[ticker] = NO_DATA
             continue
 
     results.sort(key=lambda x: x["return_pct"], reverse=True)
-    return results
+    return results, reasons
+
+
+def format_skipped_line(reasons: dict[str, str]) -> str:
+    """One line naming each unmeasured ticker and why, or "" if none."""
+    if not reasons:
+        return ""
+    named = ", ".join(f"{t} ({why})" for t, why in reasons.items())
+    return f"No full price history for this period: {named}"
