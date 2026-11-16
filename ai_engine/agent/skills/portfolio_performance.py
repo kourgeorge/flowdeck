@@ -17,11 +17,11 @@ and selects this skill; no regex or keyword matching is used.
 from __future__ import annotations
 
 import json
-import re
 from typing import Any
 
 from ai_engine.agent.skill import BaseSkill, SkillResult, SkillSpec, SkillStep
 from ai_engine.agent.tool import ExecutionContext
+from ai_engine.agent.skills._subscriptions import parse_subscribed_tickers
 from ai_engine.agent.skills._periods import (
     compute_period_returns_with_reasons,
     fetch_start_date,
@@ -83,7 +83,7 @@ class PortfolioPerformanceSkill(BaseSkill):
                 steps=steps,
             )
 
-        tickers = _parse_tickers(subs_result.to_str())
+        tickers = parse_subscribed_tickers(subs_result.to_str())
         if not tickers:
             return SkillResult(
                 ok=True,
@@ -154,18 +154,6 @@ class PortfolioPerformanceSkill(BaseSkill):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-def _parse_tickers(subs_text: str) -> list[str]:
-    """Extract ticker symbols from get_user_subscriptions output."""
-    matches = re.findall(r"\*\*([A-Z0-9\-\.^]+)\*\*", subs_text)
-    seen: set[str] = set()
-    result = []
-    for m in matches:
-        if m not in seen:
-            seen.add(m)
-            result.append(m)
-    return result
-
 
 def _build_returns_report(
     prices_json: str,
