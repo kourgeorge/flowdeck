@@ -48,6 +48,32 @@ def test_all_fred_calls_time_out(monkeypatch):
     MarketRatesService.clear_cache()
 
 
+def test_vix_looked_up_once_when_all_sources_fail(monkeypatch):
+    _setup(monkeypatch, {})
+    calls = []
+    fake_get = mrs.requests.get
+
+    def counting_get(url, params=None, timeout=None):
+        calls.append(params["series_id"])
+        return fake_get(url, params=params, timeout=timeout)
+
+    def counting_yf(cls):
+        calls.append("yf")
+        return None
+
+    monkeypatch.setattr(mrs.requests, "get", counting_get)
+    monkeypatch.setattr(MarketRatesService, "_fetch_vix_from_yfinance", classmethod(counting_yf))
+
+    rates = MarketRatesService.get_market_rates(force_refresh=True)
+
+    assert calls.count("VIXCLS") == 1
+    assert calls.count("yf") == 1
+    assert rates["vix"] is None
+    assert rates["market_risk_premium"] == 0.055
+    assert rates["field_sources"]["market_risk_premium"] == "historical_average_assumption"
+    MarketRatesService.clear_cache()
+
+
 def test_partial_success_labels_only_returned_fields(monkeypatch):
     _setup(monkeypatch, {"DGS10": "4.30"})
     rates = MarketRatesService.get_market_rates(force_refresh=True)
