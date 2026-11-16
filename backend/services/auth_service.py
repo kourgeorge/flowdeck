@@ -9,7 +9,13 @@ from urllib.parse import urlencode
 
 from sqlalchemy.orm import Session
 
-from auth import create_access_token, hash_password, verify_password
+from auth import (
+    PASSWORD_TOO_LONG_MESSAGE,
+    create_access_token,
+    hash_password,
+    password_too_long,
+    verify_password,
+)
 from config import MAJOR_TICKERS
 from models.db_models import User
 from services.email_service import send_welcome_email
@@ -44,6 +50,8 @@ def register(email: str, password: str, db: Session) -> Tuple[str, int, str]:
     email = email.strip().lower()
     if len(password) < MIN_PASSWORD_LENGTH:
         raise AuthError(400, "Password must be at least 6 characters")
+    if password_too_long(password):
+        raise AuthError(400, PASSWORD_TOO_LONG_MESSAGE)
     existing = db.query(User).filter(User.email == email).first()
     if existing:
         raise AuthError(409, "Email already registered")
