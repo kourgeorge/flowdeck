@@ -223,21 +223,9 @@ class MarketRatesService:
         return rates["risk_free_rate"]
 
     @classmethod
-    def get_vix(cls) -> Optional[float]:
-        """
-        Fetch current VIX (volatility index) level.
-
-        Primary source is FRED's VIXCLS series (prior-day close, same pipeline as
-        the treasury rates). Falls back to yfinance when FRED is unavailable or
-        no API key is configured.
-
-        Returns:
-            Current VIX level (e.g., 18.5), or None if unavailable
-        """
-        return cls._get_vix_with_source()[0]
-
-    @classmethod
     def _get_vix_with_source(cls) -> Tuple[Optional[float], Optional[str]]:
+        # Primary source is FRED's VIXCLS (prior-day close, same pipeline as the
+        # treasury rates); yfinance is the fallback when FRED is down or unkeyed.
         # VIX is an index level, not a percentage rate, so no /100 conversion
         vix = cls._fetch_fred_series("VIXCLS", is_percentage=False)
         if vix is not None:
@@ -277,16 +265,14 @@ class MarketRatesService:
         - VIX > 35: High stress → 6.5-8.0% premium
         
         Args:
-            vix: Current VIX level. If None, will fetch automatically.
-            
+            vix: Current VIX level, or None when it could not be fetched.
+
         Returns:
             Market risk premium as decimal (e.g., 0.055 for 5.5%)
         """
-        # Fetch VIX if not provided
-        if vix is None:
-            vix = cls.get_vix()
-
-        # Default to historical average if VIX unavailable
+        # No fetching here: get_market_rates already tried FRED and yfinance, and
+        # a second lookup both doubled the slow calls when VIX was down and could
+        # price the premium off a VIX the response reports as None.
         if vix is None:
             logger.warning("VIX unavailable, using historical average market risk premium (5.5%)")
             return 0.055
