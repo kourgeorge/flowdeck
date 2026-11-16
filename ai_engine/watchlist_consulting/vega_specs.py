@@ -9,33 +9,31 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from pipeline_schemas import NO_REPORT_LABEL, recommendation_counts
+
 VEGA_LITE_SCHEMA = "https://vega.github.io/schema/vega-lite/v5.json"
 
 
 def recommendation_bar_spec(entries: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Bar chart: count of BUY / SELL / HOLD across the watchlist."""
-    rec_counts: Dict[str, int] = {}
-    for e in entries:
-        r = (e.get("recommendation") or "HOLD").upper()
-        if r not in ("BUY", "SELL", "HOLD"):
-            r = "HOLD"
-        rec_counts[r] = rec_counts.get(r, 0) + 1
+    """Bar chart: count of BUY / HOLD / SELL across the watchlist, plus a "No report" bar."""
+    rec_counts = recommendation_counts(entries)
     data = [{"recommendation": k, "count": v} for k, v in rec_counts.items()]
     if not data:
         data = [{"recommendation": "HOLD", "count": 0}]
+    order = ["BUY", "HOLD", "SELL", NO_REPORT_LABEL]
     return {
         "$schema": VEGA_LITE_SCHEMA,
         "title": "Recommendation distribution",
         "data": {"values": data},
         "mark": "bar",
         "encoding": {
-            "x": {"field": "recommendation", "type": "nominal", "sort": ["BUY", "HOLD", "SELL"]},
+            "x": {"field": "recommendation", "type": "nominal", "sort": order},
             "y": {"field": "count", "type": "quantitative"},
             "color": {
                 "field": "recommendation",
                 "type": "nominal",
-                "scale": {"range": ["#22c55e", "#eab308", "#ef4444"]},
-                "sort": ["BUY", "HOLD", "SELL"],
+                "scale": {"domain": order, "range": ["#22c55e", "#eab308", "#ef4444", "#9ca3af"]},
+                "sort": order,
             },
         },
         "width": 300,

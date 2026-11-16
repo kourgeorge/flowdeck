@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pipeline_schemas import ActionCandidate, EvidencePacket, ScenarioRange
+from pipeline_schemas import ActionCandidate, EvidencePacket, ScenarioRange, normalize_recommendation, NO_PLATFORM_REPORT_TEXT
 
 try:
     from report_agent import _get_llm
@@ -22,7 +22,7 @@ def _entry_to_text(entry: Dict[str, Any]) -> str:
     lines = [
         f"Ticker: {entry.get('ticker')}",
         f"Name: {entry.get('name', entry.get('ticker'))}",
-        f"Recommendation: {entry.get('recommendation') or '—'}",
+        f"Recommendation: {normalize_recommendation(entry.get('recommendation')) or 'none (no platform report for this ticker)'}",
         f"Confidence: {entry.get('confidence')}",
         f"Report date: {entry.get('report_date')}",
         f"Expected return %: {entry.get('expected_return_pct')}",
@@ -68,10 +68,17 @@ def _extract_one_llm(llm: Any, entry: Dict[str, Any]) -> EvidencePacket:
     )
     out = structured_llm.invoke([HumanMessage(content=prompt)])
     if isinstance(out, EvidencePacket):
-        return out
-    if isinstance(out, dict):
-        return EvidencePacket(ticker=ticker, **{k: v for k, v in out.items() if k != "ticker"})
-    return EvidencePacket(ticker=ticker)
+        packet = out
+    elif isinstance(out, dict):
+        packet = EvidencePacket(ticker=ticker, **{k: v for k, v in out.items() if k != "ticker"})
+    else:
+        packet = EvidencePacket(ticker=ticker)
+    if normalize_recommendation(entry.get("recommendation")) is None:
+        # The prompt forces buy/hold/sell/watch, so the LLM will invent one even
+        # when the platform never analysed the stock. Drop it rather than show a
+        # rating with nothing behind it.
+        packet.action_candidate = None
+    return packet
 
 
 def _extract_one_heuristic(entry: Dict[str, Any]) -> EvidencePacket:
@@ -89,10 +96,9 @@ def _extract_one_heuristic(entry: Dict[str, Any]) -> EvidencePacket:
         pts = bear if isinstance(bear, list) else [str(bear)]
         key_risks = [str(p)[:200] for p in pts[:3]]
 
-    rec = (entry.get("recommendation") or "HOLD").upper()
-    if rec not in ("BUY", "SELL", "HOLD"):
-        rec = "HOLD"
-    action = "buy" if rec == "BUY" else ("sell" if rec == "SELL" else "hold")
+    rec = normalize_recommendation(entry.get("recommendation"))
+    if rec is None:
+        thesis_bullets.insert(0, NO_PLATFORM_REPORT_TEXT)
     numbers_used = []
     for f in ("expected_return_pct", "bear_case_return_pct", "bull_case_return_pct"):
         if entry.get(f) is not None:
@@ -118,7 +124,11 @@ def _extract_one_heuristic(entry: Dict[str, Any]) -> EvidencePacket:
         news_drivers=[],
         scenario_range=scenario,
         numbers_used=numbers_used,
-        action_candidate=ActionCandidate(action=action, rationale=f"Recommendation: {rec}"),
+        # No platform report -> no action at all; defaulting to "hold" made
+        # never-analysed stocks look like considered HOLD calls.
+        action_candidate=(
+            ActionCandidate(action=rec.lower(), rationale=f"Recommendation: {rec}") if rec else None
+        ),
     )
 
 
