@@ -10,7 +10,19 @@ from tenacity import (
     wait_exponential,
     retry_if_exception_type,
     retry_if_result,
+    stop_after_delay,
 )
+
+# (connect, read) seconds. Google News is reached as a fallback from
+# interface._route; a page that never answers used to hang the whole
+# /api/data request (and its worker thread) with no way out.
+REQUEST_TIMEOUT = (5, 15)
+
+# Hard caps on the page loop. Each page already costs a 2-6s random sleep plus
+# up to several 429 back-offs, so an open-ended loop could run for minutes
+# before _route got a chance to try the next vendor.
+MAX_PAGES = 5
+MAX_TOTAL_SECONDS = 60
 
 
 def is_rate_limited(response):
@@ -20,14 +32,14 @@ def is_rate_limited(response):
 
 @retry(
     retry=(retry_if_result(is_rate_limited)),
-    wait=wait_exponential(multiplier=1, min=4, max=60),
-    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=1, min=4, max=15),
+    stop=(stop_after_attempt(5) | stop_after_delay(30)),
 )
 def make_request(url, headers):
     """Make a request with retry logic for rate limiting"""
     # Random delay before each request to avoid detection
     time.sleep(random.uniform(2, 6))
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
     return response
 
 
@@ -55,7 +67,8 @@ def getNewsData(query, start_date, end_date):
 
     news_results = []
     page = 0
-    while True:
+    deadline = time.monotonic() + MAX_TOTAL_SECONDS
+    while page < MAX_PAGES and time.monotonic() < deadline:
         offset = page * 10
         url = (
             f"https://www.google.com/search?q={query}"
@@ -102,6 +115,12 @@ def getNewsData(query, start_date, end_date):
             page += 1
 
         except Exception as e:
+            # With nothing collected, an empty list would look like "no news
+            # for this query" rather than "Google didn't answer". Raise so
+            # _route records the real cause and moves to the next vendor;
+            # once some pages are in, keep what we have.
+            if not news_results:
+                raise
             print(f"Failed after multiple retries: {e}")
             break
 

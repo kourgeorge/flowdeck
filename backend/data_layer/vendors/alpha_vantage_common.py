@@ -8,6 +8,14 @@ from typing import Union
 
 API_BASE_URL = "https://www.alphavantage.co/query"
 
+# (connect, read) seconds. Alpha Vantage is a fallback behind yfinance in
+# interface._route; without a timeout a server that accepts the connection but
+# never answers would hang the /api/data request (and its worker thread)
+# forever instead of letting _route move on to the next vendor. A
+# requests.Timeout is a plain Exception, which _route already treats as
+# "this vendor failed, try the next one".
+REQUEST_TIMEOUT = (5, 15)
+
 def get_api_key() -> str:
     """Retrieve the API key for Alpha Vantage from environment variables."""
     api_key = os.getenv("ALPHA_VANTAGE_API_KEY")
@@ -64,7 +72,7 @@ def _make_api_request(function_name: str, params: dict) -> Union[dict, str]:
         # Remove entitlement if it's None or empty
         api_params.pop("entitlement", None)
     
-    response = requests.get(API_BASE_URL, params=api_params)
+    response = requests.get(API_BASE_URL, params=api_params, timeout=REQUEST_TIMEOUT)
     response.raise_for_status()
 
     response_text = response.text
