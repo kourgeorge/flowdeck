@@ -94,14 +94,17 @@ SECTOR_DIVERGENCE_THRESHOLDS = {
 def _weighted_base_value(
     dcf_base: float,
     pe_comps_base: float,
-    ev_ebitda_base: float,
+    ev_ebitda_base: Optional[float],
     method_weights: Optional[Dict[str, float]] = None,
 ) -> float:
     method_weights = method_weights or DEFAULT_METHOD_WEIGHTS
+    # EV/EBITDA is None when the company reports no usable EBITDA; its weight is
+    # then 0, so it simply contributes nothing.
+    ev_contribution = (ev_ebitda_base or 0.0) * method_weights["EV/EBITDA"]
     return (
         dcf_base * method_weights["DCF"]
         + pe_comps_base * method_weights["P/E Comps"]
-        + ev_ebitda_base * method_weights["EV/EBITDA"]
+        + ev_contribution
     )
 
 
@@ -474,7 +477,7 @@ def _build_valuation_bridge(
     fair_value_base: float,
     dcf_base: float,
     pe_comps_base: float,
-    ev_ebitda_base: float,
+    ev_ebitda_base: Optional[float],
     method_weights: Optional[Dict[str, float]] = None,
 ) -> Dict[str, float]:
     """
@@ -486,7 +489,9 @@ def _build_valuation_bridge(
     - Risk discount: Difference between methods (uncertainty/risk premium)
     """
     method_weights = method_weights or DEFAULT_METHOD_WEIGHTS
-    avg_comps_base = (pe_comps_base + ev_ebitda_base) / 2.0
+    avg_comps_base = (
+        (pe_comps_base + ev_ebitda_base) / 2.0 if ev_ebitda_base is not None else pe_comps_base
+    )
     total_gap = fair_value_base - current_price
 
     # Handle overvalued case (negative gap)
@@ -566,10 +571,10 @@ def _build_sensitivity_analysis(
     net_debt: float,
     shares_outstanding: float,
     pe_comps_base: float,
-    ev_ebitda_base: float,
+    ev_ebitda_base: Optional[float],
     dcf_base: float,
     base_ev_multiple: float,
-    ebitda: float,
+    ebitda: Optional[float],
     beta: float = 1.0,
     growth_samples: Optional[list] = None,
     method_weights: Optional[Dict[str, float]] = None,
@@ -654,8 +659,13 @@ def _build_sensitivity_analysis(
         net_debt=net_debt,
         shares_outstanding=shares_outstanding,
     )
-    exit_low_ev = max((((ebitda * (base_ev_multiple - exit_multiple_delta)) - net_debt) / shares_outstanding), 0.01)
-    exit_high_ev = max((((ebitda * (base_ev_multiple + exit_multiple_delta)) - net_debt) / shares_outstanding), 0.01)
+    if ebitda is not None and ev_ebitda_base is not None:
+        exit_low_ev = max((((ebitda * (base_ev_multiple - exit_multiple_delta)) - net_debt) / shares_outstanding), 0.01)
+        exit_high_ev = max((((ebitda * (base_ev_multiple + exit_multiple_delta)) - net_debt) / shares_outstanding), 0.01)
+    else:
+        # No real EBITDA means EV/EBITDA is out of the blend, so the exit
+        # multiple cannot move fair value.
+        exit_low_ev = exit_high_ev = None
 
     # Calculate fair value ranges
     fcf_fv_low = min(weighted_from_dcf(fcf_low), weighted_from_dcf(fcf_high))
@@ -1532,6 +1542,7 @@ def _determine_dynamic_method_weights(
     total_debt: float,
     market_cap: float,
     revenue_ttm: float,
+    fcf_estimated: bool = False,
 ) -> Dict[str, float]:
     scores = {
         "DCF": 1.0,
@@ -1559,6 +1570,10 @@ def _determine_dynamic_method_weights(
         if normalized_fcf_ratio > 2.0:
             scores["DCF"] *= 0.85
 
+    if fcf_estimated:
+        # FCF came from RevenueTTM x ProfitMargin, not a cash-flow statement.
+        scores["DCF"] *= 0.60
+
     if "FALLBACK_ESTIMATE" in growth_data_source:
         scores["DCF"] *= 0.75
     elif len(growth_samples) >= 3:
@@ -1581,9 +1596,8 @@ def _determine_dynamic_method_weights(
         elif forward_pe is not None and forward_pe < 8:
             scores["P/E Comps"] *= 0.90
 
-    if ebitda is None or ebitda <= 0:
-        scores["EV/EBITDA"] *= 0.35
-    else:
+    ebitda_available = ebitda is not None and ebitda > 0
+    if ebitda_available:
         scores["EV/EBITDA"] *= 1.10
 
     if debt_ratio > 0.25:
@@ -1613,6 +1627,10 @@ def _determine_dynamic_method_weights(
         scores["EV/EBITDA"] *= 1.15
 
     scores = {method: max(score, 0.05) for method, score in scores.items()}
+    if not ebitda_available:
+        # Without real EBITDA the EV/EBITDA value is made up, so it gets no
+        # weight at all (it used to be defaulted to $1 and then boosted).
+        scores["EV/EBITDA"] = 0.0
     total_score = sum(scores.values()) or 1.0
     normalized = {method: score / total_score for method, score in scores.items()}
 
@@ -1706,16 +1724,23 @@ def calculate_multi_method_valuation_data(
         quarterly_fcf = _sum_latest(cashflow_quarterly, "freeCashFlow", count=4)
         if quarterly_fcf is not None:
             current_fcf = quarterly_fcf
-    if current_fcf is None:
-        revenue_ttm = _first_numeric(fundamentals, "RevenueTTM") or _latest_numeric(income_annual, "totalRevenue") or 0.0
-        profit_margin = _first_numeric(fundamentals, "ProfitMargin") or 0.15
-        current_fcf = revenue_ttm * profit_margin * 0.9
-    
-    # Ensure current_fcf is never None before converting to float
-    if current_fcf is None:
-        current_fcf = 0.0
-    current_fcf = float(current_fcf)
     revenue_ttm = _first_numeric(fundamentals, "RevenueTTM") or _latest_numeric(income_annual, "totalRevenue") or 0.0
+    fcf_estimated = False
+    if current_fcf is None:
+        # No cash-flow statement (e.g. the statements call failed and came back
+        # as {}). Only estimate FCF from a real reported ProfitMargin; a made-up
+        # margin would put an invented number at the heart of the DCF.
+        profit_margin = _first_numeric(fundamentals, "ProfitMargin")
+        if profit_margin is None or revenue_ttm <= 0:
+            reason = (
+                "no cash-flow statements and no reported ProfitMargin/RevenueTTM "
+                "to estimate free cash flow from"
+            )
+            logger.warning("[%s] %s — refusing to compute valuation", ticker, reason)
+            return _valuation_unavailable(ticker, current_price, reason, resolved_shares=shares_outstanding)
+        current_fcf = revenue_ttm * profit_margin * 0.9
+        fcf_estimated = True
+    current_fcf = float(current_fcf)
     
     # Detect growth stage and determine projection period
     revenue_growth = _first_numeric(fundamentals, "QuarterlyRevenueGrowthYOY")
@@ -1878,28 +1903,37 @@ def calculate_multi_method_valuation_data(
         "bull": max(forward_eps * bull_pe, 0.01),
     }
 
+    # Keep the real EBITDA (possibly None). It used to be defaulted to $1 or
+    # FCF/0.75, which then got the EV/EBITDA *boost* in the weighting and
+    # produced fair values of $0.01 that dominated the blend.
     ebitda = _first_numeric(fundamentals, "EBITDA") or _latest_numeric(income_annual, "ebitda")
-    ebitda = max(ebitda or (current_fcf / 0.75 if current_fcf > 0 else 1.0), 1.0)
+    ebitda_available = ebitda is not None and ebitda > 0
+    if not ebitda_available:
+        ebitda = None
     current_ev_to_ebitda = _first_numeric(fundamentals, "EVToEBITDA")
     if current_ev_to_ebitda is None:
         enterprise_value = _first_numeric(fundamentals, "EnterpriseValue")
-        if enterprise_value is not None and ebitda > 0:
+        if enterprise_value is not None and ebitda_available:
             current_ev_to_ebitda = enterprise_value / ebitda
+    ev_multiple_defaulted = current_ev_to_ebitda is None
     current_ev_to_ebitda = max(current_ev_to_ebitda or 14.0, 1.0)
-    implied_ev_mult_low = ((target_low * shares_outstanding + net_debt) / ebitda) if target_low and ebitda > 0 else None
-    implied_ev_mult_avg = ((target_avg * shares_outstanding + net_debt) / ebitda) if target_avg and ebitda > 0 else None
-    implied_ev_mult_high = ((target_high * shares_outstanding + net_debt) / ebitda) if target_high and ebitda > 0 else None
+    implied_ev_mult_low = ((target_low * shares_outstanding + net_debt) / ebitda) if target_low and ebitda_available else None
+    implied_ev_mult_avg = ((target_avg * shares_outstanding + net_debt) / ebitda) if target_avg and ebitda_available else None
+    implied_ev_mult_high = ((target_high * shares_outstanding + net_debt) / ebitda) if target_high and ebitda_available else None
     base_ev_mult_values = [v for v in [current_ev_to_ebitda, implied_ev_mult_avg] if v is not None]
     base_ev_mult = median(base_ev_mult_values) if base_ev_mult_values else current_ev_to_ebitda
     bear_ev_mult_values = [v for v in [base_ev_mult * 0.85, implied_ev_mult_low] if v is not None]
     bear_ev_mult = median(bear_ev_mult_values) if bear_ev_mult_values else base_ev_mult * 0.85
     bull_ev_mult_values = [v for v in [base_ev_mult * 1.15, implied_ev_mult_high] if v is not None]
     bull_ev_mult = median(bull_ev_mult_values) if bull_ev_mult_values else base_ev_mult * 1.15
-    ev_ebitda = {
-        "bear": max(((ebitda * bear_ev_mult) - net_debt) / shares_outstanding, 0.01),
-        "base": max(((ebitda * base_ev_mult) - net_debt) / shares_outstanding, 0.01),
-        "bull": max(((ebitda * bull_ev_mult) - net_debt) / shares_outstanding, 0.01),
-    }
+    if ebitda_available:
+        ev_ebitda = {
+            "bear": max(((ebitda * bear_ev_mult) - net_debt) / shares_outstanding, 0.01),
+            "base": max(((ebitda * base_ev_mult) - net_debt) / shares_outstanding, 0.01),
+            "bull": max(((ebitda * bull_ev_mult) - net_debt) / shares_outstanding, 0.01),
+        }
+    else:
+        ev_ebitda = {"bear": None, "base": None, "bull": None}
 
     method_weights = _determine_dynamic_method_weights(
         sector=sector,
@@ -1916,6 +1950,7 @@ def calculate_multi_method_valuation_data(
         total_debt=total_debt,
         market_cap=market_cap,
         revenue_ttm=revenue_ttm,
+        fcf_estimated=fcf_estimated,
     )
 
     valuation_summary = calculate_valuation_summary(
@@ -1930,7 +1965,7 @@ def calculate_multi_method_valuation_data(
     current_discount_pct = ((fair_value_base - current_price) / fair_value_base * 100.0) if fair_value_base > 0 else 0.0
     
     # Calculate method dispersion
-    base_values = [dcf["base"], pe_comps["base"], ev_ebitda["base"]]
+    base_values = [v for v in (dcf["base"], pe_comps["base"], ev_ebitda["base"]) if v is not None]
     dispersion = (pstdev(base_values) / max(sum(base_values) / len(base_values), 1e-9)) if len(base_values) >= 2 else 0.0
     
     # Enhanced conviction scoring with data quality factors
@@ -1939,6 +1974,12 @@ def calculate_multi_method_valuation_data(
         data_quality_score *= 0.85  # Penalize normalized FCF (higher uncertainty)
     if growth_samples and len(growth_samples) < 2:
         data_quality_score *= 0.90  # Penalize limited growth data
+    if fcf_estimated:
+        data_quality_score *= 0.70  # FCF estimated from ProfitMargin, not reported
+    if not ebitda_available:
+        data_quality_score *= 0.90  # EV/EBITDA dropped, only two methods left
+    elif ev_multiple_defaulted:
+        data_quality_score *= 0.85  # EV/EBITDA uses the assumed 14x multiple
     
     # Adjust dispersion for data quality
     adjusted_dispersion = dispersion / data_quality_score
@@ -1953,7 +1994,7 @@ def calculate_multi_method_valuation_data(
         logger.warning(f"{ticker}: Negative or zero DCF values detected - {dcf}")
     if any(pe_comps[k] > 200 for k in pe_comps):
         logger.warning(f"{ticker}: Extreme P/E multiples (>200) detected - {pe_comps}")
-    if any(ev_ebitda[k] > 100 for k in ev_ebitda):
+    if any(v is not None and v > 100 for v in ev_ebitda.values()):
         logger.warning(f"{ticker}: Extreme EV/EBITDA multiples (>100) detected - {ev_ebitda}")
     if abs(current_discount_pct) > 80:
         logger.warning(f"{ticker}: Extreme discount/premium (>{abs(current_discount_pct):.1f}%) - may indicate data issues")
@@ -2078,14 +2119,18 @@ def calculate_multi_method_valuation_data(
         f"WACC: bear {wacc_bear*100:.1f}%, base {wacc_base*100:.1f}%, bull {wacc_bull*100:.1f}% (from market rates: risk-free {risk_free_rate*100:.2f}%, MRP {market_risk_premium*100:.2f}%)",
         f"Terminal growth: bear {terminal_growth['bear']*100:.1f}%, base {terminal_growth['base']*100:.1f}%, bull {terminal_growth['bull']*100:.1f}% (sector-based: {sector or 'Unknown'})",
         f"Forward EPS used for P/E comps: {forward_eps:.2f}",
-        f"Base EV/EBITDA multiple: {base_ev_mult:.2f}x",
+        (
+            f"Base EV/EBITDA multiple: {base_ev_mult:.2f}x"
+            if ebitda_available
+            else "EV/EBITDA excluded (weight 0%): EBITDA not reported or not positive"
+        ),
         "Method weights: "
         f"DCF {method_weights['DCF']*100:.1f}%, "
         f"P/E Comps {method_weights['P/E Comps']*100:.1f}%, "
         f"EV/EBITDA {method_weights['EV/EBITDA']*100:.1f}% "
         f"(dynamic by company profile: sector={sector or 'Unknown'}, "
         f"{'high-growth' if is_high_growth else 'mature'}, "
-        f"FCF {'normalized' if fcf_normalization_note else 'reported'}, "
+        f"FCF {'estimated' if fcf_estimated else 'normalized' if fcf_normalization_note else 'reported'}, "
         f"debt ratio {debt_ratio*100:.1f}%)",
     ]
     
@@ -2093,6 +2138,17 @@ def calculate_multi_method_valuation_data(
     if fcf_normalization_note:
         key_assumptions.insert(1, f"⚠️ Negative FCF normalized: {fcf_normalization_note['explanation']}")
     
+    if fcf_estimated:
+        key_assumptions.insert(1, (
+            "⚠️ ESTIMATED FCF: no cash-flow statements available; FCF estimated as "
+            "RevenueTTM x reported ProfitMargin x 0.9. DCF weight reduced."
+        ))
+    if ebitda_available and ev_multiple_defaulted:
+        key_assumptions.append(
+            "⚠️ ESTIMATED EV/EBITDA multiple: no EVToEBITDA or EnterpriseValue reported; "
+            "assumed a default 14.0x multiple."
+        )
+
     # Add implied growth from reverse DCF
     if implied_growth is not None:
         key_assumptions.append(f"Market-implied growth rate (reverse DCF): {implied_growth*100:.1f}%")
@@ -2131,6 +2187,8 @@ def calculate_multi_method_valuation_data(
             "net_debt": net_debt,
             "eps": eps,
             "ebitda": ebitda,
+            "fcf_estimated": fcf_estimated,
+            "ev_ebitda_multiple_defaulted": ebitda_available and ev_multiple_defaulted,
             "analyst_price_targets": {"low": target_low, "average": target_avg, "high": target_high},
             "fcf_normalization": fcf_normalization_note,  # Include normalization details
             "is_high_growth": is_high_growth,
@@ -2942,9 +3000,9 @@ def calculate_multi_method_valuation(
     fundamentals_payload = _json_loads_maybe(get_fundamentals_via_service(ticker_upper))
     fundamentals = fundamentals_payload.get("fundamentals") or {}
     quote = get_quote(ticker_upper) or {}
+    # No fallback to AnalystTargetPrice: a target is where analysts think the
+    # price is going, not where it is, so using it would quietly fake the discount.
     current_price = _safe_float(quote.get("current_price"))
-    if current_price is None:
-        current_price = _first_numeric(fundamentals, "AnalystTargetPrice")
     if current_price is None or current_price <= 0:
         return json.dumps({"ticker": ticker_upper, "error": "Unable to determine current price for valuation"}, indent=2)
 
