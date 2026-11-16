@@ -1,5 +1,13 @@
 import { useState } from 'react';
 import { contactApi } from '../services/api';
+import { getErrorMessage } from '../utils/errorHandling';
+
+// Keep in step with NAME/EMAIL/MESSAGE_MAX_LENGTH in backend/routers/contact.py.
+const NAME_MAX_LENGTH = 200;
+const EMAIL_MAX_LENGTH = 254;
+const MESSAGE_MAX_LENGTH = 5000;
+// Only show the counter once it is useful, so it doesn't clutter short notes.
+const MESSAGE_COUNTER_FROM = MESSAGE_MAX_LENGTH - 500;
 
 export default function ContactUsPage() {
   const [name, setName] = useState('');
@@ -20,11 +28,10 @@ export default function ContactUsPage() {
       setMessage('');
     } catch (err: unknown) {
       setStatus('error');
-      const msg =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-          : '';
-      setErrorDetail(typeof msg === 'string' ? msg : 'Failed to send. Please try again or email us directly.');
+      // getErrorMessage turns a 422 detail list into a sentence such as
+      // "Message is too long (max 5,000 characters)" and passes the 429
+      // "Too many messages" string through as-is.
+      setErrorDetail(getErrorMessage(err, 'Failed to send. Please try again or email us directly.'));
     }
   }
 
@@ -56,6 +63,7 @@ export default function ContactUsPage() {
                   name="name"
                   type="text"
                   placeholder="Your name"
+                  maxLength={NAME_MAX_LENGTH}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full px-4 py-2 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -71,6 +79,7 @@ export default function ContactUsPage() {
                   type="email"
                   placeholder="you@example.com"
                   required
+                  maxLength={EMAIL_MAX_LENGTH}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full px-4 py-2 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -85,10 +94,22 @@ export default function ContactUsPage() {
                   name="message"
                   rows={4}
                   placeholder="How can we help?"
+                  maxLength={MESSAGE_MAX_LENGTH}
+                  aria-describedby={message.length >= MESSAGE_COUNTER_FROM ? 'contact-message-count' : undefined}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   className="w-full px-4 py-2 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
                 />
+                {message.length >= MESSAGE_COUNTER_FROM && (
+                  <p
+                    id="contact-message-count"
+                    className={`mt-1 text-xs text-right ${
+                      message.length >= MESSAGE_MAX_LENGTH ? 'text-red-400' : 'text-gray-500'
+                    }`}
+                  >
+                    {message.length.toLocaleString()} / {MESSAGE_MAX_LENGTH.toLocaleString()} characters
+                  </p>
+                )}
               </div>
               {status === 'success' && (
                 <p className="text-green-400 text-sm">Message sent successfully. We'll get back to you soon.</p>

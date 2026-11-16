@@ -59,6 +59,22 @@ def test_oversized_or_invalid_fields_give_422_and_never_send(monkeypatch, overri
     assert calls == []
 
 
+@pytest.mark.parametrize(
+    "override, expected",
+    [
+        ({"name": "n" * 201}, "Name is too long (max 200 characters)"),
+        ({"email": "a" * 250 + "@example.com"}, "Email is too long (max 254 characters)"),
+        ({"message": "x" * 5001}, "Message is too long (max 5,000 characters)"),
+    ],
+)
+def test_too_long_field_422_names_the_field(monkeypatch, override, expected):
+    monkeypatch.setattr(contact, "send_contact_form_email", _fake_sender([]))
+    resp = _client().post("/api/contact", json={**VALID, **override})
+    assert resp.status_code == 422
+    msgs = [item["msg"] for item in resp.json()["detail"]]
+    assert msgs == [f"Value error, {expected}"]
+
+
 def test_fields_at_the_limit_are_accepted(monkeypatch):
     calls = []
     monkeypatch.setattr(contact, "send_contact_form_email", _fake_sender(calls))
