@@ -21,7 +21,6 @@ from ai_engine.tradingagents.agents.utils.fundamental_data_tools import (
 from ai_engine.tradingagents.agents.utils.news_data_tools import (
     get_news,
     get_global_news,
-    get_insider_sentiment,
     get_insider_transactions,
 )
 from ai_engine.tradingagents.agents.utils.edgar_tools import get_edgar_filing_content
@@ -131,7 +130,6 @@ def get_data_tools() -> List[Any]:
             get_income_statement,
             get_news,
             get_global_news,
-            get_insider_sentiment,
             get_insider_transactions,
         ])
     

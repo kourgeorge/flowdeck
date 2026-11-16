@@ -376,7 +376,7 @@ def run_ticker_interpreter(
             prompt_text = prompts.build_ticker_interpreter_prompt(
                 ticker=ticker,
                 context_text=context_text,
-                tool_names=["get_news", "get_platform_reports", "get_fundamentals", "get_analysts_recommendation", "get_insider_transactions", "get_insider_sentiment", "get_indicators", "web_search"],
+                tool_names=["get_news", "get_platform_reports", "get_fundamentals", "get_analysts_recommendation", "get_insider_transactions", "get_indicators", "web_search"],
                 user_context_snapshot=ctx.user_context_snapshot,
                 period_label=state.period_label,
             )
