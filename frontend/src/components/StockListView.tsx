@@ -67,7 +67,7 @@ function getConfidenceValue(widget: TickerWidgetType): number {
 }
 
 function renderEventChips(widget: TickerWidgetType) {
-  if (widget.events_unavailable) {
+  if (widget.events_available === false) {
     return <span className="text-xs text-gray-500">Events unavailable</span>;
   }
   if (widget.dominant_events == null && widget.event_count == null) {

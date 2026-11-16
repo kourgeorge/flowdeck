@@ -147,7 +147,7 @@ export function useDashboardData({
     if (!user || !enableRecentAnalyzed || recentAnalyzedWidgets.length === 0) return;
 
     const unresolvedTickers = recentAnalyzedWidgets
-      .filter((widget) => !widget.events_unavailable && widget.dominant_events == null && widget.event_count == null)
+      .filter((widget) => widget.events_available !== false && widget.dominant_events == null && widget.event_count == null)
       .map((widget) => widget.ticker)
       .filter((ticker) => !recentEventRequestsRef.current.has(ticker));
 
@@ -160,15 +160,13 @@ export function useDashboardData({
         setRecentAnalyzedWidgets((prev) => prev.map((widget) => {
           const summary = response.summaries[widget.ticker];
           if (!summary) return widget;
-          // The backend answers null counts when price history couldn't be loaded or the
-          // summary failed. Coercing those to [] / 0 showed "0 tracked" for an unscored ticker.
-          if (summary.dominant_events == null && summary.event_count == null) {
-            return { ...widget, events_unavailable: true };
-          }
+          // available=false means price history couldn't be loaded or the summary failed; its
+          // null counts must not be coerced to [] / 0, which showed "0 tracked" for an unscored ticker.
           return {
             ...widget,
             dominant_events: summary.dominant_events ?? null,
             event_count: summary.event_count ?? null,
+            events_available: summary.available ?? null,
           };
         }));
       })

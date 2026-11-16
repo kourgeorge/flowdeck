@@ -136,6 +136,10 @@ class TickerEventSummaryLite(BaseModel):
     """Lightweight event summary for list views."""
     dominant_events: Optional[List[str]] = None
     event_count: Optional[int] = None
+    # Null counts alone can't tell "unavailable" from "not loaded yet" on the client, so say it outright:
+    # False (with a short reason in error) when price history couldn't be loaded or the summary failed.
+    available: Optional[bool] = None
+    error: Optional[str] = None
 
 
 class TickerEventSummariesResponse(BaseModel):

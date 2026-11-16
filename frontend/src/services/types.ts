@@ -24,10 +24,10 @@ export interface TickerWidget {
   dominant_events?: string[] | null;
   event_count?: number | null;
   /**
-   * Set on the client when /api/tickers/event-summaries answered with null counts, i.e. the
-   * summary was unavailable or failed. Without it, null/null reads as "still loading".
+   * Copied from /api/tickers/event-summaries `available`. false means the summary was unavailable
+   * or failed; unset (with null counts) means it hasn't been fetched yet.
    */
-  events_unavailable?: boolean;
+  events_available?: boolean | null;
 }
 
 export interface WidgetsResponse {
@@ -39,6 +39,10 @@ export interface WidgetsResponse {
 export interface TickerEventSummaryLite {
   dominant_events?: string[] | null;
   event_count?: number | null;
+  /** false when price history couldn't be loaded or the summary failed; counts are then null. */
+  available?: boolean | null;
+  /** Short reason when available is false. */
+  error?: string | null;
 }
 
 export interface TickerEventSummariesResponse {

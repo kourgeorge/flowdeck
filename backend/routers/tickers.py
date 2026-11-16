@@ -284,16 +284,28 @@ def _get_ticker_event_summaries_sync(tickers: str) -> TickerEventSummariesRespon
             summary = get_ticker_event_summary(gw, ticker, as_of_date=today)
         except Exception:
             logger.warning("Event summary failed for %s", ticker, exc_info=True)
-            summary = None
-        # An unavailable summary (no price history) or a failed one must stay unknown:
+            # Keep the reason short and generic: the exception text can carry gateway internals.
+            return ticker, TickerEventSummaryLite(
+                dominant_events=None,
+                event_count=None,
+                available=False,
+                error="Event summary could not be computed.",
+            )
+        # An unavailable summary (no price history) must stay unknown:
         # returning [] / 0 made list views show "0 tracked" for a ticker we never looked at.
         if summary is None or not summary.available:
-            return ticker, TickerEventSummaryLite(dominant_events=None, event_count=None)
+            return ticker, TickerEventSummaryLite(
+                dominant_events=None,
+                event_count=None,
+                available=False,
+                error=(getattr(summary, "error", None) or "Event data unavailable."),
+            )
         return (
             ticker,
             TickerEventSummaryLite(
                 dominant_events=summary.dominant_events[:3],
                 event_count=summary.event_count,
+                available=True,
             ),
         )
 

@@ -48,7 +48,7 @@ function getAverageScore(scoreEntries: [string, { score: number | null }][]): nu
 }
 
 function renderEventChips(widget: TickerWidgetType) {
-  if (widget.events_unavailable) {
+  if (widget.events_available === false) {
     return <span className="text-[11px] text-slate-500">Events unavailable</span>;
   }
   if (widget.dominant_events == null && widget.event_count == null) {
@@ -179,7 +179,7 @@ export default function MajorStockWidgets({ widgets, tickerToName }: MajorStockW
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <h4 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Signals</h4>
                   <span className="text-[10px] text-slate-500">
-                    {widget.events_unavailable
+                    {widget.events_available === false
                       ? '—'
                       : widget.event_count == null && widget.dominant_events == null
                         ? 'Loading…'

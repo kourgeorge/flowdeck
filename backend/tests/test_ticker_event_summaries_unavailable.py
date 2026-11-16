@@ -30,7 +30,12 @@ def test_unavailable_summary_gives_none_counts_not_zero(monkeypatch) -> None:
     resp = _client(monkeypatch, fake_summary).get("/api/tickers/event-summaries?tickers=AAPL")
 
     assert resp.status_code == 200
-    assert resp.json()["summaries"]["AAPL"] == {"dominant_events": None, "event_count": None}
+    assert resp.json()["summaries"]["AAPL"] == {
+        "dominant_events": None,
+        "event_count": None,
+        "available": False,
+        "error": "Price history could not be loaded: no bars returned.",
+    }
 
 
 def test_raising_summary_gives_none_counts_not_zero(monkeypatch) -> None:
@@ -42,8 +47,14 @@ def test_raising_summary_gives_none_counts_not_zero(monkeypatch) -> None:
 
     assert resp.status_code == 200
     summaries = resp.json()["summaries"]
-    assert summaries["AAPL"] == {"dominant_events": None, "event_count": None}
-    assert summaries["MSFT"] == {"dominant_events": None, "event_count": None}
+    for ticker in ("AAPL", "MSFT"):
+        entry = summaries[ticker]
+        assert entry["dominant_events"] is None
+        assert entry["event_count"] is None
+        assert entry["available"] is False
+        assert entry["error"]
+        # The raw exception text stays in the server log, not the public response.
+        assert "gateway timed out" not in entry["error"]
 
 
 def test_available_quiet_summary_still_reports_zero(monkeypatch) -> None:
@@ -54,4 +65,9 @@ def test_available_quiet_summary_still_reports_zero(monkeypatch) -> None:
     resp = _client(monkeypatch, fake_summary).get("/api/tickers/event-summaries?tickers=AAPL")
 
     assert resp.status_code == 200
-    assert resp.json()["summaries"]["AAPL"] == {"dominant_events": [], "event_count": 0}
+    assert resp.json()["summaries"]["AAPL"] == {
+        "dominant_events": [],
+        "event_count": 0,
+        "available": True,
+        "error": None,
+    }
