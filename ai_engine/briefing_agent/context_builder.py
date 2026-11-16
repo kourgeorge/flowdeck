@@ -13,7 +13,7 @@ import logging
 import os
 import sys
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from backend.processing import get_ticker_event_summary, parse_rsi_indicator_data
 
@@ -24,6 +24,33 @@ logger = logging.getLogger(__name__)
 # Default attention weights: absolute 1d return, 5d return, abnormal flag, has recent news
 W_EVENT, W1, W2, W3, W4 = 1.0, 0.2, 0.1, 0.15, 0.1
 ABNORMAL_THRESHOLD_PCT = 3.0  # |1d return| > this (%) -> abnormal_signal True
+
+# ticker -> (reports for the latest platform run, share URL or None). Returns ({}, None)
+# when the ticker has no run. Supplied by the backend because the reports live in its
+# database and share URLs are signed with its secret; ai_engine cannot reach either
+# without importing backend services.
+PlatformReportsLoader = Callable[[str], Tuple[Dict[str, Any], Optional[str]]]
+
+
+def _load_platform_reports(
+    loader: Optional[PlatformReportsLoader],
+    tickers: List[str],
+) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, str]]:
+    platform_reports: Dict[str, Dict[str, Any]] = {}
+    share_urls: Dict[str, str] = {}
+    for t in tickers:
+        if loader is None:
+            platform_reports[t] = {}
+            continue
+        try:
+            reports, url = loader(t)
+            platform_reports[t] = reports or {}
+            if url:
+                share_urls[t] = url
+        except Exception as exc:
+            logger.debug("Platform reports for %s: %s", t, exc)
+            platform_reports[t] = {}
+    return platform_reports, share_urls
 
 
 def _ensure_backend_on_path() -> None:
@@ -348,20 +375,24 @@ def build_digest_context(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     span_trading_days: Optional[int] = None,
+    platform_reports_loader: Optional[PlatformReportsLoader] = None,
 ) -> DigestContext:
     """
     Build the full DigestContext: portfolio, base data, ranking, evidence, reports, market context, sector/peer.
 
-    If fetcher is None, backend is used (get_info_fetcher()). On partial failure for a ticker,
-    that ticker's keys are left empty/None; agents can use tools to fill gaps.
+    fetcher is required (the backend passes its info fetcher). platform_reports_loader is
+    optional; without it platform_reports are empty and share_urls has no entries.
+    On partial failure for a ticker, that ticker's keys are left empty/None; agents can
+    use tools to fill gaps.
 
     When start_date/end_date or span_trading_days are set (e.g. for weekly brief), news lookback
     and ranking use the span; returns_span is computed for the span period.
     """
-    _ensure_backend_on_path()
     if fetcher is None:
-        from services.info_fetcher import get_info_fetcher  # type: ignore[import-untyped]
-        fetcher = get_info_fetcher()
+        # ai_engine must not import backend services (one-way rule), so the caller
+        # (backend/services/digest_service.py) hands the data source in. Failing here
+        # is better than a brief silently built from no market data.
+        raise ValueError("build_digest_context needs a fetcher (pass get_info_fetcher() from the backend)")
 
     # Market-wide context should exist even when the user has no subscribed tickers.
     if span_trading_days is not None and span_trading_days > 0:
@@ -440,24 +471,7 @@ def build_digest_context(
         for ticker, score in event_scores.items():
             attention_scores[ticker] = attention_scores.get(ticker, 0.0) + score
 
-        from services.report_service import ReportService  # type: ignore[import-untyped]
-        from services.share_service import get_share_url  # type: ignore[import-untyped]
-        report_svc = ReportService()
-        platform_reports: Dict[str, Dict[str, Any]] = {}
-        share_urls: Dict[str, str] = {}
-        for t in priority_tickers:
-            try:
-                latest = report_svc.get_latest_execution_for_ticker(t)
-                if latest:
-                    ar_id, _ = latest
-                    platform_reports[t] = report_svc.get_reports_with_scores(ar_id, execution_type="ticker")
-                    url = get_share_url(ar_id)
-                    if url:
-                        share_urls[t] = url
-                else:
-                    platform_reports[t] = {}
-            except Exception:
-                platform_reports[t] = {}
+        platform_reports, share_urls = _load_platform_reports(platform_reports_loader, priority_tickers)
 
         try:
             company_batch = fetcher.get_company_info_batch(priority_tickers)
@@ -576,24 +590,7 @@ def build_digest_context(
     insider = {ticker: insider.get(ticker) or {} for ticker in priority_tickers}
 
     # Platform reports and share URLs
-    from services.report_service import ReportService  # type: ignore[import-untyped]
-    from services.share_service import get_share_url  # type: ignore[import-untyped]
-    report_svc = ReportService()
-    platform_reports: Dict[str, Dict[str, Any]] = {}
-    share_urls: Dict[str, str] = {}
-    for t in priority_tickers:
-        try:
-            latest = report_svc.get_latest_execution_for_ticker(t)
-            if latest:
-                ar_id, _ = latest
-                platform_reports[t] = report_svc.get_reports_with_scores(ar_id, execution_type="ticker")
-                url = get_share_url(ar_id)
-                if url:
-                    share_urls[t] = url
-            else:
-                platform_reports[t] = {}
-        except Exception:
-            platform_reports[t] = {}
+    platform_reports, share_urls = _load_platform_reports(platform_reports_loader, priority_tickers)
 
     # Sector/peer
     try:

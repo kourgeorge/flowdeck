@@ -54,6 +54,8 @@ def main() -> None:
     try:
         from ai_engine.briefing_agent import run_digest
         from services import token_service
+        from services.digest_service import load_platform_reports_for_ticker
+        from services.info_fetcher import get_info_fetcher
         from services.report_service import save_report
 
         result = run_digest(
@@ -62,6 +64,8 @@ def main() -> None:
             db=db,
             config=None,
             max_priority_tickers=args.max_priority,
+            fetcher=get_info_fetcher(),
+            platform_reports_loader=load_platform_reports_for_ticker,
         )
 
         # Persist digest as Execution + Report (creator = user, subject = user_id:date)

@@ -347,12 +347,8 @@ class TestDigestContextEventIntegration(unittest.TestCase):
     @patch("ai_engine.briefing_agent.context_builder._fetch_global_news", return_value=None)
     @patch("ai_engine.briefing_agent.context_builder._get_user_context_snapshot", return_value="Long-term investor")
     @patch("ai_engine.briefing_agent.context_builder._load_portfolio_tickers", return_value=["AAPL", "MSFT"])
-    @patch("services.share_service.get_share_url", return_value=None)
-    @patch("services.report_service.ReportService")
     def test_build_digest_context_populates_event_summaries_and_uses_event_scores(
         self,
-        mock_report_service,
-        _mock_share_url,
         _mock_tickers,
         _mock_user_context,
         _mock_global_news,
@@ -396,14 +392,13 @@ class TestDigestContextEventIntegration(unittest.TestCase):
             },
             "MSFT": {"ticker": "MSFT", "transactions": [], "count": 0},
         }
-        mock_report_service.return_value.get_latest_execution_for_ticker.return_value = None
-
         result = build_digest_context(
             user_id=7,
             digest_date="2026-03-19",
             max_priority_tickers=2,
             db=object(),
             fetcher=_ContextFetcher(histories, future_events, insider_transactions),
+            platform_reports_loader=lambda _t: ({}, None),
         )
 
         self.assertIn("AAPL", result.event_summaries)
