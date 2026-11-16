@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy.orm import Session
 
@@ -17,6 +18,22 @@ from models.db_models import UserSchedule
 
 DIGEST_DAILY_TYPE = "daily_digest"
 DIGEST_WEEKLY_TYPE = "weekly_digest"
+
+
+INVALID_TIMEZONE_MESSAGE = "Choose a valid IANA timezone, such as America/New_York."
+
+
+def validate_timezone_name(tz_name: str) -> None:
+    """Raise ValueError unless tz_name is a zone zoneinfo can load.
+
+    The scheduler silently falls back to the default zone for names it cannot
+    load (e.g. "Athens", "EST5"), so a bad value saved here means emails quietly
+    go out at the wrong hour. Rejecting it on save is the only visible signal.
+    """
+    try:
+        ZoneInfo(tz_name)
+    except (ValueError, ZoneInfoNotFoundError) as exc:
+        raise ValueError(INVALID_TIMEZONE_MESSAGE) from exc
 
 
 def _now_utc() -> datetime:

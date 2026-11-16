@@ -162,3 +162,21 @@ def test_valuation_does_not_flag_vix_derived_premium(monkeypatch):
     assert result["inputs"]["market_risk_premium_source"] == "derived_from_vix"
     assert premium_warnings == []
     assert not any("not market data" in line for line in result["valuation_key_assumptions"])
+
+
+def test_valuation_tool_fetches_market_rates_once(monkeypatch):
+    # get_market_rates() has no cache, so two fetches per tool call doubled the
+    # wait and let a flaky service mix a FRED rate with an assumed premium.
+    from ai_engine.tradingagents.agents.utils import valuation_tools as vt
+    from ai_engine.tradingagents.datasources import info_service_client
+
+    calls = []
+
+    def fake_rates(*a, **k):
+        calls.append(1)
+        return {"risk_free_rate": 0.043, "market_risk_premium": 0.05, "field_sources": {"market_risk_premium": "derived_from_vix"}}
+
+    monkeypatch.setattr(info_service_client, "get_market_rates", fake_rates)
+    result = vt._build_index_etf_valuation(ticker="TEST", current_price=100, fundamentals={"QuoteType": "ETF", "ForwardPE": 20})
+    assert len(calls) == 1
+    assert result["inputs"]["market_risk_premium_source"] == "derived_from_vix"

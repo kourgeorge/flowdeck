@@ -296,8 +296,7 @@ def test_negative_event_probability_is_not_bullish():
 
 def test_missing_etf_inputs_are_unavailable(monkeypatch):
     from ai_engine.tradingagents.agents.utils import valuation_tools as v
-    monkeypatch.setattr(v, '_get_risk_free_rate_with_source', lambda: (0.04, None))
-    monkeypatch.setattr(v, '_get_market_risk_premium_with_source', lambda: (0.05, 'derived_from_vix'))
+    monkeypatch.setattr(v, '_get_market_rates_with_sources', lambda: (0.04, None, 0.05, 'derived_from_vix'))
     result = v._build_index_etf_valuation(ticker='TEST', current_price=100, fundamentals={'QuoteType': 'ETF'})
     assert result['valuation_available'] is False
     assert result['fair_value_base'] is None
@@ -492,8 +491,7 @@ def test_full_chat_capacity_releases_reservation_without_provider_call(runtime, 
 def test_etf_sensitivity_uses_nullable_schema(monkeypatch):
     from ai_engine.tradingagents.agents.utils import valuation_tools as v
     from ai_engine.tradingagents.agents.analysts.valuation_analyst import ValuationSensitivity
-    monkeypatch.setattr(v, '_get_risk_free_rate_with_source', lambda: (0.04, None))
-    monkeypatch.setattr(v, '_get_market_risk_premium_with_source', lambda: (0.05, 'derived_from_vix'))
+    monkeypatch.setattr(v, '_get_market_rates_with_sources', lambda: (0.04, None, 0.05, 'derived_from_vix'))
     result = v._build_index_etf_valuation(ticker='TEST', current_price=100,
         fundamentals={'QuoteType': 'ETF', 'ForwardPE': 20})
     # At a 4% pinned rate the P/E band anchors at 18x, so 20x forward P/E gives 100 * 18 / 20.
@@ -506,8 +504,7 @@ def test_etf_valuation_flags_assumed_risk_free_rate(monkeypatch):
     from ai_engine.tradingagents.agents.utils import valuation_tools as v
     # Below 4% the P/E band moves to 20x, so a pinned 3.5% must change the fair value,
     # and the assumption label must reach the output instead of being passed off as FRED data.
-    monkeypatch.setattr(v, '_get_risk_free_rate_with_source', lambda: (0.035, 'assumed default'))
-    monkeypatch.setattr(v, '_get_market_risk_premium_with_source', lambda: (0.05, 'derived_from_vix'))
+    monkeypatch.setattr(v, '_get_market_rates_with_sources', lambda: (0.035, 'assumed default', 0.05, 'derived_from_vix'))
     result = v._build_index_etf_valuation(ticker='TEST', current_price=100,
         fundamentals={'QuoteType': 'ETF', 'ForwardPE': 20})
     assert result['fair_value_base'] == pytest.approx(100)

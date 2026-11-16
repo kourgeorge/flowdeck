@@ -77,6 +77,19 @@ def _cron_matches(now_local: datetime, expr: str) -> bool:
     )
 
 
+def _stored_utc(value: datetime) -> datetime:
+    """Read a time stored in a plain DateTime column as UTC.
+
+    UserSchedule.last_executed_at has no timezone, so SQLite hands it back
+    naive. Calling .astimezone() on a naive value reads it as the *server's*
+    local time, which on a non-UTC host (e.g. a dev laptop in Europe/Athens)
+    shifts the last run onto the wrong day and charges a digest twice.
+    """
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
 def _should_run_now(now_utc: datetime, schedule: UserSchedule, default_tz: ZoneInfo) -> bool:
     """
     Return True if this schedule should run on this tick.
@@ -117,7 +130,7 @@ def _should_run_now(now_utc: datetime, schedule: UserSchedule, default_tz: ZoneI
 
         # If we've already run once today in local time, skip.
         if schedule.last_executed_at:
-            last_local = schedule.last_executed_at.astimezone(tz)
+            last_local = _stored_utc(schedule.last_executed_at).astimezone(tz)
             if last_local.date() == now_local.date():
                 return False
 
@@ -137,7 +150,7 @@ def _should_run_now(now_utc: datetime, schedule: UserSchedule, default_tz: ZoneI
         iso_year, iso_week, _iso_dow = now_local.isocalendar()
 
         if schedule.last_executed_at:
-            last_local = schedule.last_executed_at.astimezone(tz)
+            last_local = _stored_utc(schedule.last_executed_at).astimezone(tz)
             last_year, last_week, _ = last_local.isocalendar()
             # Already ran in this ISO week.
             if (last_year, last_week) == (iso_year, iso_week):
@@ -214,7 +227,9 @@ async def run_scheduled_jobs() -> None:
                 # Mark as executed IMMEDIATELY to prevent duplicate runs on the same tick
                 # or if the process crashes/fails. We update this timestamp before attempting
                 # the digest generation to ensure we don't retry on every scheduler tick.
-                schedule.last_executed_at = now_utc
+                # Store naive UTC so the column means the same thing on every
+                # database backend; _stored_utc() reads it back as UTC.
+                schedule.last_executed_at = now_utc.astimezone(timezone.utc).replace(tzinfo=None)
                 db.commit()
 
                 tz_name = schedule.timezone or _get_default_timezone()
