@@ -158,10 +158,13 @@ class DigestContext(BaseModel):
     global_news: Any = Field(default=None, description="Global/macro news (list or str).")
     web_search_snippet: Optional[str] = Field(default=None, description="Optional macro/sector snippet from web_search.")
 
-    # Polymarket prediction-market sentiment per priority ticker
-    polymarket_sentiment: Dict[str, Any] = Field(
+    # Polymarket prediction markets per priority ticker
+    polymarket_markets: Dict[str, Any] = Field(
         default_factory=dict,
-        description="ticker -> Polymarket sentiment payload (overall_sentiment, trend, top_markets, etc.).",
+        description=(
+            "ticker -> /api/polymarket/ticker payload. Only top_markets (question, probability, "
+            "change_24h, volume) is meaningful; the service no longer infers an overall sentiment or trend."
+        ),
     )
 
     model_config = {"extra": "allow"}

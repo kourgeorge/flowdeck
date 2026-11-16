@@ -342,7 +342,7 @@ class TestDeterministicFundamentalEvents(unittest.TestCase):
 
 
 class TestDigestContextEventIntegration(unittest.TestCase):
-    @patch("ai_engine.briefing_agent.context_builder._fetch_polymarket_sentiment", return_value={})
+    @patch("ai_engine.briefing_agent.context_builder._fetch_polymarket_markets", return_value={})
     @patch("ai_engine.briefing_agent.context_builder._fetch_web_snippet", return_value=None)
     @patch("ai_engine.briefing_agent.context_builder._fetch_global_news", return_value=None)
     @patch("ai_engine.briefing_agent.context_builder._get_user_context_snapshot", return_value="Long-term investor")
