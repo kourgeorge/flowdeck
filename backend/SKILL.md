@@ -731,7 +731,10 @@ GET /api/analyses/{analysis_run_id}/status
 Authorization: Bearer YOUR_ACCESS_TOKEN
 ```
 
-Returns the current status (running, completed, failed) and progress info; **404** if the run id is unknown.
+Returns the current status and progress info; **404** if the run id is unknown. `status` is one of:
+`queued` (waiting to start), `running`, `completed`, `error` (the run failed or was stopped; the
+`error` field says why), or `cancelled` (a stop that is still being handled; it usually turns into
+`error` soon after). Stop polling on `completed`, `error` or `cancelled`. The value `failed` is never returned here.
 Poll this, then read the reports for that ticker.
 
 ### WebSocket (optional)
@@ -1044,7 +1047,7 @@ while true; do
   STATUS=$(curl -s "https://flowdeck.biz/api/analyses/$ANALYSIS_RUN_ID/status" \
     -H "Authorization: Bearer $TOKEN")
   echo "$STATUS" | jq .
-  if echo "$STATUS" | jq -e '.status == "completed" or .status == "failed"' >/dev/null 2>&1; then break; fi
+  if echo "$STATUS" | jq -e '.status == "completed" or .status == "error" or .status == "cancelled"' >/dev/null 2>&1; then break; fi
   sleep 10
 done
 
