@@ -599,8 +599,14 @@ class ReportService:
                 Execution.subject_type == "ticker",
                 Execution.subject_id == ticker.upper(),
             )
-            if date_str.isdigit():
-                query = query.filter(Execution.id == int(date_str))
+            # isascii(): str.isdigit() also accepts "²", which int() rejects.
+            if date_str.isascii() and date_str.isdigit():
+                run_id = int(date_str)
+                # Ids past the 64-bit signed limit cannot exist, and binding them
+                # raises (SQLite OverflowError, Postgres "integer out of range").
+                if run_id > 2**63 - 1:
+                    return None
+                query = query.filter(Execution.id == run_id)
             else:
                 try:
                     datetime.strptime(date_str, "%Y-%m-%d")

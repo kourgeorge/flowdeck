@@ -701,7 +701,9 @@ async def data_reports_ticker(
     date_display: str = ""
     if date and date.strip():
         wanted = date.strip()
-        if not wanted.isdigit():
+        # str.isdigit() also accepts digits like "²", which int() then rejects
+        # with a 500, so only plain ASCII digits count as a run id.
+        if not (wanted.isascii() and wanted.isdigit()):
             try:
                 datetime.strptime(wanted, "%Y-%m-%d")
             except ValueError:
