@@ -287,7 +287,7 @@ def _build_index_etf_valuation(
     ev_to_ebitda = _first_numeric(fundamentals, "EVToEBITDA")
     beta = _clamp(_first_numeric(fundamentals, "Beta") or 1.0, 0.7, 2.0)
     risk_free_rate, risk_free_label = _get_risk_free_rate_with_source()
-    market_risk_premium = _get_market_risk_premium()
+    market_risk_premium, market_risk_premium_source = _get_market_risk_premium_with_source()
 
     price_targets = (analyst_recommendations.get("price_targets") or {}) if isinstance(analyst_recommendations, dict) else {}
     target_low = _safe_float(price_targets.get("low"))
@@ -422,6 +422,9 @@ def _build_index_etf_valuation(
     rf_warning = _risk_free_warning(risk_free_label, risk_free_rate)
     if rf_warning:
         key_assumptions.append(rf_warning)
+    mrp_warning = _market_risk_premium_warning(market_risk_premium_source, market_risk_premium)
+    if mrp_warning:
+        key_assumptions.append(mrp_warning)
     if forward_pe or trailing_pe:
         key_assumptions.append(
             f"P/E inputs: trailing {trailing_pe:.2f}x, forward {forward_pe:.2f}x; fair band anchored near {'18.0x' if risk_free_rate >= 0.04 else '20.0x'}"
@@ -466,6 +469,8 @@ def _build_index_etf_valuation(
             "beta": beta,
             "analyst_price_targets": {"low": target_low, "average": target_avg, "high": target_high},
             "valuation_mode": "index_etf_relative",
+            "market_risk_premium": market_risk_premium,
+            "market_risk_premium_source": market_risk_premium_source,
         },
     }
 
@@ -1377,13 +1382,23 @@ def _risk_free_warning(label: Optional[str], rate: float) -> Optional[str]:
     return f"⚠️ WARNING: Risk-free rate {rate*100:.2f}% is an {label}, not market data."
 
 
-def _get_market_risk_premium() -> float:
+# Used only when the market-rates service is unreachable or returns no premium.
+_ASSUMED_MARKET_RISK_PREMIUM = 0.055
+_ASSUMED_MARKET_RISK_PREMIUM_SOURCE = "assumed"
+# market_rates_service always fills the premium, but when VIX is missing it
+# fills it with a historical average and marks it with this field_sources
+# value. That is just as much an assumption as our own fallback.
+_PREMIUM_ASSUMPTION_SOURCES = {_ASSUMED_MARKET_RISK_PREMIUM_SOURCE, "historical_average_assumption"}
+
+
+def _get_market_risk_premium_with_source() -> Tuple[float, str]:
     """
-    Fetch current market risk premium based on VIX (volatility index).
-    Falls back to historical average if service unavailable.
-    
-    Returns:
-        Market risk premium as decimal (e.g., 0.055 for 5.5%)
+    Return (market_risk_premium, source).
+
+    source is the service's field_sources label ("derived_from_vix" or
+    "historical_average_assumption"), or "assumed" when the service gave us
+    nothing and we fall back to a fixed 5.5%. Callers use
+    _market_risk_premium_warning() to flag the assumption cases.
     """
     try:
         from ...datasources.info_service_client import get_market_rates
@@ -1391,11 +1406,22 @@ def _get_market_risk_premium() -> float:
         if rates:
             market_risk_premium = rates.get("market_risk_premium")
             if market_risk_premium is not None:
-                return float(market_risk_premium)
+                field_sources = rates.get("field_sources") or {}
+                source = field_sources.get("market_risk_premium") or "market_rates_service"
+                return float(market_risk_premium), source
     except Exception:
         pass
-    # Fallback to historical average
-    return 0.055
+    return _ASSUMED_MARKET_RISK_PREMIUM, _ASSUMED_MARKET_RISK_PREMIUM_SOURCE
+
+
+def _market_risk_premium_warning(source: Optional[str], premium: float) -> Optional[str]:
+    if source not in _PREMIUM_ASSUMPTION_SOURCES:
+        return None
+    if source == "historical_average_assumption":
+        reason = "the market-rates service's historical-average assumption (VIX unavailable)"
+    else:
+        reason = "an assumed default (market-rates service unavailable)"
+    return f"⚠️ WARNING: Market risk premium {premium*100:.2f}% is {reason}, not market data."
 
 
 def _calculate_terminal_growth(
@@ -1742,7 +1768,7 @@ def calculate_multi_method_valuation_data(
     # Fetch current risk-free rate from FRED (10-year treasury)
     risk_free_rate, risk_free_label = _get_risk_free_rate_with_source()
     # Fetch dynamic market risk premium based on VIX
-    market_risk_premium = _get_market_risk_premium()
+    market_risk_premium, market_risk_premium_source = _get_market_risk_premium_with_source()
     cost_of_equity = risk_free_rate + beta * market_risk_premium
     total_debt = _latest_numeric(balance_sheet_quarterly or balance_sheet_annual, "totalDebt", "longTermDebtAndCapitalLeaseObligation", "longTermDebt") or 0.0
     interest_expense = abs(_latest_numeric(income_annual, "interestExpense", "netInterestIncome") or 0.0)
@@ -2046,6 +2072,9 @@ def calculate_multi_method_valuation_data(
     rf_warning = _risk_free_warning(risk_free_label, risk_free_rate)
     if rf_warning:
         key_assumptions.append(rf_warning)
+    mrp_warning = _market_risk_premium_warning(market_risk_premium_source, market_risk_premium)
+    if mrp_warning:
+        key_assumptions.append(mrp_warning)
 
     return {
         "ticker": ticker.upper(),
@@ -2081,6 +2110,8 @@ def calculate_multi_method_valuation_data(
             "is_high_growth": is_high_growth,
             "projection_years": projection_years,
             "implied_growth_rate": implied_growth,
+            "market_risk_premium": market_risk_premium,
+            "market_risk_premium_source": market_risk_premium_source,
         },
     }
 
@@ -2523,7 +2554,7 @@ def get_wacc_inputs(
     
     # Fetch current market rates dynamically
     risk_free_rate, risk_free_label = _get_risk_free_rate_with_source()
-    market_risk_premium = _get_market_risk_premium()
+    market_risk_premium, market_risk_premium_source = _get_market_risk_premium_with_source()
     
     # Calculate cost of equity using CAPM: Re = Rf + Beta * (Rm - Rf)
     cost_of_equity = risk_free_rate + (beta * market_risk_premium)
@@ -2550,6 +2581,7 @@ def get_wacc_inputs(
             "risk_free_rate": f"{risk_free_rate * 100:.2f}%",
             "risk_free_rate_source": risk_free_label or "FRED",
             "market_risk_premium": f"{market_risk_premium * 100:.2f}%",
+            "market_risk_premium_source": market_risk_premium_source,
             "cost_of_debt": f"{cost_of_debt * 100:.2f}%" if cost_of_debt else None,
             "tax_rate": f"{tax_rate * 100:.2f}%" if tax_rate else None,
             "cost_of_equity": f"{cost_of_equity * 100:.2f}%",
@@ -2570,7 +2602,17 @@ def get_wacc_inputs(
             "debt_to_equity": debt_to_equity,
         },
     }
-    
+    # The agent reads this JSON directly, so assumed inputs must be called out
+    # here rather than only in the source fields.
+    warnings = [
+        w for w in (
+            _risk_free_warning(risk_free_label, risk_free_rate),
+            _market_risk_premium_warning(market_risk_premium_source, market_risk_premium),
+        ) if w
+    ]
+    if warnings:
+        result["warnings"] = warnings
+
     return json.dumps(result, indent=2)
 
 
