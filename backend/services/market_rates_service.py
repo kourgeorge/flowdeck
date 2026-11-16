@@ -8,7 +8,7 @@ Uses caching to minimize API calls and improve performance.
 import logging
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 import requests
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,10 @@ class MarketRatesService:
     _cache: Optional[Dict[str, Any]] = None
     _cache_timestamp: Optional[datetime] = None
     _CACHE_DURATION_HOURS = 24
+    # A failed or partial FRED fetch is kept only briefly so we pick FRED back up
+    # soon after it recovers, instead of serving gaps for a whole day.
+    _FAILED_CACHE_DURATION_MINUTES = 15
+    _cache_ttl: timedelta = timedelta(hours=_CACHE_DURATION_HOURS)
 
     @classmethod
     def _fetch_fred_series(
@@ -97,29 +101,31 @@ class MarketRatesService:
             return True
 
         age = datetime.now(timezone.utc) - cls._cache_timestamp
-        return age > timedelta(hours=cls._CACHE_DURATION_HOURS)
+        return age > cls._cache_ttl
 
     @classmethod
     def get_market_rates(cls, force_refresh: bool = False) -> Dict[str, Any]:
         """
         Get current market rates including treasury yields.
-        
-        Uses caching to minimize API calls. Cache refreshes every 24 hours.
-        
+
+        A full FRED success is cached for 24 hours. A partial or failed fetch is
+        cached only for a few minutes so we retry soon after FRED recovers.
+
         Args:
             force_refresh: Force cache refresh even if not expired
-            
+
         Returns:
             Dictionary with market rates:
             {
-                "risk_free_rate": float,  # 10-year treasury (standard for WACC)
-                "treasury_10y": float,
-                "treasury_2y": float,
-                "treasury_3m": float,
+                "risk_free_rate": float | None,  # 10-year treasury (standard for WACC)
+                "treasury_10y": float | None,
+                "treasury_2y": float | None,
+                "treasury_3m": float | None,
                 "vix": float | None,
                 "market_risk_premium": float,
                 "last_updated": str (ISO format, UTC),
-                "source": "FRED",
+                "source": "FRED" | "partial" | "unavailable",
+                "field_sources": {field: "FRED" | "yfinance" | ... | None},
                 "cache_age_hours": float
             }
         """
@@ -132,58 +138,86 @@ class MarketRatesService:
             else:
                 cache_age = 0.0
             result = cls._cache.copy()
+            result["field_sources"] = dict(result.get("field_sources") or {})
             result["cache_age_hours"] = round(cache_age, 2)
             logger.debug(f"Returning cached market rates (age: {cache_age:.1f}h)")
             return result
 
         logger.info("Fetching fresh market rates from FRED")
-        
-        # Fetch treasury rates from FRED
-        # DGS10 = 10-Year Treasury Constant Maturity Rate
-        # DGS2 = 2-Year Treasury Constant Maturity Rate
-        # DGS3MO = 3-Month Treasury Constant Maturity Rate
+
+        # DGS10 = 10-Year, DGS2 = 2-Year, DGS3MO = 3-Month Treasury Constant Maturity Rate
         treasury_10y = cls._fetch_fred_series("DGS10")
         treasury_2y = cls._fetch_fred_series("DGS2")
         treasury_3m = cls._fetch_fred_series("DGS3MO")
 
-        # Use 10-year as risk-free rate (standard for DCF/WACC)
-        # Fallback to reasonable defaults if API fails
-        risk_free_rate = treasury_10y if treasury_10y is not None else 0.045
+        # No made-up defaults and no copying one maturity into another: when FRED
+        # timed out we used to return 0.045/0.045/0.045/0.05 labelled "FRED" and
+        # cache it for a day. A missing yield is now None, and callers decide.
+        rate_fields = {
+            "risk_free_rate": treasury_10y,  # 10-year is the standard WACC/DCF risk-free rate
+            "treasury_10y": treasury_10y,
+            "treasury_2y": treasury_2y,
+            "treasury_3m": treasury_3m,
+        }
+        field_sources: Dict[str, Optional[str]] = {
+            name: ("FRED" if value is not None else None) for name, value in rate_fields.items()
+        }
 
-        # Fetch VIX and calculate market risk premium
-        vix = cls.get_vix()
+        vix, vix_source = cls._get_vix_with_source()
         market_risk_premium = cls.calculate_market_risk_premium(vix)
+        field_sources["vix"] = vix_source
+        # The premium always has a value; say whether it came from VIX or is the
+        # historical-average assumption used when VIX is missing.
+        field_sources["market_risk_premium"] = (
+            "derived_from_vix" if vix is not None else "historical_average_assumption"
+        )
+
+        # The overall label describes the treasury yields, which are what this
+        # endpoint advertises as "from FRED".
+        fred_count = sum(1 for v in rate_fields.values() if v is not None)
+        if fred_count == len(rate_fields):
+            source = "FRED"
+        elif fred_count > 0:
+            source = "partial"
+        else:
+            source = "unavailable"
 
         rates = {
-            "risk_free_rate": risk_free_rate,
-            "treasury_10y": treasury_10y if treasury_10y is not None else risk_free_rate,
-            "treasury_2y": treasury_2y if treasury_2y is not None else risk_free_rate,
-            "treasury_3m": treasury_3m if treasury_3m is not None else 0.050,
+            **rate_fields,
             "vix": vix,
             "market_risk_premium": market_risk_premium,
             "last_updated": now.isoformat(),
-            "source": "FRED" if FRED_API_KEY else "fallback",
-            "cache_age_hours": 0.0
+            "source": source,
+            "field_sources": field_sources,
+            "cache_age_hours": 0.0,
         }
 
-        # Update cache
-        cls._cache = rates.copy()
+        cls._cache = {**rates, "field_sources": dict(field_sources)}
         cls._cache_timestamp = now
+        cls._cache_ttl = (
+            timedelta(hours=cls._CACHE_DURATION_HOURS)
+            if source == "FRED"
+            else timedelta(minutes=cls._FAILED_CACHE_DURATION_MINUTES)
+        )
 
         if not FRED_API_KEY:
-            logger.warning("FRED_API_KEY not configured, using fallback rates")
-        
+            logger.warning("FRED_API_KEY not configured, market rates unavailable")
+        elif source != "FRED":
+            logger.warning(
+                f"FRED returned {fred_count}/{len(rate_fields)} rate fields; "
+                f"caching for {cls._FAILED_CACHE_DURATION_MINUTES} min only"
+            )
+
         return rates
 
     @classmethod
-    def get_risk_free_rate(cls) -> float:
+    def get_risk_free_rate(cls) -> Optional[float]:
         """
-        Get current risk-free rate (10-year treasury).
-
-        Convenience method for valuation calculations.
+        Get current risk-free rate (10-year treasury) from FRED.
 
         Returns:
-            Risk-free rate as decimal (e.g., 0.043 for 4.3%)
+            Risk-free rate as decimal (e.g., 0.043 for 4.3%), or None if FRED
+            did not return it.
         """
         rates = cls.get_market_rates()
         return rates["risk_free_rate"]
@@ -193,9 +227,6 @@ class MarketRatesService:
         """
         Fetch current VIX (volatility index) level.
 
-        VIX measures market volatility expectations and is used to calculate
-        dynamic market risk premium for equity valuations.
-
         Primary source is FRED's VIXCLS series (prior-day close, same pipeline as
         the treasury rates). Falls back to yfinance when FRED is unavailable or
         no API key is configured.
@@ -203,11 +234,21 @@ class MarketRatesService:
         Returns:
             Current VIX level (e.g., 18.5), or None if unavailable
         """
+        return cls._get_vix_with_source()[0]
+
+    @classmethod
+    def _get_vix_with_source(cls) -> Tuple[Optional[float], Optional[str]]:
         # VIX is an index level, not a percentage rate, so no /100 conversion
         vix = cls._fetch_fred_series("VIXCLS", is_percentage=False)
         if vix is not None:
-            return vix
+            return vix, "FRED"
+        vix = cls._fetch_vix_from_yfinance()
+        if vix is not None:
+            return vix, "yfinance"
+        return None, None
 
+    @classmethod
+    def _fetch_vix_from_yfinance(cls) -> Optional[float]:
         try:
             import yfinance as yf
             from data_layer.vendors.yf_session import close_orphaned_price_history_session, get_yf_session
@@ -272,6 +313,7 @@ class MarketRatesService:
         """Clear the market rates cache. Useful for testing or forcing refresh."""
         cls._cache = None
         cls._cache_timestamp = None
+        cls._cache_ttl = timedelta(hours=cls._CACHE_DURATION_HOURS)
         logger.info("Market rates cache cleared")
 
 # Made with Bob

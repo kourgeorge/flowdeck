@@ -3,7 +3,7 @@ Valuation tools for calculating fair value using multiple methods.
 """
 
 from langchain_core.tools import tool
-from typing import Annotated, Optional, Dict, Any, List
+from typing import Annotated, Optional, Dict, Any, List, Tuple
 import json
 import logging
 import math
@@ -286,7 +286,7 @@ def _build_index_etf_valuation(
     price_to_book = _first_numeric(fundamentals, "PriceToBookRatio", "PriceToBookRatioTTM", "PriceToBook")
     ev_to_ebitda = _first_numeric(fundamentals, "EVToEBITDA")
     beta = _clamp(_first_numeric(fundamentals, "Beta") or 1.0, 0.7, 2.0)
-    risk_free_rate = _get_current_risk_free_rate()
+    risk_free_rate, risk_free_label = _get_risk_free_rate_with_source()
     market_risk_premium = _get_market_risk_premium()
 
     price_targets = (analyst_recommendations.get("price_targets") or {}) if isinstance(analyst_recommendations, dict) else {}
@@ -419,6 +419,9 @@ def _build_index_etf_valuation(
         f"Rates context: risk-free {risk_free_rate*100:.2f}%, market risk premium {market_risk_premium*100:.2f}%",
         f"Method weights: " + ", ".join(f"{method} {normalized_weights[method]*100:.1f}%" for method in normalized_weights),
     ]
+    rf_warning = _risk_free_warning(risk_free_label, risk_free_rate)
+    if rf_warning:
+        key_assumptions.append(rf_warning)
     if forward_pe or trailing_pe:
         key_assumptions.append(
             f"P/E inputs: trailing {trailing_pe:.2f}x, forward {forward_pe:.2f}x; fair band anchored near {'18.0x' if risk_free_rate >= 0.04 else '20.0x'}"
@@ -1340,10 +1343,21 @@ def _deterministic_score(current_discount_pct: float, conviction: str = "medium"
     return base
 
 
-def _get_current_risk_free_rate() -> float:
+# Used only when the market-rates service has no FRED 10-year yield. It is an
+# assumption, not market data, and every caller says so in its output.
+_ASSUMED_RISK_FREE_RATE = 0.045
+_ASSUMED_RISK_FREE_RATE_SOURCE = "assumed default (FRED 10-year yield unavailable)"
+
+
+def _get_risk_free_rate_with_source() -> Tuple[float, Optional[str]]:
     """
-    Fetch current risk-free rate from market rates service.
-    Falls back to reasonable default if service unavailable.
+    Return (risk_free_rate, assumption_label).
+
+    assumption_label is None when the rate really came from FRED. When FRED
+    timed out the service now returns None instead of a made-up 4.5% labelled
+    "FRED", so here we fall back to a clearly labelled assumption. We use a
+    labelled default rather than refusing, matching how the DCF already handles
+    missing growth estimates (a stated fallback plus a warning).
     """
     try:
         from ...datasources.info_service_client import get_market_rates
@@ -1351,11 +1365,21 @@ def _get_current_risk_free_rate() -> float:
         if rates:
             risk_free_rate = rates.get("risk_free_rate")
             if risk_free_rate is not None:
-                return float(risk_free_rate)
+                return float(risk_free_rate), None
     except Exception:
         pass
-    # Fallback to reasonable default (will be logged by service)
-    return 0.045
+    return _ASSUMED_RISK_FREE_RATE, _ASSUMED_RISK_FREE_RATE_SOURCE
+
+
+def _get_current_risk_free_rate() -> float:
+    """Risk-free rate only; see _get_risk_free_rate_with_source for the label."""
+    return _get_risk_free_rate_with_source()[0]
+
+
+def _risk_free_warning(label: Optional[str], rate: float) -> Optional[str]:
+    if label is None:
+        return None
+    return f"⚠️ WARNING: Risk-free rate {rate*100:.2f}% is an {label}, not market data."
 
 
 def _get_market_risk_premium() -> float:
@@ -1721,7 +1745,7 @@ def calculate_multi_method_valuation_data(
 
     beta = _clamp(_first_numeric(fundamentals, "Beta") or 1.1, 0.8, 2.0)
     # Fetch current risk-free rate from FRED (10-year treasury)
-    risk_free_rate = _get_current_risk_free_rate()
+    risk_free_rate, risk_free_label = _get_risk_free_rate_with_source()
     # Fetch dynamic market risk premium based on VIX
     market_risk_premium = _get_market_risk_premium()
     cost_of_equity = risk_free_rate + beta * market_risk_premium
@@ -2024,6 +2048,9 @@ def calculate_multi_method_valuation_data(
     # Add data quality warning if using fallback estimates
     if "FALLBACK_ESTIMATE" in growth_data_source:
         key_assumptions.append("⚠️ WARNING: Growth estimates unavailable - using conservative fallback (8%). Valuation reliability is LOW.")
+    rf_warning = _risk_free_warning(risk_free_label, risk_free_rate)
+    if rf_warning:
+        key_assumptions.append(rf_warning)
 
     return {
         "ticker": ticker.upper(),
@@ -2500,7 +2527,7 @@ def get_wacc_inputs(
         cost_of_debt = 0.05  # Default 5% cost of debt
     
     # Fetch current market rates dynamically
-    risk_free_rate = _get_current_risk_free_rate()
+    risk_free_rate, risk_free_label = _get_risk_free_rate_with_source()
     market_risk_premium = _get_market_risk_premium()
     
     # Calculate cost of equity using CAPM: Re = Rf + Beta * (Rm - Rf)
@@ -2526,6 +2553,7 @@ def get_wacc_inputs(
         "wacc_inputs": {
             "beta": round(beta, 3) if beta else None,
             "risk_free_rate": f"{risk_free_rate * 100:.2f}%",
+            "risk_free_rate_source": risk_free_label or "FRED",
             "market_risk_premium": f"{market_risk_premium * 100:.2f}%",
             "cost_of_debt": f"{cost_of_debt * 100:.2f}%" if cost_of_debt else None,
             "tax_rate": f"{tax_rate * 100:.2f}%" if tax_rate else None,

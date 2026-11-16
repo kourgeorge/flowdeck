@@ -85,15 +85,20 @@ async def data_quote(ticker: str):
 @market_data_router.get(
     "/market-rates",
     summary="Treasury rates",
-    response_description="Treasury yields and risk-free rate from FRED, used for WACC/DCF.",
+    response_description=(
+        "Treasury yields and risk-free rate from FRED, used for WACC/DCF. "
+        "A yield FRED did not return is null; `source` is FRED, partial or unavailable."
+    ),
     responses=data_responses("market_rates", ticker_404=False),
 )
 async def data_market_rates():
     """
     Get current market rates including treasury yields and risk-free rate from FRED.
     
-    Returns treasury rates used for valuation models (WACC, DCF).
-    Data is cached for 24 hours to minimize API calls.
+    Returns treasury rates used for valuation models (WACC, DCF). Any yield
+    FRED did not return is null, never a guess or a copy of another maturity;
+    `field_sources` says where each value came from. A full FRED result is
+    cached for 24 hours, a partial or failed one for about 15 minutes.
     """
     return await asyncio.to_thread(_gateway().get_market_rates)
 
