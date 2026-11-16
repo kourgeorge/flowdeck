@@ -400,27 +400,6 @@ def get_reports(
         return None
 
 
-def get_reports_batch(
-    tickers: List[str],
-    base_url: Optional[str] = None,
-) -> Dict[str, Any]:
-    """Fetch latest reports for multiple tickers via POST /api/data/reports/batch.
-    Auth required. Returns {tickers: {ticker: {report_run_id, report_date, reports}}}."""
-    base_url = base_url or _get_info_service_base_url()
-    if not base_url:
-        raise ValueError("Info service URL not configured (set INFO_SERVICE_URL or config info_service_url)")
-    if requests is None:
-        raise RuntimeError("requests is required; install with: pip install requests")
-    ticker_list = [str(t).strip().upper() for t in tickers if t][:50]
-    if not ticker_list:
-        return {"tickers": {}}
-    url = urljoin(base_url.rstrip("/") + "/", "api/data/reports/batch")
-    r = requests.post(url, json={"tickers": ticker_list}, timeout=30)
-    r.raise_for_status()
-    out = r.json()
-    return out if isinstance(out, dict) else {"tickers": {}}
-
-
 def get_report_dates(ticker: str, base_url: Optional[str] = None) -> List[str]:
     """List report dates for a ticker from /api/data/reports/{ticker}/dates.
     Auth required. Returns list of date strings (newest first)."""

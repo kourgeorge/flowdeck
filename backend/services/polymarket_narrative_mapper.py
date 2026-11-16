@@ -385,33 +385,6 @@ def get_narrative_category(query: str) -> str:
     return "general"
 
 
-def get_related_tickers(ticker: str) -> List[str]:
-    """
-    Get related tickers that might have relevant Polymarket markets.
-    
-    Args:
-        ticker: Stock ticker
-        
-    Returns:
-        List of related ticker symbols
-    """
-    # Mapping of tickers to related tickers
-    RELATED_TICKERS = {
-        "NVDA": ["AMD", "INTC", "TSM"],
-        "AMD": ["NVDA", "INTC"],
-        "TSLA": ["F", "GM", "RIVN", "LCID"],
-        "AAPL": ["MSFT", "GOOGL", "AMZN"],
-        "MSFT": ["AAPL", "GOOGL", "AMZN"],
-        "GOOGL": ["AAPL", "MSFT", "META"],
-        "META": ["GOOGL", "SNAP", "PINS"],
-        "AMZN": ["WMT", "SHOP"],
-        "JPM": ["BAC", "WFC", "C"],
-        "BAC": ["JPM", "WFC", "C"],
-    }
-    
-    return RELATED_TICKERS.get(ticker.upper(), [])
-
-
 # Example usage and testing
 if __name__ == "__main__":
     # Test with NVDA

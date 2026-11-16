@@ -13,7 +13,6 @@ import time
 import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
-from functools import lru_cache
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -336,35 +335,6 @@ def get_market_details(market_id: str) -> Dict:
         raise PolymarketAPIError(f"Failed to fetch market details: {e}")
 
 
-def get_market_prices(market_id: str) -> Dict:
-    """
-    Get current prices and implied probabilities for a market.
-    
-    Args:
-        market_id: Market ID
-        
-    Returns:
-        Dictionary with:
-        - outcomes: List of outcomes with current prices
-        - last_updated: Timestamp of last price update
-        
-    Raises:
-        PolymarketAPIError: On API errors
-    """
-    url = f"{POLYMARKET_CLOB_API_URL}/prices/{market_id}"
-    
-    try:
-        logger.info(f"Fetching market prices: {market_id}")
-        data = _make_request(url)
-        return data
-        
-    except PolymarketAPIError:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching market prices: {e}")
-        raise PolymarketAPIError(f"Failed to fetch market prices: {e}")
-
-
 def search_markets_by_keywords(
     keywords: List[str],
     category: Optional[str] = None,
@@ -502,26 +472,6 @@ def get_trending_markets(
     except Exception as e:
         logger.error(f"Error fetching trending markets: {e}")
         raise PolymarketAPIError(f"Failed to fetch trending markets: {e}")
-
-
-@lru_cache(maxsize=100)
-def get_market_categories() -> List[str]:
-    """
-    Get list of available market categories.
-    
-    Returns:
-        List of category names
-    """
-    # Common categories based on Polymarket structure
-    return [
-        "finance",
-        "crypto",
-        "politics",
-        "sports",
-        "economics",
-        "technology",
-        "entertainment"
-    ]
 
 
 def health_check() -> bool:

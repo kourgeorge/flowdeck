@@ -18,21 +18,6 @@ def _require(fetcher: Any) -> Any:
     return fetcher
 
 
-def fetch_historical(fetcher: Any, ticker: str, period: str = "6mo", interval: str = "1d") -> Dict[str, Any]:
-    """Fetch OHLCV time series (same data as Market Analyst's get_ticker_data / backend historical)."""
-    return _require(fetcher).get_historical(ticker.upper(), period=period, interval=interval)
-
-
-def fetch_fundamentals(fetcher: Any, ticker: str) -> Dict[str, Any]:
-    """Fetch fundamentals (same data as Fundamentals Analyst's get_fundamentals)."""
-    return _require(fetcher).get_fundamentals(ticker.upper())
-
-
-def fetch_financial_charts(fetcher: Any, ticker: str, freq: str = "annual") -> Dict[str, Any]:
-    """Fetch chart-ready fundamental series (revenue, EPS, etc.)."""
-    return _require(fetcher).get_financial_charts(ticker.upper(), freq=freq)
-
-
 def fetch_figure_data_for_tickers(
     tickers: List[str],
     *,
