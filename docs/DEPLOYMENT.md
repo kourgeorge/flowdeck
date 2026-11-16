@@ -126,6 +126,16 @@ the backend, use `systemctl restart flowdeck-backend` instead of `start_flowdeck
 which starts both frontend and backend. Read service logs with
 `journalctl -u flowdeck-backend`; journald preserves them across restarts.
 
+**Real visitor IP (contact form rate limit):** `/api/contact` limits each visitor IP
+to 5 messages per 10 minutes. uvicorn trusts `X-Forwarded-For` only from
+`--forwarded-allow-ips` (default `127.0.0.1`), which is right for the unit above:
+Nginx on the same host connects from `127.0.0.1`. Keep `--host 127.0.0.1` and do not
+add `--no-proxy-headers`. The template in `scripts/` binds to `0.0.0.0` for a proxy on
+another machine (Caddy on a gateway); in that case also add
+`--forwarded-allow-ips <proxy IP>` and open port 8002 only to that IP, as in
+[DEPLOYMENT_UBUNTU.md](DEPLOYMENT_UBUNTU.md#backend-service). Without that, all
+visitors share one limit.
+
 **Analysis capacity:** Use one Uvicorn worker with
 `FLOWDECK_ANALYSIS_WORKERS=5` (the default) to run up to five ticker analyses
 concurrently. This limits expensive ticker analyses across normal

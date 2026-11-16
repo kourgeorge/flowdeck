@@ -29,6 +29,14 @@ fi
 
 export PYTHONPATH="$ROOT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 
+# The contact form rate limit is per visitor IP. uvicorn only takes that IP from
+# X-Forwarded-For when the request comes from FORWARDED_ALLOW_IPS, so when Caddy
+# runs on a separate gateway set FORWARDED_ALLOW_IPS=<gateway IP> (never "*"), or
+# every visitor shares one limit. Use BACKEND_HOST=127.0.0.1 when the proxy runs
+# on this machine so port 8002 is not reachable from outside.
+BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
+FORWARDED_ALLOW_IPS="${FORWARDED_ALLOW_IPS:-127.0.0.1}"
+
 # Portable new-session launcher: use setsid on Linux, plain subshell on macOS
 new_session() {
   if command -v setsid &>/dev/null; then
@@ -75,7 +83,7 @@ if [ "$1" = "--foreground" ]; then
   echo "[$(date '+%H:%M:%S')] Press Ctrl+C to stop both."
   # Start backend in a new session so it leads its own process group
   cd "$BACKEND_DIR"
-  new_session python -m uvicorn main:app --host 0.0.0.0 --port 8002 --workers 1 --log-config "$BACKEND_DIR/uvicorn_logging.json" &
+  new_session python -m uvicorn main:app --host "$BACKEND_HOST" --port 8002 --forwarded-allow-ips "$FORWARDED_ALLOW_IPS" --workers 1 --log-config "$BACKEND_DIR/uvicorn_logging.json" &
   BACKEND_PID=$!
   echo $BACKEND_PID > "$PID_FILE"
   # Start frontend in a new session so npm + vite child share a process group
@@ -89,14 +97,14 @@ else
   stop_services 2>/dev/null || true
   echo "[$(date '+%H:%M:%S')] Starting Flowdeck in background..."
   cd "$BACKEND_DIR"
-  new_session nohup python -m uvicorn main:app --host 0.0.0.0 --port 8002 --workers 1 --log-config "$BACKEND_DIR/uvicorn_logging.json" >> "$ROOT_DIR/backend.log" 2>&1 &
+  new_session nohup python -m uvicorn main:app --host "$BACKEND_HOST" --port 8002 --forwarded-allow-ips "$FORWARDED_ALLOW_IPS" --workers 1 --log-config "$BACKEND_DIR/uvicorn_logging.json" >> "$ROOT_DIR/backend.log" 2>&1 &
   echo $! > "$PID_FILE"
   cd "$FRONTEND_DIR"
   new_session nohup npm run preview -- --host >> "$ROOT_DIR/frontend.log" 2>&1 &
   echo $! >> "$PID_FILE"
   sleep 2
   if kill -0 $(head -1 "$PID_FILE") 2>/dev/null; then
-    echo "[$(date '+%H:%M:%S')] Backend running on http://0.0.0.0:8002 (PID $(head -1 "$PID_FILE"))"
+    echo "[$(date '+%H:%M:%S')] Backend running on http://$BACKEND_HOST:8002 (PID $(head -1 "$PID_FILE"))"
   fi
   if kill -0 $(tail -1 "$PID_FILE") 2>/dev/null; then
     echo "[$(date '+%H:%M:%S')] Frontend running on http://0.0.0.0:4173 (PID $(tail -1 "$PID_FILE"))"

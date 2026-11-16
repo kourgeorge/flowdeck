@@ -269,6 +269,12 @@ www.flowdeck.biz {
 }
 
 flowdeck.biz {
+    # The contact form needs only a few KB; refuse bigger bodies at the edge.
+    @contact path /api/contact
+    request_body @contact {
+        max_size 16KB
+    }
+
     @api path /api /api/* /ws /ws/*
     handle @api {
         reverse_proxy 192.168.1.110:8002
@@ -286,7 +292,7 @@ flowdeck.biz {
 }
 ```
 
-Replace `192.168.1.110` with your Flowdeck server IP. Open port **4173** on the Flowdeck server firewall (or your gateway must reach it on the LAN). Without the `www` redirect, both hosts serve identical content with no canonical relationship between them, which splits search/AI-crawler trust signals across two domains instead of one.
+Replace `192.168.1.110` with your Flowdeck server IP. `reverse_proxy` sends the visitor's IP in `X-Forwarded-For` by default, and it replaces any `X-Forwarded-For` the visitor sent. Do not add `trusted_proxies` here: nothing sits in front of Caddy, so that would let visitors choose their own IP. Open port **4173** on the Flowdeck server firewall (or your gateway must reach it on the LAN). Without the `www` redirect, both hosts serve identical content with no canonical relationship between them, which splits search/AI-crawler trust signals across two domains instead of one.
 
 ---
 
@@ -339,8 +345,10 @@ EnvironmentFile=/opt/flowdeck/.env
 # Python path for tradingagents package
 Environment=PYTHONPATH=/opt/flowdeck
 
-# Bind to all interfaces so Caddy on the gateway can reach it
-ExecStart=/opt/flowdeck/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8002
+# Listen on all interfaces: Caddy on the gateway connects over the LAN, and
+# cron / BACKEND_URL connect over 127.0.0.1. Trust X-Forwarded-For only from
+# the gateway; replace 192.168.1.1 with your gateway's LAN IP.
+ExecStart=/opt/flowdeck/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8002 --forwarded-allow-ips 192.168.1.1
 
 Restart=always
 RestartSec=5
@@ -349,9 +357,19 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
-**Important:** Binding to `0.0.0.0` is required so Caddy on the gateway can proxy requests. Adjust `User`/`Group` and paths to match your setup. Ensure the user has read access to `results/` and `.env`.
+**Important:** Binding to `0.0.0.0` is required so Caddy on the gateway can proxy requests. Because that also opens port 8002 to the LAN, limit it to the gateway with the firewall (section 9). Adjust `User`/`Group` and paths to match your setup. Ensure the user has read access to `results/` and `.env`.
 
 **Miniconda users:** Replace `ExecStart` with your conda Python path, e.g. `/home/YOUR_USER/miniconda3/envs/flowdeck/bin/python`. Ensure `User` matches the account where Miniconda is installed.
+
+**Contact form rate limit needs the real visitor IP.** `/api/contact` allows 5 messages per IP every 10 minutes, using the IP uvicorn reports. uvicorn takes that IP from `X-Forwarded-For` only when the request comes from an address in `--forwarded-allow-ips` (default `127.0.0.1`). Caddy runs on the gateway, not on this server, so without `--forwarded-allow-ips <gateway IP>` every visitor shows up as the gateway and they all share one limit of 5. Keep these in place:
+
+- `--forwarded-allow-ips` is the gateway's IP only. Never use `*`: anyone who can reach port 8002 could then pick their own IP and skip the limit.
+- Do not add `--no-proxy-headers` (proxy headers are on by default).
+- Port 8002 is open only to the gateway (section 9), so nobody can bypass Caddy.
+
+If Caddy ever runs on this same server, bind with `--host 127.0.0.1` instead, drop `--forwarded-allow-ips` (the default `127.0.0.1` is then correct), point Caddy at `127.0.0.1:8002`, and close port 8002 in the firewall.
+
+To check: send a contact message through the site and look for the visitor's public IP (not the gateway's) in the backend access log (`journalctl -u stock-dashboard-backend`).
 
 ### Frontend (npm preview)
 
@@ -395,14 +413,16 @@ The script defaults to `BACKEND_URL=http://127.0.0.1:8002`; that is correct when
 
 ## 9. Firewall (Flowdeck server)
 
-On the Flowdeck server, allow SSH and the ports the gateway needs to reach:
+On the Flowdeck server, allow SSH and let only the gateway reach the backend and frontend ports (replace `192.168.1.1` with your gateway's LAN IP):
 
 ```bash
 sudo ufw allow 22/tcp   # SSH
-sudo ufw allow 8002/tcp # Backend (for Caddy gateway)
-sudo ufw allow 4173/tcp # Frontend preview (for Caddy gateway)
+sudo ufw allow from 192.168.1.1 to any port 8002 proto tcp # Backend, gateway only
+sudo ufw allow from 192.168.1.1 to any port 4173 proto tcp # Frontend preview, gateway only
 sudo ufw enable
 ```
+
+If you earlier ran `sudo ufw allow 8002/tcp` or `sudo ufw allow 4173/tcp`, remove those rules (`sudo ufw delete allow 8002/tcp`, same for 4173); otherwise the ports stay open to everyone. Direct access to 8002 would skip Caddy's body limit and HTTPS.
 
 Ports 80 and 443 are on the gateway machine; Caddy handles SSL there.
 
@@ -502,10 +522,10 @@ sudo systemctl restart stock-dashboard-backend stock-dashboard-frontend
 - [ ] Repository cloned and dependencies installed
 - [ ] Root `.env` with API keys; `backend/.env` with production `CORS_ORIGINS`, `BACKEND_URL`
 - [ ] Frontend built with production `VITE_API_URL` (or `''` for same-origin) via `npm run build`
-- [ ] systemd service for backend (bind to 0.0.0.0 when gateway is on another host)
+- [ ] systemd service for backend (bind to 0.0.0.0 when gateway is on another host, with `--forwarded-allow-ips` set to the gateway IP)
 - [ ] Caddy on gateway configured (see section 5.5)
 - [ ] npm preview and backend systemd services running
 - [ ] Caddy on gateway handles SSL automatically
-- [ ] Firewall on Flowdeck server: 22, 8002, 4173
+- [ ] Firewall on Flowdeck server: 22 open; 8002 and 4173 open only to the gateway
 - [ ] Permissions on `results/` and `.env`
 - [ ] Cron or in-process daily sync (optional)

@@ -118,3 +118,49 @@ def test_window_expiry_allows_again(monkeypatch):
     assert client.post("/api/contact", json=VALID).status_code == 429
     now[0] += contact.RATE_LIMIT_WINDOW_SECONDS + 1
     assert client.post("/api/contact", json=VALID).status_code == 200
+
+
+def _proxied_client(peer_ip: str) -> TestClient:
+    """App wrapped the way uvicorn runs it in production: ProxyHeadersMiddleware
+    trusting only 127.0.0.1 (uvicorn's default --forwarded-allow-ips).
+
+    TestClient always reports the peer as "testclient", so a small shim sets the
+    socket peer to `peer_ip` first, standing in for Caddy (or an attacker)
+    connecting to port 8002.
+    """
+    from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
+    app = FastAPI()
+    app.include_router(contact.router)
+    proxied = ProxyHeadersMiddleware(app, trusted_hosts=["127.0.0.1"])
+
+    async def set_peer(scope, receive, send):
+        if scope["type"] in ("http", "websocket"):
+            scope = {**scope, "client": (peer_ip, 50000)}
+        await proxied(scope, receive, send)
+
+    return TestClient(set_peer, raise_server_exceptions=False)
+
+
+def test_trusted_proxy_gives_each_forwarded_ip_its_own_limit(monkeypatch):
+    calls = []
+    monkeypatch.setattr(contact, "send_contact_form_email", _fake_sender(calls))
+    client = _proxied_client("127.0.0.1")
+    for visitor in ("203.0.113.7", "198.51.100.23"):
+        headers = {"X-Forwarded-For": visitor}
+        for _ in range(5):
+            assert client.post("/api/contact", json=VALID, headers=headers).status_code == 200
+        assert client.post("/api/contact", json=VALID, headers=headers).status_code == 429
+    assert len(calls) == 10
+
+
+def test_untrusted_peer_cannot_fake_forwarded_for(monkeypatch):
+    # A caller reaching port 8002 directly (not via the trusted proxy) must not
+    # get a fresh limit by rotating X-Forwarded-For.
+    monkeypatch.setattr(contact, "send_contact_form_email", _fake_sender([]))
+    client = _proxied_client("192.0.2.50")
+    for i in range(5):
+        r = client.post("/api/contact", json=VALID, headers={"X-Forwarded-For": f"10.0.0.{i}"})
+        assert r.status_code == 200
+    r = client.post("/api/contact", json=VALID, headers={"X-Forwarded-For": "10.0.0.99"})
+    assert r.status_code == 429
