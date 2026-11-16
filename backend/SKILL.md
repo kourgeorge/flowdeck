@@ -175,17 +175,17 @@ All under `/api/data/`. Most endpoints are public; auth-required endpoints are m
 | GET | `/api/data/news?ticker=AAPL` | News articles (optional: `lookback_days=7`) |
 | GET | `/api/data/news/batch?tickers=AAPL,MSFT` | Merged, de-duplicated news for up to 50 tickers |
 | GET | `/api/data/news/batch/stream?tickers=AAPL,MSFT` | Same, as an NDJSON progressive stream |
-| GET | `/api/data/global-news?lookback_days=7&limit=10` | Macro / world news (optional `query`, `curr_date`) |
+| GET | `/api/data/global-news?curr_date=2026-08-19&lookback_days=7&limit=10` | Macro / world news (**`curr_date` required**, `YYYY-MM-DD`; optional `query`) |
 | GET | `/api/data/insider-transactions/{ticker}?limit=50` | Latest insider transactions |
 | GET | `/api/data/insider-sentiment/{ticker}?curr_date=YYYY-MM-DD` | Finnhub insider sentiment series |
-| GET | `/api/data/reddit-company-social/{ticker}?search_terms=Apple,AAPL` | Reddit chatter (**`search_terms` required**) |
+| GET | `/api/data/reddit-company-social/{ticker}?search_terms=Apple,AAPL&start_date=2026-08-01&end_date=2026-08-19` | Reddit chatter (**`search_terms`, `start_date`, `end_date` required**; dates are `YYYY-MM-DD`) |
 | GET | `/api/data/fundamentals/{ticker}` | Fundamental data |
 | GET | `/api/data/fund-info/{ticker}` | ETF/fund data (AUM, expense ratio, holdings, sector weightings) |
 | GET | `/api/data/financial-statements/{ticker}?statement_type=all&freq=quarterly` | Balance sheet, cashflow, income statement |
 | GET | `/api/data/financial-charts/{ticker}?freq=annual` | Chart-ready fundamental time series |
 | GET | `/api/data/historical/{ticker}?period=6mo&interval=1d` | OHLCV history (`period`: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max) |
 | GET | `/api/data/ticker-data/{ticker}?start_date=2026-01-01&end_date=2026-06-30` | OHLCV as CSV-like text for agents |
-| GET | `/api/data/indicators/{ticker}?indicator=rsi&look_back_days=30` | Technical indicator series |
+| GET | `/api/data/indicators/{ticker}?indicator=rsi&curr_date=2026-08-19&look_back_days=30` | Technical indicator series (**`indicator` and `curr_date` required**, `YYYY-MM-DD`) |
 | GET | `/api/data/analyst-recommendations/{ticker}` | Analyst recommendations (Yahoo) |
 | GET | `/api/data/events/{ticker}?lookback_days=10` | Deterministic event signals + score |
 | GET | `/api/data/future-events/{ticker}` | Upcoming earnings and ex-dividend dates |
@@ -204,7 +204,8 @@ curl "https://flowdeck.biz/api/data/quote/AAPL"
 curl "https://flowdeck.biz/api/data/company/AAPL"
 curl "https://flowdeck.biz/api/data/news?ticker=AAPL&lookback_days=7"
 curl "https://flowdeck.biz/api/data/historical/AAPL?period=1y&interval=1d"
-curl "https://flowdeck.biz/api/data/indicators/AAPL?indicator=rsi&look_back_days=60"
+curl "https://flowdeck.biz/api/data/indicators/AAPL?indicator=rsi&curr_date=2026-08-19&look_back_days=60"
+curl "https://flowdeck.biz/api/data/global-news?curr_date=2026-08-19&lookback_days=7&limit=10"
 ```
 
 #### Market overview
@@ -545,8 +546,8 @@ Response:
   "reports": {
     "investment_plan": {
       "content": "Detailed analysis text...",
-      "score": 75,
-      "score_label": "Strong Buy",
+      "score": 4,
+      "score_label": "Conviction Score",
       "key_takeaways": ["Revenue growth accelerating", "Valuation attractive"],
       "recommendation": "BUY",
       "expected_return_pct": 15.5,
@@ -554,7 +555,7 @@ Response:
       "bull_case_return_pct": 35.0,
       "current_price": 231.4,
       "currency": "USD",
-      "confidence": "HIGH",
+      "confidence": 0.8,
       "analysis_date": "2026-03-04",
       "generated_at": "2026-03-04T10:30:00Z",
       "days_ago": 0,
@@ -565,7 +566,7 @@ Response:
       "resources": [],
       "agent_steps": []
     },
-    "market_report": {"content": "...", "score": 68, "key_takeaways": ["..."]},
+    "market_report": {"content": "...", "score": 4, "key_takeaways": ["..."]},
     "valuation_report": {"content": "...", "fair_value_base": 245.0, "current_discount_pct": 5.6}
   }
 }
@@ -648,15 +649,16 @@ For the headline call (`recommendation`, `confidence`, `days_ago`), read **`inve
 | Field | Type | Description |
 |-------|------|-------------|
 | `content` | string | Full analysis text (markdown) |
-| `score` | number | Numerical score (0–100) |
-| `score_label` | string | Human-readable label ("Strong Buy", "Hold", …) |
-| `recommendation` | string | BUY, SELL, or HOLD |
+| `score` | number | Score from 1 to 5 (5 is strongest) |
+| `score_label` | string | Name of the score, which differs per report (e.g. "Conviction Score" on `investment_plan`, "Market Score" on `market_report`). It is not a rating word. |
+| `recommendation` | string or null | BUY, SELL, or HOLD. `null` if the model could not produce a valid answer; then `recommendation_missing_reason` is `"structured_output_failed"`. Treat `null` as "no call", not as HOLD. |
+| `recommendation_missing_reason` | string or null | Why `recommendation` is `null` (currently `"structured_output_failed"`); absent or `null` otherwise |
 | `expected_return_pct` | number | Expected return percentage |
 | `bull_case_return_pct` | number | Optimistic scenario return |
 | `bear_case_return_pct` | number | Pessimistic scenario return |
 | `current_price` | number | Price at analysis time |
 | `currency` | string | Currency of the price figures |
-| `confidence` | string | HIGH, MEDIUM, or LOW |
+| `confidence` | number | 0 to 1 (score divided by 5, so score 4 gives 0.8) |
 | `key_takeaways` | array of strings | Key insights |
 | `tps_plan` | **string** | Target/entry/stop plan as narrative text |
 | `bull_viewpoint`, `bear_viewpoint`, `neutral_viewpoint`, `risky_viewpoint`, `safe_viewpoint` | array of strings | Debate positions — **fields inside a report, not separate report keys** |
