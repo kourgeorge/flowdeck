@@ -25,6 +25,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
+from ai_engine.report_meta import pick_recommendation_meta
 from ai_engine.agent.tool import BaseTool, ExecutionContext, ToolResult, ToolSpec
 
 logger = logging.getLogger(__name__)
@@ -226,12 +227,11 @@ def _get_portfolio_overview(user_id: int, db: Any, user_store: Any = None) -> st
                 ar_id, latest_date = latest
                 reports = report_svc.get_reports_with_scores(ar_id, execution_type="ticker")
                 inv = reports.get("investment_plan") or {}
-                tip = reports.get("trader_investment_plan") or {}
-                ftd = reports.get("final_trade_decision") or {}
-                # investment_plan (Research Manager) is the authoritative recommendation source;
-                # final_trade_decision / trader plan are historical fallbacks.
-                rec = inv.get("recommendation") or ftd.get("recommendation") or tip.get("recommendation")
-                conf = inv.get("confidence") or ftd.get("confidence") or tip.get("confidence")
+                # Confidence comes from the same report as the call, so a trader confidence
+                # is never shown next to the Research Manager's recommendation.
+                _rec_key, rec_meta = pick_recommendation_meta(reports)
+                rec = rec_meta.get("recommendation")
+                conf = rec_meta.get("confidence")
                 exp = inv.get("expected_return_pct")
                 bear_ret = inv.get("bear_case_return_pct")
                 bull_ret = inv.get("bull_case_return_pct")
