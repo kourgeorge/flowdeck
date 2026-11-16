@@ -35,7 +35,6 @@ from ..agents.utils.agent_utils import (
     get_income_statement,
     get_news,
     get_reddit_company_social,
-    get_insider_sentiment,
     get_insider_transactions,
     get_global_news
 )

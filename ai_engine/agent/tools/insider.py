@@ -1,7 +1,9 @@
 """
 Insider trading tools:
   - InsiderTransactionsTool — recent insider buy/sell transactions
-  - InsiderSentimentTool    — aggregated insider sentiment score
+
+No insider-sentiment tool: there is no data source for it, so offering it to
+the LLM only wasted a tool call on an error.
 """
 
 from __future__ import annotations
@@ -44,41 +46,3 @@ class InsiderTransactionsTool(BaseTool):
             return ToolResult(ok=True, data=data)
         except Exception as exc:
             return ToolResult(ok=False, error={"code": "TOOL_ERROR", "message": str(exc)})
-
-
-# ---------------------------------------------------------------------------
-# InsiderSentimentTool
-# ---------------------------------------------------------------------------
-
-_INSIDER_SENTIMENT_SPEC = ToolSpec(
-    name="get_insider_sentiment",
-    version="1.0",
-    description=(
-        "Get an aggregated insider sentiment score for a ticker: net insider buying vs selling trend, "
-        "ratio of buyers to sellers, and overall sentiment direction. "
-        "Use when the user asks about insider sentiment, whether insiders are bullish or bearish."
-    ),
-    input_schema={
-        "type": "object",
-        "properties": {
-            "ticker": {"type": "string", "description": "Stock ticker symbol, e.g. AAPL, MSFT, TSLA"}
-        },
-        "required": ["ticker"],
-    },
-    tags=["insider", "sentiment"],
-)
-
-
-class InsiderSentimentTool(BaseTool):
-    spec = _INSIDER_SENTIMENT_SPEC
-
-    def execute(self, ctx: ExecutionContext, *, ticker: str, **_) -> ToolResult:
-        try:
-            from ai_engine.tradingagents.agents.utils.news_data_tools import get_insider_sentiment
-            today = datetime.date.today().isoformat()
-            data = get_insider_sentiment.invoke({"ticker": ticker.upper(), "curr_date": today})
-            return ToolResult(ok=True, data=data)
-        except Exception as exc:
-            return ToolResult(ok=False, error={"code": "TOOL_ERROR", "message": str(exc)})
-
-

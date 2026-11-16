@@ -4,9 +4,10 @@ import logging
 import threading
 import time
 from collections import deque
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ValidationInfo, field_validator
 
 from services.email_service import send_contact_form_email
 
@@ -26,6 +27,25 @@ class ContactRequest(BaseModel):
     name: str = Field(default="", max_length=NAME_MAX_LENGTH)
     email: EmailStr = Field(max_length=EMAIL_MAX_LENGTH)
     message: str = Field(default="", max_length=MESSAGE_MAX_LENGTH)
+
+    # Runs before the max_length checks (and EmailStr parsing) so the 422 the
+    # contact page shows names the field in a plain sentence, instead of
+    # pydantic's "String should have at most 5000 characters". Field(max_length)
+    # stays so the limits are in the API docs. Same approach as chat (T-76).
+    @field_validator("name", "email", "message", mode="before")
+    @classmethod
+    def _not_too_long(cls, value: Any, info: ValidationInfo) -> Any:
+        limit, label = _FIELD_LIMITS[info.field_name]
+        if isinstance(value, str) and len(value) > limit:
+            raise ValueError(f"{label} is too long (max {limit:,} characters)")
+        return value
+
+
+_FIELD_LIMITS = {
+    "name": (NAME_MAX_LENGTH, "Name"),
+    "email": (EMAIL_MAX_LENGTH, "Email"),
+    "message": (MESSAGE_MAX_LENGTH, "Message"),
+}
 
 
 # Simple sliding-window limit: RATE_LIMIT_MAX submissions per client IP per

@@ -185,7 +185,7 @@ Always use **Yahoo Finance ticker symbols** when calling any tool that accepts a
 7. Call `get_income_statement`, `get_balance_sheet`, or `get_cashflow` for detailed financial statements.
 8. Call `get_news` for recent company-specific news and catalysts.
 9. Call `get_global_news` for macro/market-wide news and trends.
-10. Call `get_insider_transactions` or `get_insider_sentiment` for insider trading activity.
+10. Call `get_insider_transactions` for insider trading activity.
 11. Call `web_search` to find breaking news, recent earnings, analyst upgrades/downgrades, regulatory filings, macroeconomic data releases, or any information not covered by the other tools. Use it for general financial questions or when you need the latest web information.
 12. Call `get_historical_prices` to fetch real daily OHLCV price data for a **single ticker** over a custom date range (up to 5 years). Use this — NOT simulation — whenever the user asks about year-to-date performance, 1-year returns, multi-year price history, historical volatility, or any analysis requiring more than 30 days of price data for one ticker. Use the compare_stocks skill for deterministic period-return calculations.
 13. **Call `get_multi_historical_prices`** to fetch real closing prices for **multiple tickers at once** — use this whenever the user asks about: comparing two or more markets/stocks over a period (e.g. US vs Israeli market), top gainers/losers in a portfolio, normalized performance charts, or any multi-ticker return calculation. This is far more efficient than calling `get_historical_prices` repeatedly. Use the compare_stocks skill for deterministic returns and charts.
