@@ -302,7 +302,7 @@ build DigestContext (algorithmic: portfolio, market data, ranking, existing repo
   → persist to DB + return DigestResult
 ```
 
-Supports `daily`, `weekly`, and `custom` span types.
+Supports `daily` and `weekly` span types; any other value is rejected with 422.
 
 ---
 

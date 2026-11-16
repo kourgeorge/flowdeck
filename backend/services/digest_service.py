@@ -115,18 +115,27 @@ def _utc_bounds_for_local_day(slot: str, timezone_name: Optional[str]) -> Option
     return start_utc, end_utc
 
 
+_SPAN_TYPES = ("daily", "weekly")
+
+
+def _check_span(span_type: str) -> None:
+    # Refuse rather than guess: these two helpers used to disagree on unknown
+    # values (slot fell through to weekly, run fell through to daily), so
+    # 'monthly' was billed as weekly but produced a daily brief.
+    if span_type not in _SPAN_TYPES:
+        raise ValueError(f"Unknown span type {span_type!r}; expected 'daily' or 'weekly'")
+
+
 def _build_slot(span_type: str, digest_date: str) -> str:
     """Return slot key used in subject_id."""
+    _check_span(span_type)
     return digest_date if span_type == "daily" else f"w:{digest_date}"
 
 
 def _parse_span(span_type: str) -> tuple[str, Optional[str], Optional[str]]:
-    """Return (span_type, start_date, end_date) for run_digest. Custom not yet supported here."""
-    if not span_type or span_type == "daily":
-        return "daily", None, None
-    if span_type == "weekly":
-        return "weekly", None, None
-    return "daily", None, None
+    """Return (span_type, start_date, end_date) for run_digest."""
+    _check_span(span_type)
+    return span_type, None, None
 
 
 async def run_and_store_digest(

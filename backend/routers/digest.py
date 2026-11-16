@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -94,7 +94,10 @@ async def get_digest(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
     date: Optional[str] = Query(None, description="Date for the digest (YYYY-MM-DD). Default: today. For weekly, end date."),
-    span: Optional[str] = Query(
+    # Literal so FastAPI answers 422 before any tokens are charged. A free str
+    # let 'monthly' / 'Daily' / 'custom' be billed and stored in the weekly slot
+    # while the agent ran a daily brief.
+    span: Literal["daily", "weekly"] = Query(
         "daily",
         description="Time span: 'daily' (single day) or 'weekly' (7 days ending on date).",
     ),
@@ -134,7 +137,7 @@ async def get_digest(
     narrative brief and a "what to watch" section. Use span=daily (default) or span=weekly.
     """
     digest_date = date or _today_for_timezone(timezone_name)
-    span_type = span or "daily"
+    span_type = span
     logger.info(
         "Digest request user_id=%s date=%s span=%s timezone=%s max_priority_tickers=%s",
         current_user.id,
