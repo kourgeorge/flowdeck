@@ -689,8 +689,7 @@ Content-Type: application/json
   "ticker": "AAPL",
   "analysis_date": "2026-02-14",
   "analysts": ["market", "social", "fundamentals", "technical", "sec", "valuation"],
-  "research_depth": 2,
-  "llm_provider": "azure"
+  "research_depth": 2
 }
 ```
 
@@ -700,10 +699,7 @@ Content-Type: application/json
 | `analysis_date` | No | YYYY-MM-DD (default: today) |
 | `analysts` | No | Default **all six**: `["market", "social", "fundamentals", "technical", "sec", "valuation"]` |
 | `research_depth` | No | Debate rounds; default 2 |
-| `llm_provider` | No | Default from server config (typically `azure`) |
-| `backend_url` | No | Override the LLM endpoint |
-| `shallow_thinker` | No | Override the quick-thinking model |
-| `deep_thinker` | No | Override the deep-thinking model |
+| `llm_provider` | No | Leave it out. The server picks its own provider and models. If you send it, it must match the server's provider, or the API returns 422. |
 
 Each analyst maps to one report key: `market` → `market_report`, `social` → `sentiment_report`,
 `fundamentals` → `fundamentals_report`, `technical` → `technical_report`, `sec` → `sec_report`,
