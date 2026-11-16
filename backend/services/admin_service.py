@@ -59,11 +59,6 @@ def get_stats(db: Session) -> dict:
     }
 
 
-def get_user(db: Session, user_id: int) -> Optional[User]:
-    """Get user by id. For admin add_tokens 404 check."""
-    return db.query(User).filter(User.id == user_id).first()
-
-
 def delete_user(db: Session, user_id: int, actor_id: int) -> bool:
     from services.admin_actions import delete_user as guarded_delete
     guarded_delete(db, user_id, actor_id)
