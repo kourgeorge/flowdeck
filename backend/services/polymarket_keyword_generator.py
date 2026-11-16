@@ -125,7 +125,7 @@ def _generate_via_llm(
     # Lazy imports: ai_engine requires the project root on sys.path, and langchain
     # is heavy — importing here keeps this module cheap and lets ImportError fall
     # through to the deterministic path.
-    from ai_engine.llm_provider import get_config_from_env, get_llm
+    from ai_engine.llm_provider import get_config_from_env, get_llm, structured_output
     from langchain_core.messages import HumanMessage
     from pydantic import BaseModel, Field
 
@@ -187,7 +187,7 @@ def _generate_via_llm(
     cfg = get_config_from_env()
     # Quick/cheap tier and deterministic temperature — this is lightweight extraction.
     llm = get_llm("quick", cfg, temperature=0.0, request_timeout=30)
-    structured_llm = llm.with_structured_output(KeywordList, method="function_calling")
+    structured_llm = structured_output(llm, KeywordList)
     result = structured_llm.invoke([HumanMessage(content=prompt)])
 
     keywords = getattr(result, "keywords", None)
