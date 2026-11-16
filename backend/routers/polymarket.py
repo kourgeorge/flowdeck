@@ -108,18 +108,18 @@ async def get_ticker_predictions(
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
-    Get aggregated Polymarket prediction market sentiment for a stock ticker.
+    Get the Polymarket prediction markets relevant to a stock ticker.
     
     This endpoint:
     1. Maps the ticker to relevant narrative categories
     2. Searches Polymarket for related markets
     3. Scores markets by relevance
-    4. Aggregates sentiment across top markets
-    5. Returns overall sentiment with confidence score
+    4. Returns the top markets with their probabilities and volume
     
-    **Sentiment Scale**: 0 (bearish) to 1 (bullish), 0.5 is neutral
-    
-    **Confidence**: Based on trading volume (higher volume = higher confidence)
+    **No overall sentiment**: this endpoint deliberately computes no overall
+    sentiment, confidence or trend. An event probability has no stock-return
+    direction, so `overall_sentiment` and `confidence` are null and the trend
+    is "unknown". Read each market on its own.
     
     **Example**: For NVDA, finds markets about:
     - Direct mentions (NVDA stock, Nvidia earnings)

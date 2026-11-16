@@ -817,18 +817,20 @@ Content-Type: application/json
 
 ## Prediction markets (Polymarket)
 
-Public sentiment derived from Polymarket order flow.
+Polymarket prediction markets related to a ticker. Each market is an event probability (for example, "Will X happen?"), not a stock signal.
 
 ```bash
-GET /api/polymarket/ticker/{ticker}                      # aggregated sentiment for a ticker
+GET /api/polymarket/ticker/{ticker}                      # relevant markets for a ticker (no overall sentiment)
 GET /api/polymarket/markets/relevant/{ticker}?limit=20   # markets matched to the ticker
 GET /api/polymarket/markets/trending?category=finance&limit=20
 GET /api/polymarket/market/{market_id}
 GET /api/polymarket/market/{market_id}/history?days=30
 ```
 
-`category` accepts `finance`, `crypto`, `politics`, `economics`. Sentiment runs **0 = bearish → 1 = bullish**
-with `0.5` neutral; confidence is derived from traded volume. Ticker aggregation scans up to 100 markets and
+`category` accepts `finance`, `crypto`, `politics`, `economics`. The ticker endpoint returns the
+list of relevant markets with their probabilities and volume. It deliberately computes **no** overall sentiment,
+confidence or trend: `overall_sentiment` and `confidence` are `null` and the trend is `"unknown"`, because an
+event probability has no stock-return direction. Read each market on its own. Ticker lookup scans up to 100 markets and
 keeps the top 30 by relevance.
 
 ---

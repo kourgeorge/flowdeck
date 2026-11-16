@@ -84,7 +84,7 @@ external agent is expected to read before calling this API.
 - **Comprehensive market data** -- quotes, fundamentals, news, SEC filings, technical indicators
 - **Deterministic event signals** -- price/volume/technical/insider/earnings events with a comparable score
 - **Daily & weekly digests** -- narrative briefs with schedules and email delivery
-- **Prediction-market sentiment** -- Polymarket-derived signal per ticker
+- **Prediction markets** -- relevant Polymarket markets per ticker (probabilities and volume; no overall sentiment is computed)
 
 Token economy, API key management, and share links are covered in their own sections below.
 
