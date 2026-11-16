@@ -61,8 +61,10 @@ class MarketResponse(BaseModel):
     id: str
     question: str
     description: str
-    probability: float = Field(ge=0, le=1)
-    change_24h: float
+    # None means Polymarket gave no usable price / no 24h change; we don't
+    # substitute 50% or 0 for those.
+    probability: Optional[float] = Field(default=None, ge=0, le=1)
+    change_24h: Optional[float] = None
     volume: int
     liquidity: int
     end_date: str

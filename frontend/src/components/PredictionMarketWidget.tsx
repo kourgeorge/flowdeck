@@ -11,8 +11,9 @@ interface Market {
   id: string;
   question: string;
   description: string;
-  probability: number;
-  change_24h: number;
+  // null when Polymarket gave no usable price / no 24h change
+  probability: number | null;
+  change_24h: number | null;
   volume: number;
   liquidity: number;
   end_date: string;
@@ -339,9 +340,10 @@ function EventGroup({ group }: { group: GroupedEvent }) {
 function MarketCard({ market, compact }: { market: Market; compact?: boolean }) {
   const probabilityColor = 'text-blue-300';
 
-  const changeColor = 
-    market.change_24h > 0 ? 'text-green-400' :
-    market.change_24h < 0 ? 'text-red-400' :
+  const change = market.change_24h;
+  const changeColor =
+    change != null && change > 0 ? 'text-green-400' :
+    change != null && change < 0 ? 'text-red-400' :
     'text-gray-400';
 
   const formatVolume = (vol: number) => {
@@ -367,12 +369,12 @@ function MarketCard({ market, compact }: { market: Market; compact?: boolean }) 
         </p>
         <div className="flex flex-col items-end shrink-0">
           <span className={`${compact ? 'text-base' : 'text-lg'} font-bold ${probabilityColor}`}>
-            {(market.probability * 100).toFixed(0)}%
+            {market.probability != null ? `${(market.probability * 100).toFixed(0)}%` : '—'}
           </span>
-          {market.change_24h !== 0 && (
+          {change != null && change !== 0 && (
             <span className={`text-xs ${changeColor}`}>
-              {market.change_24h > 0 ? '+' : ''}
-              {(market.change_24h * 100).toFixed(1)}%
+              {change > 0 ? '+' : ''}
+              {(change * 100).toFixed(1)}%
             </span>
           )}
         </div>

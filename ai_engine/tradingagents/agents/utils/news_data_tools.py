@@ -72,10 +72,16 @@ def _format_polymarket_sentiment(ticker: str, data: Optional[dict]) -> str:
             volume = m.get("volume")
             end_date = m.get("end_date") or ""
             parts = []
+            # Missing data is shown as n/a so the analyst never reads a
+            # placeholder as 50% odds or a flat day.
             if isinstance(prob, (int, float)):
                 parts.append(f"prob={prob * 100:.0f}%")
+            else:
+                parts.append("prob=n/a")
             if isinstance(change, (int, float)):
                 parts.append(f"24h Δ={change * 100:+.1f}pp")
+            else:
+                parts.append("24h Δ=n/a")
             if isinstance(volume, (int, float)) and volume:
                 parts.append(f"vol=${volume:,.0f}")
             if end_date:
