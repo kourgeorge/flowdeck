@@ -168,7 +168,7 @@ All under `/api/data/`. Most endpoints are public; auth-required endpoints are m
 | GET | `/api/data/quote/{ticker}` | Current quote (price, change, volume, currency) |
 | GET | `/api/data/company/{ticker}` | Company profile (name, sector, industry, exchange, country, website) |
 | GET | `/api/data/extended-info/{ticker}` | Extended metrics (beta, market cap, margins, PE, etc.) |
-| GET | `/api/data/market-rates` | FRED treasury yields / risk-free rate (cached 24 h) |
+| GET | `/api/data/market-rates` | FRED treasury yields / risk-free rate (full success cached 24 h, partial/failed fetch ~15 min; missing fields are null) |
 | GET | `/api/data/market-movers?count=8` | Top gainers/losers (`count` 1–100) |
 | GET | `/api/data/market-overview?range=1d` | Indices, sectors, regions, commodities in one payload |
 | GET | `/api/data/market-overview/section?section=indices` | One section only, paginated |
