@@ -104,7 +104,6 @@ class TradingAgentsGraph:
         # Initialize conditional logic for the Bull/Bear/Neutral debate loop
         self.conditional_logic = ConditionalLogic(
             max_debate_rounds=self.config.get("max_debate_rounds", 1),
-            max_risk_discuss_rounds=self.config.get("max_risk_discuss_rounds", 1),
         )
 
         # Initialize graph setup (analysts are now self-contained, no tool nodes needed)
