@@ -242,7 +242,8 @@ class TradingAgentsGraph:
         # Log state
         self._log_state(trade_date, final_state)
 
-        # Return decision and BUY/SELL/HOLD from structured fields (no extra LLM on narrative)
+        # Return decision and BUY/SELL/HOLD from structured fields (no extra LLM on narrative);
+        # the signal is None when no agent produced one, so callers must not assume a value.
         return final_state, resolve_trade_signal_from_state(final_state)
 
     def _log_state(self, trade_date, final_state):

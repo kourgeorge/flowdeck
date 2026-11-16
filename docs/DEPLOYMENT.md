@@ -39,7 +39,6 @@ python3.11 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
-pip install -r backend/requirements.txt
 ```
 
 **Environment:**
@@ -271,7 +270,6 @@ cd /opt/flowdeck
 git pull origin main
 source venv/bin/activate
 pip install -r requirements.txt
-pip install -r backend/requirements.txt
 python backend/scripts/migrate_token_economy.py   # if token economy / new DB schema was added
 cd frontend && npm ci && npm run build   # set VITE_API_URL if needed
 sudo systemctl restart flowdeck-backend

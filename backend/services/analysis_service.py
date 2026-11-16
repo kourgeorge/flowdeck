@@ -1081,9 +1081,15 @@ class AnalysisService:
                     # Research Manager now emits the authoritative BUY/SELL/HOLD recommendation;
                     # its conviction score (recommendation_score) drives the confidence.
                     rec_score = chunk.get("recommendation_score")
-                    final_rec = chunk.get("recommendation") or chunk.get("trader_recommendation") or "HOLD"
+                    # No HOLD default: when the Research Manager's structured call fails it
+                    # falls back to plain text with recommendation=None, and a made-up HOLD
+                    # would be saved and emailed as if the model had said it.
+                    final_rec = chunk.get("recommendation") or chunk.get("trader_recommendation") or None
                     meta = _build_report_json(content, rec_score, "Conviction Score", inv_takeaways,
                         recommendation=final_rec,
+                        recommendation_missing_reason=(
+                            "structured_output_failed" if final_rec is None else None
+                        ),
                         confidence=(rec_score / 5.0) if rec_score is not None else None,
                         expected_return_pct=chunk.get("expected_return_pct"),
                         bear_case_return_pct=chunk.get("bear_case_return_pct"),
@@ -1112,7 +1118,7 @@ class AnalysisService:
                     )
                     if write_reports_to_results:
                         _write_report_to_filesystem("investment_plan", content, analysis_info["report_dir"])
-                    _progress_log(f"Investment plan ready → {final_rec} → saved")
+                    _progress_log(f"Investment plan ready → {final_rec or 'no recommendation'} → saved")
 
                 if "trader_investment_plan" in chunk and chunk["trader_investment_plan"]:
                     c = chunk["trader_investment_plan"]
