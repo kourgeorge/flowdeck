@@ -444,9 +444,17 @@ def _build_index_etf_valuation(
         "instrument_type": quote_type,
         "instrument_name": name,
         "current_price": current_price,
-        "dcf": {"bear": 0.0, "base": 0.0, "bull": 0.0},
-        "pe_comps": methods.get("P/E Regime", methods.get("Price Regime", {"bear": 0.0, "base": 0.0, "bull": 0.0})),
-        "ev_ebitda": methods.get("EV/EBITDA Regime", methods.get("Market Target", {"bear": 0.0, "base": 0.0, "bull": 0.0})),
+        # No intrinsic DCF for an index/ETF, and a regime may be missing when its
+        # input was not reported. Null (not 0.0) so the analyst and the report show
+        # the method as left out instead of a $0 fair value.
+        "dcf": {"bear": None, "base": None, "bull": None},
+        "pe_comps": methods.get("P/E Regime", methods.get("Price Regime", {"bear": None, "base": None, "bull": None})),
+        "ev_ebitda": methods.get("EV/EBITDA Regime", methods.get("Market Target", {"bear": None, "base": None, "bull": None})),
+        "method_scenarios_text": format_method_scenarios_text(
+            None,
+            methods.get("P/E Regime", methods.get("Price Regime")),
+            methods.get("EV/EBITDA Regime", methods.get("Market Target")),
+        ),
         "valuation_summary": valuation_summary,
         "fair_value_bear": fair_value_bear,
         "fair_value_base": fair_value_base,
@@ -2177,6 +2185,7 @@ def calculate_multi_method_valuation_data(
         "probability_distribution": probability_distribution,
         "scenario_interpretation": scenario_interpretation,
         "valuation_key_assumptions": key_assumptions,
+        "method_scenarios_text": format_method_scenarios_text(dcf, pe_comps, ev_ebitda),
         "valuation_available": True,
         "inputs": {
             "shares_outstanding": shares_outstanding,
@@ -2200,10 +2209,41 @@ def calculate_multi_method_valuation_data(
     }
 
 
+def _format_scenario_value(value: Any) -> str:
+    number = _safe_float(value)
+    return "n/a" if number is None else f"${number:,.2f}"
+
+
+def format_method_scenarios_text(
+    dcf: Optional[Dict[str, Any]],
+    pe_comps: Optional[Dict[str, Any]],
+    ev_ebitda: Optional[Dict[str, Any]],
+) -> str:
+    """Plain-text bear/base/bull lines per method, with "n/a" for a left-out method.
+
+    A method the tool leaves out (EV/EBITDA without usable EBITDA, DCF for an
+    ETF) carries null values; formatting those as $0.00 would read as a real
+    fair value, so they print as n/a instead.
+    """
+    lines = []
+    for label, scenarios in (("DCF", dcf), ("P/E Comps", pe_comps), ("EV/EBITDA", ev_ebitda)):
+        scenarios = scenarios if isinstance(scenarios, dict) else {}
+        values = [scenarios.get(key) for key in ("bear", "base", "bull")]
+        if all(_safe_float(v) is None for v in values):
+            lines.append(f"{label}: n/a (left out, no usable data)")
+            continue
+        lines.append(
+            f"{label}: bear {_format_scenario_value(values[0])}, "
+            f"base {_format_scenario_value(values[1])}, "
+            f"bull {_format_scenario_value(values[2])}"
+        )
+    return "\n".join(lines)
+
+
 def calculate_valuation_summary(
-    dcf: Dict[str, float],
-    pe_comps: Dict[str, float],
-    ev_ebitda: Dict[str, float],
+    dcf: Dict[str, Optional[float]],
+    pe_comps: Dict[str, Optional[float]],
+    ev_ebitda: Dict[str, Optional[float]],
     method_weights: Optional[Dict[str, float]] = None,
     scenario_weights: Optional[Dict[str, float]] = None,
 ) -> Dict[str, Any]:
@@ -2258,15 +2298,15 @@ def calculate_valuation_summary(
 
 @tool
 def calculate_valuation_summary_table(
-    dcf_bear: Annotated[float, "DCF bear-case fair value per share"],
-    dcf_base: Annotated[float, "DCF base-case fair value per share"],
-    dcf_bull: Annotated[float, "DCF bull-case fair value per share"],
-    pe_comps_bear: Annotated[float, "P/E comps bear-case fair value per share"],
-    pe_comps_base: Annotated[float, "P/E comps base-case fair value per share"],
-    pe_comps_bull: Annotated[float, "P/E comps bull-case fair value per share"],
-    ev_ebitda_bear: Annotated[float, "EV/EBITDA bear-case fair value per share"],
-    ev_ebitda_base: Annotated[float, "EV/EBITDA base-case fair value per share"],
-    ev_ebitda_bull: Annotated[float, "EV/EBITDA bull-case fair value per share"],
+    dcf_bear: Annotated[Optional[float], "DCF bear-case fair value per share, or null if the method was left out"],
+    dcf_base: Annotated[Optional[float], "DCF base-case fair value per share, or null if the method was left out"],
+    dcf_bull: Annotated[Optional[float], "DCF bull-case fair value per share, or null if the method was left out"],
+    pe_comps_bear: Annotated[Optional[float], "P/E comps bear-case fair value per share, or null if the method was left out"],
+    pe_comps_base: Annotated[Optional[float], "P/E comps base-case fair value per share, or null if the method was left out"],
+    pe_comps_bull: Annotated[Optional[float], "P/E comps bull-case fair value per share, or null if the method was left out"],
+    ev_ebitda_bear: Annotated[Optional[float], "EV/EBITDA bear-case fair value per share, or null if the method was left out"],
+    ev_ebitda_base: Annotated[Optional[float], "EV/EBITDA base-case fair value per share, or null if the method was left out"],
+    ev_ebitda_bull: Annotated[Optional[float], "EV/EBITDA bull-case fair value per share, or null if the method was left out"],
 ) -> str:
     """
     Deterministically compute the valuation summary table.

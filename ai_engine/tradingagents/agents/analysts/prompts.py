@@ -552,6 +552,8 @@ The markdown table in `report` must match the values returned by `calculate_mult
 | EV/EBITDA | $XX | $XX | $XX | 30% | $XX |
 | **Weighted Avg** | **$XX** | **$XX** | **$XX** | **100%** | **$XX** |
 
+If the tool returned null for a method (for example `ev_ebitda` is null with 0% weight because EBITDA is missing), write `n/a` in that row's value cells and say why. The tool's `method_scenarios_text` field already shows each method this way. Never write $0 for a method the tool left out.
+
 Current Price: $XX
 Upside to Base: +X%
 
@@ -788,10 +790,10 @@ Use the numeric outputs from `calculate_multi_method_valuation` directly. If the
 8. **valuation_conviction**: String ("high", "medium", or "low")
 9. **valuation_key_assumptions**: List of 3-5 strings (most important assumptions) - **CRITICAL: Copy these EXACTLY from the `valuation_key_assumptions` field returned by `calculate_multi_method_valuation`. These include data source annotations. DO NOT rewrite or simplify them. If they contain "(source: FALLBACK_ESTIMATE)" or similar warnings, you MUST include that text verbatim.**
 10. **key_takeaways**: List of 3-5 one-sentence trader takeaways
-11. **dcf**: Object with float fields `bear`, `base`, `bull`
-12. **pe_comps**: Object with float fields `bear`, `base`, `bull`
-13. **ev_ebitda**: Object with float fields `bear`, `base`, `bull`
-14. **valuation_summary**: Object matching the output of `calculate_valuation_summary_table`, at minimum including `rows` and `weighted_avg`
+11. **dcf**: Object with float-or-null fields `bear`, `base`, `bull`
+12. **pe_comps**: Object with float-or-null fields `bear`, `base`, `bull`
+13. **ev_ebitda**: Object with float-or-null fields `bear`, `base`, `bull`. **If the tool returned null for a method (EV/EBITDA is left out with 0% weight when EBITDA is missing), write null, NEVER 0, and write "n/a" for it in the report text.**
+14. **valuation_summary**: Object matching the output of `calculate_valuation_summary_table`, at minimum including `rows` and `weighted_avg`. Leave out rows for methods the tool left out.
 15. **valuation_bridge**: Object with float fields `current_price`, `growth_premium`, `multiple_expansion`, `risk_discount`, `fair_value`
 16. **valuation_sensitivity**: Object with enhanced format including `parameter_name`, `base_value`, `delta_absolute`, `delta_percent`, `low_value`, `high_value`, `fair_value_low`, `fair_value_high`, `fair_value_range_pct` for each parameter
 17. **probability_distribution**: Object with P10/P25/P50/P75/P90, expected_value, downside_risk_pct, upside_potential_pct, risk_reward_ratio (copy from `probability_distribution`)

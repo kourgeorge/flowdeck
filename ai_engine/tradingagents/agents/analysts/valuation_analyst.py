@@ -42,10 +42,19 @@ class ValuationScoreBreakdown(BaseModel):
     explanation: str = Field(description="Detailed explanation of score components")
 
 
+_LEFT_OUT_NOTE = (
+    " Use null (not 0) when calculate_multi_method_valuation returned null for this "
+    "method, e.g. EV/EBITDA when the company reports no usable EBITDA."
+)
+
+
 class ValuationMethodScenario(BaseModel):
-    bear: float = Field(description="Bear-case fair value per share for this method")
-    base: float = Field(description="Base-case fair value per share for this method")
-    bull: float = Field(description="Bull-case fair value per share for this method")
+    # Values are nullable but still required: since T-58 the tool leaves EV/EBITDA
+    # out (null, 0% weight) when EBITDA is missing, and a float-only schema pushed
+    # the model to write 0 -- a $0 fair value that looks like a real result.
+    bear: Optional[float] = Field(description="Bear-case fair value per share for this method." + _LEFT_OUT_NOTE)
+    base: Optional[float] = Field(description="Base-case fair value per share for this method." + _LEFT_OUT_NOTE)
+    bull: Optional[float] = Field(description="Bull-case fair value per share for this method." + _LEFT_OUT_NOTE)
 
 
 class ValuationProbabilityDistribution(BaseModel):
@@ -179,7 +188,10 @@ class ValuationAnalysisOutput(BaseModel):
         description="P/E comps fair value outputs by scenario"
     )
     ev_ebitda: ValuationMethodScenario = Field(
-        description="EV/EBITDA fair value outputs by scenario"
+        description=(
+            "EV/EBITDA fair value outputs by scenario. All three values must be null "
+            "(never 0) when the tool left EV/EBITDA out"
+        )
     )
     valuation_summary: ValuationSummaryTable = Field(
         description="Deterministic valuation summary generated from calculate_valuation_summary_table"
