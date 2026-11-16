@@ -10,6 +10,32 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
+# report_payload.py lists every watchlist ticker with recommendation=None and
+# only fills it in when the platform has a report. A missing or unrecognised
+# value means "we never analysed this stock", not HOLD, so it gets its own
+# label instead of being folded into the HOLD count.
+VALID_RECOMMENDATIONS = ("BUY", "HOLD", "SELL")
+NO_REPORT_LABEL = "No report"
+NO_PLATFORM_REPORT_TEXT = "No platform report for this ticker yet; no rating is given."
+
+
+def normalize_recommendation(value: Any) -> Optional[str]:
+    """Return BUY/HOLD/SELL, or None when there is no usable platform recommendation."""
+    if not value:
+        return None
+    r = str(value).strip().upper()
+    return r if r in VALID_RECOMMENDATIONS else None
+
+
+def recommendation_counts(entries: List[Dict[str, Any]]) -> Dict[str, int]:
+    """Count BUY/HOLD/SELL plus NO_REPORT_LABEL for entries without a platform recommendation."""
+    counts: Dict[str, int] = {}
+    for e in entries:
+        r = normalize_recommendation(e.get("recommendation")) or NO_REPORT_LABEL
+        counts[r] = counts.get(r, 0) + 1
+    return counts
+
+
 # ----- Stage 1: User Intent -----
 class UserIntent(BaseModel):
     investor_style: str = Field(description="e.g. long-term, swing, learning, income, speculation")

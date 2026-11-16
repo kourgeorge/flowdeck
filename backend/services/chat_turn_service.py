@@ -42,6 +42,10 @@ class ChatTurnConflict(ValueError):
     pass
 
 
+class ChatInvalidMessages(ValueError):
+    pass
+
+
 def _parse_sse_event(raw_event: str) -> Optional[Dict[str, Any]]:
     try:
         return json.loads(raw_event.removeprefix("data: ").strip())
@@ -125,6 +129,10 @@ class ChatTurnService:
         body_messages: List[Dict[str, str]],
         session_id: Optional[int],
     ) -> tuple[int, int, List[Dict[str, str]]]:
+        # The router already validates this; repeated here so any other caller
+        # cannot reserve tokens for a turn with no question to answer.
+        if not body_messages or body_messages[-1].get("role", "user") != "user":
+            raise ChatInvalidMessages("The last message must have role 'user'")
         db = SessionLocal()
         try:
             token_service.ensure_user_balance(user_id, db)
@@ -148,14 +156,18 @@ class ChatTurnService:
             base_sort_order = (next_sort_order if next_sort_order is not None else -1) + 1
             user_message_id: Optional[int] = None
             for i, message in enumerate(body_messages):
-                saved = save_user_message(db, session.id, message.get("content", ""), base_sort_order + i)
-                user_message_id = saved.id
-                history.append({"role": message.get("role", "user"), "content": message.get("content", "")})
+                role = message.get("role", "user")
+                content = message.get("content", "")
+                saved = save_user_message(db, session.id, content, base_sort_order + i, role=role)
+                if role == "user":
+                    user_message_id = saved.id
+                history.append({"role": role, "content": content})
 
+            first_user = next((m for m in body_messages if m.get("role", "user") == "user"), None)
             update_session_after_messages(
                 db,
                 session.id,
-                first_user_content=body_messages[0].get("content") if body_messages else None,
+                first_user_content=first_user.get("content") if first_user else None,
             )
 
             turn = ChatTurn(

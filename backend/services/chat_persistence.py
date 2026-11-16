@@ -20,16 +20,27 @@ logger = logging.getLogger(__name__)
 SESSION_TITLE_MAX_LEN = 80
 
 
+CLIENT_MESSAGE_ROLES = ("user", "assistant")
+
+
 def save_user_message(
     db: Session,
     session_id: int,
     content: str,
     sort_order: int,
+    *,
+    role: str = "user",
 ) -> ChatMessage:
-    """Insert a user message and return it."""
+    """Insert a client-sent message (normally a user turn) and return it.
+
+    Without a session id the frontend resends earlier assistant replies too;
+    they must keep role="assistant" or they reload as the user's own words.
+    """
+    if role not in CLIENT_MESSAGE_ROLES:
+        raise ValueError(f"Unsupported chat message role: {role!r}")
     msg = ChatMessage(
         session_id=session_id,
-        role="user",
+        role=role,
         content=content or "",
         sort_order=sort_order,
     )
