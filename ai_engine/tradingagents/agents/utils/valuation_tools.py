@@ -286,8 +286,7 @@ def _build_index_etf_valuation(
     price_to_book = _first_numeric(fundamentals, "PriceToBookRatio", "PriceToBookRatioTTM", "PriceToBook")
     ev_to_ebitda = _first_numeric(fundamentals, "EVToEBITDA")
     beta = _clamp(_first_numeric(fundamentals, "Beta") or 1.0, 0.7, 2.0)
-    risk_free_rate, risk_free_label = _get_risk_free_rate_with_source()
-    market_risk_premium, market_risk_premium_source = _get_market_risk_premium_with_source()
+    risk_free_rate, risk_free_label, market_risk_premium, market_risk_premium_source = _get_market_rates_with_sources()
 
     price_targets = (analyst_recommendations.get("price_targets") or {}) if isinstance(analyst_recommendations, dict) else {}
     target_low = _safe_float(price_targets.get("low"))
@@ -419,12 +418,7 @@ def _build_index_etf_valuation(
         f"Rates context: risk-free {risk_free_rate*100:.2f}%, market risk premium {market_risk_premium*100:.2f}%",
         f"Method weights: " + ", ".join(f"{method} {normalized_weights[method]*100:.1f}%" for method in normalized_weights),
     ]
-    rf_warning = _risk_free_warning(risk_free_label, risk_free_rate)
-    if rf_warning:
-        key_assumptions.append(rf_warning)
-    mrp_warning = _market_risk_premium_warning(market_risk_premium_source, market_risk_premium)
-    if mrp_warning:
-        key_assumptions.append(mrp_warning)
+    key_assumptions.extend(_rate_warnings(risk_free_label, risk_free_rate, market_risk_premium_source, market_risk_premium))
     if forward_pe or trailing_pe:
         key_assumptions.append(
             f"P/E inputs: trailing {trailing_pe:.2f}x, forward {forward_pe:.2f}x; fair band anchored near {'18.0x' if risk_free_rate >= 0.04 else '20.0x'}"
@@ -1354,9 +1348,17 @@ _ASSUMED_RISK_FREE_RATE = 0.045
 _ASSUMED_RISK_FREE_RATE_SOURCE = "assumed default (FRED 10-year yield unavailable)"
 
 
-def _get_risk_free_rate_with_source() -> Tuple[float, Optional[str]]:
+def _fetch_market_rates() -> Optional[Dict[str, Any]]:
+    try:
+        from ...datasources.info_service_client import get_market_rates
+        return get_market_rates()
+    except Exception:
+        return None
+
+
+def _risk_free_rate_from(rates: Optional[Dict[str, Any]]) -> Tuple[float, Optional[str]]:
     """
-    Return (risk_free_rate, assumption_label).
+    Return (risk_free_rate, assumption_label) from a get_market_rates() result.
 
     assumption_label is None when the rate really came from FRED. When FRED
     timed out the service now returns None instead of a made-up 4.5% labelled
@@ -1365,8 +1367,6 @@ def _get_risk_free_rate_with_source() -> Tuple[float, Optional[str]]:
     missing growth estimates (a stated fallback plus a warning).
     """
     try:
-        from ...datasources.info_service_client import get_market_rates
-        rates = get_market_rates()
         if rates:
             risk_free_rate = rates.get("risk_free_rate")
             if risk_free_rate is not None:
@@ -1374,6 +1374,10 @@ def _get_risk_free_rate_with_source() -> Tuple[float, Optional[str]]:
     except Exception:
         pass
     return _ASSUMED_RISK_FREE_RATE, _ASSUMED_RISK_FREE_RATE_SOURCE
+
+
+def _get_risk_free_rate_with_source() -> Tuple[float, Optional[str]]:
+    return _risk_free_rate_from(_fetch_market_rates())
 
 
 def _risk_free_warning(label: Optional[str], rate: float) -> Optional[str]:
@@ -1391,9 +1395,9 @@ _ASSUMED_MARKET_RISK_PREMIUM_SOURCE = "assumed"
 _PREMIUM_ASSUMPTION_SOURCES = {_ASSUMED_MARKET_RISK_PREMIUM_SOURCE, "historical_average_assumption"}
 
 
-def _get_market_risk_premium_with_source() -> Tuple[float, str]:
+def _market_risk_premium_from(rates: Optional[Dict[str, Any]]) -> Tuple[float, str]:
     """
-    Return (market_risk_premium, source).
+    Return (market_risk_premium, source) from a get_market_rates() result.
 
     source is the service's field_sources label ("derived_from_vix" or
     "historical_average_assumption"), or "assumed" when the service gave us
@@ -1401,8 +1405,6 @@ def _get_market_risk_premium_with_source() -> Tuple[float, str]:
     _market_risk_premium_warning() to flag the assumption cases.
     """
     try:
-        from ...datasources.info_service_client import get_market_rates
-        rates = get_market_rates()
         if rates:
             market_risk_premium = rates.get("market_risk_premium")
             if market_risk_premium is not None:
@@ -1414,6 +1416,23 @@ def _get_market_risk_premium_with_source() -> Tuple[float, str]:
     return _ASSUMED_MARKET_RISK_PREMIUM, _ASSUMED_MARKET_RISK_PREMIUM_SOURCE
 
 
+def _get_market_risk_premium_with_source() -> Tuple[float, str]:
+    return _market_risk_premium_from(_fetch_market_rates())
+
+
+def _get_market_rates_with_sources() -> Tuple[float, Optional[str], float, str]:
+    """
+    Return (risk_free_rate, risk_free_label, market_risk_premium, premium_source)
+    from a single get_market_rates() call.
+
+    get_market_rates() has no cache, so fetching once per tool call halves the
+    wait on a slow service and stops one output from mixing a FRED rate with an
+    "assumed (service unavailable)" premium when the service flaps between calls.
+    """
+    rates = _fetch_market_rates()
+    return (*_risk_free_rate_from(rates), *_market_risk_premium_from(rates))
+
+
 def _market_risk_premium_warning(source: Optional[str], premium: float) -> Optional[str]:
     if source not in _PREMIUM_ASSUMPTION_SOURCES:
         return None
@@ -1422,6 +1441,20 @@ def _market_risk_premium_warning(source: Optional[str], premium: float) -> Optio
     else:
         reason = "an assumed default (market-rates service unavailable)"
     return f"⚠️ WARNING: Market risk premium {premium*100:.2f}% is {reason}, not market data."
+
+
+def _rate_warnings(
+    risk_free_label: Optional[str],
+    risk_free_rate: float,
+    market_risk_premium_source: Optional[str],
+    market_risk_premium: float,
+) -> List[str]:
+    return [
+        w for w in (
+            _risk_free_warning(risk_free_label, risk_free_rate),
+            _market_risk_premium_warning(market_risk_premium_source, market_risk_premium),
+        ) if w
+    ]
 
 
 def _calculate_terminal_growth(
@@ -1766,9 +1799,7 @@ def calculate_multi_method_valuation_data(
 
     beta = _clamp(_first_numeric(fundamentals, "Beta") or 1.1, 0.8, 2.0)
     # Fetch current risk-free rate from FRED (10-year treasury)
-    risk_free_rate, risk_free_label = _get_risk_free_rate_with_source()
-    # Fetch dynamic market risk premium based on VIX
-    market_risk_premium, market_risk_premium_source = _get_market_risk_premium_with_source()
+    risk_free_rate, risk_free_label, market_risk_premium, market_risk_premium_source = _get_market_rates_with_sources()
     cost_of_equity = risk_free_rate + beta * market_risk_premium
     total_debt = _latest_numeric(balance_sheet_quarterly or balance_sheet_annual, "totalDebt", "longTermDebtAndCapitalLeaseObligation", "longTermDebt") or 0.0
     interest_expense = abs(_latest_numeric(income_annual, "interestExpense", "netInterestIncome") or 0.0)
@@ -2069,12 +2100,7 @@ def calculate_multi_method_valuation_data(
     # Add data quality warning if using fallback estimates
     if "FALLBACK_ESTIMATE" in growth_data_source:
         key_assumptions.append("⚠️ WARNING: Growth estimates unavailable - using conservative fallback (8%). Valuation reliability is LOW.")
-    rf_warning = _risk_free_warning(risk_free_label, risk_free_rate)
-    if rf_warning:
-        key_assumptions.append(rf_warning)
-    mrp_warning = _market_risk_premium_warning(market_risk_premium_source, market_risk_premium)
-    if mrp_warning:
-        key_assumptions.append(mrp_warning)
+    key_assumptions.extend(_rate_warnings(risk_free_label, risk_free_rate, market_risk_premium_source, market_risk_premium))
 
     return {
         "ticker": ticker.upper(),
@@ -2553,8 +2579,7 @@ def get_wacc_inputs(
         cost_of_debt = 0.05  # Default 5% cost of debt
     
     # Fetch current market rates dynamically
-    risk_free_rate, risk_free_label = _get_risk_free_rate_with_source()
-    market_risk_premium, market_risk_premium_source = _get_market_risk_premium_with_source()
+    risk_free_rate, risk_free_label, market_risk_premium, market_risk_premium_source = _get_market_rates_with_sources()
     
     # Calculate cost of equity using CAPM: Re = Rf + Beta * (Rm - Rf)
     cost_of_equity = risk_free_rate + (beta * market_risk_premium)
@@ -2604,12 +2629,7 @@ def get_wacc_inputs(
     }
     # The agent reads this JSON directly, so assumed inputs must be called out
     # here rather than only in the source fields.
-    warnings = [
-        w for w in (
-            _risk_free_warning(risk_free_label, risk_free_rate),
-            _market_risk_premium_warning(market_risk_premium_source, market_risk_premium),
-        ) if w
-    ]
+    warnings = _rate_warnings(risk_free_label, risk_free_rate, market_risk_premium_source, market_risk_premium)
     if warnings:
         result["warnings"] = warnings
 
@@ -2843,8 +2863,7 @@ def get_dcf_inputs(
         # Same helpers as get_wacc_inputs: this used to hard-code 4.5% / 7.5%,
         # which disagreed with the 5.5% premium everywhere else and hid the
         # fact that both numbers were guesses.
-        risk_free_rate, risk_free_label = _get_risk_free_rate_with_source()
-        market_risk_premium, market_risk_premium_source = _get_market_risk_premium_with_source()
+        risk_free_rate, risk_free_label, market_risk_premium, market_risk_premium_source = _get_market_rates_with_sources()
         risk_free_rate_source = risk_free_label or "FRED"
         wacc = risk_free_rate + (beta * market_risk_premium)
         wacc_data_source = [
@@ -2852,12 +2871,7 @@ def get_dcf_inputs(
             f"risk_free_rate: {risk_free_rate_source}",
             f"market_risk_premium: {market_risk_premium_source}",
         ]
-        wacc_warnings = [
-            w for w in (
-                _risk_free_warning(risk_free_label, risk_free_rate),
-                _market_risk_premium_warning(market_risk_premium_source, market_risk_premium),
-            ) if w
-        ]
+        wacc_warnings = _rate_warnings(risk_free_label, risk_free_rate, market_risk_premium_source, market_risk_premium)
     
     result = {
         "ticker": ticker.upper(),
