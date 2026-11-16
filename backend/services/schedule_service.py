@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy.orm import Session
@@ -48,16 +48,6 @@ def validate_timezone_name(tz_name: str) -> None:
 
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def get_user_schedules(db: Session, user_id: int) -> List[UserSchedule]:
-    """Return all schedules for a user."""
-    return (
-        db.query(UserSchedule)
-        .filter(UserSchedule.user_id == user_id)
-        .order_by(UserSchedule.created_at.asc())
-        .all()
-    )
 
 
 def get_user_schedule_by_type(db: Session, user_id: int, schedule_type: str) -> Optional[UserSchedule]:
@@ -110,23 +100,6 @@ def upsert_user_schedule(
     db.commit()
     db.refresh(schedule)
     return schedule
-
-
-def delete_user_schedule(db: Session, user_id: int, schedule_id: int) -> bool:
-    """Delete a schedule if it belongs to the user. Returns True if deleted."""
-    schedule = (
-        db.query(UserSchedule)
-        .filter(
-            UserSchedule.id == schedule_id,
-            UserSchedule.user_id == user_id,
-        )
-        .first()
-    )
-    if not schedule:
-        return False
-    db.delete(schedule)
-    db.commit()
-    return True
 
 
 def decode_metadata(schedule: UserSchedule) -> Dict[str, Any]:

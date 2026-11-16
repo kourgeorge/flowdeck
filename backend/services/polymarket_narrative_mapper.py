@@ -385,27 +385,6 @@ def get_narrative_category(query: str) -> str:
     return "general"
 
 
-def prioritize_narratives(
-    narratives: List[str],
-    max_queries: int = 10
-) -> List[str]:
-    """
-    Reduce and prioritize narrative list to avoid excessive API calls.
-    
-    Args:
-        narratives: Full list of narratives
-        max_queries: Maximum number of queries to return
-        
-    Returns:
-        Prioritized subset of narratives
-    """
-    if len(narratives) <= max_queries:
-        return narratives
-    
-    # Keep first max_queries (already prioritized by map_ticker_to_narratives)
-    return narratives[:max_queries]
-
-
 def get_related_tickers(ticker: str) -> List[str]:
     """
     Get related tickers that might have relevant Polymarket markets.
@@ -431,33 +410,6 @@ def get_related_tickers(ticker: str) -> List[str]:
     }
     
     return RELATED_TICKERS.get(ticker.upper(), [])
-
-
-def expand_narratives_with_related(
-    ticker: str,
-    company_info: Optional[Dict] = None,
-    include_related: bool = False
-) -> List[str]:
-    """
-    Generate narratives including related companies if requested.
-    
-    Args:
-        ticker: Stock ticker
-        company_info: Company information
-        include_related: Whether to include related ticker narratives
-        
-    Returns:
-        Expanded list of narratives
-    """
-    narratives = map_ticker_to_narratives(ticker, company_info)
-    
-    if include_related:
-        related_tickers = get_related_tickers(ticker)
-        for related_ticker in related_tickers:
-            narratives.append(related_ticker)
-            narratives.append(f"{related_ticker} stock")
-    
-    return narratives
 
 
 # Example usage and testing

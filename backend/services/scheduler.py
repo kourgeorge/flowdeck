@@ -25,58 +25,6 @@ def _get_default_timezone() -> str:
     return os.environ.get("DIGEST_DEFAULT_TIMEZONE", "UTC")
 
 
-def _cron_field_matches(value: int, field: str) -> bool:
-    """
-    Minimal cron field matcher.
-
-    Supports:
-    - "*" (any)
-    - "N" (single integer)
-    - "a,b,c" (list of integers)
-    """
-    field = (field or "").strip()
-    if field == "*" or not field:
-        return True
-    parts = field.split(",")
-    for part in parts:
-        part = part.strip()
-        if not part:
-            continue
-        try:
-            if value == int(part):
-                return True
-        except ValueError:
-            continue
-    return False
-
-
-def _cron_matches(now_local: datetime, expr: str) -> bool:
-    """
-    Check whether a 5-field cron expression matches the given local datetime
-    at minute resolution: "min hour day month weekday".
-    """
-    expr = (expr or "").strip()
-    fields = expr.split()
-    if len(fields) != 5:
-        return False
-    minute_f, hour_f, dom_f, month_f, dow_f = fields
-
-    minute = now_local.minute
-    hour = now_local.hour
-    day = now_local.day
-    month = now_local.month
-    # Python: Monday=0..Sunday=6, cron: Sunday=0 or 7. We accept 0-6 here for simplicity.
-    dow = now_local.weekday()
-
-    return (
-        _cron_field_matches(minute, minute_f)
-        and _cron_field_matches(hour, hour_f)
-        and _cron_field_matches(day, dom_f)
-        and _cron_field_matches(month, month_f)
-        and _cron_field_matches(dow, dow_f)
-    )
-
-
 def _stored_utc(value: datetime) -> datetime:
     """Read a time stored in a plain DateTime column as UTC.
 
