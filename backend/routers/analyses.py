@@ -295,7 +295,10 @@ async def start_analysis(
         try:
             body = await request.json()
         except ValueError as exc:
-            raise HTTPException(422, "Request body must be a JSON object") from exc
+            # Starlette surfaces unparseable bodies as JSONDecodeError (a ValueError);
+            # the API docs promise 400 for that case, while 422 stays for valid JSON
+            # that isn't an object.
+            raise HTTPException(status_code=400, detail="Invalid JSON in request body") from exc
         if not isinstance(body, dict) or not isinstance(body.get("ticker", ""), str):
             raise HTTPException(422, "Request body must contain a ticker string")
         ticker = body.get("ticker", "").strip().upper()
@@ -367,8 +370,6 @@ async def start_analysis(
         raise HTTPException(status_code=503, detail=str(e), headers={"Retry-After": "60"})
     except HTTPException:
         raise
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON in request body")
     except Exception as e:
         if analysis_run_id is not None:
             analysis_service._fail_analysis(analysis_run_id, "Unable to start analysis")
