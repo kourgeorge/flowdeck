@@ -1,5 +1,6 @@
 """Digest service: generation helpers and history for user briefs."""
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -222,6 +223,36 @@ def _parse_span(span_type: str) -> tuple[str, Optional[str], Optional[str]]:
     return span_type, None, None
 
 
+def _fail_and_refund(execution_id: int, user_id: int, db: Session, error: BaseException) -> None:
+    """Mark the brief's Execution failed and give the tokens back.
+
+    Each step is best-effort: a failure here must not hide the original error.
+    """
+    if isinstance(error, asyncio.CancelledError):
+        logger.warning("Digest cancelled for user_id=%s execution_id=%s", user_id, execution_id)
+    else:
+        logger.error(
+            "Digest generation failed for user_id=%s execution_id=%s",
+            user_id, execution_id, exc_info=error,
+        )
+    from services.report_service import update_execution_status
+    try:
+        update_execution_status(
+            execution_id, "failed", error_message=f"{type(error).__name__}: {error}"
+        )
+    except Exception as update_err:
+        logger.error("Failed to update execution status after error: %s", update_err)
+
+    try:
+        from services.token_service import refund_for_failed_digest
+        if refund_for_failed_digest(execution_id, db):
+            logger.info("Refunded tokens for failed digest: execution_id=%s user_id=%s", execution_id, user_id)
+        else:
+            logger.warning("Failed to refund tokens for failed digest: execution_id=%s user_id=%s", execution_id, user_id)
+    except Exception as refund_err:
+        logger.error("Error during automatic refund for failed digest: %s", refund_err)
+
+
 async def run_and_store_digest(
     db: Session,
     user_id: int,
@@ -261,8 +292,13 @@ async def run_and_store_digest(
 
     parsed_span_type, start_date, end_date = _parse_span(span_type)
 
-    # Run the heavy work in a background thread.
-    import asyncio
+    # Everything after the charge sits under one handler. It used to cover only
+    # run_digest, so when save_report raised ("database is locked") the user was
+    # charged, nothing was saved and the Execution stayed "running" until the
+    # manual cleanup script ran. CancelledError is listed on its own because a
+    # client disconnect arrives as asyncio.CancelledError, which `except
+    # Exception` skips; it is re-raised after cleanup. The refund is idempotent, so one call here is safe.
+    from services.report_service import save_report, update_execution_status
     try:
         result = await asyncio.to_thread(
             run_digest,
@@ -282,80 +318,54 @@ async def run_and_store_digest(
             portfolio_tickers_loader=load_portfolio_tickers,
             recent_digests_loader=load_recent_digest_rows,
         )
-    except Exception as e:  # pragma: no cover - surface to caller
-        logger.exception("Digest generation failed for user_id=%s: %s", user_id, e)
-        # Mark execution as failed with error message
-        from services.report_service import update_execution_status
-        try:
-            error_msg = f"{type(e).__name__}: {str(e)}"
-            update_execution_status(execution_id, "failed", error_message=error_msg)
-        except Exception as update_err:
-            logger.error("Failed to update execution status after error: %s", update_err)
-        
-        # Automatically refund tokens for failed digest
-        try:
-            from services.token_service import refund_for_failed_digest
-            refund_success = refund_for_failed_digest(execution_id, db)
-            if refund_success:
-                logger.info("Refunded tokens for failed digest: execution_id=%s user_id=%s", execution_id, user_id)
-            else:
-                logger.warning("Failed to refund tokens for failed digest: execution_id=%s user_id=%s", execution_id, user_id)
-        except Exception as refund_err:
-            logger.error("Error during automatic refund for failed digest: %s", refund_err)
-        
+
+        metadata: dict = {
+            "digest_date": getattr(result, "digest_date", digest_date),
+            "span_type": getattr(result, "span_type", parsed_span_type),
+            "span_label": getattr(result, "span_label", "Daily"),
+            "priority_tickers": getattr(result, "priority_tickers", []),
+            "important_events": [
+                event.model_dump() if hasattr(event, "model_dump") else event
+                for event in (getattr(result, "important_events", None) or [])
+            ],
+            "what_to_watch": getattr(result, "what_to_watch", ""),
+        }
+        # Optional per-ticker snapshot for UI: price + span-aware percent change.
+        focus_snapshot = getattr(result, "focus_snapshot", None)
+        if isinstance(focus_snapshot, dict) and focus_snapshot:
+            metadata["focus_snapshot"] = focus_snapshot
+        if user_note:
+            metadata["user_note"] = user_note
+        if narrative_style:
+            metadata["narrative_style"] = narrative_style
+        if user_focus_tickers:
+            metadata["user_focus_tickers"] = user_focus_tickers
+        if getattr(result, "references", None):
+            metadata["references"] = [
+                r.model_dump() if hasattr(r, "model_dump") else r
+                for r in (result.references or [])
+            ]
+        if getattr(result, "resources", None):
+            metadata["resources"] = list(result.resources or [])
+        if getattr(result, "agent_steps", None):
+            metadata["agent_steps"] = list(result.agent_steps or [])
+        # Optional LLM usage metadata
+        for key in ("input_tokens", "output_tokens", "total_tokens", "cost_usd", "models_used"):
+            value = getattr(result, key, None)
+            if value is not None:
+                metadata[key] = value
+
+        save_report(
+            execution_id,
+            "daily_digest",
+            content=getattr(result, "narrative", ""),
+            metadata=metadata,
+        )
+        update_execution_status(execution_id, "completed")
+    except (Exception, asyncio.CancelledError) as e:
+        _fail_and_refund(execution_id, user_id, db, e)
         raise
 
-    metadata: dict = {
-        "digest_date": getattr(result, "digest_date", digest_date),
-        "span_type": getattr(result, "span_type", parsed_span_type),
-        "span_label": getattr(result, "span_label", "Daily"),
-        "priority_tickers": getattr(result, "priority_tickers", []),
-        "important_events": [
-            event.model_dump() if hasattr(event, "model_dump") else event
-            for event in (getattr(result, "important_events", None) or [])
-        ],
-        "what_to_watch": getattr(result, "what_to_watch", ""),
-    }
-    # Optional per-ticker snapshot for UI: price + span-aware percent change.
-    focus_snapshot = getattr(result, "focus_snapshot", None)
-    if isinstance(focus_snapshot, dict) and focus_snapshot:
-        metadata["focus_snapshot"] = focus_snapshot
-    if user_note:
-        metadata["user_note"] = user_note
-    if narrative_style:
-        metadata["narrative_style"] = narrative_style
-    if user_focus_tickers:
-        metadata["user_focus_tickers"] = user_focus_tickers
-    if getattr(result, "references", None):
-        metadata["references"] = [
-            r.model_dump() if hasattr(r, "model_dump") else r
-            for r in (result.references or [])
-        ]
-    if getattr(result, "resources", None):
-        metadata["resources"] = list(result.resources or [])
-    if getattr(result, "agent_steps", None):
-        metadata["agent_steps"] = list(result.agent_steps or [])
-    # Optional LLM usage metadata
-    for key in ("input_tokens", "output_tokens", "total_tokens", "cost_usd", "models_used"):
-        value = getattr(result, key, None)
-        if value is not None:
-            metadata[key] = value
-
-    from services.report_service import save_report, update_execution_status
-
-    save_report(
-        execution_id,
-        "daily_digest",
-        content=getattr(result, "narrative", ""),
-        metadata=metadata,
-    )
-    
-    # Update execution status to completed
-    try:
-        update_execution_status(execution_id, "completed")
-    except Exception as e:
-        logger.warning("Failed to update execution status to completed: %s", e)
-    
     # Update Usage entry with actual LLM usage from report metadata
     try:
         from services.token_service import update_usage_with_llm_data

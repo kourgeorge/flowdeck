@@ -191,10 +191,14 @@ async def get_digest(
         raise HTTPException(status_code=503, detail="Digest service unavailable")
     except Exception as e:  # pragma: no cover - bubble to client
         logger.exception("Digest generation failed for user_id=%s: %s", current_user.id, e)
-        raise HTTPException(status_code=500, detail=f"Digest generation failed: {e}")
+        # The error text can name internals ("database is locked", file paths),
+        # so it stays in the log and the client gets a fixed message.
+        raise HTTPException(status_code=500, detail="Digest generation failed")
 
     share_url = get_share_url(execution_id) if execution_id else None
     return DigestResponse(
+        # BriefPage's "send email" button needs this id for a brief made just now.
+        execution_id=execution_id,
         narrative=result.narrative,
         what_to_watch=result.what_to_watch,
         digest_date=result.digest_date,
