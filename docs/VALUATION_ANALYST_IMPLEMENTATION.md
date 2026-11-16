@@ -360,6 +360,5 @@ if __name__ == "__main__":
 
 ## Related Documentation
 
-- [Integration Plan](../INTEGRATION_PLAN.md) - Full plan for all 17 report types
-- [TPS YAML Specification](../../backend/TPS/TPS-YAML-v0.1-1.yaml) - Trading plan format
-- [Agent States](../../ai_engine/tradingagents/agents/utils/agent_states.py) - State schema
+- [TPS YAML Specification](../backend/TPS/TPS-YAML-v0.1-1.yaml) - Trading plan format
+- [Agent States](../ai_engine/tradingagents/agents/utils/agent_states.py) - State schema

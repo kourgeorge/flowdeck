@@ -27,6 +27,7 @@ from api_docs import (
     ERR_504_SECTION,
     data_responses,
 )
+from api_docs_examples import EXAMPLES as _EVENTS_EXAMPLES
 from auth import get_current_user
 from data_layer import get_data_gateway
 from services.share_service import get_share_url
@@ -577,7 +578,36 @@ async def data_analyst_recommendations(ticker: str):
     "/events/{ticker}",
     summary="Deterministic event signals",
     response_description="Deterministic technical and fundamental events for a ticker, with a comparable event score.",
-    responses=data_responses("events"),
+    responses=data_responses(
+        "events",
+        extra={
+            # Replaces the single captured 200 so the docs show both outcomes side by side.
+            200: {
+                "content": {
+                    "application/json": {
+                        "examples": {
+                            "available": {
+                                "summary": "Price history loaded",
+                                "value": _EVENTS_EXAMPLES["events"],
+                            },
+                            "unavailable": {
+                                "summary": "Price history could not be loaded (no score)",
+                                "value": {
+                                    "ticker": "AAPL",
+                                    "events": [],
+                                    "event_score": None,
+                                    "dominant_events": [],
+                                    "event_count": 0,
+                                    "available": False,
+                                    "error": "Price history could not be loaded: TimeoutError: ...",
+                                },
+                            },
+                        }
+                    }
+                }
+            }
+        },
+    ),
 )
 async def data_deterministic_events(
     ticker: str,

@@ -309,8 +309,11 @@ Check `available` (or `event_score == null`) before ranking: treat the ticker as
 never as "nothing happening". Unavailable results are not cached, so a retry fetches again. A real
 `event_score` of `0` with `available: true` means the data loaded and no events were detected.
 
-`/api/tickers/event-summaries` returns only the cheap fields:
-`{"summaries": {"AAPL": {"dominant_events": [...], "event_count": 4}, ...}}`.
+`/api/tickers/event-summaries` returns only the cheap fields, plus `available` and `error`:
+`{"summaries": {"AAPL": {"dominant_events": [...], "event_count": 4, "available": true, "error": null}, ...}}`.
+When a ticker's price history can't be loaded (or its summary fails), `dominant_events` and `event_count`
+are `null` (not `[]` / `0`), `available` is `false`, and `error` holds a short reason. Check `available`
+before showing "0 tracked".
 
 **Event types:** `price_spike_up`, `price_spike_down`, `price_gap_up`, `price_gap_down`,
 `volatility_expansion`, `volatility_compression`, `moving_average_cross`, `new_52w_high`, `new_52w_low`,
@@ -974,7 +977,7 @@ API keys do **not** work on the analysis WebSocket — its `?token=` parameter i
 | POST | `/api/auth/login` | No | Login (email, password) |
 | DELETE | `/api/auth/account` | Yes | Delete account (204) |
 | GET | `/api/tickers/widgets` | No | Widget data (tickers, date, pagination, events) |
-| GET | `/api/tickers/event-summaries` | No | Batch `dominant_events` + `event_count` |
+| GET | `/api/tickers/event-summaries` | No | Batch `dominant_events` + `event_count` (both `null` when `available` is `false`; `error` says why) |
 | GET | `/api/tickers/{ticker}` | Optional | Ticker page (auth records the view) |
 | GET | `/api/tickers/{ticker}/reports/{analysis_run_id}` | Optional | Reports for one historical run |
 | GET | `/api/data/quote|company|extended-info|fundamentals|fund-info/{ticker}` | No | Core ticker data |

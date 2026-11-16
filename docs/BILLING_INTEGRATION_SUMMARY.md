@@ -118,7 +118,6 @@ PayPal billing has been fully integrated into Flowdeck to allow users to purchas
 
 - **[PAYPAL_SETUP_GUIDE.md](PAYPAL_SETUP_GUIDE.md)** - Quick setup guide (START HERE)
 - **[PAYPAL_BILLING_INTEGRATION.md](PAYPAL_BILLING_INTEGRATION.md)** - Detailed technical documentation
-- **[STRIPE_BILLING_INTEGRATION.md](STRIPE_BILLING_INTEGRATION.md)** - Alternative Stripe integration (more complex)
 
 ## 🔒 Security
 
