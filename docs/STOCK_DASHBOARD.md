@@ -68,7 +68,7 @@ python run.py
 Or use uvicorn directly:
 ```bash
 cd backend
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+python -m uvicorn main:app --host 0.0.0.0 --port 8002 --reload
 ```
 
 **Important**: Run from the `backend` directory; `run.py` adds the repo root to PYTHONPATH so `tradingagents` can be imported.
@@ -278,7 +278,7 @@ If you see this error on the frontend:
    ```
 You should see: `INFO: Uvicorn running on http://0.0.0.0:8002`
 
-   **Note**: If port 8002 is in use, set `PORT=8003` when running the backend and update the frontend proxy in `frontend/vite.config.ts` to match.
+   **Note**: If port 8002 is in use, start the backend with a different port, for example `python -m uvicorn main:app --host 0.0.0.0 --port 8003`. Nothing reads a `PORT` variable. Then tell the frontend where to find it by setting `VITE_DEV_PROXY_TARGET=http://127.0.0.1:8003` (for example in `frontend/.env.local`) and restart `npm run dev`.
 
 2. **Check if frontend is running**: Make sure the frontend is running on `http://localhost:3003`
    ```bash
@@ -296,7 +296,7 @@ You should see: `INFO: Uvicorn running on http://0.0.0.0:8002`
 
 4. **Check browser console**: Open browser developer tools (F12) and check:
    - **Console tab**: Look for API errors or CORS issues
-   - **Network tab**: Check if requests to `http://localhost:8000/api/...` are failing
+   - **Network tab**: Check if requests to `http://localhost:8002/api/...` are failing
 
 5. **Check backend logs**: Look at the terminal where the backend is running for error messages
 
@@ -312,7 +312,7 @@ You should see: `INFO: Uvicorn running on http://0.0.0.0:8002`
 
 8. **Check CORS**: If you see CORS errors in the browser console, the backend CORS is configured to allow `localhost:3003`, but verify the backend is actually running
 
-9. **Check frontend proxy**: The frontend `vite.config.ts` proxies `/api` and `/ws` to `http://localhost:8002`. If you run the backend on a different port, update the proxy target to match.
+9. **Check frontend proxy**: The frontend `vite.config.ts` proxies `/api` and `/ws` to `http://127.0.0.1:8002` by default. If you run the backend on a different port (`uvicorn ... --port N`), set `VITE_DEV_PROXY_TARGET=http://127.0.0.1:N` and restart the dev server.
 
 10. **Verify proxy is working**: Check the Vite dev server console for proxy logs. The updated config includes logging to show when requests are proxied.
 

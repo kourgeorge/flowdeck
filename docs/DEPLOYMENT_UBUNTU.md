@@ -16,7 +16,7 @@ Before deploying, set these values. Replace `your-domain.com` with your actual d
 | `INFO_SERVICE_URL` | `backend/.env` (optional) | Same as `BACKEND_URL` | Override only if backend is on another host. |
 | `ENABLE_DAILY_SYNC` | `backend/.env` | `true` | Enable in-process daily sync. |
 | `SYNC_SCHEDULE_TIME` | `backend/.env` | `06:00` | Time for daily sync. |
-| `PORT` | `backend/.env` or systemd | `8002` | Backend port (Caddy on gateway proxies to it). |
+| (port) | uvicorn or systemd command | `8002` | Backend port (Caddy on gateway proxies to it). Set with `--port`; there is no `PORT` variable. |
 
 **Important:** Caddy runs on the gateway machine; the Flowdeck server runs the backend (8002) and frontend (4173). Cron and in-process agents call the backend via loopback.
 
@@ -166,7 +166,6 @@ BACKEND_URL=http://127.0.0.1:8002
 # Daily sync
 ENABLE_DAILY_SYNC=true
 SYNC_SCHEDULE_TIME=06:00
-PORT=8002
 ```
 
 Replace `your-domain.com` with your actual domain. If your API is on a subdomain (e.g. `api.your-domain.com`), add it to `CORS_ORIGINS` as well.
@@ -311,7 +310,7 @@ cd backend
 uvicorn main:app --host 127.0.0.1 --port 8002
 ```
 
-For production, use `--host 127.0.0.1` so only localhost can reach it. For development with auto-reload: `python run.py` (binds to 0.0.0.0 and enables reload).
+For production, use `--host 127.0.0.1` so only localhost can reach it. For development with auto-reload, run `python -m uvicorn main:app --host 127.0.0.1 --port 8002 --reload` (`python run.py` does not reload).
 
 Verify: `curl http://127.0.0.1:8002/health`
 
@@ -339,7 +338,6 @@ EnvironmentFile=/opt/flowdeck/.env
 
 # Python path for tradingagents package
 Environment=PYTHONPATH=/opt/flowdeck
-Environment=PORT=8002
 
 # Bind to all interfaces so Caddy on the gateway can reach it
 ExecStart=/opt/flowdeck/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8002
@@ -435,7 +433,7 @@ sudo chmod 640 /opt/flowdeck/.env
 | `VITE_API_URL` | Build-time | `''` or `https://api.your-domain.com` | API base URL for frontend (see section 5) |
 | `ENABLE_DAILY_SYNC` | Backend `.env` | `true` | Enable in-process daily sync |
 | `SYNC_SCHEDULE_TIME` | Backend `.env` | `06:00` | Time for sync |
-| `PORT` | Backend `.env` | `8002` | Backend port (internal) |
+| (port) | uvicorn or systemd command | `8002` | Backend port (internal). Set with `--port` in the command; there is no `PORT` variable. |
 
 ---
 
