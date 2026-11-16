@@ -40,8 +40,13 @@ def decode_share_token(token: str) -> Optional[int]:
     try:
         dec = fernet.decrypt(token.encode("ascii")).decode("utf-8")
         data = json.loads(dec)
+        # A correctly signed payload that is valid JSON but not an object (e.g. a
+        # list) used to hit data.get() and 500 on this unauthenticated route.
+        if not isinstance(data, dict):
+            return None
         e = data.get("e")
-        if not isinstance(e, int):
+        # bool is an int subclass; {"e": true} must not resolve to execution 1.
+        if not isinstance(e, int) or isinstance(e, bool):
             return None
         return int(e)
     except (InvalidToken, ValueError, TypeError):
