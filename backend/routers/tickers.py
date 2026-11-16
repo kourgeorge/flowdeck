@@ -548,6 +548,13 @@ async def get_ticker_reports_for_run(
     gw = get_data_gateway()
 
     def _fetch():
+        # Execution ids are a shared counter across every execution type, so a bare
+        # id lookup let anyone (even logged out) walk /reports/1, /2, ... and read
+        # other users' daily_digest briefs, or an MSFT run under the AAPL URL.
+        # get_analysis_run_for_date only matches a ticker-analysis execution whose
+        # subject is this ticker; anything else is treated as "not found".
+        if not gw.get_analysis_run_for_date(ticker, str(analysis_run_id)):
+            return None
         scores_raw = gw.get_reports_with_scores(analysis_run_id)
         if not scores_raw:
             return None
@@ -585,8 +592,10 @@ async def get_ticker_reports_for_run(
         return result
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to load reports: {str(e)}")
+    except Exception:
+        # Raw exception text can carry SQL or file paths; keep it in the server log.
+        logging.getLogger(__name__).exception("get_ticker_reports_for_run failed")
+        raise HTTPException(status_code=500, detail="Failed to load reports")
 
 
 @router.get("/{ticker}", response_model=TickerPageData)
