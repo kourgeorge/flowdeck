@@ -6174,7 +6174,7 @@ requires-dist = [
     { name = "akshare", specifier = ">=1.16.98" },
     { name = "apscheduler", specifier = ">=3.10.0" },
     { name = "backtrader", specifier = ">=1.9.78.123" },
-    { name = "bcrypt", specifier = ">=4.3.0" },
+    { name = "bcrypt", specifier = ">=4.3.0,<5" },
     { name = "beautifulsoup4", specifier = ">=4.13.0" },
     { name = "chainlit", specifier = ">=2.5.5" },
     { name = "chromadb", specifier = ">=1.0.12" },

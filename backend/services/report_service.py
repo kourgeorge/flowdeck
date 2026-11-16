@@ -537,34 +537,6 @@ class ReportService:
         finally:
             db.close()
 
-    def get_report(
-        self, execution_id: int, report_type: str
-    ) -> Optional[Dict[str, Any]]:
-        """Return a single report or None."""
-        db = SessionLocal()
-        try:
-            execution = db.query(Execution).filter(Execution.id == execution_id).first()
-            if not execution:
-                return None
-            
-            date_display = execution.created_at.strftime("%Y-%m-%d") if execution.created_at else ""
-            
-            report = (
-                db.query(Report)
-                .filter(
-                    Report.execution_id == execution_id,
-                    Report.report_type == report_type,
-                )
-                .first()
-            )
-            
-            if not report:
-                return None
-            
-            return _report_row_to_dict(report, date_display)
-        finally:
-            db.close()
-
     def get_reports_for_run(
         self, execution_id: int, *, execution_type: str
     ) -> Dict[str, Optional[str]]:

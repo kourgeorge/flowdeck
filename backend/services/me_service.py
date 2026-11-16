@@ -5,7 +5,7 @@ from typing import Optional
 from sqlalchemy import func as sqla_func
 from sqlalchemy.orm import Session
 
-from auth import hash_password, verify_password
+from auth import PASSWORD_TOO_LONG_MESSAGE, hash_password, password_too_long, verify_password
 from models.db_models import User, Execution, ReportView, Subscription
 from services import user_profile_service
 
@@ -52,6 +52,8 @@ def update_profile(
             raise ValueError("Current password is incorrect")
         if len(new_password) < 6:
             raise ValueError("New password must be at least 6 characters")
+        if password_too_long(new_password):
+            raise ValueError(PASSWORD_TOO_LONG_MESSAGE)
         user.hashed_password = hash_password(new_password)
     if name is not None:
         user.name = (name or "").strip() or None

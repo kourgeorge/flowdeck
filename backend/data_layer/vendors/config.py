@@ -42,15 +42,6 @@ def initialize_config() -> None:
         DATA_DIR = _config["data_dir"]
 
 
-def set_config(config: Dict[str, Any]) -> None:
-    """Update config (for tests or runtime overrides)."""
-    global _config, DATA_DIR
-    if _config is None:
-        initialize_config()
-    _config.update(config)
-    DATA_DIR = _config.get("data_dir", DATA_DIR)
-
-
 def get_config() -> Dict[str, Any]:
     """Get current config."""
     if _config is None:

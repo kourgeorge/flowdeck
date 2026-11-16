@@ -1,7 +1,6 @@
 from typing import Any, List, Optional, Tuple
 
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.messages import ToolMessage
 
 
 class _UsageCaptureCallback(BaseCallbackHandler):
@@ -30,18 +29,6 @@ def _capture_usage(message: Any, llm: Any) -> Optional[dict]:
         return metadata
     except Exception:
         return None
-
-
-def is_tool_result_message(message: Any) -> bool:
-    if isinstance(message, ToolMessage):
-        return True
-
-    content = getattr(message, "content", None)
-    if isinstance(content, list):
-        return any(
-            isinstance(item, dict) and item.get("type") == "tool" for item in content
-        )
-    return False
 
 
 def _normalized_key_takeaways(structured_result: Any) -> List[str]:
