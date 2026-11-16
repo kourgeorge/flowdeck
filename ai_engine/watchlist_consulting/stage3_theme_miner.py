@@ -47,10 +47,15 @@ def _divergent_views(evidence_packets: List[EvidencePacket]) -> List[Dict[str, A
     actions = []
     for p in evidence_packets:
         ac = p.action_candidate
-        a = (ac.action.lower() if ac else "hold").strip()
+        if ac is None:
+            # No platform report: there is no view to diverge from the majority.
+            continue
+        a = ac.action.lower().strip()
         if a not in ("buy", "hold", "sell", "watch"):
             a = "hold"
         actions.append((p.ticker, a))
+    if len(actions) < 2:
+        return []
     counter = Counter(a for _, a in actions)
     majority_action = counter.most_common(1)[0][0] if counter else "hold"
     out = []

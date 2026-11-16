@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pipeline_schemas import DataJob, FigurePlanItem
+from pipeline_schemas import DataJob, FigurePlanItem, recommendation_counts
 
 try:
     from fetch_figure_data import fetch_figure_data_for_tickers
@@ -118,12 +118,7 @@ def run_data_builder(
     figure_data["by_ticker"] = by_ticker
 
     # recommendation_dist
-    rec_counts: Dict[str, int] = {}
-    for e in entries:
-        r = (e.get("recommendation") or "HOLD").upper()
-        if r not in ("BUY", "SELL", "HOLD"):
-            r = "HOLD"
-        rec_counts[r] = rec_counts.get(r, 0) + 1
+    rec_counts = recommendation_counts(entries)
     figure_data["recommendation_dist"] = {"values": [{"recommendation": k, "count": v} for k, v in rec_counts.items()]}
 
     # daily_change

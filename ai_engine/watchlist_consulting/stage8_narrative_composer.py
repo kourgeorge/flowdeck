@@ -10,6 +10,8 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from pipeline_schemas import (
+    NO_PLATFORM_REPORT_TEXT,
+    NO_REPORT_LABEL,
     ActionsOutput,
     EvidencePacket,
     FigurePlanItem,
@@ -18,6 +20,8 @@ from pipeline_schemas import (
     ThemeOutput,
     UserIntent,
     WebResearchOutput,
+    normalize_recommendation,
+    recommendation_counts,
 )
 
 try:
@@ -38,6 +42,8 @@ def _evidence_summary(packets: List[EvidencePacket]) -> str:
             lines.append(f"  Scenario: bear={sr.bear_return_pct}% base={sr.base_return_pct}% bull={sr.bull_return_pct}%")
         if p.action_candidate:
             lines.append(f"  Action: {p.action_candidate.action} — {p.action_candidate.rationale[:100]}")
+        else:
+            lines.append(f"  Action: none — {NO_PLATFORM_REPORT_TEXT}")
     return "\n".join(lines)[:8000]
 
 
@@ -186,14 +192,15 @@ def _fallback_narrative(
     web_research_output: Optional[WebResearchOutput] = None,
 ) -> NarrativeOutput:
     """No-LLM narrative: substantial summary, discussion, and figure explanations from evidence and theme."""
-    rec_counts = {"BUY": 0, "HOLD": 0, "SELL": 0}
-    for p in evidence_packets:
-        a = p.action_candidate.action.upper() if p.action_candidate else "HOLD"
-        if a == "BUY" or a == "SELL":
-            rec_counts[a] = rec_counts.get(a, 0) + 1
-        else:
-            rec_counts["HOLD"] = rec_counts.get("HOLD", 0) + 1
+    # Same source and buckets as the Figure 1 chart, so the text matches the bars.
+    rec_counts = recommendation_counts(entries)
     n_buy, n_hold, n_sell = rec_counts.get("BUY", 0), rec_counts.get("HOLD", 0), rec_counts.get("SELL", 0)
+    n_no_report = rec_counts.get(NO_REPORT_LABEL, 0)
+    no_report_line = (
+        f" {n_no_report} {'name has' if n_no_report == 1 else 'names have'} no platform report yet and "
+        f"{'is' if n_no_report == 1 else 'are'} shown as \"{NO_REPORT_LABEL}\" rather than counted as HOLD."
+        if n_no_report else ""
+    )
 
     exp = theme_output.exposure_snapshot
     sector_counts = (exp.sector_counts or {}) if exp else {}
@@ -205,7 +212,7 @@ def _fallback_narrative(
 
     watchlist_summary = (
         f"This consultation report covers your watchlist of {len(entries)} names. "
-        f"The current mix of views is tilted bullish: {n_buy} BUY, {n_hold} HOLD, and {n_sell} SELL (see Figure 1). "
+        f"The current mix of views is {n_buy} BUY, {n_hold} HOLD, and {n_sell} SELL (see Figure 1).{no_report_line} "
         f"Sector exposure is {sector_line}. {regime}\n\n"
         f"Risks that appear across multiple names include: {risks_line}. "
         "Figure 2 shows same-day volatility and price moves; Figure 3 shows expected return ranges (bear, base, bull) for each name. "
@@ -228,7 +235,7 @@ def _fallback_narrative(
     )
 
     figure_explanations = (
-        "**Recommendation distribution (Figure 1).** This bar chart shows how many watchlist names are rated BUY, HOLD, or SELL. "
+        f"**Recommendation distribution (Figure 1).** This bar chart shows how many watchlist names are rated BUY, HOLD, or SELL; names the platform has not analysed yet appear as a separate \"{NO_REPORT_LABEL}\" bar. "
         "It summarizes analyst tilt at a glance: a majority of BUYs suggests a constructive stance; a mix of HOLDs and SELLs suggests caution or selectivity.\n\n"
         "**Daily % change by ticker (Figure 2).** Each bar is the same-day price change for one ticker. "
         "Use it to see which names moved most on the report date and whether moves are in line with or against recent recommendations.\n\n"
@@ -251,12 +258,16 @@ def _fallback_narrative(
             scenario = ""
             if p.scenario_range and p.scenario_range.base_return_pct is not None:
                 scenario = f" Base case return: {p.scenario_range.base_return_pct}%."
-            summary = (p.action_candidate.action if p.action_candidate else "—") + ": " + (thesis or name) + risks + scenario
+            if p.action_candidate:
+                summary = p.action_candidate.action + ": " + (thesis or name) + risks + scenario
+            else:
+                summary = f"{NO_REPORT_LABEL}: " + (thesis or f"{name} — {NO_PLATFORM_REPORT_TEXT}") + risks + scenario
             details = None
             if len(ticker_cards) < 3 and (p.thesis_bullets or p.key_risks):
                 details = "\n".join(("- " + b for b in p.thesis_bullets[:3])) + ("\nRisks: " + " | ".join(p.key_risks[:3]) if p.key_risks else "")
         else:
-            summary = f"{e.get('recommendation') or '—'} — {name}"
+            rec = normalize_recommendation(e.get("recommendation"))
+            summary = f"{rec} — {name}" if rec else f"{NO_REPORT_LABEL} — {name}: {NO_PLATFORM_REPORT_TEXT}"
             details = None
         ticker_cards.append(TickerCard(ticker=t, is_expanded=len(ticker_cards) < 3, summary=summary, details=details))
     actions_section = "\n".join(

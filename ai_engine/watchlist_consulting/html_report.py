@@ -120,7 +120,7 @@ def build_html(
 
     # Summary figures: interleave short intro + figure (paper-style)
     summary_figure_intros = [
-        "Figure 1 shows the distribution of BUY, HOLD, and SELL recommendations across the watchlist.",
+        "Figure 1 shows the distribution of BUY, HOLD, and SELL recommendations across the watchlist; names without a platform report are shown as a separate \"No report\" bar.",
         "Figure 2 shows the same-day price change for each ticker.",
         "Figure 3 shows the expected return range (bear, base, and bull case) from the latest analysis for each ticker.",
     ]
