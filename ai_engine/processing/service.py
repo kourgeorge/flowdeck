@@ -284,8 +284,8 @@ def get_ticker_event_summary(
 
     When this function fetches the price history itself and it can't be loaded (the
     fetch raises or returns no bars), the result has ``event_score=None``,
-    ``available=False`` and an ``error``, and it is not cached. Preloaded ``bars`` are
-    trusted as given: an empty list still yields a score of 0.0.
+    ``available=False`` and an ``error``, and it is not cached. The same holds when the
+    caller passes preloaded ``bars`` that are empty.
     """
 
     ticker_upper = ticker.upper()
@@ -298,7 +298,10 @@ def get_ticker_event_summary(
             interval=history_interval,
         )
         if not resolved_bars:
-            return TickerEventSummary(ticker=ticker_upper).model_dump(mode="json")
+            # The daily brief and stocks discovery load history in bulk and pass
+            # `ohlcv_history.get(t) or []`, so a ticker whose bulk load failed arrives
+            # here as an empty list. Scoring that 0.0 would present it as quiet.
+            raise _EventDataUnavailable("Price history could not be loaded: no bars provided.")
 
         resolved_future_events = future_events if future_events is not None else _future_events(fetcher, ticker_upper)
         resolved_insider = (

@@ -57,7 +57,11 @@ def _format_ticker_context(ctx: DigestContext, ticker: str) -> str:
     """Format the slice of DigestContext for one ticker as text for the prompt."""
     lines = []
     event_summary = (getattr(ctx, "event_summaries", None) or {}).get(ticker)
-    if event_summary and getattr(event_summary, "events", None):
+    if event_summary is not None and getattr(event_summary, "available", True) is False:
+        # Say so explicitly; otherwise the model sees no events and may call the ticker quiet.
+        reason = getattr(event_summary, "error", None) or "event data could not be loaded"
+        lines.append(f"Deterministic events: unavailable ({reason}). Do not describe this ticker as quiet based on events.")
+    elif event_summary and getattr(event_summary, "events", None):
         lines.append(f"Deterministic event score: {getattr(event_summary, 'event_score', 0.0)}")
         lines.append("Detected events:")
         for event in event_summary.events:

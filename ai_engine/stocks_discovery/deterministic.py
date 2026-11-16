@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from ai_engine.tradingagents.agents.utils.trace_utils import make_agent_step
 from ai_engine.processing import get_ticker_event_summary
@@ -152,7 +152,8 @@ def _score_tickers_by_event_activity(
                 price_technical_lookback_days=lookback_days,
             )
             event_summaries[ticker] = summary
-            event_scores[ticker] = summary.event_score
+            # None means the event data couldn't be loaded; rank it like no activity.
+            event_scores[ticker] = summary.event_score or 0.0
         except Exception as e:
             logger.debug("Failed to get event summary for %s: %s", ticker, e)
             event_scores[ticker] = 0.0
@@ -259,10 +260,13 @@ def run_deterministic_discovery(
     )
 
     if discovered_tickers:
-        top_event_scores: Dict[str, float] = {}
+        top_event_scores: Dict[str, Optional[float]] = {}
         for ticker in discovered_tickers[:5]:
             ev = discovered_ticker_events.get(ticker)
-            top_event_scores[ticker] = float(ev.event_score) if ev is not None else 0.0
+            # Only tickers with a positive score are discovered, so a None score
+            # shouldn't reach here; keep it None rather than show a fake 0.
+            score = getattr(ev, "event_score", None) if ev is not None else None
+            top_event_scores[ticker] = float(score) if score is not None else None
         steps.append(
             make_agent_step(
                 agent="Stocks Discovery (data)",
