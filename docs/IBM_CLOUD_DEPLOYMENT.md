@@ -198,12 +198,17 @@ kubectl create secret generic flowdeck-secrets -n flowdeck \
   --from-literal=GOOGLE_CLIENT_SECRET='your-google-client-secret' \
   --from-literal=PAYPAL_CLIENT_ID='your-paypal-client-id' \
   --from-literal=PAYPAL_CLIENT_SECRET='your-paypal-client-secret' \
-  --from-literal=SMTP_HOST='smtp.gmail.com' \
-  --from-literal=SMTP_PORT='587' \
-  --from-literal=SMTP_USER='your-email@gmail.com' \
-  --from-literal=SMTP_PASSWORD='your-app-password' \
-  --from-literal=SMTP_FROM='noreply@yourdomain.com'
+  --from-literal=AGENTMAIL_API_KEY='your-agentmail-api-key' \
+  --from-literal=AGENTMAIL_INBOX_ID='your-inbox@agentmail.to' \
+  --from-literal=AGENTMAIL_SMTP_HOST='smtp.agentmail.to' \
+  --from-literal=AGENTMAIL_SMTP_PORT='465' \
+  --from-literal=AGENTMAIL_SMTP_USER='your-inbox@agentmail.to'
 ```
+
+Email uses the `AGENTMAIL_*` names only. The backend does not read `SMTP_*`.
+Without `AGENTMAIL_API_KEY`, emails are silently skipped. A secret does not
+reach the container by itself: the backend deployment must pass each
+`AGENTMAIL_*` key in as an environment variable.
 
 ### Step 5: Update Deployment Configuration
 

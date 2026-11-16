@@ -155,17 +155,6 @@ docker run -d \
   flowdeck-frontend:latest
 ```
 
-### Run Redis (Optional)
-
-```bash
-docker run -d \
-  --name flowdeck-redis \
-  -p 6379:6379 \
-  -v redis-data:/data \
-  --restart unless-stopped \
-  redis:7-alpine redis-server --appendonly yes
-```
-
 ---
 
 ## Production Considerations
@@ -291,35 +280,20 @@ PAYPAL_CLIENT_ID=...
 PAYPAL_CLIENT_SECRET=...
 PAYPAL_MODE=sandbox  # or 'live'
 
-# Email Notifications
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=your-email@gmail.com
-SMTP_PASSWORD=your-app-password
-SMTP_FROM=noreply@yourdomain.com
-
-# Redis Caching
-REDIS_URL=redis://redis:6379/0
+# Email Notifications (sent through AgentMail)
+AGENTMAIL_API_KEY=am_...
+AGENTMAIL_INBOX_ID=your-inbox@agentmail.to
+AGENTMAIL_SMTP_USER=your-inbox@agentmail.to
+AGENTMAIL_SMTP_HOST=smtp.agentmail.to
+AGENTMAIL_SMTP_PORT=465
+AGENTMAIL_SMTP_PASSWORD=...  # only if different from the API key
 ```
 
-### Development vs Production
-
-**Development** (`.env.development`):
-```bash
-DEBUG=true
-LOG_LEVEL=DEBUG
-CORS_ORIGINS=http://localhost:3003,http://localhost:80
-ENABLE_DAILY_SYNC=false
-```
-
-**Production** (`.env.production`):
-```bash
-DEBUG=false
-LOG_LEVEL=INFO
-CORS_ORIGINS=https://yourdomain.com
-ENABLE_DAILY_SYNC=true
-ENABLE_DIGEST_SCHEDULER=true
-```
+Email uses the `AGENTMAIL_*` names only. The backend does not read `SMTP_*`.
+Without `AGENTMAIL_API_KEY`, emails are silently skipped. Make sure these
+variables are passed into the container (for example with `--env-file` or in
+the `environment:` list of `docker/compose.yml`). A value in your `.env` file
+does not reach the container on its own.
 
 ---
 
