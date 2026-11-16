@@ -23,6 +23,7 @@ from services.schedule_service import (
     decode_metadata,
     get_digest_schedules_for_user,
     upsert_user_schedule,
+    validate_timezone_name,
 )
 
 
@@ -197,6 +198,14 @@ def upsert_my_digest_schedule(
     """
     if schedule_type == DIGEST_WEEKLY_TYPE and payload.day_of_week is None:
         raise HTTPException(status_code=400, detail="day_of_week is required for weekly schedules.")
+    if payload.timezone is not None:
+        # watchlist_update_service.get_preferences reuses the newest timezone
+        # across all of a user's schedules, so a bad value here would also
+        # shift watchlist emails, not just this brief.
+        try:
+            validate_timezone_name(payload.timezone)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     minute = payload.minute
     hour = payload.hour
