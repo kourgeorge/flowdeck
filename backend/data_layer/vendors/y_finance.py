@@ -989,24 +989,28 @@ def get_analyst_recommendations(
         }
         total = strong_buy + buy + hold + sell + strong_sell
         
-        # Determine overall recommendation based on highest count
+        # Count Strong Buy with Buy and Strong Sell with Sell before picking a
+        # winner. Picking the single biggest of five buckets let bullish votes
+        # split across Strong Buy/Buy lose to Hold (e.g. 12/15/16/1/0 -> HOLD).
+        groups = {
+            "BUY": strong_buy + buy,
+            "HOLD": hold,
+            "SELL": sell + strong_sell,
+        }
         recommendation = None
         if total > 0:
-            max_count = max(breakdown.values())
-            recommendation = [k for k, v in breakdown.items() if v == max_count][0]
-            # Normalize to BUY/SELL/HOLD format
-            if recommendation in ['Strong Buy', 'Buy']:
-                recommendation = 'BUY'
-            elif recommendation in ['Strong Sell', 'Sell']:
-                recommendation = 'SELL'
-            else:
-                recommendation = 'HOLD'
-        
-        info = ticker_obj.info
-        # Get target price from info
-        target_price = info.get('targetMeanPrice') or info.get('targetHighPrice') or info.get('targetLowPrice')
+            max_count = max(groups.values())
+            winners = [k for k, v in groups.items() if v == max_count]
+            if len(winners) == 1:
+                recommendation = winners[0]
 
-        # Fallback recommendation from Yahoo key if counts are unavailable.
+        info = ticker_obj.info or {}
+        # Only the mean is a "target price". Falling back to the high or low
+        # target made the UI draw the high target as the "Mean" line.
+        target_price = info.get('targetMeanPrice')
+
+        # On a tie or with no counts, use Yahoo's own key; otherwise leave it
+        # empty rather than guess.
         if recommendation is None:
             key = str(info.get("recommendationKey") or "").strip().lower()
             if key in ("strong_buy", "buy"):
@@ -1015,7 +1019,7 @@ def get_analyst_recommendations(
                 recommendation = "SELL"
             elif key in ("hold",):
                 recommendation = "HOLD"
-        
+
         # Extract detailed financial data for price targets
         financial_data = {
             "currentPrice": info.get('currentPrice'),
@@ -1037,7 +1041,7 @@ def get_analyst_recommendations(
         return {
             "ticker": ticker.upper(),
             "recommendation": recommendation,
-            "target_price": float(target_price) if target_price else None,
+            "target_price": float(target_price) if target_price is not None else None,
             "breakdown": breakdown,
             "total_analysts": total,
             "latest_date": latest_date,
