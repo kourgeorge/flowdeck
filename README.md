@@ -138,9 +138,9 @@ print(decision)
 **Analysis flow:**
 
 1. **Specialized analysts** — Market, News, Fundamentals, Technical, and Sentiment analysts each produce a focused report and score
-2. **Bull vs. Bear debate** — Two AI researchers argue both sides across multiple rounds, stress-testing the investment case
-3. **Research manager + trader** — Synthesizes the debate into an investment plan and actionable stance
-4. **Risk debate → recommendation** — Aggressive, cautious, and neutral risk perspectives debate before a final judge produces the BUY / SELL / HOLD
+2. **Bull, Bear and Neutral debate** — Three AI researchers (one optimistic, one cautious, one balanced) argue the case across multiple rounds, stress-testing the investment case
+3. **Research Manager decides** — Weighs the debate, writes the investment plan, and issues the BUY / SELL / HOLD call
+4. **Trader** — Turns the plan into an actionable trade stance. This is the last step; there is no separate risk debate
 
 Configuration options: `ai_engine/tradingagents/default_config.py`
 
