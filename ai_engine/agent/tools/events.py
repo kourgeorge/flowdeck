@@ -91,11 +91,5 @@ def _fetch_events(ticker: str) -> str:
                 "or run the chat agent from within the backend process."
             )
 
-    payload = payload or {}
-    if payload.get("available") is False or ("event_score" in payload and payload.get("event_score") is None):
-        # The shared formatter would follow the warning with "No active events were
-        # detected", which reads as a quiet ticker. Say plainly that nothing was checked.
-        reason = str(payload.get("error") or "price history could not be loaded").strip()
-        return f"Events unavailable for {ticker_upper}: {reason}. No event score was computed; do not read this as a quiet ticker."
-    return _format_events_payload(ticker_upper, payload)
+    return _format_events_payload(ticker_upper, payload or {})
 

@@ -37,6 +37,16 @@ def get_events(
 
 
 def _format_events_payload(ticker: str, payload: dict[str, Any]) -> str:
+    if payload.get("available") is False or ("event_score" in payload and payload.get("event_score") is None):
+        # An unavailable summary has no events because nothing was checked (e.g. the
+        # price-history fetch timed out). Rendering it as "No active events were
+        # detected" let paid analyses call a stock quiet when it was never looked at.
+        reason = str(payload.get("error") or "price history could not be loaded").strip()
+        return (
+            f"Events unavailable for {ticker}: {reason}. No event score was computed; "
+            "do not read this as a quiet ticker."
+        )
+
     error = str(payload.get("error") or "").strip()
     event_score = payload.get("event_score", 0.0)
     event_count = payload.get("event_count", 0)
