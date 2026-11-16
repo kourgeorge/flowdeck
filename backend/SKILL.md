@@ -284,9 +284,30 @@ GET /api/tickers/event-summaries?tickers=AAPL,MSFT  # lightweight, batch
   ],
   "event_score": 7.5,
   "dominant_events": ["price_gap_up", "volume_spike"],
-  "event_count": 4
+  "event_count": 4,
+  "available": true,
+  "error": null
 }
 ```
+
+**Unavailable is not quiet.** When the price history can't be loaded (a vendor timeout, an error, or no
+bars at all), the response has **no score** instead of `0`:
+
+```json
+{
+  "ticker": "AAPL",
+  "events": [],
+  "event_score": null,
+  "dominant_events": [],
+  "event_count": 0,
+  "available": false,
+  "error": "Price history could not be loaded: TimeoutError: ..."
+}
+```
+
+Check `available` (or `event_score == null`) before ranking: treat the ticker as "unknown, retry later",
+never as "nothing happening". Unavailable results are not cached, so a retry fetches again. A real
+`event_score` of `0` with `available: true` means the data loaded and no events were detected.
 
 `/api/tickers/event-summaries` returns only the cheap fields:
 `{"summaries": {"AAPL": {"dominant_events": [...], "event_count": 4}, ...}}`.

@@ -264,7 +264,7 @@ def _has_recent_news(fetcher: Any, tickers: List[str], lookback_days: int = 2) -
 
 def _rank_tickers(
     tickers: List[str],
-    event_scores: Dict[str, float],
+    event_scores: Dict[str, Optional[float]],
     returns_1d: Dict[str, Optional[float]],
     returns_5d: Dict[str, Optional[float]],
     abnormal_signal: Dict[str, bool],
@@ -472,7 +472,7 @@ def build_digest_context(
         news, fundamentals, analyst_rec = _load_ticker_evidence(fetcher, priority_tickers, news_lookback)
         indicators: Dict[str, Any] = {}
         event_summaries: Dict[str, Any] = {}
-        event_scores: Dict[str, float] = {}
+        event_scores: Dict[str, Optional[float]] = {}
         for t in priority_tickers:
             event_summary = get_ticker_event_summary(
                 fetcher,
@@ -492,7 +492,8 @@ def build_digest_context(
             event_scores[t] = event_summary.event_score
 
         for ticker, score in event_scores.items():
-            attention_scores[ticker] = attention_scores.get(ticker, 0.0) + score
+            # None means the event data couldn't be loaded; it adds no attention either way.
+            attention_scores[ticker] = attention_scores.get(ticker, 0.0) + (score or 0.0)
 
         platform_reports, share_urls = _load_platform_reports(platform_reports_loader, priority_tickers)
 

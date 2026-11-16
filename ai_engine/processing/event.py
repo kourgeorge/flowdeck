@@ -54,9 +54,20 @@ class TickerEventSummary(BaseModel):
 
     ticker: str = Field(description="Ticker symbol.")
     events: List[DetectedEvent] = Field(default_factory=list, description="Detected events for this ticker.")
-    event_score: float = Field(default=0.0, description="Deterministic scalar summarizing event importance.")
+    event_score: Optional[float] = Field(
+        default=0.0,
+        description=(
+            "Deterministic scalar summarizing event importance. None when price history could not be "
+            "loaded (see `available` / `error`); 0.0 means the data loaded and nothing was detected."
+        ),
+    )
     dominant_events: List[str] = Field(default_factory=list, description="Dominant event types ordered by contribution.")
     event_count: int = Field(default=0, description="Number of detected events.")
+    available: bool = Field(
+        default=True,
+        description="False when price history could not be loaded, so no score was computed.",
+    )
+    error: Optional[str] = Field(default=None, description="Why the summary is unavailable, when `available` is false.")
 
 
 _EVENT_WEIGHT: Dict[str, float] = {

@@ -120,9 +120,9 @@ class DigestContext(BaseModel):
         default_factory=dict,
         description="ticker -> deterministic event summary extracted from currently available platform data.",
     )
-    event_scores: Dict[str, float] = Field(
+    event_scores: Dict[str, Optional[float]] = Field(
         default_factory=dict,
-        description="ticker -> deterministic event score used in ranking.",
+        description="ticker -> deterministic event score used in ranking; None when event data was unavailable.",
     )
 
     news: Dict[str, Any] = Field(default_factory=dict)  # ticker -> news payload (e.g. list of articles or str)

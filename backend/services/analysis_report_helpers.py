@@ -119,8 +119,14 @@ def get_analysis_event_meta(ticker: str, analysis_date: str) -> Dict[str, Any]:
     except Exception as e:
         logger.warning("Failed to read event signal for %s: %s", ticker, e)
         return {}
+    if summary.event_score is None:
+        # Price history couldn't be loaded. Stamping 0.0 here would become the event
+        # monitor's baseline and make the next real score look like a spike, so record
+        # nothing and let the monitor skip this ticker as "no baseline".
+        logger.warning("Event signal unavailable for %s: %s", ticker, getattr(summary, "error", None))
+        return {}
     return {
-        "event_score": float(summary.event_score or 0.0),
+        "event_score": float(summary.event_score),
         "dominant_events": list(summary.dominant_events or []),
     }
 

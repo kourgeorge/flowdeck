@@ -51,7 +51,8 @@ def _get_or_set(namespace: str, *, parts: List[Any], ttl_seconds: Optional[int],
     return impl(namespace, parts=parts, ttl_seconds=ttl_seconds, fetch_fn=fetch_fn, version=version)
 
 _TICKER_EVENT_CACHE_NAMESPACE = "processing:ticker_events"
-_TICKER_EVENT_CACHE_VERSION = "v1"
+# v2: summaries gained available/error, and v1 may hold 0.0 scores cached from failed loads.
+_TICKER_EVENT_CACHE_VERSION = "v2"
 _TICKER_EVENT_WARMER = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ticker-event-summary")
 _TICKER_EVENT_WARMING_KEYS: set[str] = set()
 _TICKER_EVENT_WARMING_LOCK = Lock()
@@ -111,13 +112,34 @@ def _ticker_event_cache_key(
     )
 
 
+class _EventDataUnavailable(Exception):
+    """Raised inside the cached compute so a failed load is never written to the cache.
+
+    The backend cache stores whatever fetch_fn returns but does not store exceptions, so
+    raising here (and turning it back into an "unavailable" summary outside _get_or_set)
+    makes the next call retry the fetch instead of serving a cached empty result.
+    """
+
+
+def _unavailable_summary(ticker: str, error: str) -> TickerEventSummary:
+    return TickerEventSummary(ticker=ticker, event_score=None, available=False, error=error)
+
+
 def _historical_bars(fetcher: Any, ticker: str, *, period: str, interval: str) -> List[Dict[str, Any]]:
+    # Errors are not swallowed here: a timeout used to become [] and then a cached
+    # event_score of 0.0, which every caller (agents triaging tickers via
+    # /api/data/events, the morning event monitor) read as "quiet ticker".
     try:
         payload = fetcher.get_historical(ticker, period=period, interval=interval) or {}
-    except Exception:
-        return []
+    except Exception as exc:
+        raise _EventDataUnavailable(f"Price history could not be loaded: {type(exc).__name__}: {exc}") from exc
     rows = payload.get("data") or []
-    return [row for row in rows if isinstance(row, dict)]
+    bars = [row for row in rows if isinstance(row, dict)]
+    if not bars:
+        # A ticker that really exists always has some daily bars over the history
+        # period, so no bars at all means the load failed, not that nothing happened.
+        raise _EventDataUnavailable("Price history could not be loaded: no bars returned.")
+    return bars
 
 
 def _future_events(fetcher: Any, ticker: str) -> Any:
@@ -259,6 +281,11 @@ def get_ticker_event_summary(
     Return a cached deterministic event snapshot for a ticker.
 
     Callers may provide preloaded inputs to avoid duplicate raw fetches on cache miss.
+
+    When this function fetches the price history itself and it can't be loaded (the
+    fetch raises or returns no bars), the result has ``event_score=None``,
+    ``available=False`` and an ``error``, and it is not cached. Preloaded ``bars`` are
+    trusted as given: an empty list still yields a score of 0.0.
     """
 
     ticker_upper = ticker.upper()
@@ -296,21 +323,24 @@ def get_ticker_event_summary(
         )
         return summary.model_dump(mode="json")
 
-    payload = _get_or_set(
-        _TICKER_EVENT_CACHE_NAMESPACE,
-        parts=_ticker_event_cache_parts(
-            ticker_upper,
-            as_of_date=as_of_date,
-            history_period=history_period,
-            history_interval=history_interval,
-            insider_limit=insider_limit,
-            rsi_look_back_days=rsi_look_back_days,
-            price_technical_lookback_days=price_technical_lookback_days,
-            start_date=start_date,
-            end_date=end_date,
-        ),
-        ttl_seconds=_cache.get("ttl_seconds"),
-        fetch_fn=_compute,
-        version=_TICKER_EVENT_CACHE_VERSION,
-    )
+    try:
+        payload = _get_or_set(
+            _TICKER_EVENT_CACHE_NAMESPACE,
+            parts=_ticker_event_cache_parts(
+                ticker_upper,
+                as_of_date=as_of_date,
+                history_period=history_period,
+                history_interval=history_interval,
+                insider_limit=insider_limit,
+                rsi_look_back_days=rsi_look_back_days,
+                price_technical_lookback_days=price_technical_lookback_days,
+                start_date=start_date,
+                end_date=end_date,
+            ),
+            ttl_seconds=_cache.get("ttl_seconds"),
+            fetch_fn=_compute,
+            version=_TICKER_EVENT_CACHE_VERSION,
+        )
+    except _EventDataUnavailable as exc:
+        return _unavailable_summary(ticker_upper, str(exc))
     return TickerEventSummary.model_validate(payload)

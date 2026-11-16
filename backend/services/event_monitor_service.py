@@ -231,7 +231,13 @@ def check_ticker(
     from processing import get_ticker_event_summary
 
     summary = get_ticker_event_summary(gateway, ticker, as_of_date=as_of_date)
-    event_score = float(summary.event_score or 0.0)
+    if summary.event_score is None:
+        # Price history couldn't be loaded today. Treating that as 0.0 would hide a real
+        # spike (or, against a 0.0 baseline, invent one), so skip and try again next run.
+        result["status"] = "skipped_event_data_unavailable"
+        result["error"] = getattr(summary, "error", None)
+        return result
+    event_score = float(summary.event_score)
     result["event_score"] = event_score
     result["dominant_events"] = list(summary.dominant_events or [])
     result["baseline_score"] = baseline_score

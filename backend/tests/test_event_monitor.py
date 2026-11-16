@@ -207,6 +207,42 @@ class TestEventMonitorService(unittest.TestCase):
         self.assertEqual(result["status"], "skipped_no_baseline")
         self.assertEqual(service.calls, [])
 
+    def test_null_recorded_score_is_no_baseline(self) -> None:
+        """A report stamped with event_score null (data was unavailable) is not a 0.0 baseline."""
+        execution_id = self._add_analysis("AAPL", created_at=self.stale)
+        self.db.add(
+            Report(
+                execution_id=execution_id,
+                report_type=ems.SIGNAL_REPORT_TYPE,
+                content="plan",
+                metadata_json=json.dumps({"event_score": None, "dominant_events": []}),
+                created_at=self.stale,
+            )
+        )
+        self.db.commit()
+        service = _FakeAnalysisService()
+
+        with self._summary(self.high):
+            result = self._check("AAPL", analysis_service=service)
+
+        self.assertEqual(result["status"], "skipped_no_baseline")
+        self.assertEqual(service.calls, [])
+
+    def test_unavailable_current_score_is_skipped(self) -> None:
+        """Today's price history failed to load: no comparison, no re-analysis."""
+        self._add_analysis("AAPL", created_at=self.stale, event_score=0.0)
+        service = _FakeAnalysisService()
+        unavailable = _FakeSummary(None)
+        unavailable.error = "Price history could not be loaded: TimeoutError: slow"
+
+        with patch("processing.get_ticker_event_summary", return_value=unavailable):
+            result = self._check("AAPL", analysis_service=service)
+
+        self.assertEqual(result["status"], "skipped_event_data_unavailable")
+        self.assertIn("TimeoutError", result["error"])
+        self.assertNotIn("delta", result)
+        self.assertEqual(service.calls, [])
+
     def test_baseline_comes_from_the_newest_analysis(self) -> None:
         """"Versus the last run" means the newest analysis wins, whoever triggered it."""
         self._add_analysis("AAPL", created_at=self.now - timedelta(days=9), event_score=0.0)

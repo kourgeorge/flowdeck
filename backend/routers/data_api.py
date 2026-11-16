@@ -600,12 +600,15 @@ async def data_deterministic_events(
         )
         return result.model_dump()
     except Exception as e:
+        # Same "unavailable" shape the summary itself uses when price history can't be
+        # loaded: no score rather than 0.0, which callers would read as a quiet ticker.
         return {
             "ticker": ticker.upper(),
-            "event_score": 0.0,
+            "event_score": None,
             "events": [],
             "dominant_events": [],
             "event_count": 0,
+            "available": False,
             "error": str(e),
         }
 
