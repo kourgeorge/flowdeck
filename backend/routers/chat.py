@@ -10,11 +10,11 @@ Session persistence: optional session_id on request; GET/POST/DELETE /api/chat/s
 import asyncio
 import json
 import logging
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from auth import get_current_user
@@ -29,6 +29,7 @@ from services.chat_persistence import (
 )
 from services.chat_turn_service import (
     InsufficientChatBalance,
+    ChatInvalidMessages,
     ChatTurnConflict,
     get_active_turn_for_session,
     get_chat_turn_service,
@@ -41,15 +42,34 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["Chat"])
 
 
+# Without a session id the frontend resends the whole conversation, so the
+# message cap must leave room for long chats; the content cap stops one request
+# from stuffing the agent's context window. Both are checked by FastAPI before
+# the handler runs, so a rejected request is never charged chat_reserve.
+CHAT_MAX_MESSAGES = 200
+CHAT_MAX_CONTENT_CHARS = 20_000
+
+
 class ChatMessageIn(BaseModel):
-    role: str  # "user" or "assistant"
-    content: str
+    # "system" is refused: a client-supplied system turn would override the
+    # agent's own instructions.
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=CHAT_MAX_CONTENT_CHARS)
 
 
 class ChatRequest(BaseModel):
-    messages: List[ChatMessageIn]
+    messages: List[ChatMessageIn] = Field(min_length=1, max_length=CHAT_MAX_MESSAGES)
     context: Optional[Dict] = None  # optional context (e.g. {"tickers": ["AAPL", "MSFT"]})
     session_id: Optional[int] = None  # when set, load history and persist new messages
+
+    @field_validator("messages")
+    @classmethod
+    def _last_message_is_from_user(cls, messages: List[ChatMessageIn]) -> List[ChatMessageIn]:
+        # The agent answers the last message; ending on an assistant turn would
+        # charge the user for a turn with no question in it.
+        if messages[-1].role != "user":
+            raise ValueError("The last message must have role 'user'")
+        return messages
 
 
 class ChatResponse(BaseModel):
@@ -303,6 +323,8 @@ async def chat(
         )
     except ChatTurnConflict as e:
         raise HTTPException(status_code=409, detail=str(e))
+    except ChatInvalidMessages as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except InsufficientChatBalance as e:
         raise HTTPException(status_code=402, detail=str(e))
     except ValueError:
@@ -412,6 +434,8 @@ async def chat_stream(
         )
     except ChatTurnConflict as e:
         raise HTTPException(status_code=409, detail=str(e))
+    except ChatInvalidMessages as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except InsufficientChatBalance as e:
         raise HTTPException(status_code=402, detail=str(e))
     except ValueError:
