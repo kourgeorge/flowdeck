@@ -14,6 +14,20 @@ def list_for_user(db: Session, user_id: int) -> List[Subscription]:
     return db.query(Subscription).filter(Subscription.user_id == user_id).all()
 
 
+def subscriptions_for_user(user_id: int, db: Session) -> List[Subscription]:
+    """The user's subscriptions ordered by ticker.
+
+    Shared by the daily brief's ticker list (digest_service) and the chat's
+    portfolio tools (ChatUserStore) so both see the same rows in the same order.
+    """
+    return (
+        db.query(Subscription)
+        .filter(Subscription.user_id == user_id)
+        .order_by(Subscription.ticker)
+        .all()
+    )
+
+
 def subscribe(
     db: Session,
     user_id: int,

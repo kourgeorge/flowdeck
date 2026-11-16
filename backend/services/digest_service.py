@@ -11,8 +11,9 @@ from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
 from ai_engine.tradingagents.agents.utils.trace_utils import sort_agent_steps
-from models.db_models import Execution, Report, Subscription
+from models.db_models import Execution, Report
 from services import token_service
+from services.subscription_service import subscriptions_for_user
 
 
 logger = logging.getLogger(__name__)
@@ -170,13 +171,7 @@ def load_portfolio_tickers(user_id: int, db: Session) -> List[str]:
     Lives here rather than in ai_engine because Subscription is a backend model; ai_engine
     gets this function passed in (backend -> ai_engine only).
     """
-    subs = (
-        db.query(Subscription)
-        .filter(Subscription.user_id == user_id)
-        .order_by(Subscription.ticker)
-        .all()
-    )
-    return [s.ticker.upper() for s in subs]
+    return [s.ticker.upper() for s in subscriptions_for_user(user_id, db)]
 
 
 def load_recent_digest_rows(user_id: int, db: Session, limit: int):

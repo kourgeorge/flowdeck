@@ -316,24 +316,14 @@ class ChatUserStore:
         )
 
     def subscriptions_by_ticker(self, user_id: int, db: Any) -> list:
-        from models.db_models import Subscription
+        from services.subscription_service import subscriptions_for_user
 
-        return (
-            db.query(Subscription)
-            .filter(Subscription.user_id == user_id)
-            .order_by(Subscription.ticker)
-            .all()
-        )
+        return subscriptions_for_user(user_id, db)
 
     def get_or_create_profile(self, user_id: int, db: Any) -> Any:
-        from models.db_models import UserProfile
+        from services import user_profile_service
 
-        profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
-        if profile is None:
-            profile = UserProfile(user_id=user_id)
-            db.add(profile)
-            db.flush()
-        return profile
+        return user_profile_service.get_or_create_profile(db, user_id)
 
 
 # ---------------------------------------------------------------------------
