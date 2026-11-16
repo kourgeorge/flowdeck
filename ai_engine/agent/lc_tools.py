@@ -269,16 +269,6 @@ def get_insider_transactions(ticker: str, config: RunnableConfig = None) -> str:
     return _run_tool(InsiderTransactionsTool(), ctx, ticker=ticker).to_str()
 
 
-@tool
-def get_insider_sentiment(ticker: str, config: RunnableConfig = None) -> str:
-    """Get aggregated insider sentiment score for a stock based on recent insider transactions.
-    Returns a bullish/bearish/neutral signal with supporting data.
-    Use for a quick read on insider conviction or to complement fundamental analysis."""
-    from ai_engine.agent.tools.insider import InsiderSentimentTool
-    ctx = _ctx_from_config(config)
-    return _run_tool(InsiderSentimentTool(), ctx, ticker=ticker).to_str()
-
-
 # ---------------------------------------------------------------------------
 # Web search
 # ---------------------------------------------------------------------------
@@ -399,7 +389,6 @@ ALL_LC_TOOLS = [
     get_global_news,
     get_reddit_company_social,
     get_insider_transactions,
-    get_insider_sentiment,
     web_search,
 ]
 

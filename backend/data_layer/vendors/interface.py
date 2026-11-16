@@ -112,6 +112,8 @@ VENDOR_METHODS = {
         "google": get_global_news_google,
         "reddit_online": get_reddit_global_news_online,
     },
+    # No data source exists for insider sentiment; the HTTP endpoint answers 503
+    # before reaching here, so an empty map only makes direct callers fail loudly.
     "get_insider_sentiment": {},
     "get_insider_transactions": {
         "alpha_vantage": get_alpha_vantage_insider_transactions,
