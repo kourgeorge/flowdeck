@@ -120,3 +120,45 @@ def test_valuation_labels_missing_risk_free_rate_as_assumption(monkeypatch):
 
     monkeypatch.setattr(info_service_client, "get_market_rates", lambda *a, **k: {"risk_free_rate": 0.043, "source": "FRED"})
     assert vt._get_risk_free_rate_with_source() == (pytest.approx(0.043), None)
+
+
+def _etf_with_rates(monkeypatch, rates):
+    from ai_engine.tradingagents.agents.utils import valuation_tools as vt
+    from ai_engine.tradingagents.datasources import info_service_client
+
+    monkeypatch.setattr(info_service_client, "get_market_rates", lambda *a, **k: rates)
+    result = vt._build_index_etf_valuation(ticker="TEST", current_price=100, fundamentals={"QuoteType": "ETF", "ForwardPE": 20})
+    premium_warnings = [line for line in result["valuation_key_assumptions"] if "Market risk premium" in line and "not market data" in line]
+    return vt, result, premium_warnings
+
+
+def test_valuation_flags_assumed_market_risk_premium_when_service_down(monkeypatch):
+    vt, result, premium_warnings = _etf_with_rates(monkeypatch, None)
+    assert vt._get_market_risk_premium_with_source() == (0.055, "assumed")
+    assert result["inputs"]["market_risk_premium"] == 0.055
+    assert result["inputs"]["market_risk_premium_source"] == "assumed"
+    assert len(premium_warnings) == 1 and "5.50%" in premium_warnings[0]
+
+
+def test_valuation_flags_service_historical_average_premium(monkeypatch):
+    rates = {
+        "risk_free_rate": 0.043,
+        "market_risk_premium": 0.055,
+        "field_sources": {"risk_free_rate": "FRED", "market_risk_premium": "historical_average_assumption"},
+    }
+    vt, result, premium_warnings = _etf_with_rates(monkeypatch, rates)
+    assert result["inputs"]["market_risk_premium_source"] == "historical_average_assumption"
+    assert len(premium_warnings) == 1 and "historical-average" in premium_warnings[0]
+
+
+def test_valuation_does_not_flag_vix_derived_premium(monkeypatch):
+    rates = {
+        "risk_free_rate": 0.043,
+        "market_risk_premium": 0.062,
+        "field_sources": {"risk_free_rate": "FRED", "market_risk_premium": "derived_from_vix"},
+    }
+    vt, result, premium_warnings = _etf_with_rates(monkeypatch, rates)
+    assert result["inputs"]["market_risk_premium"] == pytest.approx(0.062)
+    assert result["inputs"]["market_risk_premium_source"] == "derived_from_vix"
+    assert premium_warnings == []
+    assert not any("not market data" in line for line in result["valuation_key_assumptions"])
