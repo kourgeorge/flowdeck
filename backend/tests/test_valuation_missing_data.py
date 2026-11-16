@@ -192,3 +192,90 @@ def test_default_ev_multiple_is_labelled_in_exit_multiple_row():
     row = result["valuation_sensitivity"]["exit_multiple"]
     assert row is not None
     assert "default 14.0x assumption" in row["parameter_name"]
+
+
+def test_negative_eps_without_forward_pe_drops_pe_comps():
+    # T-62, the scout's repro: $40 stock, EPS -1.5, no forward P/E, no EBITDA,
+    # negative FCF. P/E used to run on a $0.01 EPS and a 20x default, giving
+    # values around $0.22 at a 19% weight that dragged the blend down.
+    result = vt.calculate_multi_method_valuation_data(
+        ticker="LOSS",
+        current_price=40.0,
+        fundamentals={
+            "SharesOutstanding": 100_000_000,
+            "EPS": -1.5,
+            "RevenueTTM": 10_000_000_000,
+        },
+        statements_payload=_statements(fcf=-50_000_000, operating_cf=100_000_000, capex=-150_000_000),
+    )
+
+    assert result["valuation_available"] is True
+    weights = result["valuation_summary"]["method_weights"]
+    assert weights["P/E Comps"] == 0.0
+    assert weights["EV/EBITDA"] == 0.0
+    assert weights["DCF"] == pytest.approx(1.0)
+    assert result["pe_comps"] == {"bear": None, "base": None, "bull": None}
+    assert [row["method"] for row in result["valuation_summary"]["rows"]] == ["DCF"]
+    assert result["fair_value_base"] == pytest.approx(result["dcf"]["base"])
+    assert result["inputs"]["eps"] == -1.5
+    text = _all_assumptions(result)
+    assert "P/E Comps excluded" in text
+    assert "left out" in text
+    assert "Forward EPS used for P/E comps: 0.01" not in text
+    assert "P/E Comps: n/a" in result["method_scenarios_text"]
+
+
+def test_positive_eps_keeps_pe_comps():
+    result = vt.calculate_multi_method_valuation_data(
+        ticker="PROFIT",
+        current_price=40.0,
+        fundamentals={
+            "SharesOutstanding": 100_000_000,
+            "EPS": 2.0,
+            "TrailingPE": 20.0,
+            "RevenueTTM": 10_000_000_000,
+        },
+        statements_payload=_statements(fcf=500_000_000),
+    )
+
+    assert result["valuation_summary"]["method_weights"]["P/E Comps"] > 0.0
+    assert all(v is not None and v > 1.0 for v in result["pe_comps"].values())
+    assert "P/E Comps" in [row["method"] for row in result["valuation_summary"]["rows"]]
+    assert "P/E Comps excluded" not in _all_assumptions(result)
+    assert result["inputs"]["pe_multiple_defaulted"] is False
+
+
+def test_negative_eps_with_forward_pe_keeps_pe_comps():
+    # A loss-maker with a real forward P/E still has usable forward earnings.
+    result = vt.calculate_multi_method_valuation_data(
+        ticker="TURN",
+        current_price=40.0,
+        fundamentals={
+            "SharesOutstanding": 100_000_000,
+            "EPS": -1.5,
+            "ForwardPE": 25.0,
+            "RevenueTTM": 10_000_000_000,
+        },
+        statements_payload=_statements(fcf=500_000_000),
+    )
+
+    assert result["valuation_summary"]["method_weights"]["P/E Comps"] > 0.0
+    assert result["pe_comps"]["base"] == pytest.approx(40.0)
+    assert "P/E Comps excluded" not in _all_assumptions(result)
+
+
+def test_no_pe_no_ebitda_and_floored_dcf_refuses():
+    result = vt.calculate_multi_method_valuation_data(
+        ticker="BROKE",
+        current_price=40.0,
+        fundamentals={
+            "SharesOutstanding": 100_000_000,
+            "EPS": -1.5,
+            "RevenueTTM": 10_000_000,
+        },
+        statements_payload=_statements(fcf=-50_000_000, operating_cf=-40_000_000, capex=-10_000_000),
+    )
+
+    assert result["valuation_available"] is False
+    assert "EPS" in result["valuation_unavailable_reason"]
+    assert result["fair_value_base"] is None

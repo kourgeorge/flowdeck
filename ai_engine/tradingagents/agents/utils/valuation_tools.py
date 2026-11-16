@@ -93,7 +93,7 @@ SECTOR_DIVERGENCE_THRESHOLDS = {
 
 def _weighted_base_value(
     dcf_base: float,
-    pe_comps_base: float,
+    pe_comps_base: Optional[float],
     ev_ebitda_base: Optional[float],
     method_weights: Optional[Dict[str, float]] = None,
 ) -> float:
@@ -101,9 +101,11 @@ def _weighted_base_value(
     # EV/EBITDA is None when the company reports no usable EBITDA; its weight is
     # then 0, so it simply contributes nothing.
     ev_contribution = (ev_ebitda_base or 0.0) * method_weights["EV/EBITDA"]
+    # Same for P/E comps without a positive EPS or forward P/E.
+    pe_contribution = (pe_comps_base or 0.0) * method_weights["P/E Comps"]
     return (
         dcf_base * method_weights["DCF"]
-        + pe_comps_base * method_weights["P/E Comps"]
+        + pe_contribution
         + ev_contribution
     )
 
@@ -484,7 +486,7 @@ def _build_valuation_bridge(
     current_price: float,
     fair_value_base: float,
     dcf_base: float,
-    pe_comps_base: float,
+    pe_comps_base: Optional[float],
     ev_ebitda_base: Optional[float],
     method_weights: Optional[Dict[str, float]] = None,
 ) -> Dict[str, float]:
@@ -497,9 +499,10 @@ def _build_valuation_bridge(
     - Risk discount: Difference between methods (uncertainty/risk premium)
     """
     method_weights = method_weights or DEFAULT_METHOD_WEIGHTS
-    avg_comps_base = (
-        (pe_comps_base + ev_ebitda_base) / 2.0 if ev_ebitda_base is not None else pe_comps_base
-    )
+    # Left-out comps methods carry None; average only the ones that exist, and
+    # with neither the comps side simply adds no upside.
+    comps_values = [v for v in (pe_comps_base, ev_ebitda_base) if v is not None]
+    avg_comps_base = sum(comps_values) / len(comps_values) if comps_values else 0.0
     total_gap = fair_value_base - current_price
 
     # Handle overvalued case (negative gap)
@@ -578,7 +581,7 @@ def _build_sensitivity_analysis(
     terminal_growth_base: float,
     net_debt: float,
     shares_outstanding: float,
-    pe_comps_base: float,
+    pe_comps_base: Optional[float],
     ev_ebitda_base: Optional[float],
     dcf_base: float,
     base_ev_multiple: float,
@@ -1602,6 +1605,7 @@ def _determine_dynamic_method_weights(
         scores["P/E Comps"] *= 0.85
         scores["EV/EBITDA"] *= 1.10
 
+    pe_available = (eps is not None and eps > 0) or (forward_pe is not None and forward_pe > 0)
     if eps is None or eps <= 0:
         scores["P/E Comps"] = 0.05
     else:
@@ -1647,6 +1651,10 @@ def _determine_dynamic_method_weights(
         # Without real EBITDA the EV/EBITDA value is made up, so it gets no
         # weight at all (it used to be defaulted to $1 and then boosted).
         scores["EV/EBITDA"] = 0.0
+    if not pe_available:
+        # No positive EPS and no forward P/E: the P/E value would be built on a
+        # made-up $0.01 EPS (a $40 loss-maker came out at $0.22), so drop it.
+        scores["P/E Comps"] = 0.0
     total_score = sum(scores.values()) or 1.0
     normalized = {method: score / total_score for method, score in scores.items()}
 
@@ -1895,7 +1903,9 @@ def calculate_multi_method_valuation_data(
         net_income = _latest_numeric(income_annual, "netIncome")
         if net_income is not None and shares_outstanding > 0:
             raw_eps = net_income / shares_outstanding
-    eps = max(raw_eps or 0.01, 0.01)
+    # Keep the real EPS (possibly None or negative). It used to be floored at
+    # $0.01, which fed a $0.01 forward EPS and a 20x default into P/E comps.
+    eps = raw_eps
     trailing_pe = _first_numeric(fundamentals, "TrailingPE") or (current_price / raw_eps if raw_eps and raw_eps > 0 else None)
     forward_pe = _first_numeric(fundamentals, "ForwardPE")
     analyst_recommendations = analyst_recommendations or {}
@@ -1903,21 +1913,32 @@ def calculate_multi_method_valuation_data(
     target_low = _safe_float(price_targets.get("low"))
     target_avg = _safe_float(price_targets.get("average"))
     target_high = _safe_float(price_targets.get("high"))
-    forward_eps = (current_price / forward_pe) if forward_pe and forward_pe > 0 else eps * (1 + base_growth)
-    forward_eps = max(forward_eps, 0.01)
-    implied_target_pe_low = (target_low / forward_eps) if target_low and target_low > 0 else None
-    implied_target_pe_avg = (target_avg / forward_eps) if target_avg and target_avg > 0 else None
-    implied_target_pe_high = (target_high / forward_eps) if target_high and target_high > 0 else None
-    base_pe = median([v for v in [forward_pe, trailing_pe, implied_target_pe_avg] if v is not None]) if any(v is not None for v in [forward_pe, trailing_pe, implied_target_pe_avg]) else 20.0
-    bear_pe_values = [v for v in [base_pe * 0.85, implied_target_pe_low] if v is not None]
-    bear_pe = median(bear_pe_values) if bear_pe_values else base_pe * 0.85
-    bull_pe_values = [v for v in [base_pe * 1.15, implied_target_pe_high] if v is not None]
-    bull_pe = median(bull_pe_values) if bull_pe_values else base_pe * 1.15
-    pe_comps = {
-        "bear": max(forward_eps * bear_pe, 0.01),
-        "base": max(forward_eps * base_pe, 0.01),
-        "bull": max(forward_eps * bull_pe, 0.01),
-    }
+    if forward_pe and forward_pe > 0:
+        forward_eps = current_price / forward_pe
+    elif eps is not None and eps > 0:
+        forward_eps = eps * (1 + base_growth)
+    else:
+        forward_eps = None
+    pe_available = forward_eps is not None and forward_eps > 0
+    pe_multiple_defaulted = False
+    if pe_available:
+        implied_target_pe_low = (target_low / forward_eps) if target_low and target_low > 0 else None
+        implied_target_pe_avg = (target_avg / forward_eps) if target_avg and target_avg > 0 else None
+        implied_target_pe_high = (target_high / forward_eps) if target_high and target_high > 0 else None
+        base_pe_values = [v for v in [forward_pe, trailing_pe, implied_target_pe_avg] if v is not None]
+        pe_multiple_defaulted = not base_pe_values
+        base_pe = median(base_pe_values) if base_pe_values else 20.0
+        bear_pe_values = [v for v in [base_pe * 0.85, implied_target_pe_low] if v is not None]
+        bear_pe = median(bear_pe_values) if bear_pe_values else base_pe * 0.85
+        bull_pe_values = [v for v in [base_pe * 1.15, implied_target_pe_high] if v is not None]
+        bull_pe = median(bull_pe_values) if bull_pe_values else base_pe * 1.15
+        pe_comps = {
+            "bear": max(forward_eps * bear_pe, 0.01),
+            "base": max(forward_eps * base_pe, 0.01),
+            "bull": max(forward_eps * bull_pe, 0.01),
+        }
+    else:
+        pe_comps = {"bear": None, "base": None, "bull": None}
 
     # Keep the real EBITDA (possibly None). It used to be defaulted to $1 or
     # FCF/0.75, which then got the EV/EBITDA *boost* in the weighting and
@@ -1950,6 +1971,16 @@ def calculate_multi_method_valuation_data(
         }
     else:
         ev_ebitda = {"bear": None, "base": None, "bull": None}
+
+    # With both comps methods out, DCF is all that is left. If it sits on its
+    # $1.00 floor (equity value not positive) there is no real value to show.
+    if not pe_available and not ebitda_available and dcf["base"] <= 1.0:
+        reason = (
+            "no positive EPS or forward P/E, no positive EBITDA, and the DCF "
+            "has no positive equity value"
+        )
+        logger.warning("[%s] %s — refusing to compute valuation", ticker, reason)
+        return _valuation_unavailable(ticker, current_price, reason, resolved_shares=shares_outstanding)
 
     method_weights = _determine_dynamic_method_weights(
         sector=sector,
@@ -1992,6 +2023,10 @@ def calculate_multi_method_valuation_data(
         data_quality_score *= 0.90  # Penalize limited growth data
     if fcf_estimated:
         data_quality_score *= 0.70  # FCF estimated from ProfitMargin, not reported
+    if not pe_available:
+        data_quality_score *= 0.90  # P/E comps dropped
+    elif pe_multiple_defaulted:
+        data_quality_score *= 0.85  # P/E comps uses the assumed 20x multiple
     if not ebitda_available:
         data_quality_score *= 0.90  # EV/EBITDA dropped, only two methods left
     elif ev_multiple_defaulted:
@@ -2008,7 +2043,7 @@ def calculate_multi_method_valuation_data(
     # Validations for extreme values
     if any(dcf[k] <= 0 for k in dcf):
         logger.warning(f"{ticker}: Negative or zero DCF values detected - {dcf}")
-    if any(pe_comps[k] > 200 for k in pe_comps):
+    if any(v is not None and v > 200 for v in pe_comps.values()):
         logger.warning(f"{ticker}: Extreme P/E multiples (>200) detected - {pe_comps}")
     if any(v is not None and v > 100 for v in ev_ebitda.values()):
         logger.warning(f"{ticker}: Extreme EV/EBITDA multiples (>100) detected - {ev_ebitda}")
@@ -2135,7 +2170,11 @@ def calculate_multi_method_valuation_data(
         f"FCF growth: bear {bear_growth*100:.1f}%, base {base_growth*100:.1f}%, bull {bull_growth*100:.1f}% (source: {', '.join(growth_data_source)})",
         f"WACC: bear {wacc_bear*100:.1f}%, base {wacc_base*100:.1f}%, bull {wacc_bull*100:.1f}% (from market rates: risk-free {risk_free_rate*100:.2f}%, MRP {market_risk_premium*100:.2f}%)",
         f"Terminal growth: bear {terminal_growth['bear']*100:.1f}%, base {terminal_growth['base']*100:.1f}%, bull {terminal_growth['bull']*100:.1f}% (sector-based: {sector or 'Unknown'})",
-        f"Forward EPS used for P/E comps: {forward_eps:.2f}",
+        (
+            f"Forward EPS used for P/E comps: {forward_eps:.2f}"
+            if pe_available
+            else "P/E Comps excluded (weight 0%): no positive EPS and no forward P/E (left out)"
+        ),
         (
             f"Base EV/EBITDA multiple: {base_ev_mult:.2f}x"
             if ebitda_available
@@ -2160,6 +2199,11 @@ def calculate_multi_method_valuation_data(
             "⚠️ ESTIMATED FCF: no cash-flow statements available; FCF estimated as "
             "RevenueTTM x reported ProfitMargin x 0.9. DCF weight reduced."
         ))
+    if pe_available and pe_multiple_defaulted:
+        key_assumptions.append(
+            "⚠️ ESTIMATED P/E multiple: no ForwardPE, TrailingPE or analyst target reported; "
+            "assumed a default 20.0x multiple."
+        )
     if ebitda_available and ev_multiple_defaulted:
         key_assumptions.append(
             "⚠️ ESTIMATED EV/EBITDA multiple: no EVToEBITDA or EnterpriseValue reported; "
@@ -2207,6 +2251,7 @@ def calculate_multi_method_valuation_data(
             "ebitda": ebitda,
             "fcf_estimated": fcf_estimated,
             "ev_ebitda_multiple_defaulted": ebitda_available and ev_multiple_defaulted,
+            "pe_multiple_defaulted": pe_available and pe_multiple_defaulted,
             "analyst_price_targets": {"low": target_low, "average": target_avg, "high": target_high},
             "fcf_normalization": fcf_normalization_note,  # Include normalization details
             "is_high_growth": is_high_growth,
