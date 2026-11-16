@@ -4,12 +4,12 @@ Shared platform cache helpers for raw data, derived processing outputs, and repo
 
 from __future__ import annotations
 
-from typing import Any, Callable, Sequence, Tuple, TypeVar
+from typing import Any, Callable, Sequence, TypeVar
 
 try:
-    from services.data_cache import get_cached, get_cached_with_origin, refresh_cached
+    from services.data_cache import get_cached, refresh_cached
 except ModuleNotFoundError:  # pragma: no cover - package-style import path
-    from backend.services.data_cache import get_cached, get_cached_with_origin, refresh_cached
+    from backend.services.data_cache import get_cached, refresh_cached
 
 T = TypeVar("T")
 
@@ -47,19 +47,6 @@ def get_or_set(
     """Get a cached value or compute and cache it under a namespaced key."""
     key = make_cache_key(namespace, *parts, version=version)
     return get_cached(key, ttl_seconds, fetch_fn)
-
-
-def get_or_set_with_origin(
-    namespace: str,
-    *,
-    parts: Sequence[Any],
-    ttl_seconds: float,
-    fetch_fn: Callable[[], T],
-    version: str = "v1",
-) -> Tuple[T, bool]:
-    """Like get_or_set, but also indicate whether the value came from cache."""
-    key = make_cache_key(namespace, *parts, version=version)
-    return get_cached_with_origin(key, ttl_seconds, fetch_fn)
 
 
 def refresh(
