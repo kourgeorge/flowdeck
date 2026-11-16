@@ -23,6 +23,11 @@ export interface TickerWidget {
   currency?: string | null;
   dominant_events?: string[] | null;
   event_count?: number | null;
+  /**
+   * Set on the client when /api/tickers/event-summaries answered with null counts, i.e. the
+   * summary was unavailable or failed. Without it, null/null reads as "still loading".
+   */
+  events_unavailable?: boolean;
 }
 
 export interface WidgetsResponse {
@@ -55,7 +60,9 @@ export interface DetectedEvent {
 
 export interface TickerEventSummary {
   ticker: string;
-  event_score: number;
+  // null (with available false and an error) when price history couldn't be loaded.
+  event_score: number | null;
+  available?: boolean;
   events: DetectedEvent[];
   dominant_events: string[];
   event_count: number;

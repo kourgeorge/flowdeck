@@ -34,6 +34,8 @@ from processing import (
     warm_ticker_event_summary_async,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/tickers", tags=["Ticker Pages"])
 
 
@@ -143,6 +145,13 @@ def _get_ticker_widgets_sync(
                 summary = get_cached_ticker_event_summary(ticker, as_of_date=today)
                 if summary is None:
                     warm_ticker_event_summary_async(gw, ticker, as_of_date=today)
+                    event_summaries[ticker] = {
+                        "dominant_events": None,
+                        "event_count": None,
+                    }
+                elif not summary.available:
+                    # Price history could not be loaded (T-101), so the 0 count is not
+                    # "nothing happened"; keep it unknown so cards don't show "0 tracked".
                     event_summaries[ticker] = {
                         "dominant_events": None,
                         "event_count": None,
@@ -273,21 +282,20 @@ def _get_ticker_event_summaries_sync(tickers: str) -> TickerEventSummariesRespon
     def _load_one(ticker: str) -> tuple[str, TickerEventSummaryLite]:
         try:
             summary = get_ticker_event_summary(gw, ticker, as_of_date=today)
-            return (
-                ticker,
-                TickerEventSummaryLite(
-                    dominant_events=summary.dominant_events[:3],
-                    event_count=summary.event_count,
-                ),
-            )
         except Exception:
-            return (
-                ticker,
-                TickerEventSummaryLite(
-                    dominant_events=[],
-                    event_count=0,
-                ),
-            )
+            logger.warning("Event summary failed for %s", ticker, exc_info=True)
+            summary = None
+        # An unavailable summary (no price history) or a failed one must stay unknown:
+        # returning [] / 0 made list views show "0 tracked" for a ticker we never looked at.
+        if summary is None or not summary.available:
+            return ticker, TickerEventSummaryLite(dominant_events=None, event_count=None)
+        return (
+            ticker,
+            TickerEventSummaryLite(
+                dominant_events=summary.dominant_events[:3],
+                event_count=summary.event_count,
+            ),
+        )
 
     max_workers = min(4, len(ticker_list))
     if max_workers <= 1:

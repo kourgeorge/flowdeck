@@ -15,11 +15,14 @@ interface DetectedEvent {
 
 interface EventsPanelProps {
   ticker: string;
-  eventScore: number;
+  // null means the backend could not score the ticker (price history failed to load),
+  // which is different from 0.0 ("data loaded, nothing detected").
+  eventScore: number | null;
   events: DetectedEvent[];
   dominantEvents: string[];
   isLoading?: boolean;
   error?: string;
+  unavailableReason?: string;
 }
 
 export const EVENT_LABELS: Record<string, string> = {
@@ -306,8 +309,10 @@ export default function EventsPanel({
   dominantEvents,
   isLoading = false,
   error,
+  unavailableReason,
 }: EventsPanelProps) {
   const scoreColor = useMemo(() => {
+    if (eventScore == null) return 'text-gray-400';
     if (eventScore >= 10) return 'text-red-400';
     if (eventScore >= 5) return 'text-orange-400';
     if (eventScore >= 2) return 'text-yellow-400';
@@ -315,6 +320,7 @@ export default function EventsPanel({
   }, [eventScore]);
 
   const scoreLabel = useMemo(() => {
+    if (eventScore == null) return 'Unavailable';
     if (eventScore >= 10) return 'Very High Activity';
     if (eventScore >= 5) return 'High Activity';
     if (eventScore >= 2) return 'Moderate Activity';
@@ -346,6 +352,26 @@ export default function EventsPanel({
         <div className="space-y-2">
           <div className="h-4 bg-sky-900/30 rounded w-full" />
           <div className="h-4 bg-sky-900/30 rounded w-5/6" />
+        </div>
+      </div>
+    );
+  }
+
+  if (eventScore == null) {
+    // The backend returns 200 with event_score null when price history can't be loaded.
+    // Showing 0.0 / "Low Activity" here would present an unscored ticker as quiet.
+    return (
+      <div className={`${PANEL_SHELL} p-4`}>
+        <div className="flex items-start gap-3 text-amber-300">
+          <svg className="w-5 h-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <p className="text-sm font-semibold">Event data unavailable</p>
+            <p className="text-sm text-gray-400 mt-1">
+              {unavailableReason || `Signals for ${ticker} could not be computed right now.`}
+            </p>
+          </div>
         </div>
       </div>
     );

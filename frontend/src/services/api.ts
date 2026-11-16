@@ -823,7 +823,9 @@ export const tickerApi = {
   // Get deterministic technical and fundamental events
   getEvents: async (ticker: string, params?: { lookbackDays?: number }): Promise<{
     ticker: string;
-    event_score: number;
+    // null (with available false and an error) when price history couldn't be loaded.
+    event_score: number | null;
+    available?: boolean;
     events: Array<{
       event_type: string;
       domain: 'price_technical' | 'news_information' | 'fundamental';

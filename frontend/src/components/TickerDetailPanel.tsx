@@ -1929,11 +1929,18 @@ function StockDetailPanelBody({ ticker, prefetchedData, onSubscriptionChange }: 
           {activeTab === 'events' && (
             <EventsPanel
               ticker={ticker}
-              eventScore={eventsData?.event_score ?? 0}
+              eventScore={
+                eventsData == null
+                  ? 0
+                  : eventsData.available === false
+                    ? null
+                    : (eventsData.event_score ?? null)
+              }
               events={eventsData?.events ?? []}
               dominantEvents={eventsData?.dominant_events ?? []}
               isLoading={isLoadingEvents}
               error={eventsError}
+              unavailableReason={eventsData?.error}
             />
           )}
 
