@@ -526,18 +526,22 @@ def get_market_rates(base_url: Optional[str] = None) -> Optional[Dict[str, Any]]
     Fetch current market rates (treasury yields, risk-free rate) from info service.
     
     Returns:
-        Dictionary with market rates:
+        Dictionary with market rates. Any rate that could not be fetched is None:
         {
-            "risk_free_rate": float,  # 10-year treasury (standard for WACC)
-            "treasury_10y": float,
-            "treasury_2y": float,
-            "treasury_3m": float,
+            "risk_free_rate": float | None,  # 10-year treasury (standard for WACC)
+            "treasury_10y": float | None,
+            "treasury_2y": float | None,
+            "treasury_3m": float | None,
+            "vix": float | None,
+            "market_risk_premium": float | None,
             "last_updated": str (ISO format),
-            "source": "FRED",
+            "source": "FRED" | "partial" | "unavailable",
+            "field_sources": {field: str | None},
             "cache_age_hours": float
         }
-        
-        Returns None if service not configured or error occurs.
+
+        Returns None if the service is not configured or any error occurs
+        (including a timeout).
     """
     base_url = base_url or _get_info_service_base_url()
     if not base_url:
