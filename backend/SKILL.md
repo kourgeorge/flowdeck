@@ -14,7 +14,7 @@ AI-powered ticker analysis platform for agents. Features include:
 - **Comprehensive market data** (quotes, fundamentals, news, SEC filings, technical indicators, insider activity, market overview)
 - **Deterministic event signals** (price/volume/technical/insider/earnings events with a comparable score)
 - **Daily & weekly digests** with schedules and email delivery
-- **Prediction-market sentiment** (Polymarket)
+- **Polymarket prediction markets and their probabilities (no computed sentiment)**
 - **Token economy** (1000 free tokens on signup; 200 per analysis, 20 per digest, variable for chat)
 - **API key management** for programmatic access
 - **Share links** for public, auth-free report views
@@ -996,7 +996,7 @@ API keys do **not** work on the analysis WebSocket — its `?token=` parameter i
 | GET | `/api/api-keys` | Yes | List API keys |
 | PATCH | `/api/api-keys/{key_id}/deactivate`, `/activate` | Yes | Toggle API key |
 | DELETE | `/api/api-keys/{key_id}` | Yes | Revoke API key (204) |
-| GET | `/api/polymarket/*` | No | Prediction-market sentiment and markets |
+| GET | `/api/polymarket/*` | No | Polymarket prediction markets and their probabilities (no computed sentiment) |
 
 ---
 
@@ -1017,7 +1017,7 @@ API keys do **not** work on the analysis WebSocket — its `?token=` parameter i
 | **Start AI analysis** | `POST /api/analyses/start` (200 tokens); poll `GET /api/analyses/{analysis_run_id}/status` or open the WebSocket |
 | **Chat with AI analyst** | `POST /api/chat` or `/api/chat/stream`; resume via `session_id`, recover a dropped stream via `GET /api/chat/turns/{turn_id}` |
 | **Get a daily / weekly brief** | `GET /api/digest?span=daily` (20 tokens); schedule with `PUT /api/digest/schedules/{slot}` |
-| **Read prediction-market sentiment** | `GET /api/polymarket/ticker/{ticker}` |
+| **Read Polymarket prediction markets** | `GET /api/polymarket/ticker/{ticker}` |
 | **Check token balance / spend** | `GET /api/me` → `token_balance`; `GET /api/tokens/usage-breakdown?days=30` |
 | **Manage watchlist** | `GET/POST/PATCH/DELETE /api/subscriptions` |
 | **Update profile** | `PATCH /api/me` (name, password), `PATCH /api/me/investor-profile` |

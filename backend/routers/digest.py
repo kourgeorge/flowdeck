@@ -13,6 +13,7 @@ from backend.processing import ImportantEvent
 from auth import get_current_user
 from database import get_db
 from services.digest_service import (
+    InsufficientDigestBalance,
     run_and_store_digest,
     delete_brief as svc_delete_brief,
     get_digest_dates as svc_get_digest_dates,
@@ -159,7 +160,9 @@ async def get_digest(
             user_focus_tickers=user_focus_tickers,
             user_email=current_user.email,
         )
-    except RuntimeError as e:
+    except InsufficientDigestBalance as e:
+        # Only a failed balance check is a 402. Any other RuntimeError falls
+        # through to the 500 handler below instead of telling users to buy tokens.
         raise HTTPException(
             status_code=402,
             detail=str(e),

@@ -17,11 +17,11 @@ and selects this skill; no regex or keyword matching is used.
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from ai_engine.agent.skill import BaseSkill, SkillResult, SkillSpec, SkillStep
 from ai_engine.agent.tool import ExecutionContext
+from ai_engine.agent.skills._subscriptions import parse_subscribed_tickers
 
 
 _SPEC = SkillSpec(
@@ -68,7 +68,7 @@ class PortfolioHealthSkill(BaseSkill):
             )
 
         # Parse tickers from subscription output
-        tickers = _parse_tickers(subs_result.to_str())
+        tickers = parse_subscribed_tickers(subs_result.to_str())
         if not tickers:
             return SkillResult(
                 ok=True,
@@ -106,20 +106,6 @@ class PortfolioHealthSkill(BaseSkill):
             steps=steps,
             metrics={"tool_calls": len(steps), "tickers_analysed": len(ticker_data)},
         )
-
-
-def _parse_tickers(subs_text: str) -> list[str]:
-    """Extract ticker symbols from get_user_subscriptions output."""
-    # Matches lines like: - **AAPL** — subscribed ...
-    matches = re.findall(r"\*\*([A-Z\-\.^]+)\*\*", subs_text)
-    # Deduplicate while preserving order
-    seen: set[str] = set()
-    result = []
-    for m in matches:
-        if m not in seen:
-            seen.add(m)
-            result.append(m)
-    return result
 
 
 def _extract_recommendation(reports_text: str) -> str:
