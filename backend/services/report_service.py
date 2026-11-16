@@ -583,21 +583,31 @@ class ReportService:
     def get_analysis_run_for_date(
         self, ticker: str, date_str: str
     ) -> Optional[tuple[int, str]]:
-        """Return (execution_id, date_display) for a specific date, or None."""
+        """Return (execution_id, date_display) for a run of this ticker, or None.
+
+        ``date_str`` is either an analysis_run_id (all digits) or YYYY-MM-DD,
+        as documented on GET /api/data/reports/{ticker}?date=. Anything else
+        matches nothing. A run id only matches when it belongs to ``ticker``,
+        so one ticker's URL cannot be used to read another ticker's run.
+        """
+        date_str = (date_str or "").strip()
         db = SessionLocal()
         try:
             from sqlalchemy import func
-            row = (
-                db.query(Execution.id, Execution.created_at)
-                .filter(
-                    Execution.execution_type == "ticker",
-                    Execution.subject_type == "ticker",
-                    Execution.subject_id == ticker.upper(),
-                    func.date(Execution.created_at) == date_str,
-                )
-                .order_by(Execution.created_at.desc())
-                .first()
+            query = db.query(Execution.id, Execution.created_at).filter(
+                Execution.execution_type == "ticker",
+                Execution.subject_type == "ticker",
+                Execution.subject_id == ticker.upper(),
             )
+            if date_str.isdigit():
+                query = query.filter(Execution.id == int(date_str))
+            else:
+                try:
+                    datetime.strptime(date_str, "%Y-%m-%d")
+                except ValueError:
+                    return None
+                query = query.filter(func.date(Execution.created_at) == date_str)
+            row = query.order_by(Execution.created_at.desc()).first()
             if not row:
                 return None
             ex_id, created = row

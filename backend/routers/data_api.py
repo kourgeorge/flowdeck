@@ -12,6 +12,7 @@ Blocking engine calls run in thread pool (non-blocking event loop).
 import asyncio
 import json
 import logging
+from datetime import datetime
 from typing import Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -699,10 +700,26 @@ async def data_reports_ticker(
     ar_id: Optional[int] = None
     date_display: str = ""
     if date and date.strip():
-        resolved = await asyncio.to_thread(gw.get_analysis_run_for_date, t, date.strip())
-        if resolved:
-            ar_id, date_display = resolved
-    if ar_id is None:
+        wanted = date.strip()
+        if not wanted.isdigit():
+            try:
+                datetime.strptime(wanted, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid date '{wanted}'. Use YYYY-MM-DD or a numeric analysis_run_id.",
+                )
+        resolved = await asyncio.to_thread(gw.get_analysis_run_for_date, t, wanted)
+        if not resolved:
+            # Falling back to the latest run here used to hand back a different
+            # run with 200, which callers could not tell apart from a real match.
+            raise HTTPException(
+                status_code=404,
+                detail=f"No report found for {t} matching '{wanted}'. "
+                f"See /api/data/reports/{t}/dates for available runs.",
+            )
+        ar_id, date_display = resolved
+    else:
         latest = await asyncio.to_thread(gw.get_latest_execution_for_ticker, t)
         if latest:
             ar_id, date_display = latest
