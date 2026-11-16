@@ -51,7 +51,7 @@ START → Social Analyst → Bull Researcher → ...
 
 - `get_ticker_quote` — live price quote (anchors the report to the current market context)
 - `get_reddit_company_social` — Reddit posts/comments for company-related search terms
-- `get_insider_sentiment`, `get_insider_transactions` — insider activity signals
+- `get_insider_transactions` — insider activity signals
 - `get_global_news` — broad news feed for the ticker
 
 ## Key files
