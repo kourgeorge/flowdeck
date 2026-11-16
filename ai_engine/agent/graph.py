@@ -601,7 +601,8 @@ def skill_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
     tool_registry = ToolRegistry()
     tool_registry.register_many(ALL_TOOLS)
     if user_id is not None and db is not None:
-        tool_registry.register_many(make_user_context_tools(user_id, db))
+        user_store = ((config or {}).get("configurable") or {}).get("user_store")
+        tool_registry.register_many(make_user_context_tools(user_id, db, user_store))
 
     tool_executor = ToolExecutor()
     tool_executor.tool_registry = tool_registry  # type: ignore[attr-defined]
@@ -966,8 +967,11 @@ class FlowDeckAgent:
             ...
     """
 
-    def __init__(self, llm: Any) -> None:
+    def __init__(self, llm: Any, user_store: Any = None) -> None:
         self.llm = llm
+        # The backend's subscription/profile lookups for the user tools (see
+        # tools/user_context.py); ai_engine may not import backend models itself.
+        self.user_store = user_store
         self._graphs: Dict[str, Any] = {}  # keyed by tool fingerprint
 
     def _get_graph(self, tools: list) -> Any:
@@ -999,6 +1003,7 @@ class FlowDeckAgent:
                     max_tool_calls=max_tool_calls,
                 ),
                 "llm_usage": [],
+                "user_store": self.user_store,
             }
         }
 
@@ -1072,7 +1077,7 @@ class FlowDeckAgent:
             {"reply": str, "tokens_used": int, "tools_called": int, "skill_used": str | None}
         """
         from ai_engine.agent.lc_tools import get_all_lc_tools
-        tools = get_all_lc_tools(user_id=user_id, db=db)
+        tools = get_all_lc_tools(user_id=user_id, db=db, user_store=self.user_store)
         graph = self._get_graph(tools)
         config = self._make_config(tools, user_id, db, system_prompt, max_tool_calls, max_llm_tokens)
         initial_state = self._make_initial_state(messages, user_id, db, system_prompt, max_tool_calls)
@@ -1140,7 +1145,7 @@ class FlowDeckAgent:
           - data: {"type":"error","content":"..."}
         """
         from ai_engine.agent.lc_tools import get_all_lc_tools
-        tools = get_all_lc_tools(user_id=user_id, db=db)
+        tools = get_all_lc_tools(user_id=user_id, db=db, user_store=self.user_store)
         graph = self._get_graph(tools)
         config = self._make_config(tools, user_id, db, system_prompt, max_tool_calls, max_llm_tokens)
         initial_state = self._make_initial_state(messages, user_id, db, system_prompt, max_tool_calls)

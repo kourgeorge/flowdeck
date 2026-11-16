@@ -5,9 +5,19 @@ These tools are NOT in ALL_TOOLS (which is for always-available tools).
 Instead, ChatService creates instances per-request and registers them dynamically.
 
 Usage:
-    tools = make_user_context_tools(user_id=42, db=session)
+    tools = make_user_context_tools(user_id=42, db=session, user_store=store)
     for t in tools:
         tool_registry.register(t)
+
+The subscriptions, portfolio and memory tools read backend database models. ai_engine may
+not import those (backend -> ai_engine only), so the backend hands in a user_store
+(services.chat_service.ChatUserStore) with these methods:
+
+    subscriptions_newest_first(user_id, db) -> Subscription rows, newest first
+    subscriptions_by_ticker(user_id, db)    -> Subscription rows, sorted by ticker
+    get_or_create_profile(user_id, db)      -> the user's UserProfile (added and flushed if new)
+
+Without a user_store those tools report an error instead of guessing.
 """
 
 from __future__ import annotations
@@ -60,6 +70,12 @@ class UserContextTool(BaseTool):
             return ToolResult(ok=False, error={"code": "TOOL_ERROR", "message": str(exc)})
 
 
+def _require_user_store(user_store: Any) -> Any:
+    if user_store is None:
+        raise RuntimeError("User store not provided (the backend passes it in when building chat tools)")
+    return user_store
+
+
 def _get_user_context(user_id: int, db: Any) -> str:
     import sys
     import os
@@ -107,38 +123,26 @@ _USER_SUBSCRIPTIONS_SPEC = ToolSpec(
 
 
 class UserSubscriptionsTool(BaseTool):
-    """Lists the user's subscribed tickers. Requires user_id + db at construction."""
+    """Lists the user's subscribed tickers. Requires user_id + db + user_store at construction."""
 
     spec = _USER_SUBSCRIPTIONS_SPEC
 
-    def __init__(self, user_id: Optional[int] = None, db: Any = None) -> None:
+    def __init__(self, user_id: Optional[int] = None, db: Any = None, user_store: Any = None) -> None:
         self._user_id = user_id
         self._db = db
+        self._user_store = user_store
 
     def execute(self, ctx: ExecutionContext, **_) -> ToolResult:
         try:
-            result = _get_user_subscriptions((ctx.user_id if ctx.user_id is not None else self._user_id), (ctx.db if ctx.db is not None else self._db))
+            result = _get_user_subscriptions((ctx.user_id if ctx.user_id is not None else self._user_id), (ctx.db if ctx.db is not None else self._db), self._user_store)
             return ToolResult(ok=True, data=result)
         except Exception as exc:
             logger.exception("UserSubscriptionsTool error: %s", exc)
             return ToolResult(ok=False, error={"code": "TOOL_ERROR", "message": str(exc)})
 
 
-def _get_user_subscriptions(user_id: int, db: Any) -> str:
-    import sys
-    import os
-    _backend_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "backend")
-    if _backend_dir not in sys.path:
-        sys.path.insert(0, os.path.abspath(_backend_dir))
-
-    from models.db_models import Subscription  # type: ignore[import]
-
-    subs = (
-        db.query(Subscription)
-        .filter(Subscription.user_id == user_id)
-        .order_by(Subscription.created_at.desc())
-        .all()
-    )
+def _get_user_subscriptions(user_id: int, db: Any, user_store: Any = None) -> str:
+    subs = _require_user_store(user_store).subscriptions_newest_first(user_id, db)
     if not subs:
         return "You have no subscribed stocks yet. Visit the platform to subscribe to tickers."
     lines = ["# Your Subscribed Stocks", ""]
@@ -175,41 +179,31 @@ _PORTFOLIO_OVERVIEW_SPEC = ToolSpec(
 
 
 class PortfolioOverviewTool(BaseTool):
-    """Full portfolio overview (quotes + AI recs). Requires user_id + db at construction."""
+    """Full portfolio overview (quotes + AI recs). Requires user_id + db + user_store at construction."""
 
     spec = _PORTFOLIO_OVERVIEW_SPEC
 
-    def __init__(self, user_id: Optional[int] = None, db: Any = None) -> None:
+    def __init__(self, user_id: Optional[int] = None, db: Any = None, user_store: Any = None) -> None:
         self._user_id = user_id
         self._db = db
+        self._user_store = user_store
 
     def execute(self, ctx: ExecutionContext, **_) -> ToolResult:
         try:
-            result = _get_portfolio_overview((ctx.user_id if ctx.user_id is not None else self._user_id), (ctx.db if ctx.db is not None else self._db))
+            result = _get_portfolio_overview((ctx.user_id if ctx.user_id is not None else self._user_id), (ctx.db if ctx.db is not None else self._db), self._user_store)
             return ToolResult(ok=True, data=result)
         except Exception as exc:
             logger.exception("PortfolioOverviewTool error: %s", exc)
             return ToolResult(ok=False, error={"code": "TOOL_ERROR", "message": str(exc)})
 
 
-def _get_portfolio_overview(user_id: int, db: Any) -> str:
-    import sys
-    import os
-    _backend_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "backend")
-    if _backend_dir not in sys.path:
-        sys.path.insert(0, os.path.abspath(_backend_dir))
-
-    from models.db_models import Subscription  # type: ignore[import]
+def _get_portfolio_overview(user_id: int, db: Any, user_store: Any = None) -> str:
+    store = _require_user_store(user_store)
     from ai_engine.tradingagents.agents.utils.core_stock_tools import get_ticker_quote
 
     report_svc = _backend_gateway()
 
-    subs = (
-        db.query(Subscription)
-        .filter(Subscription.user_id == user_id)
-        .order_by(Subscription.ticker)
-        .all()
-    )
+    subs = store.subscriptions_by_ticker(user_id, db)
     if not subs:
         return "You have no subscribed stocks. Subscribe to tickers on the platform to build your portfolio."
     lines = ["# Your Portfolio Overview", ""]
@@ -294,42 +288,32 @@ _UPDATE_USER_MEMORY_SPEC = ToolSpec(
 
 
 class UpdateUserMemoryTool(BaseTool):
-    """Saves information to the user's persistent AI memory. Requires user_id + db at construction."""
+    """Saves information to the user's persistent AI memory. Requires user_id + db + user_store at construction."""
 
     spec = _UPDATE_USER_MEMORY_SPEC
 
-    def __init__(self, user_id: Optional[int] = None, db: Any = None) -> None:
+    def __init__(self, user_id: Optional[int] = None, db: Any = None, user_store: Any = None) -> None:
         self._user_id = user_id
         self._db = db
+        self._user_store = user_store
 
     def execute(self, ctx: ExecutionContext, **kwargs) -> ToolResult:
         try:
             memory_note = kwargs.get("memory_note", "")
             if not memory_note:
                 return ToolResult(ok=False, error={"code": "MISSING_PARAM", "message": "memory_note is required"})
-            result = _update_user_memory((ctx.user_id if ctx.user_id is not None else self._user_id), (ctx.db if ctx.db is not None else self._db), memory_note)
+            result = _update_user_memory((ctx.user_id if ctx.user_id is not None else self._user_id), (ctx.db if ctx.db is not None else self._db), memory_note, self._user_store)
             return ToolResult(ok=True, data=result)
         except Exception as exc:
             logger.exception("UpdateUserMemoryTool error: %s", exc)
             return ToolResult(ok=False, error={"code": "TOOL_ERROR", "message": str(exc)})
 
 
-def _update_user_memory(user_id: int, db: Any, memory_note: str) -> str:
-    import sys
-    import os
-    _backend_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "backend")
-    if _backend_dir not in sys.path:
-        sys.path.insert(0, os.path.abspath(_backend_dir))
-
-    from models.db_models import UserProfile  # type: ignore[import]
+def _update_user_memory(user_id: int, db: Any, memory_note: str, user_store: Any = None) -> str:
+    store = _require_user_store(user_store)
     from datetime import datetime
 
-    # Get or create profile
-    profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
-    if profile is None:
-        profile = UserProfile(user_id=user_id)
-        db.add(profile)
-        db.flush()
+    profile = store.get_or_create_profile(user_id, db)
 
     # Clean the memory note
     memory_note = memory_note.strip()
@@ -360,15 +344,16 @@ def _update_user_memory(user_id: int, db: Any, memory_note: str) -> str:
 # Factory function
 # ---------------------------------------------------------------------------
 
-def make_user_context_tools(user_id: int, db: Any) -> list[BaseTool]:
+def make_user_context_tools(user_id: int, db: Any, user_store: Any = None) -> list[BaseTool]:
     """
     Create all user-context tool instances bound to a specific user_id and db session.
     Call this per-request and register the returned tools into the ToolRegistry.
+    user_store is the backend's lookup object (see the module docstring).
     """
     return [
         UserContextTool(user_id=user_id, db=db),
-        UserSubscriptionsTool(user_id=user_id, db=db),
-        PortfolioOverviewTool(user_id=user_id, db=db),
-        UpdateUserMemoryTool(user_id=user_id, db=db),
+        UserSubscriptionsTool(user_id=user_id, db=db, user_store=user_store),
+        PortfolioOverviewTool(user_id=user_id, db=db, user_store=user_store),
+        UpdateUserMemoryTool(user_id=user_id, db=db, user_store=user_store),
     ]
 

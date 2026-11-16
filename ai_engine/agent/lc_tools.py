@@ -309,10 +309,12 @@ def execute_python(code: str, config: RunnableConfig = None) -> str:
 # Identity-independent user tools; the current principal/session is injected.
 # ---------------------------------------------------------------------------
 
-def make_user_lc_tools(user_id: int, db: Any) -> list:
+def make_user_lc_tools(user_id: int, db: Any, user_store: Any = None) -> list:
     """
     Create LangChain @tool wrappers for user-context tools.
     Tools contain no user/session closures; identity is injected at invocation time.
+    user_store (the backend's subscription/profile lookups, see tools/user_context.py)
+    is process-wide, not per-user, so closing over it is safe with the graph cache.
     """
 
     @tool
@@ -333,7 +335,7 @@ def make_user_lc_tools(user_id: int, db: Any) -> list:
         from ai_engine.agent.tools.user_context import UserSubscriptionsTool
         from ai_engine.agent.tool import ExecutionContext
         ctx = _ctx_from_config(config)
-        return _run_tool(UserSubscriptionsTool(), ctx).to_str()
+        return _run_tool(UserSubscriptionsTool(user_store=user_store), ctx).to_str()
 
     @tool
     def get_portfolio_overview(config: RunnableConfig) -> str:
@@ -345,7 +347,7 @@ def make_user_lc_tools(user_id: int, db: Any) -> list:
         from ai_engine.agent.tools.user_context import PortfolioOverviewTool
         from ai_engine.agent.tool import ExecutionContext
         ctx = _ctx_from_config(config)
-        return _run_tool(PortfolioOverviewTool(), ctx).to_str()
+        return _run_tool(PortfolioOverviewTool(user_store=user_store), ctx).to_str()
 
     @tool
     def update_user_memory(memory_note: str, config: RunnableConfig) -> str:
@@ -361,7 +363,7 @@ def make_user_lc_tools(user_id: int, db: Any) -> list:
         from ai_engine.agent.tools.user_context import UpdateUserMemoryTool
         from ai_engine.agent.tool import ExecutionContext
         ctx = _ctx_from_config(config)
-        return _run_tool(UpdateUserMemoryTool(), ctx, memory_note=memory_note).to_str()
+        return _run_tool(UpdateUserMemoryTool(user_store=user_store), ctx, memory_note=memory_note).to_str()
 
     return [get_user_context, get_user_subscriptions, get_portfolio_overview, update_user_memory]
 
@@ -404,13 +406,13 @@ ALL_LC_TOOLS = [
 ]
 
 
-def get_all_lc_tools(user_id: Optional[int] = None, db: Any = None) -> list:
+def get_all_lc_tools(user_id: Optional[int] = None, db: Any = None, user_store: Any = None) -> list:
     """
     Return the full list of LangChain tools for a request.
 
-    If user_id and db are provided, user-context tools are appended.
+    If user_id and db are provided, user-context tools are appended (bound to user_store).
     """
     tools = list(ALL_LC_TOOLS)
     if user_id is not None and db is not None:
-        tools.extend(make_user_lc_tools(user_id, db))
+        tools.extend(make_user_lc_tools(user_id, db, user_store))
     return tools

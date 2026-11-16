@@ -101,6 +101,7 @@ def test_concurrent_debits_cannot_overspend_and_replays_do_not_repeat(runtime):
 def test_cached_graph_tools_use_each_invocations_user_for_reads_and_writes(runtime, monkeypatch):
     from ai_engine.agent.graph import FlowDeckAgent
     from ai_engine.agent.lc_tools import make_user_lc_tools
+    from services.chat_service import ChatUserStore
     from ai_engine.agent.tool import ExecutionContext
     from ai_engine.agent.tools.user_context import UserContextTool, ToolResult
     from langchain_core.messages import AIMessage
@@ -111,8 +112,8 @@ def test_cached_graph_tools_use_each_invocations_user_for_reads_and_writes(runti
     monkeypatch.setattr(UserContextTool, 'execute', read)
     agent = FlowDeckAgent(None)
     with runtime.sessions() as db:
-        graph = agent._get_graph(make_user_lc_tools(1, db))
-        assert graph is agent._get_graph(make_user_lc_tools(2, db))
+        graph = agent._get_graph(make_user_lc_tools(1, db, ChatUserStore()))
+        assert graph is agent._get_graph(make_user_lc_tools(2, db, ChatUserStore()))
         for user_id in (1, 2, 1):
             config = {'configurable': {'execution_context': ExecutionContext(user_id=user_id, db=db, max_tool_calls=3)}}
             graph.nodes['tool_node'].bound.invoke({'messages': [AIMessage(content='', tool_calls=[
@@ -143,6 +144,7 @@ def test_cached_graph_tools_use_each_invocations_user_for_reads_and_writes(runti
 def test_parallel_tool_calls_share_one_hard_budget(runtime, monkeypatch):
     from ai_engine.agent.graph import FlowDeckAgent
     from ai_engine.agent.lc_tools import make_user_lc_tools
+    from services.chat_service import ChatUserStore
     from ai_engine.agent.tool import ExecutionContext, ToolResult
     from ai_engine.agent.tools.user_context import UserContextTool
     from langchain_core.messages import AIMessage
@@ -150,7 +152,7 @@ def test_parallel_tool_calls_share_one_hard_budget(runtime, monkeypatch):
     monkeypatch.setattr(UserContextTool, 'execute', calls)
     with runtime.sessions() as db:
         ctx = ExecutionContext(user_id=1, db=db, max_tool_calls=1)
-        graph = FlowDeckAgent(None)._get_graph(make_user_lc_tools(1, db))
+        graph = FlowDeckAgent(None)._get_graph(make_user_lc_tools(1, db, ChatUserStore()))
         result = graph.nodes['tool_node'].bound.invoke({'messages': [AIMessage(content='', tool_calls=[
             {'name': 'get_user_context', 'args': {}, 'id': str(i)} for i in range(3)
         ])]}, {'configurable': {'execution_context': ctx}})

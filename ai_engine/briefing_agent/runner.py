@@ -10,13 +10,13 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from ai_engine.llm_provider import get_config_from_env, get_llm
 from ai_engine.tradingagents.agents.utils.trace_utils import json_safe, make_agent_step, preview_text
 from ai_engine.processing import build_important_events
 
-from .context_builder import PlatformReportsLoader, build_digest_context
+from .context_builder import PlatformReportsLoader, PortfolioTickersLoader, build_digest_context
 from .agents import (
     run_focus_selector,
     run_ticker_interpreter,
@@ -30,20 +30,14 @@ from .state import DigestWorkflowState, DigestResult, HistoricalDigestBrief, Spa
 logger = logging.getLogger(__name__)
 _RECENT_BRIEFS_LIMIT = 5
 
+# (user_id, db, limit) -> the user's stored (Execution, Report) daily-digest rows, newest
+# first. Supplied by the backend (services.digest_service.load_recent_digest_rows)
+# because the rows are its database models, and ai_engine may not import them.
+RecentDigestsLoader = Callable[[int, Any, int], Iterable[Tuple[Any, Any]]]
+
 
 def _parse_date(s: str) -> datetime:
     return datetime.strptime(s, "%Y-%m-%d")
-
-
-def _ensure_backend_import_path() -> None:
-    import os
-    import sys
-
-    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    backend_dir = os.path.join(repo_root, "backend")
-    for path in (repo_root, backend_dir):
-        if os.path.isdir(path) and path not in sys.path:
-            sys.path.insert(0, path)
 
 
 def _to_utc_iso(value: Optional[datetime]) -> Optional[str]:
@@ -61,31 +55,17 @@ def _load_recent_digest_briefs(
     db: Any,
     *,
     limit: int = _RECENT_BRIEFS_LIMIT,
+    loader: Optional[RecentDigestsLoader] = None,
 ) -> List[HistoricalDigestBrief]:
-    """Load the user's most recent stored digests, newest first."""
-    if db is None:
+    """Load the user's most recent stored digests, newest first.
+
+    Recent briefs are optional context, so without a db or a loader there are none.
+    """
+    if db is None or loader is None:
         return []
 
     try:
-        _ensure_backend_import_path()
-        # Only the app's name (models.db_models, backend/ on sys.path). Importing the
-        # file as backend.models.db_models too loads it a second time and SQLAlchemy
-        # fails with "Table 'entity_sequences' is already defined".
-        from models.db_models import Execution, Report  # type: ignore[import-not-found]
-
-        rows = (
-            db.query(Execution, Report)
-            .join(Report, Report.execution_id == Execution.id)
-            .filter(
-                Execution.execution_type == "daily_digest",
-                Execution.subject_type == "user_date",
-                Execution.creator_id == user_id,
-                Report.report_type == "daily_digest",
-            )
-            .order_by(Execution.created_at.desc(), Report.created_at.desc(), Execution.id.desc())
-            .limit(max(1, int(limit)))
-            .all()
-        )
+        rows = loader(user_id, db, max(1, int(limit)))
         briefs: List[HistoricalDigestBrief] = []
         for execution, report in rows:
             metadata: Dict[str, Any] = {}
@@ -276,6 +256,8 @@ def run_digest(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     platform_reports_loader: Optional[PlatformReportsLoader] = None,
+    portfolio_tickers_loader: Optional[PortfolioTickersLoader] = None,
+    recent_digests_loader: Optional[RecentDigestsLoader] = None,
 ) -> DigestResult:
     """
     Run the full User Daily Brief pipeline and return a DigestResult.
@@ -296,6 +278,10 @@ def run_digest(
             because ai_engine may not import backend services.
         platform_reports_loader: ticker -> (latest platform reports, share URL or None).
             Supplied by the backend; without it the brief has no platform reports.
+        portfolio_tickers_loader: (user_id, db) -> subscribed tickers. Required, as in
+            build_digest_context; the backend passes services.digest_service.load_portfolio_tickers.
+        recent_digests_loader: (user_id, db, limit) -> stored digest rows. The backend passes
+            services.digest_service.load_recent_digest_rows; without it there are no recent briefs.
         span_type: 'daily', 'weekly', or 'custom'. Weekly = 7 days ending digest_date.
         start_date: Required for custom; for weekly computed from digest_date.
         end_date: Required for custom; for weekly equals digest_date.
@@ -348,7 +334,7 @@ def run_digest(
         db=db,
         config=cfg,
     )
-    state.recent_digest_briefs = _load_recent_digest_briefs(user_id, db)
+    state.recent_digest_briefs = _load_recent_digest_briefs(user_id, db, loader=recent_digests_loader)
     if user_note:
         state.user_note = user_note
     if narrative_style:
@@ -377,6 +363,7 @@ def run_digest(
         end_date=end_date,
         span_trading_days=span_trading_days,
         platform_reports_loader=platform_reports_loader,
+        portfolio_tickers_loader=portfolio_tickers_loader,
     )
     state.digest_context = ctx
     context_preview = {

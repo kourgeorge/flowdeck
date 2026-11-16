@@ -10,7 +10,7 @@ from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
 from ai_engine.tradingagents.agents.utils.trace_utils import sort_agent_steps
-from models.db_models import Execution, Report
+from models.db_models import Execution, Report, Subscription
 from services import token_service
 
 
@@ -163,18 +163,56 @@ def load_platform_reports_for_ticker(ticker: str) -> Tuple[dict, Optional[str]]:
     return reports, get_share_url(execution_id)
 
 
+def load_portfolio_tickers(user_id: int, db: Session) -> List[str]:
+    """The user's subscribed tickers for the brief and stocks discovery (upper-case, by ticker).
+
+    Lives here rather than in ai_engine because Subscription is a backend model; ai_engine
+    gets this function passed in (backend -> ai_engine only).
+    """
+    subs = (
+        db.query(Subscription)
+        .filter(Subscription.user_id == user_id)
+        .order_by(Subscription.ticker)
+        .all()
+    )
+    return [s.ticker.upper() for s in subs]
+
+
+def load_recent_digest_rows(user_id: int, db: Session, limit: int):
+    """The user's stored daily-digest (Execution, Report) rows, newest first.
+
+    The brief turns these into its "recent briefs" context. The query moved here from
+    ai_engine so ai_engine no longer imports models.db_models.
+    """
+    return (
+        db.query(Execution, Report)
+        .join(Report, Report.execution_id == Execution.id)
+        .filter(
+            Execution.execution_type == "daily_digest",
+            Execution.subject_type == "user_date",
+            Execution.creator_id == user_id,
+            Report.report_type == "daily_digest",
+        )
+        .order_by(Execution.created_at.desc(), Report.created_at.desc(), Execution.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+
 def run_stocks_discovery_for_user(user_id: int, digest_date: str, db: Session, **kwargs):
     """ai_engine.stocks_discovery.run_stocks_discovery with the backend's data passed in.
 
-    Stocks discovery builds the same context as the brief, so it needs the same two
-    things from the backend: the info fetcher and the platform-reports loader. Without
-    the loader its context would have empty platform reports and no share links.
+    Stocks discovery builds the same context as the brief, so it needs the same things
+    from the backend: the info fetcher, the platform-reports loader and the portfolio
+    tickers loader. Without the reports loader its context would have empty platform
+    reports and no share links.
     """
     from ai_engine.stocks_discovery import run_stocks_discovery
     from services.info_fetcher import get_info_fetcher
 
     kwargs.setdefault("fetcher", get_info_fetcher())
     kwargs.setdefault("platform_reports_loader", load_platform_reports_for_ticker)
+    kwargs.setdefault("portfolio_tickers_loader", load_portfolio_tickers)
     return run_stocks_discovery(user_id, digest_date, db, **kwargs)
 
 
@@ -241,6 +279,8 @@ async def run_and_store_digest(
             end_date=end_date,
             fetcher=get_info_fetcher(),
             platform_reports_loader=load_platform_reports_for_ticker,
+            portfolio_tickers_loader=load_portfolio_tickers,
+            recent_digests_loader=load_recent_digest_rows,
         )
     except Exception as e:  # pragma: no cover - surface to caller
         logger.exception("Digest generation failed for user_id=%s: %s", user_id, e)

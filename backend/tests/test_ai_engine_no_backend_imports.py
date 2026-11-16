@@ -4,7 +4,10 @@ T-52 removed the brief's services imports; T-63 removed the rest (stocks_discove
 chat user_context, watchlist_consulting, portfolio_deep_research). The data now comes
 in from the backend caller or, for the separately-run portfolio research, over HTTP.
 T-74 moved the event layer to ai_engine.processing and dropped the brief's
-backend.models import, so there are no exceptions left.
+backend.models import. T-87 removed the models.db_models imports (the brief's recent
+briefs and subscriptions, the chat's subscription/memory tools): the backend now passes
+those lookups in. The guard used to check only "services" and "backend", which missed
+"models" because backend/ is on sys.path; it now checks every backend top-level package.
 """
 
 from __future__ import annotations
@@ -32,19 +35,46 @@ def _imported_modules(tree: ast.AST):
             yield node.module
 
 
+# backend/'s top-level packages. backend/ is on sys.path in the app and the tests, so
+# "models.db_models" is backend code even though it does not say "backend".
+_BACKEND_PACKAGES = ("services", "backend", "models", "database", "routers", "config", "auth", "data_layer")
+
+# The only allowed exceptions: chat tools that read the data gateway the backend sets up
+# at startup (init_data_gateway in backend/main.py). Each one catches ImportError and
+# RuntimeError and falls back to the public HTTP API (or reports an error), so ai_engine
+# still works without the backend. Each is covered by a test below.
+_ALLOWED = {
+    ("ai_engine/agent/tools/user_context.py", "data_layer"),  # get_user_context
+    ("ai_engine/agent/tools/platform_reports.py", "data_layer"),  # reports and report dates
+    ("ai_engine/agent/tools/events.py", "data_layer"),  # event summary
+}
+
+
 def _is_backend(module: str) -> bool:
-    top = module.split(".")[0]
-    return top in ("services", "backend")
+    return module.split(".")[0] in _BACKEND_PACKAGES
 
 
-def test_ai_engine_has_no_services_or_backend_import():
-    offenders = []
+def _backend_imports():
     for path in AI_ENGINE.rglob("*.py"):
-        rel = str(path.relative_to(REPO_ROOT))
+        rel = path.relative_to(REPO_ROOT).as_posix()
         for module in _imported_modules(ast.parse(path.read_text())):
             if _is_backend(module):
-                offenders.append(f"{rel}: {module}")
+                yield rel, module
+
+
+def test_ai_engine_has_no_backend_import():
+    offenders = [f"{rel}: {m}" for rel, m in _backend_imports() if (rel, m) not in _ALLOWED]
     assert offenders == []
+
+
+def test_allowlist_has_no_stale_entries():
+    # An entry that no longer matches an import should be removed, not kept "just in case".
+    assert _ALLOWED <= set(_backend_imports())
+
+
+def test_guard_flags_models_db_models():
+    tree = ast.parse("from models.db_models import Subscription\nimport database\nimport config.x")
+    assert [m for m in _imported_modules(tree) if _is_backend(m)] == ["models.db_models", "database", "config.x"]
 
 
 def test_no_file_imports_services_at_all():
@@ -115,11 +145,16 @@ def test_stocks_discovery_passes_platform_reports_loader(monkeypatch):
 
     monkeypatch.setattr(runner, "build_digest_context", fake_build)
     loader = lambda t: ({}, None)  # noqa: E731
+    tickers_loader = lambda uid, db: []  # noqa: E731
     fetcher = object()
     with pytest.raises(_Stop):
-        runner.run_stocks_discovery(1, "2026-11-16", None, fetcher=fetcher, platform_reports_loader=loader)
+        runner.run_stocks_discovery(
+            1, "2026-11-16", None, fetcher=fetcher, platform_reports_loader=loader,
+            portfolio_tickers_loader=tickers_loader,
+        )
     assert seen["fetcher"] is fetcher
     assert seen["platform_reports_loader"] is loader
+    assert seen["portfolio_tickers_loader"] is tickers_loader
 
 
 def test_backend_stocks_discovery_entry_injects_dependencies(monkeypatch):
@@ -134,6 +169,7 @@ def test_backend_stocks_discovery_entry_injects_dependencies(monkeypatch):
     assert digest_service.run_stocks_discovery_for_user(1, "2026-11-16", None) == "ok"
     assert seen["fetcher"] is sentinel
     assert seen["platform_reports_loader"] is digest_service.load_platform_reports_for_ticker
+    assert seen["portfolio_tickers_loader"] is digest_service.load_portfolio_tickers
 
 
 # --- chat user_context: in the backend process, uses the startup data gateway ---
@@ -153,6 +189,104 @@ def test_user_context_uses_gateway_and_has_no_services_fallback(monkeypatch):
     monkeypatch.setattr(data_layer, "get_data_gateway", missing)
     with pytest.raises(RuntimeError):
         user_context._get_user_context(5, None)
+
+
+def test_platform_report_dates_read_the_gateway(monkeypatch):
+    import data_layer
+    from ai_engine.agent.tools import platform_reports
+
+    gw = SimpleNamespace(list_report_dates=lambda t: ["2026-11-15"] if t == "AAA" else [])
+    monkeypatch.setattr(data_layer, "get_data_gateway", lambda: gw)
+    assert "`2026-11-15`" in platform_reports._fetch_historical_dates("aaa")
+
+
+def test_events_tool_reads_the_gateway(monkeypatch):
+    import data_layer
+    import processing
+    from ai_engine.agent.tools import events
+
+    gw = object()
+    seen = {}
+
+    def fake_summary(gateway, ticker, as_of_date):
+        seen["gateway"], seen["ticker"] = gateway, ticker
+        return SimpleNamespace(model_dump=lambda mode: {"event_score": 1.0, "event_count": 0, "events": []})
+
+    monkeypatch.setattr(data_layer, "get_data_gateway", lambda: gw)
+    monkeypatch.setattr(processing, "get_ticker_event_summary", fake_summary)
+    assert "AAA" in events._fetch_events("aaa")
+    assert seen == {"gateway": gw, "ticker": "AAA"}
+
+
+class _Sub(SimpleNamespace):
+    pass
+
+
+class _Store:
+    def __init__(self):
+        self.profile = SimpleNamespace(ai_memory_text=None)
+
+    def subscriptions_newest_first(self, uid, db):
+        return [_Sub(ticker="BBB", created_at=None, email_updates=True)] if uid == 1 else []
+
+    def subscriptions_by_ticker(self, uid, db):
+        return [_Sub(ticker="AAA")] if uid == 1 else []
+
+    def get_or_create_profile(self, uid, db):
+        return self.profile
+
+
+class _Db:
+    def commit(self):
+        pass
+
+    def refresh(self, obj):
+        pass
+
+
+def test_user_tools_use_the_injected_store(monkeypatch):
+    import data_layer
+    from ai_engine.agent.tool import ExecutionContext
+    from ai_engine.agent.tools import user_context
+
+    monkeypatch.setattr(data_layer, "get_data_gateway", lambda: object())
+    store = _Store()
+    subs = user_context.UserSubscriptionsTool(user_store=store)
+    overview = user_context.PortfolioOverviewTool(user_store=store)
+    memory = user_context.UpdateUserMemoryTool(user_store=store)
+    ctx = ExecutionContext(user_id=1, db=_Db())
+    assert "**BBB** — subscribed Unknown (email updates on)" in subs.execute(ctx).data
+    assert subs.execute(ExecutionContext(user_id=2, db=_Db())).data.startswith("You have no subscribed stocks yet")
+    assert overview.execute(ExecutionContext(user_id=2, db=_Db())).data.startswith("You have no subscribed stocks.")
+    assert memory.execute(ctx, memory_note="likes AAA").ok
+    assert store.profile.ai_memory_text.endswith("] likes AAA")
+
+
+def test_user_tools_without_store_report_an_error():
+    from ai_engine.agent.tool import ExecutionContext
+    from ai_engine.agent.tools import user_context
+
+    ctx = ExecutionContext(user_id=1, db=_Db())
+    for tool in (user_context.UserSubscriptionsTool(), user_context.PortfolioOverviewTool()):
+        assert tool.execute(ctx).error["code"] == "TOOL_ERROR"
+    assert user_context.UpdateUserMemoryTool().execute(ctx, memory_note="x").error["code"] == "TOOL_ERROR"
+
+
+def test_chat_service_hands_its_store_to_every_user_tool_path(monkeypatch):
+    from ai_engine.agent import graph
+    from ai_engine.agent.lc_tools import get_all_lc_tools
+    from services import chat_service
+
+    svc = chat_service.ChatService()
+    monkeypatch.setattr(svc, "_get_llm", lambda: None)
+    agent = svc._get_agent()
+    assert isinstance(agent.user_store, chat_service.ChatUserStore)
+    config = agent._make_config([], 1, object(), "", 3)
+    assert config["configurable"]["user_store"] is agent.user_store
+    # The lc tool wrappers close over the store; the store is per-process, not per-user.
+    names = [t.name for t in get_all_lc_tools(user_id=1, db=object(), user_store=agent.user_store)]
+    assert "get_user_subscriptions" in names and "update_user_memory" in names
+    assert graph.FlowDeckAgent(None).user_store is None
 
 
 # --- watchlist_consulting: backend entry passes payload loader and fetcher ---

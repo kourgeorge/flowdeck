@@ -294,6 +294,49 @@ def _last_user_message(messages: List[Dict[str, Any]]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# User lookups for the chat's user tools
+# ---------------------------------------------------------------------------
+
+class ChatUserStore:
+    """Subscription and profile lookups the chat's user tools need.
+
+    The tools live in ai_engine/agent/tools/user_context.py, which may not import
+    backend models (backend -> ai_engine only), so the queries live here and an
+    instance is handed to FlowDeckAgent.
+    """
+
+    def subscriptions_newest_first(self, user_id: int, db: Any) -> list:
+        from models.db_models import Subscription
+
+        return (
+            db.query(Subscription)
+            .filter(Subscription.user_id == user_id)
+            .order_by(Subscription.created_at.desc())
+            .all()
+        )
+
+    def subscriptions_by_ticker(self, user_id: int, db: Any) -> list:
+        from models.db_models import Subscription
+
+        return (
+            db.query(Subscription)
+            .filter(Subscription.user_id == user_id)
+            .order_by(Subscription.ticker)
+            .all()
+        )
+
+    def get_or_create_profile(self, user_id: int, db: Any) -> Any:
+        from models.db_models import UserProfile
+
+        profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+        if profile is None:
+            profile = UserProfile(user_id=user_id)
+            db.add(profile)
+            db.flush()
+        return profile
+
+
+# ---------------------------------------------------------------------------
 # ChatService
 # ---------------------------------------------------------------------------
 
@@ -320,7 +363,7 @@ class ChatService:
         """Lazy-initialize the FlowDeckAgent (graph is compiled once per process)."""
         if self._agent is None:
             from ai_engine.agent.graph import FlowDeckAgent
-            self._agent = FlowDeckAgent(llm=self._get_llm())
+            self._agent = FlowDeckAgent(llm=self._get_llm(), user_store=ChatUserStore())
         return self._agent  # type: ignore[return-value]
 
     def chat(

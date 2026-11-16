@@ -76,6 +76,17 @@ def test_missing_fetcher_is_refused():
         context_builder.build_digest_context(user_id=1, digest_date="2026-11-16", max_priority_tickers=3, db=None)
 
 
+def test_missing_portfolio_tickers_loader_is_refused(monkeypatch):
+    # Falling back to market movers would look like a real brief for a user with no tickers.
+    monkeypatch.setattr(context_builder, "_fetch_global_news", lambda *a, **k: None)
+    monkeypatch.setattr(context_builder, "_fetch_web_snippet", lambda *a, **k: None)
+    with pytest.raises(ValueError, match="portfolio_tickers_loader"):
+        context_builder.build_digest_context(
+            user_id=1, digest_date="2026-11-16", max_priority_tickers=3, db=None, fetcher=_Fetcher()
+        )
+    assert context_builder._load_portfolio_tickers(1, "db", lambda uid, db: [f"{uid}{db}"]) == ["1db"]
+
+
 def test_digest_service_loader_matches_old_behaviour(monkeypatch):
     from services import digest_service, report_service, share_service
 
@@ -123,3 +134,5 @@ def test_run_and_store_digest_injects_dependencies(monkeypatch):
         pass  # only the run_digest call matters here
     assert seen["fetcher"] is sentinel
     assert seen["platform_reports_loader"] is digest_service.load_platform_reports_for_ticker
+    assert seen["portfolio_tickers_loader"] is digest_service.load_portfolio_tickers
+    assert seen["recent_digests_loader"] is digest_service.load_recent_digest_rows

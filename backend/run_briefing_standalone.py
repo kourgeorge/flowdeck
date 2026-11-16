@@ -62,7 +62,11 @@ def main() -> None:
     try:
         from ai_engine.briefing_agent import run_digest
         from services import token_service
-        from services.digest_service import load_platform_reports_for_ticker
+        from services.digest_service import (
+            load_platform_reports_for_ticker,
+            load_portfolio_tickers,
+            load_recent_digest_rows,
+        )
         from services.info_fetcher import get_info_fetcher
         from services.report_service import save_report
 
@@ -74,6 +78,8 @@ def main() -> None:
             max_priority_tickers=args.max_priority,
             fetcher=get_info_fetcher(),
             platform_reports_loader=load_platform_reports_for_ticker,
+            portfolio_tickers_loader=load_portfolio_tickers,
+            recent_digests_loader=load_recent_digest_rows,
         )
 
         # Persist digest as Execution + Report (creator = user, subject = user_id:date)

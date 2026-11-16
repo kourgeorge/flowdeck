@@ -10,8 +10,6 @@ is left empty so agents can use tools to fill gaps.
 from __future__ import annotations
 
 import logging
-import os
-import sys
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -30,6 +28,11 @@ ABNORMAL_THRESHOLD_PCT = 3.0  # |1d return| > this (%) -> abnormal_signal True
 # database and share URLs are signed with its secret; ai_engine cannot reach either
 # without importing backend services.
 PlatformReportsLoader = Callable[[str], Tuple[Dict[str, Any], Optional[str]]]
+
+# (user_id, db) -> the user's subscribed tickers, upper-case, sorted by ticker. Supplied
+# by the backend (services.digest_service.load_portfolio_tickers) because subscriptions
+# are its database models, and ai_engine may not import them.
+PortfolioTickersLoader = Callable[[int, Any], List[str]]
 
 
 def _load_platform_reports(
@@ -53,25 +56,17 @@ def _load_platform_reports(
     return platform_reports, share_urls
 
 
-def _ensure_backend_on_path() -> None:
-    if "backend" in [os.path.basename(p) for p in sys.path]:
-        return
-    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    backend_dir = os.path.join(repo_root, "backend")
-    if os.path.isdir(backend_dir) and backend_dir not in sys.path:
-        sys.path.insert(0, backend_dir)
-
-
-def _load_portfolio_tickers(user_id: int, db: Any) -> List[str]:
-    _ensure_backend_on_path()
-    from models.db_models import Subscription  # type: ignore[import-untyped]
-    subs = (
-        db.query(Subscription)
-        .filter(Subscription.user_id == user_id)
-        .order_by(Subscription.ticker)
-        .all()
-    )
-    return [s.ticker.upper() for s in subs]
+def _load_portfolio_tickers(
+    user_id: int, db: Any, loader: Optional[PortfolioTickersLoader] = None
+) -> List[str]:
+    if loader is None:
+        # Without the backend's subscriptions the brief would quietly fall back to
+        # market movers, which looks like a real brief for a user with no tickers.
+        raise ValueError(
+            "build_digest_context needs a portfolio_tickers_loader "
+            "(pass services.digest_service.load_portfolio_tickers from the backend)"
+        )
+    return loader(user_id, db)
 
 
 def _get_user_context_snapshot(user_id: int, db: Any) -> Optional[str]:
@@ -415,12 +410,15 @@ def build_digest_context(
     end_date: Optional[str] = None,
     span_trading_days: Optional[int] = None,
     platform_reports_loader: Optional[PlatformReportsLoader] = None,
+    portfolio_tickers_loader: Optional[PortfolioTickersLoader] = None,
 ) -> DigestContext:
     """
     Build the full DigestContext: portfolio, base data, ranking, evidence, reports, market context, sector/peer.
 
     fetcher is required (the backend passes its info fetcher). platform_reports_loader is
     optional; without it platform_reports are empty and share_urls has no entries.
+    portfolio_tickers_loader is required, like fetcher: it is how the backend hands
+    over the user's subscribed tickers.
     On partial failure for a ticker, that ticker's keys are left empty/None; agents can
     use tools to fill gaps.
 
@@ -440,7 +438,7 @@ def build_digest_context(
         lookback_days = 2
     market_movers, global_news, web_search_snippet = _fetch_market_context(fetcher, digest_date, lookback_days)
 
-    tickers = _load_portfolio_tickers(user_id, db)
+    tickers = _load_portfolio_tickers(user_id, db, portfolio_tickers_loader)
     if not tickers:
         user_context_snapshot = _get_user_context_snapshot(user_id, db)
         fallback_rows = _extract_market_focus_rows(market_movers, max_priority_tickers)

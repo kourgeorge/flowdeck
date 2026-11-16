@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from models.db_models import Base, User, UserProfile
 from ai_engine.agent.tools.user_context import UpdateUserMemoryTool
 from ai_engine.agent.tool import ExecutionContext
+from services.chat_service import ChatUserStore
 
 
 class TestUpdateUserMemoryTool(unittest.TestCase):
@@ -32,7 +33,7 @@ class TestUpdateUserMemoryTool(unittest.TestCase):
 
     def test_update_user_memory_creates_profile_if_not_exists(self) -> None:
         """Test that the tool creates a profile if it doesn't exist."""
-        tool = UpdateUserMemoryTool(user_id=1, db=self.db)
+        tool = UpdateUserMemoryTool(user_id=1, db=self.db, user_store=ChatUserStore())
         ctx = ExecutionContext(user_id=1, db=self.db)
         
         result = tool.execute(ctx, memory_note="I love tech sector")
@@ -55,7 +56,7 @@ class TestUpdateUserMemoryTool(unittest.TestCase):
         self.db.add(profile)
         self.db.commit()
         
-        tool = UpdateUserMemoryTool(user_id=1, db=self.db)
+        tool = UpdateUserMemoryTool(user_id=1, db=self.db, user_store=ChatUserStore())
         ctx = ExecutionContext(user_id=1, db=self.db)
         
         result = tool.execute(ctx, memory_note="I love tech sector")
@@ -69,7 +70,7 @@ class TestUpdateUserMemoryTool(unittest.TestCase):
 
     def test_update_user_memory_includes_timestamp(self) -> None:
         """Test that saved memory includes a timestamp."""
-        tool = UpdateUserMemoryTool(user_id=1, db=self.db)
+        tool = UpdateUserMemoryTool(user_id=1, db=self.db, user_store=ChatUserStore())
         ctx = ExecutionContext(user_id=1, db=self.db)
         
         result = tool.execute(ctx, memory_note="Risk-averse investor")
@@ -88,7 +89,7 @@ class TestUpdateUserMemoryTool(unittest.TestCase):
         self.db.add(profile)
         self.db.commit()
         
-        tool = UpdateUserMemoryTool(user_id=1, db=self.db)
+        tool = UpdateUserMemoryTool(user_id=1, db=self.db, user_store=ChatUserStore())
         ctx = ExecutionContext(user_id=1, db=self.db)
         
         result = tool.execute(ctx, memory_note="New important note")
@@ -103,7 +104,7 @@ class TestUpdateUserMemoryTool(unittest.TestCase):
 
     def test_update_user_memory_handles_empty_note(self) -> None:
         """Test that empty memory notes are handled gracefully."""
-        tool = UpdateUserMemoryTool(user_id=1, db=self.db)
+        tool = UpdateUserMemoryTool(user_id=1, db=self.db, user_store=ChatUserStore())
         ctx = ExecutionContext(user_id=1, db=self.db)
         
         result = tool.execute(ctx, memory_note="")

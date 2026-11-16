@@ -10,7 +10,11 @@ from typing import Any, Dict, List, Optional
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 
-from ai_engine.briefing_agent.context_builder import PlatformReportsLoader, build_digest_context
+from ai_engine.briefing_agent.context_builder import (
+    PlatformReportsLoader,
+    PortfolioTickersLoader,
+    build_digest_context,
+)
 from ai_engine.briefing_agent.state import DigestContext, DigestWorkflowState
 from ai_engine.llm_provider import get_config_from_env, get_llm, structured_output
 from ai_engine.tradingagents.agents.utils.trace_utils import make_agent_step
@@ -157,6 +161,7 @@ def run_stocks_discovery(
     end_date: Optional[str] = None,
     config: Optional[Dict[str, Any]] = None,
     platform_reports_loader: Optional[PlatformReportsLoader] = None,
+    portfolio_tickers_loader: Optional[PortfolioTickersLoader] = None,
 ) -> StocksDiscoveryRunResult:
     """
     Build digest context (algorithmic), rank discovery candidates, run LLM writer, return persist-ready payload.
@@ -164,7 +169,9 @@ def run_stocks_discovery(
     fetcher is required: the backend caller passes get_info_fetcher(), because ai_engine
     may not import backend services. platform_reports_loader works as in run_digest
     (ticker -> (latest platform reports, share URL or None)); the backend passes
-    services.digest_service.load_platform_reports_for_ticker.
+    services.digest_service.load_platform_reports_for_ticker. portfolio_tickers_loader is
+    required by build_digest_context; the backend passes
+    services.digest_service.load_portfolio_tickers.
     """
     span_type, start_date, end_date, span_trading_days = resolve_span(
         digest_date, span_type, start_date, end_date
@@ -200,6 +207,7 @@ def run_stocks_discovery(
         end_date=end_date,
         span_trading_days=span_trading_days,
         platform_reports_loader=platform_reports_loader,
+        portfolio_tickers_loader=portfolio_tickers_loader,
     )
     state.digest_context = ctx
 
