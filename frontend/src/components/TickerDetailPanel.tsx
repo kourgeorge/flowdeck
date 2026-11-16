@@ -1780,18 +1780,24 @@ function StockDetailPanelBody({ ticker, prefetchedData, onSubscriptionChange }: 
                                 <span className="h-2.5 w-2.5 rounded-full bg-white" />
                                 Past 6M closes
                               </span>
-                              <span className="inline-flex items-center gap-1.5">
-                                <span className="h-2.5 w-2.5 rounded-full bg-fuchsia-400" />
-                                Low target
-                              </span>
-                              <span className="inline-flex items-center gap-1.5">
-                                <span className="h-2.5 w-2.5 rounded-full bg-cyan-400" />
-                                Mean target
-                              </span>
-                              <span className="inline-flex items-center gap-1.5">
-                                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                                High target
-                              </span>
+                              {analystHasPriceLow && (
+                                <span className="inline-flex items-center gap-1.5">
+                                  <span className="h-2.5 w-2.5 rounded-full bg-fuchsia-400" />
+                                  Low target
+                                </span>
+                              )}
+                              {analystHasPriceAverage && (
+                                <span className="inline-flex items-center gap-1.5">
+                                  <span className="h-2.5 w-2.5 rounded-full bg-cyan-400" />
+                                  Mean target
+                                </span>
+                              )}
+                              {analystHasPriceHigh && (
+                                <span className="inline-flex items-center gap-1.5">
+                                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                                  High target
+                                </span>
+                              )}
                             </div>
                           </div>
                         ) : (
