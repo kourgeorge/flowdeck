@@ -11,6 +11,14 @@ import { convertAsciiTableToMarkdown } from '../utils/chatMarkdown';
 import TickerMentionInput from './TickerMentionInput';
 import { getErrorMessage, isInsufficientTokensError, isAuthenticationError } from '../utils/errorHandling';
 
+// Must match CHAT_MAX_CONTENT_CHARS in backend/routers/chat.py. The backend
+// rejects longer messages with a 422, so stop them here before they are added
+// to the chat. JS length counts UTF-16 units, which is never fewer than the
+// characters Python counts, so this check is never looser than the backend's.
+const CHAT_MAX_CONTENT_CHARS = 20_000;
+// Show the counter only once the user is close, so it doesn't clutter normal use.
+const CHAT_COUNTER_THRESHOLD = 18_000;
+
 // ── RTL Detection Utility ──────────────────────────────────────────────────
 /**
  * Detects if text contains RTL (Right-to-Left) characters.
@@ -886,6 +894,11 @@ export function useChatState(
   const sendMessage = (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || isLoading || isStreaming) return;
+    if (trimmed.length > CHAT_MAX_CONTENT_CHARS) {
+      // Keep the text in the input box so the user can shorten it.
+      setError(`Message is too long (max ${CHAT_MAX_CONTENT_CHARS.toLocaleString()} characters). Please shorten it and try again.`);
+      return;
+    }
 
     const doSend = async () => {
       const streamId = nextStreamIdRef.current + 1;
@@ -1189,6 +1202,8 @@ export default function ChatView({
   } = chat;
 
   const isEmpty = messages.length === 0;
+  const inputLength = input.trim().length;
+  const isTooLong = inputLength > CHAT_MAX_CONTENT_CHARS;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1330,10 +1345,21 @@ export default function ChatView({
             ) : (
               <span className="min-w-0 truncate text-[10px] text-slate-500">Authentication required to send messages.</span>
             )}
+            <div className="flex shrink-0 items-center gap-2">
+            {inputLength >= CHAT_COUNTER_THRESHOLD && (
+              <span
+                className={`text-[10px] tabular-nums ${isTooLong ? 'text-red-400' : 'text-slate-500'}`}
+                aria-live="polite"
+              >
+                {isTooLong && 'Too long: '}
+                {inputLength.toLocaleString()} / {CHAT_MAX_CONTENT_CHARS.toLocaleString()}
+              </span>
+            )}
             <button
               type="button"
               onClick={() => sendMessage(input)}
-              disabled={!input.trim() || isLoading || isStreaming || !isAuthenticated}
+              disabled={!input.trim() || isTooLong || isLoading || isStreaming || !isAuthenticated}
+              title={isTooLong ? `Message is too long (max ${CHAT_MAX_CONTENT_CHARS.toLocaleString()} characters)` : undefined}
               className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white transition-colors hover:bg-blue-500 disabled:cursor-default disabled:bg-slate-700 disabled:text-slate-400"
               aria-label="Send message"
             >
@@ -1341,6 +1367,7 @@ export default function ChatView({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.25} d="M9 5l7 7-7 7" />
               </svg>
             </button>
+            </div>
           </div>
         </div>
       </div>

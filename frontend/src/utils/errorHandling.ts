@@ -6,10 +6,35 @@ interface ApiError {
   response?: {
     status?: number;
     data?: {
-      detail?: string | string[];
+      detail?: unknown;
     };
   };
   message?: string;
+}
+
+/**
+ * Turn a FastAPI `detail` into one readable string, or null if it has none.
+ * HTTPException gives a string, but request validation (422) gives a list of
+ * {loc, msg, type} objects, e.g. when a chat message is over
+ * CHAT_MAX_CONTENT_CHARS. Passing that list on as-is left the user with a
+ * generic "Please try again" on every retry.
+ */
+export function formatApiDetail(detail: unknown): string | null {
+  if (typeof detail === 'string') return detail || null;
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object' && typeof (item as { msg?: unknown }).msg === 'string') {
+          // Pydantic prefixes custom validator errors with "Value error, ".
+          return (item as { msg: string }).msg.replace(/^Value error, /, '');
+        }
+        return '';
+      })
+      .filter((m) => m);
+    return parts.length > 0 ? Array.from(new Set(parts)).join('; ') : null;
+  }
+  return null;
 }
 
 /**
@@ -17,14 +42,21 @@ interface ApiError {
  * Handles 402 (insufficient tokens) with special messaging
  */
 export function getErrorMessage(error: unknown, defaultMessage = 'An error occurred. Please try again.'): string {
+  // chatApi.streamMessage uses fetch, not axios, and reports errors as a plain
+  // string (the backend detail, or "HTTP <status>" when there is none). A bare
+  // status code means nothing to the user, so only show strings with words.
+  if (typeof error === 'string') {
+    return error && !/^HTTP \d+$/.test(error) ? error : defaultMessage;
+  }
+
   const apiError = error as ApiError;
-  
+
   // Handle 402 Payment Required (insufficient tokens)
   if (apiError.response?.status === 402) {
-    const detail = apiError.response?.data?.detail;
+    const detail = formatApiDetail(apiError.response?.data?.detail);
     
     // If backend provides a detailed message, use it
-    if (typeof detail === 'string' && detail) {
+    if (detail) {
       return detail;
     }
     
@@ -38,14 +70,10 @@ export function getErrorMessage(error: unknown, defaultMessage = 'An error occur
   }
   
   // Extract detail from response
-  const detail = apiError.response?.data?.detail;
+  const detail = formatApiDetail(apiError.response?.data?.detail);
   
-  if (typeof detail === 'string' && detail) {
+  if (detail) {
     return detail;
-  }
-  
-  if (Array.isArray(detail) && detail.length > 0) {
-    return String(detail[0]);
   }
   
   // Fallback to error message or default

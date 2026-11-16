@@ -204,6 +204,23 @@ def test_invalid_chat_requests_are_422_and_not_charged(chat_client, chat_db, pat
     assert _reserve_rows(chat_db) == 0
 
 
+@pytest.mark.parametrize(
+    "messages, expected",
+    [
+        ([{"role": "user", "content": "x" * (chat_router.CHAT_MAX_CONTENT_CHARS + 1)}], "Message is too long (max 20,000 characters)"),
+        ([{"role": "user", "content": "hi"}] * (chat_router.CHAT_MAX_MESSAGES + 1), "Conversation is too long (max 200 messages)"),
+    ],
+    ids=["overlong", "too-many"],
+)
+def test_limit_422s_carry_a_readable_message(chat_client, messages, expected):
+    # The chat UI shows detail[0].msg to the user, so it must say what is wrong.
+    r = chat_client.post("/api/chat/stream", json={"messages": messages})
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert len(detail) == 1
+    assert expected in detail[0]["msg"]
+
+
 def test_content_at_the_cap_is_accepted():
     req = chat_router.ChatRequest(
         messages=[{"role": "user", "content": "x" * chat_router.CHAT_MAX_CONTENT_CHARS}]

@@ -9,6 +9,7 @@ import type {
   SimilarTickersResponse,
 } from './types';
 import { getStoredToken, getStoredUser } from './authApi';
+import { formatApiDetail } from '../utils/errorHandling';
 
 // Base URL for API requests. Set VITE_API_URL in .env (e.g. https://api.example.com).
 // In dev with proxy: use '' so Vite proxies /api to backend. In production: use VITE_API_URL or '' for same-origin.
@@ -1478,10 +1479,21 @@ export const chatApi = {
     const token = getStoredToken();
     const body: Record<string, unknown> = { messages, ...(context ? { context } : {}) };
     if (sessionId != null) body.session_id = sessionId;
-    const response = await api.post<ChatResponse>('/api/chat', body, {
-      headers: { ...(token && { Authorization: `Bearer ${token}` }) },
-    });
-    return response.data;
+    try {
+      const response = await api.post<ChatResponse>('/api/chat', body, {
+        headers: { ...(token && { Authorization: `Bearer ${token}` }) },
+      });
+      return response.data;
+    } catch (err) {
+      // A 422 detail is a list of objects; flatten it so callers that show
+      // `detail` directly get a readable message.
+      if (axios.isAxiosError(err) && err.response?.data && typeof err.response.data === 'object') {
+        const data = err.response.data as { detail?: unknown };
+        const detail = formatApiDetail(data.detail);
+        if (detail) data.detail = detail;
+      }
+      throw err;
+    }
   },
 
   getChatSessions: async (): Promise<ChatSessionListItem[]> => {
@@ -1572,7 +1584,8 @@ export const chatApi = {
           let detail = `HTTP ${res.status}`;
           try {
             const body = await res.json();
-            detail = body?.detail ?? detail;
+            // 422 validation errors carry a list of objects, not a string.
+            detail = formatApiDetail(body?.detail) ?? detail;
           } catch { /* ignore */ }
           onError(detail);
           return;

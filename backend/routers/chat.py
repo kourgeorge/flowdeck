@@ -56,11 +56,30 @@ class ChatMessageIn(BaseModel):
     role: Literal["user", "assistant"]
     content: str = Field(max_length=CHAT_MAX_CONTENT_CHARS)
 
+    # Runs before the max_length check so the 422 the chat UI shows is a plain
+    # sentence instead of pydantic's "String should have at most 20000
+    # characters". Field(max_length=...) stays so the limit is in the API docs.
+    @field_validator("content", mode="before")
+    @classmethod
+    def _content_not_too_long(cls, content: Any) -> Any:
+        if isinstance(content, str) and len(content) > CHAT_MAX_CONTENT_CHARS:
+            raise ValueError(f"Message is too long (max {CHAT_MAX_CONTENT_CHARS:,} characters)")
+        return content
+
 
 class ChatRequest(BaseModel):
     messages: List[ChatMessageIn] = Field(min_length=1, max_length=CHAT_MAX_MESSAGES)
     context: Optional[Dict] = None  # optional context (e.g. {"tickers": ["AAPL", "MSFT"]})
     session_id: Optional[int] = None  # when set, load history and persist new messages
+
+    @field_validator("messages", mode="before")
+    @classmethod
+    def _not_too_many_messages(cls, messages: Any) -> Any:
+        if isinstance(messages, list) and len(messages) > CHAT_MAX_MESSAGES:
+            raise ValueError(
+                f"Conversation is too long (max {CHAT_MAX_MESSAGES} messages). Please start a new chat."
+            )
+        return messages
 
     @field_validator("messages")
     @classmethod
