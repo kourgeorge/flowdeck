@@ -20,6 +20,7 @@ DIGEST_DAILY_TYPE = "daily_digest"
 DIGEST_WEEKLY_TYPE = "weekly_digest"
 
 
+MAX_TIMEZONE_LENGTH = 64
 INVALID_TIMEZONE_MESSAGE = "Choose a valid IANA timezone, such as America/New_York."
 
 
@@ -29,10 +30,19 @@ def validate_timezone_name(tz_name: str) -> None:
     The scheduler silently falls back to the default zone for names it cannot
     load (e.g. "Athens", "EST5"), so a bad value saved here means emails quietly
     go out at the wrong hour. Rejecting it on save is the only visible signal.
+
+    Folder names in the tz database ("America", "Etc") make ZoneInfo raise
+    IsADirectoryError, and very long keys raise OSError (filename too long), so
+    OSError is caught too; otherwise those reached the route as a 500. The
+    length cap matches the String(64) UserSchedule.timezone column and is
+    checked here (not in the pydantic model) so an over-long name gets the
+    same 400 message as any other bad name instead of a 422.
     """
+    if not isinstance(tz_name, str) or len(tz_name) > MAX_TIMEZONE_LENGTH:
+        raise ValueError(INVALID_TIMEZONE_MESSAGE)
     try:
         ZoneInfo(tz_name)
-    except (ValueError, ZoneInfoNotFoundError) as exc:
+    except (ValueError, ZoneInfoNotFoundError, OSError) as exc:
         raise ValueError(INVALID_TIMEZONE_MESSAGE) from exc
 
 

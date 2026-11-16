@@ -77,3 +77,37 @@ def test_weekly_without_day_of_week_is_rejected(ctx):
     )
     assert resp.status_code == 400
     assert db.query(UserSchedule).filter(UserSchedule.user_id == user.id).count() == 0
+
+
+@pytest.mark.parametrize(
+    "tz_name",
+    # "America"/"Etc" are folders in the tz database and made ZoneInfo raise
+    # IsADirectoryError (a 500 before); the long name raises OSError.
+    ["America", "Etc", "", "../etc/passwd", "A" * 300],
+)
+def test_digest_rejects_bad_timezone_names_with_400(ctx, tz_name):
+    client, db, user = ctx
+    resp = client.put(
+        "/api/digest/schedules/daily_digest",
+        json={"hour": 8, "minute": 0, "timezone": tz_name},
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "Choose a valid IANA timezone, such as America/New_York."
+    assert db.query(UserSchedule).filter(UserSchedule.user_id == user.id).count() == 0
+
+
+def test_watchlist_rejects_timezone_folder_name_with_400(ctx):
+    client, _db, _user = ctx
+    resp = client.put("/api/watchlist/notifications", json={"enabled": True, "timezone": "America"})
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "Choose a valid IANA timezone, such as America/New_York."
+
+
+def test_digest_still_accepts_europe_athens(ctx):
+    client, _db, _user = ctx
+    resp = client.put(
+        "/api/digest/schedules/daily_digest",
+        json={"hour": 8, "minute": 0, "timezone": "Europe/Athens"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["timezone"] == "Europe/Athens"
