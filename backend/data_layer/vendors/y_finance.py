@@ -1138,16 +1138,6 @@ def get_historical_app_format(ticker: str, period: str = "6mo", interval: str = 
     return {"ticker": ticker, "period": period, "interval": interval, "data": data, "count": len(data)}
 
 
-def _to_json_safe_int(val: Any) -> int:
-    """Convert to native Python int (handles numpy.int64, etc.) for JSON serialization."""
-    if val is None:
-        return 0
-    try:
-        return int(val)
-    except (TypeError, ValueError):
-        return 0
-
-
 def get_news_app_format(ticker: str, lookback_days: int = 7) -> dict:
     """Return app-format Yahoo search results; failures propagate past the cache."""
     from .yahoo_news import get_ticker_news

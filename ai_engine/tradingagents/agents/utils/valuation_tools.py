@@ -1405,10 +1405,6 @@ def _risk_free_rate_from(rates: Optional[Dict[str, Any]]) -> Tuple[float, Option
     return _ASSUMED_RISK_FREE_RATE, _ASSUMED_RISK_FREE_RATE_SOURCE
 
 
-def _get_risk_free_rate_with_source() -> Tuple[float, Optional[str]]:
-    return _risk_free_rate_from(_fetch_market_rates())
-
-
 def _risk_free_warning(label: Optional[str], rate: float) -> Optional[str]:
     if label is None:
         return None
@@ -1443,10 +1439,6 @@ def _market_risk_premium_from(rates: Optional[Dict[str, Any]]) -> Tuple[float, s
     except Exception:
         pass
     return _ASSUMED_MARKET_RISK_PREMIUM, _ASSUMED_MARKET_RISK_PREMIUM_SOURCE
-
-
-def _get_market_risk_premium_with_source() -> Tuple[float, str]:
-    return _market_risk_premium_from(_fetch_market_rates())
 
 
 def _get_market_rates_with_sources() -> Tuple[float, Optional[str], float, str]:

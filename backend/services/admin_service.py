@@ -10,7 +10,6 @@ from typing import Any, Optional
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from config import RESULTS_DIR
 from data_layer import get_data_gateway
 from models.db_models import AnalysisJob, Execution, Report, ReportView, Subscription, Usage, User
 from services.data_cache import get_cached_batch
@@ -736,13 +735,6 @@ def get_analysis_accuracy(db: Session, days: int) -> dict[str, Any]:
 _MAJOR_STOCKS_SECTORS_PATH = (
     Path(__file__).resolve().parents[1] / "data" / "major_stocks_sectors.json"
 )
-
-
-def _results_root() -> Path:
-    p = Path(RESULTS_DIR)
-    if p.is_absolute():
-        return p
-    return Path(__file__).resolve().parents[2] / p
 
 
 def load_mission_control_entries(path: Optional[Path] = None) -> list[dict[str, Any]]:

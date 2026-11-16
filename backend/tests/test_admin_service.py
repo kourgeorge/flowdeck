@@ -5,10 +5,8 @@ from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 import sys
-import tempfile
 import unittest
 import zipfile
-from unittest.mock import patch
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
@@ -153,13 +151,7 @@ class TestAdminService(unittest.TestCase):
         self.engine.dispose()
 
     def test_build_analysis_reports_zip_includes_reports_and_manifest(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            report_dir = Path(temp_dir) / "AAPL" / "42" / "reports"
-            report_dir.mkdir(parents=True, exist_ok=True)
-            (report_dir / "market_report.md").write_text("Filesystem market report", encoding="utf-8")
-
-            with patch("services.admin_service._results_root", return_value=Path(temp_dir)):
-                payload = build_analysis_reports_zip(self.db, 42)
+        payload = build_analysis_reports_zip(self.db, 42)
 
         self.assertIsNotNone(payload)
         zip_bytes, filename = payload or (b"", "")

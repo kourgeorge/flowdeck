@@ -108,18 +108,14 @@ def test_full_success_is_fred_and_cached_for_a_day(monkeypatch):
     MarketRatesService.clear_cache()
 
 
-def test_valuation_labels_missing_risk_free_rate_as_assumption(monkeypatch):
+def test_valuation_labels_missing_risk_free_rate_as_assumption():
     from ai_engine.tradingagents.agents.utils import valuation_tools as vt
-    from ai_engine.tradingagents.datasources import info_service_client
-
-    monkeypatch.setattr(info_service_client, "get_market_rates", lambda *a, **k: {"risk_free_rate": None, "source": "unavailable"})
-    rate, label = vt._get_risk_free_rate_with_source()
+    rate, label = vt._risk_free_rate_from({"risk_free_rate": None, "source": "unavailable"})
     assert rate == 0.045
     assert label and "assumed" in label and "FRED" in label
     assert "not market data" in vt._risk_free_warning(label, rate)
 
-    monkeypatch.setattr(info_service_client, "get_market_rates", lambda *a, **k: {"risk_free_rate": 0.043, "source": "FRED"})
-    assert vt._get_risk_free_rate_with_source() == (pytest.approx(0.043), None)
+    assert vt._risk_free_rate_from({"risk_free_rate": 0.043, "source": "FRED"}) == (pytest.approx(0.043), None)
 
 
 def _etf_with_rates(monkeypatch, rates):
@@ -134,7 +130,7 @@ def _etf_with_rates(monkeypatch, rates):
 
 def test_valuation_flags_assumed_market_risk_premium_when_service_down(monkeypatch):
     vt, result, premium_warnings = _etf_with_rates(monkeypatch, None)
-    assert vt._get_market_risk_premium_with_source() == (0.055, "assumed")
+    assert vt._market_risk_premium_from(None) == (0.055, "assumed")
     assert result["inputs"]["market_risk_premium"] == 0.055
     assert result["inputs"]["market_risk_premium_source"] == "assumed"
     assert len(premium_warnings) == 1 and "5.50%" in premium_warnings[0]
