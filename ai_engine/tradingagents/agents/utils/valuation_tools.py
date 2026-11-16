@@ -2835,12 +2835,29 @@ def get_dcf_inputs(
     # WACC calculation - simplified, should use get_wacc_inputs for full calculation
     wacc = 0.10  # Default 10% WACC
     wacc_data_source = ["SIMPLIFIED_ESTIMATE"]
+    risk_free_rate_source = None
+    market_risk_premium_source = None
+    wacc_warnings = []
     beta = _first_numeric(fundamentals, "Beta", "beta")
     if beta:
-        risk_free_rate = 0.045  # Approximate current rate
-        market_risk_premium = 0.075  # Historical average
+        # Same helpers as get_wacc_inputs: this used to hard-code 4.5% / 7.5%,
+        # which disagreed with the 5.5% premium everywhere else and hid the
+        # fact that both numbers were guesses.
+        risk_free_rate, risk_free_label = _get_risk_free_rate_with_source()
+        market_risk_premium, market_risk_premium_source = _get_market_risk_premium_with_source()
+        risk_free_rate_source = risk_free_label or "FRED"
         wacc = risk_free_rate + (beta * market_risk_premium)
-        wacc_data_source = ["beta_based_calculation"]
+        wacc_data_source = [
+            "beta_based_calculation",
+            f"risk_free_rate: {risk_free_rate_source}",
+            f"market_risk_premium: {market_risk_premium_source}",
+        ]
+        wacc_warnings = [
+            w for w in (
+                _risk_free_warning(risk_free_label, risk_free_rate),
+                _market_risk_premium_warning(market_risk_premium_source, market_risk_premium),
+            ) if w
+        ]
     
     result = {
         "ticker": ticker.upper(),
@@ -2883,10 +2900,16 @@ def get_dcf_inputs(
             "shares_outstanding": ["NOT_AVAILABLE"] if shares_outstanding is None else [shares_outstanding_source],
             "shares_outstanding_note": shares_outstanding_note,
             "wacc": wacc_data_source,
+            "risk_free_rate_source": risk_free_rate_source,
+            "market_risk_premium_source": market_risk_premium_source,
             "note": "FALLBACK_ESTIMATE or estimated values indicate missing data - analyst must explicitly state this limitation"
         },
     }
-    
+    # The agent reads this JSON directly, so assumed rates must be called out
+    # here rather than only in the source fields.
+    if wacc_warnings:
+        result["warnings"] = wacc_warnings
+
     return json.dumps(result, indent=2)
 
 

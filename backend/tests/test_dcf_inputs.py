@@ -50,6 +50,12 @@ def _install_fake_service(monkeypatch, shares, cashflow_years, revenues, balance
     monkeypatch.setattr(vt, "require_info_service", lambda: None)
     monkeypatch.setattr(vt, "get_fundamentals_via_service", lambda t: json.dumps(payload))
     monkeypatch.setattr(vt, "get_financial_statements", fake_statements)
+    _install_rates(monkeypatch)
+
+
+def _install_rates(monkeypatch, rf=(0.04, None), mrp=(0.05, "derived_from_vix")):
+    monkeypatch.setattr(vt, "_get_risk_free_rate_with_source", lambda: rf)
+    monkeypatch.setattr(vt, "_get_market_risk_premium_with_source", lambda: mrp)
 
 
 def _run(ticker="TEST"):
@@ -93,11 +99,49 @@ def test_top_level_share_count_is_ignored(monkeypatch):
     assert result["dcf_inputs"]["shares_outstanding"] is None
 
 
-def test_nested_beta_drives_wacc(monkeypatch):
+def test_nested_beta_drives_wacc_with_live_rates(monkeypatch):
     _install_fake_service(monkeypatch, "1000000", [(50, 10)], [120, 100], beta="1.2")
     result = _run()
-    assert abs(result["dcf_inputs"]["wacc"] - (0.045 + 1.2 * 0.075)) < 1e-9
-    assert result["data_sources"]["wacc"] == ["beta_based_calculation"]
+    # 4.0% live risk-free + 1.2 * 5.0% live premium; the old hard-coded
+    # 4.5% / 7.5% would give 13.5%.
+    assert abs(result["dcf_inputs"]["wacc"] - (0.04 + 1.2 * 0.05)) < 1e-9
+    sources = result["data_sources"]
+    assert sources["risk_free_rate_source"] == "FRED"
+    assert sources["market_risk_premium_source"] == "derived_from_vix"
+    assert sources["wacc"] != ["beta_based_calculation"]
+    assert "risk_free_rate: FRED" in sources["wacc"]
+    assert "market_risk_premium: derived_from_vix" in sources["wacc"]
+    assert "warnings" not in result
+
+
+def test_assumed_rates_are_flagged(monkeypatch):
+    _install_fake_service(monkeypatch, "1000000", [(50, 10)], [120, 100], beta="1.0")
+    _install_rates(
+        monkeypatch,
+        rf=(vt._ASSUMED_RISK_FREE_RATE, vt._ASSUMED_RISK_FREE_RATE_SOURCE),
+        mrp=(vt._ASSUMED_MARKET_RISK_PREMIUM, "assumed"),
+    )
+    result = _run()
+    expected = vt._ASSUMED_RISK_FREE_RATE + vt._ASSUMED_MARKET_RISK_PREMIUM
+    assert abs(result["dcf_inputs"]["wacc"] - expected) < 1e-9
+    sources = result["data_sources"]
+    assert sources["risk_free_rate_source"] == vt._ASSUMED_RISK_FREE_RATE_SOURCE
+    assert sources["market_risk_premium_source"] == "assumed"
+    assert sources["wacc"] != ["beta_based_calculation"]
+    warnings = result["warnings"]
+    assert len(warnings) == 2
+    assert all("not market data" in w for w in warnings)
+    assert any("Risk-free rate" in w for w in warnings)
+    assert any("Market risk premium" in w for w in warnings)
+
+
+def test_service_historical_premium_is_flagged(monkeypatch):
+    _install_fake_service(monkeypatch, "1000000", [(50, 10)], [120, 100], beta="1.0")
+    _install_rates(monkeypatch, mrp=(0.055, "historical_average_assumption"))
+    result = _run()
+    assert result["data_sources"]["market_risk_premium_source"] == "historical_average_assumption"
+    assert len(result["warnings"]) == 1
+    assert "Market risk premium" in result["warnings"][0]
 
 
 def test_balance_sheet_share_count_fallback(monkeypatch):
