@@ -298,41 +298,29 @@ def _quote_from_market_mover(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _fetch_polymarket_sentiment(
-    tickers: List[str],
-    company_batch: Dict[str, Any],
-) -> Dict[str, Any]:
+def _fetch_polymarket_markets(tickers: List[str]) -> Dict[str, Any]:
     """
-    Fetch Polymarket prediction-market sentiment for each ticker (best-effort).
+    Fetch Polymarket prediction markets for each ticker (best-effort).
 
-    Returns a dict: ticker -> sentiment payload (or empty dict on failure).
+    Goes through the info-service HTTP client rather than the backend's
+    polymarket_service, because ai_engine must never import backend code.
+    The payload keeps the endpoint's shape; only top_markets is meaningful,
+    since the service no longer infers an overall sentiment/trend from event odds.
+
+    Returns a dict: ticker -> payload (tickers with no data or an error are left out).
     """
     out: Dict[str, Any] = {}
     if not tickers:
         return out
-    try:
-        from services.polymarket_service import get_polymarket_service  # type: ignore[import-untyped]
-        svc = get_polymarket_service()
-    except Exception as exc:
-        logger.debug("Polymarket service unavailable for digest context: %s", exc)
-        return out
+    from ai_engine.tradingagents.datasources.info_service_client import get_polymarket_sentiment
 
     for ticker in tickers:
         try:
-            info = (company_batch or {}).get(ticker) or {}
-            company_info: Optional[Dict[str, Any]] = None
-            if info:
-                company_info = {
-                    "name": info.get("name") or info.get("longName"),
-                    "sector": info.get("sector"),
-                    "industry": info.get("industry"),
-                }
-            sentiment = svc.get_ticker_sentiment(ticker, company_info=company_info)
-            # Only store if there's actually useful data (not a pure neutral/error response)
-            if sentiment and not sentiment.get("error"):
-                out[ticker] = sentiment
+            payload = get_polymarket_sentiment(ticker)
+            if payload and not payload.get("error"):
+                out[ticker] = payload
         except Exception as exc:
-            logger.debug("Polymarket sentiment fetch failed for %s: %s", ticker, exc)
+            logger.debug("Polymarket fetch failed for %s: %s", ticker, exc)
     return out
 
 
@@ -472,7 +460,7 @@ def build_digest_context(
         peer_tickers = {t: [] for t in priority_tickers}
         peer_quotes: Dict[str, Any] = {}
 
-        polymarket_sentiment = _fetch_polymarket_sentiment(priority_tickers, company_batch)
+        polymarket_markets = _fetch_polymarket_markets(priority_tickers)
 
         logger.info("Digest: no portfolio tickers for user_id=%s", user_id)
         return DigestContext(
@@ -502,7 +490,7 @@ def build_digest_context(
             market_movers=market_movers,
             global_news=global_news,
             web_search_snippet=web_search_snippet,
-            polymarket_sentiment=polymarket_sentiment,
+            polymarket_markets=polymarket_markets,
         )
 
     user_context_snapshot = _get_user_context_snapshot(user_id, db)
@@ -633,7 +621,7 @@ def build_digest_context(
     peer_quotes_raw = fetcher.get_quotes_batch(all_peers) if all_peers else {}
     peer_quotes: Dict[str, Any] = dict(peer_quotes_raw or {})
 
-    polymarket_sentiment = _fetch_polymarket_sentiment(priority_tickers, company_batch)
+    polymarket_markets = _fetch_polymarket_markets(priority_tickers)
 
     return DigestContext(
         tickers=tickers,
@@ -662,5 +650,5 @@ def build_digest_context(
         market_movers=market_movers,
         global_news=global_news,
         web_search_snippet=web_search_snippet,
-        polymarket_sentiment=polymarket_sentiment,
+        polymarket_markets=polymarket_markets,
     )

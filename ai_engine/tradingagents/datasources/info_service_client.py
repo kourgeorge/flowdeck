@@ -495,16 +495,16 @@ def get_insider_sentiment(
 
 def get_polymarket_sentiment(ticker: str, base_url: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """
-    Fetch aggregated Polymarket prediction-market sentiment for a ticker from info service.
+    Fetch Polymarket prediction markets related to a ticker from info service.
 
-    Calls GET /api/polymarket/ticker/{ticker}. Returns the aggregated dict:
+    Calls GET /api/polymarket/ticker/{ticker}. Returns the dict:
         {
             "ticker": str,
-            "overall_sentiment": float,   # 0 (bearish) .. 0.5 (neutral) .. 1 (bullish)
-            "confidence": float,          # 0..1, higher = more trading volume
-            "trend": str,                 # "bullish" | "neutral" | "bearish"
+            "overall_sentiment": None,    # no longer inferred: event odds give no stock direction
+            "confidence": None,
+            "trend": "unknown",
             "narratives": dict,
-            "top_markets": list[dict],    # question, probability, change_24h, volume, url, ...
+            "top_markets": list[dict],    # question, probability, change_24h (either may be None), volume, url, ...
             "market_count": int,
             "last_updated": str,
             "error": str | None,
