@@ -3,6 +3,7 @@
 from collections.abc import Iterable
 from typing import List, Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models.db_models import Subscription
@@ -37,7 +38,17 @@ def subscribe(
         email_updates=email_updates,
     )
     db.add(sub)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # A double-click or a second tab can pass the existence check above at
+        # the same time; uq_subscription_user_ticker then rejects the loser's
+        # insert. That request should see the winner's row, not a 500.
+        db.rollback()
+        existing = get_by_ticker_for_user(db, user_id, ticker_upper)
+        if existing is None:
+            raise
+        return existing, False
     db.refresh(sub)
     return sub, True
 

@@ -1,5 +1,7 @@
 """Ticker subscription endpoints."""
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -64,6 +66,11 @@ def subscribe(
     ticker = (req.ticker or "").strip().upper()
     if not ticker:
         raise HTTPException(status_code=400, detail="Ticker is required")
+    # Same rule as POST /api/analyses/start. SQLite does not enforce String(32),
+    # and the stored value later goes into digests, watchlist emails and the
+    # admin notification, so junk must be stopped here.
+    if not re.fullmatch(r"[A-Z0-9.^=-]{1,32}", ticker):
+        raise HTTPException(status_code=400, detail="Invalid ticker symbol")
     sub, created = subscription_service.subscribe(
         db, current_user.id, ticker, email_updates=req.email_updates
     )
