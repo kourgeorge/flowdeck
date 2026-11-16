@@ -16,60 +16,53 @@ A modern, investor-focused stock analysis website featuring real-time market dat
 ## Project Structure
 
 ```
-stock-dashboard/
-├── backend/          # FastAPI backend
-│   ├── main.py      # FastAPI application
-│   ├── config.py    # Configuration
-│   ├── models/      # Pydantic models
-│   └── services/    # Business logic services
-└── frontend/        # React frontend
+flowdeck/
+├── backend/             # FastAPI backend
+│   ├── main.py          # FastAPI application
+│   ├── run.py           # Starts the server on port 8002
+│   ├── config.py        # Configuration
+│   ├── routers/         # API endpoints
+│   ├── models/          # Pydantic models
+│   ├── services/        # Business logic services
+│   └── tests/           # Backend tests
+├── ai_engine/           # AI agents that write the analysis reports
+├── scripts/             # Helper scripts (e.g. sync_major_stocks_daily.sh)
+└── frontend/            # React frontend
     └── src/
-        ├── pages/    # Page components
+        ├── pages/       # Page components
         ├── components/  # Reusable components
-        └── services/   # API clients
+        └── services/    # API clients
 ```
 
 ## Setup
 
 ### Backend
 
-1. Navigate to the backend directory:
-```bash
-cd stock-dashboard/backend
-```
+1. Go to the repository root (the folder that holds `backend/`, `ai_engine/` and `frontend/`).
 
-2. Create a conda environment (recommended):
-```bash
-conda env create -f environment.yml
-conda activate stock-dashboard
-```
-
-**Note**: The environment uses Python 3.11 for compatibility. If you're using Python 3.13, you may encounter issues with pydantic-core. The conda environment will automatically use Python 3.11.
-
-Alternatively, if you prefer pip (use Python 3.10-3.12), from the **repository root**:
+2. Create a virtual environment and install the Python packages (Python 3.10 or newer):
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt   # root requirements.txt includes backend deps
+pip install -r requirements.txt
 ```
 
-3. Make sure you're in the TradingAgents repository root (where `tradingagents` package is accessible)
-
-4. Run the backend server:
-
-From the repository root (TradingAgents directory):
+If you use conda instead, `backend/environment.yml` is available:
 ```bash
-cd stock-dashboard/backend
-python run.py
+conda env create -f backend/environment.yml
 ```
 
-Or use uvicorn directly:
+3. Create your settings file and fill in your keys (see the root `README.md` for which keys you need). `JWT_SECRET` must be set to a random string of at least 32 characters:
 ```bash
-cd stock-dashboard/backend
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+cp backend/.env.example backend/.env
 ```
 
-**Important**: Make sure you're running from the `stock-dashboard/backend` directory, and that the TradingAgents repository root (where `tradingagents` package is) is accessible.
+4. Run the backend server from the repository root:
+```bash
+python backend/run.py
+```
+
+`run.py` adds the repository root to the Python path, so `backend` can import `ai_engine`. It always uses port 8002.
 
 The backend will start on `http://localhost:8002`
 
@@ -79,11 +72,9 @@ The backend will start on `http://localhost:8002`
 
 ### Frontend
 
-1. Navigate to the frontend directory (from repo root use `stock-dashboard/frontend`; if you're already in `stock-dashboard`, use `frontend`):
+1. Go to the frontend directory (from the repository root):
 ```bash
-cd stock-dashboard/frontend   # from TradingAgents repo root
-# or
-cd frontend                   # if you're already in stock-dashboard/
+cd frontend
 ```
 
 2. Install dependencies:
@@ -115,12 +106,12 @@ When `CORS_ORIGINS` is not set, the backend allows common local dev origins (loc
 
 ### Major Stocks
 
-Edit `backend/config.py` to customize the list of stocks shown on the homepage:
+Edit `MAJOR_TICKERS` in `backend/config.py` to customize the list of stocks shown on the homepage:
 
 ```python
-MAJOR_STOCKS = [
-    "SPY", "AAPL", "MSFT", "GOOGL", "TSLA", 
-    "IBM", "META", "NVDA", "AMZN", "JPM"
+MAJOR_TICKERS = [
+    "AAPL", "MSFT", "GOOGL", "AMZN",
+    "NVDA", "META", "TSLA",
 ]
 ```
 
@@ -140,7 +131,7 @@ curl -X POST http://localhost:8002/api/sync/major-stocks \
 
 **Cron (recommended):** Run the provided script daily so reports are generated even when the dashboard is not open. The backend must be running when the cron job runs (e.g. run the backend as a service).
 
-From the repository root (TradingAgents):
+From the repository root:
 
 ```bash
 # Required: admin API key; the script exits with an error if it is missing
@@ -154,23 +145,19 @@ Example crontab (run at 6:00 AM every day; adjust path and ensure backend is up)
 
 ```cron
 FLOWDECK_ADMIN_API_KEY=fd_live_...
-0 6 * * * /path/to/TradingAgents/scripts/sync_major_stocks_daily.sh
+0 6 * * * /path/to/flowdeck/scripts/sync_major_stocks_daily.sh
 ```
 
 **Optional in-app scheduler:** If the backend runs 24/7, you can enable a daily sync job inside the FastAPI process instead of using cron:
 
-- `ENABLE_DAILY_SYNC=true` — enable the in-process daily sync job
+- `ENABLE_DAILY_SYNC` — the in-process daily sync job is on by default; set it to `false` to turn it off
 - `SYNC_SCHEDULE_TIME=06:00` — time to run (default 6:00 AM server time)
 
 Add these to your `.env` or environment before starting the backend.
 
 ### Results Directory
 
-The backend reads reports from the `results/` directory. Make sure the path in `backend/config.py` is correct:
-
-```python
-RESULTS_DIR = "results"  # Resolved to repo root (TradingAgents/results)
-```
+Reports are saved in the database (`backend/flowdeck.db` by default; change it with `DATABASE_URL`). The `results/` folder at the repository root only gets markdown copies of reports if you set `WRITE_AI_REPORTS_TO_RESULTS=true`. Its path comes from `RESULTS_DIR` in `backend/config.py` (default `results`).
 
 ## Usage
 
@@ -210,34 +197,15 @@ RESULTS_DIR = "results"  # Resolved to repo root (TradingAgents/results)
 - **Backend**: FastAPI, Python, yfinance
 - **Frontend**: React, TypeScript, Vite, Tailwind CSS
 - **Real-time**: WebSocket
-- **Data Source**: TradingAgents results directory
+- **Report storage**: SQLite database (`backend/flowdeck.db`)
 
 ## Data Storage
 
 ### Report Storage Location
 
-Stock analysis reports are stored in the `results/` directory at the TradingAgents repository root:
+Stock analysis reports are stored in the database, in the `backend/flowdeck.db` file by default. Set `DATABASE_URL` to use a different database.
 
-```
-TradingAgents/
-├── results/
-│   ├── IBM/
-│   │   ├── 2025-12-21/
-│   │   │   ├── reports/
-│   │   │   │   ├── final_trade_decision.json
-│   │   │   │   ├── market_report.json
-│   │   │   │   ├── news_report.json
-│   │   │   │   ├── fundamentals_report.json
-│   │   │   │   └── ...
-│   │   │   └── message_tool.log
-│   │   └── 2025-12-18/
-│   │       └── ...
-│   ├── AAPL/
-│   │   └── ...
-│   └── ...
-```
-
-The backend reads reports from this directory structure. The path is configured in `backend/config.py` as `RESULTS_DIR = "results"` and is resolved to the repository root (so reports live in `TradingAgents/results/`).
+If `WRITE_AI_REPORTS_TO_RESULTS=true`, the backend also writes markdown copies of each report into the `results/` folder (see `RESULTS_DIR` in `backend/config.py`). The database is still the source the website reads from.
 
 ### Market Data
 
@@ -251,55 +219,47 @@ If you see this error on the frontend:
 
 1. **Check if backend is running**: Make sure the backend server is running on `http://localhost:8002`
    ```bash
-   cd stock-dashboard/backend
-   python run.py
+   python backend/run.py
    ```
-You should see: `INFO: Uvicorn running on http://0.0.0.0:8002`
+   You should see a line like: `Uvicorn running on http://0.0.0.0:8002`
 
-   **Note**: If port 8002 is in use, set `PORT=8003` when running the backend and update the frontend proxy in `frontend/vite.config.ts` to match.
+   **Note**: The port is fixed at 8002 in `backend/run.py` (it does not read a `PORT` variable). If port 8002 is in use, free it, or change `port=8002` in `backend/run.py` and set `VITE_DEV_PROXY_TARGET` (for example `http://127.0.0.1:8003`) before `npm run dev` so the frontend proxy matches.
 
 2. **Check if frontend is running**: Make sure the frontend is running on `http://localhost:3003`
    ```bash
-   cd stock-dashboard/frontend
+   cd frontend
    npm run dev
    ```
    You should see: `Local: http://localhost:3003/`
 
-3. **Test backend services**: Run the test script to verify data access:
+3. **Check the health endpoint**: Run this and look for `"status":"healthy"`:
    ```bash
-   cd stock-dashboard/backend
-   python check_backend.py
+   curl http://localhost:8002/health
    ```
-   This will verify that the backend can read reports and fetch market data.
 
 4. **Check browser console**: Open browser developer tools (F12) and check:
    - **Console tab**: Look for API errors or CORS issues
-   - **Network tab**: Check if requests to `http://localhost:8000/api/...` are failing
+   - **Network tab**: Check if requests to `/api/...` are failing (in dev they go through the Vite proxy to `http://localhost:8002`)
 
 5. **Check backend logs**: Look at the terminal where the backend is running for error messages
 
-6. **Verify results directory**: Make sure the `results/` directory exists at the TradingAgents root:
-   ```bash
-   ls -la results/
-   ```
-
-7. **Test API directly**: Try accessing the API directly in your browser:
+6. **Test API directly**: Try accessing the API directly in your browser:
    - `http://localhost:8002/health` - Should return JSON with status
    - `http://localhost:8002/api/tickers/widgets` - Should return widget data
    - `http://localhost:8002/api/docs` - FastAPI interactive docs
 
-8. **Check CORS**: If you see CORS errors in the browser console, the backend CORS is configured to allow `localhost:3003`, but verify the backend is actually running
+7. **Check CORS**: If you see CORS errors in the browser console, the backend CORS is configured to allow `localhost:3003`, but verify the backend is actually running
 
-9. **Check frontend proxy**: The frontend `vite.config.ts` proxies `/api` and `/ws` to `http://localhost:8002`. If you run the backend on a different port, update the proxy target to match.
+8. **Check frontend proxy**: The frontend `vite.config.ts` proxies `/api` and `/ws` to `http://127.0.0.1:8002` (or to `VITE_DEV_PROXY_TARGET` if set). If you run the backend on a different port, set that variable to match.
 
-10. **Verify proxy is working**: Check the Vite dev server console for proxy logs. The updated config includes logging to show when requests are proxied.
+9. **Verify proxy is working**: Check the Vite dev server console for proxy logs. Each proxied request is logged as `[proxy] METHOD /path -> /path`.
 
 ## Notes
 
-- The backend requires access to the `tradingagents` package from the parent directory
+- The backend imports the `ai_engine` package from the repository root (`backend/run.py` sets this up)
 - Market data is fetched using yfinance (requires internet connection)
-- Reports are read from the existing `results/` directory structure
-- All reports are publicly accessible (no authentication required)
-- New reports are generated when you click "Generate Report" and are saved to `results/{TICKER}/{DATE}/reports/`
+- Reports are stored in the database (`backend/flowdeck.db` by default)
+- Most pages and endpoints need no login, but some (for example `POST /api/sync/major-stocks`) are admin-only
+- New reports are generated when you click "Generate Report"
 - Widgets always show current price from yfinance (when available)
 - Recommendations are only shown when a report exists
