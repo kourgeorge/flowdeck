@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from langchain_core.tools import tool
+
+from ai_engine import serpapi_client
 
 from ai_engine.tradingagents.agents.utils.core_stock_tools import get_ticker_data
 from ai_engine.tradingagents.agents.utils.technical_indicators_tools import get_indicators
@@ -86,70 +87,29 @@ def get_latest_reports(tickers: str) -> str:
     return "\n".join(lines)
 
 
-# --- serpapi_search: web search (sync SerpAPI wrapped for async use) ---
+# --- serpapi_search: web search ---
 
 
-def _serpapi_search_sync(query: str, num_results: int = 8, api_key: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Sync SerpAPI call (same logic as watchlist_consulting.web_research.serpapi_search)."""
-    import urllib.parse
-    import urllib.request
+def _make_serpapi_search(api_key: Optional[str] = None) -> Any:
+    """Build the serpapi_search tool; a None key means SERPAPI_KEY is read at call time."""
 
-    key = api_key or os.environ.get("SERPAPI_KEY")
-    if not key:
-        raise ValueError("SERPAPI_KEY not set in environment or .env")
-    params = {"engine": "google", "q": query, "api_key": key}
-    url = "https://serpapi.com/search?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url)
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        data = json.loads(resp.read().decode())
-    error = data.get("error")
-    if error:
-        raise RuntimeError(f"SerpAPI error: {error}")
-    results = []
-    for item in data.get("organic_results", [])[:num_results]:
-        domain = item.get("displayed_link") or item.get("source") or ""
-        if isinstance(domain, str) and " › " in domain:
-            domain = domain.split(" › ")[0].strip()
-        results.append({
-            "title": item.get("title", ""),
-            "snippet": item.get("snippet", ""),
-            "url": item.get("link", ""),
-            "domain": domain,
-        })
-    return results
+    @tool
+    def serpapi_search(
+        query: str,
+        num_results: int = 8,
+    ) -> str:
+        """
+        Search the web using Google via SerpAPI. Use for company news, industry context, recent events, and cross-checking claims.
+        Returns title, snippet, and URL for each result.
+        """
+        return serpapi_client.format_results(
+            serpapi_client.search(query, num_results=num_results, api_key=api_key)
+        )
+
+    return serpapi_search
 
 
-@tool
-def serpapi_search(
-    query: str,
-    num_results: int = 8,
-) -> str:
-    """
-    Search the web using Google via SerpAPI. Use for company news, industry context, recent events, and cross-checking claims.
-    Returns title, snippet, and URL for each result.
-    """
-    results = _serpapi_search_sync(query, num_results=num_results)
-    if not results:
-        return "No results found. Try a different query."
-    lines = []
-    for i, r in enumerate(results, 1):
-        lines.append(f"[{i}] {r.get('title', '')}\nURL: {r.get('url', '')}\n{r.get('snippet', '')}\n")
-    return "\n".join(lines)
-
-
-async def serpapi_search_async(query: str, num_results: int = 8, api_key: Optional[str] = None) -> str:
-    """Async wrapper for use in graph nodes (runs sync SerpAPI in thread)."""
-    loop = asyncio.get_event_loop()
-    results = await loop.run_in_executor(
-        None,
-        lambda: _serpapi_search_sync(query, num_results=num_results, api_key=api_key),
-    )
-    if not results:
-        return "No results found."
-    lines = []
-    for i, r in enumerate(results, 1):
-        lines.append(f"[{i}] {r.get('title', '')}\nURL: {r.get('url', '')}\n{r.get('snippet', '')}\n")
-    return "\n".join(lines)
+serpapi_search = _make_serpapi_search()
 
 
 # --- Data tools: reuse tradingagents when available ---
@@ -179,37 +139,6 @@ def get_data_tools() -> List[Any]:
     return tools
 
 
-def make_serpapi_tool(
-    api_key: Optional[str] = None,
-    num_results: int = 8,
-) -> Any:
-    """
-    Return a LangChain tool that runs SerpAPI with the given api_key and num_results.
-    Use this when config (e.g. from the graph) must override env (e.g. SERPAPI_KEY).
-    """
-    key = api_key or os.environ.get("SERPAPI_KEY")
-    n = max(1, min(num_results, 20))
-
-    @tool
-    def web_search(query: str) -> str:
-        """
-        Search the web using Google via SerpAPI. Use for company news, industry context, recent events, and cross-checking claims.
-        Returns title, snippet, and URL for each result.
-        """
-        if not key:
-            raise ValueError("SERPAPI_KEY not set. Set it in environment or pass via config to enable web search.")
-        results = _serpapi_search_sync(query, num_results=n, api_key=key)
-        if not results:
-            return "No results found. Try a different query."
-        lines = []
-        for i, r in enumerate(results, 1):
-            lines.append(f"[{i}] {r.get('title', '')}\nURL: {r.get('url', '')}\n{r.get('snippet', '')}\n")
-        return "\n".join(lines)
-
-    web_search.name = "web_search"
-    return web_search
-
-
 def get_all_tools(config: Optional[Any] = None) -> List[Any]:
     """
     Return all tools for the portfolio research graph: data tools (tradingagents)
@@ -218,5 +147,7 @@ def get_all_tools(config: Optional[Any] = None) -> List[Any]:
     tools: List[Any] = []
     tools.extend(get_data_tools())
     tools.append(get_latest_reports)
-    tools.append(serpapi_search)
+    # PortfolioDeepResearchConfig.serpapi_key (from configurable or env) wins over the env var.
+    key = getattr(config, "serpapi_key", None)
+    tools.append(_make_serpapi_search(key) if key else serpapi_search)
     return tools
