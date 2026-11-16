@@ -31,12 +31,37 @@ JWT_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 http_bearer = HTTPBearer(auto_error=False)
 
 
+# bcrypt only uses the first 72 bytes of a password. bcrypt 4 silently drops
+# the rest; bcrypt 5 raises ValueError instead, which surfaced as a 500.
+MAX_PASSWORD_BYTES = 72
+PASSWORD_TOO_LONG_MESSAGE = f"Password must be at most {MAX_PASSWORD_BYTES} bytes"
+
+
+def password_too_long(password: str) -> bool:
+    """True when the UTF-8 form of the password is longer than bcrypt can use."""
+    return len(password.encode("utf-8")) > MAX_PASSWORD_BYTES
+
+
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    # Callers must reject long passwords first (register, password change);
+    # this is a backstop so we never store a hash of a silently cut password.
+    if password_too_long(password):
+        raise ValueError(PASSWORD_TOO_LONG_MESSAGE)
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode()
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return bcrypt.checkpw(plain.encode(), hashed.encode())
+    # Accounts created while we ran bcrypt 4 may have >72-byte passwords, and
+    # bcrypt 4 hashed only their first 72 bytes. Cutting to 72 bytes here gives
+    # the same result as bcrypt 4 did, and keeps those users able to log in on
+    # bcrypt 5, which would otherwise raise ValueError (a 500) for them.
+    candidate = plain.encode("utf-8")[:MAX_PASSWORD_BYTES]
+    try:
+        return bcrypt.checkpw(candidate, hashed.encode("utf-8"))
+    except ValueError:
+        # A malformed stored hash ("Invalid salt") cannot be checked; treat it
+        # as a failed match rather than a server error.
+        return False
 
 
 def create_access_token(subject: str) -> str:
