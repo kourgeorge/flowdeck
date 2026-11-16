@@ -107,6 +107,8 @@ class TickerSentimentResponse(BaseModel):
 )
 async def get_ticker_predictions(
     ticker: str,
+    max_markets: int = Query(default=100, ge=10, le=100, description="Markets fetched across keyword searches"),
+    top_n: int = Query(default=30, ge=1, le=30, description="Markets returned"),
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
@@ -135,11 +137,16 @@ async def get_ticker_predictions(
         # back to deterministic keywords).
         company_info = await _fetch_company_info(ticker)
 
-        result = service.get_ticker_sentiment(
+        # get_ticker_sentiment is synchronous and slow (LLM keyword call, then
+        # up to 10 Polymarket searches in a row). The server runs one worker,
+        # so calling it inline froze every other request while a Daily Brief
+        # fetched markets for each priority ticker.
+        result = await asyncio.to_thread(
+            service.get_ticker_sentiment,
             ticker=ticker,
             company_info=company_info,
-            max_markets=100,  # Increased from 50
-            top_n=30  # Increased from 10 to show more markets
+            max_markets=max_markets,
+            top_n=top_n,
         )
         
         return result
@@ -173,7 +180,8 @@ async def get_relevant_markets(
 
         company_info = await _fetch_company_info(ticker)
 
-        markets = service.get_relevant_markets(
+        markets = await asyncio.to_thread(
+            service.get_relevant_markets,
             ticker=ticker,
             company_info=company_info,
             limit=limit
@@ -211,7 +219,8 @@ async def get_trending_markets(
     try:
         service = get_polymarket_service()
         
-        markets = service.get_trending_markets(
+        markets = await asyncio.to_thread(
+            service.get_trending_markets,
             category=category,
             limit=limit
         )
@@ -240,7 +249,7 @@ async def health_check():
     """
     try:
         service = get_polymarket_service()
-        is_healthy = service.health_check()
+        is_healthy = await asyncio.to_thread(service.health_check)
         
         if is_healthy:
             return {
@@ -283,7 +292,7 @@ async def get_market_details(
     from backend.data_layer.vendors import polymarket_vendor
     
     try:
-        market = polymarket_vendor.get_market_details(market_id)
+        market = await asyncio.to_thread(polymarket_vendor.get_market_details, market_id)
         return polymarket_vendor.format_market_for_display(market)
         
     except polymarket_vendor.PolymarketAPIError as e:
@@ -325,7 +334,8 @@ async def get_market_history(
         end_date = datetime.now().strftime("%Y-%m-%d")
         start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
         
-        history = polymarket_vendor.get_market_history(
+        history = await asyncio.to_thread(
+            polymarket_vendor.get_market_history,
             market_id=market_id,
             start_date=start_date,
             end_date=end_date

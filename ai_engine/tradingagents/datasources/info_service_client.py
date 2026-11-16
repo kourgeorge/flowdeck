@@ -493,7 +493,14 @@ def get_insider_sentiment(
     return str(data)
 
 
-def get_polymarket_sentiment(ticker: str, base_url: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def get_polymarket_sentiment(
+    ticker: str,
+    base_url: Optional[str] = None,
+    *,
+    top_n: Optional[int] = None,
+    max_markets: Optional[int] = None,
+    timeout: int = 90,
+) -> Optional[Dict[str, Any]]:
     """
     Fetch Polymarket prediction markets related to a ticker from info service.
 
@@ -510,12 +517,26 @@ def get_polymarket_sentiment(ticker: str, base_url: Optional[str] = None) -> Opt
             "error": str | None,
         }
     Returns None if the service is not configured or the request fails.
+
+    top_n / max_markets are passed through as query params when set (the
+    server caps them); None keeps the server defaults.
     """
     base_url = base_url or _get_info_service_base_url()
     if not base_url:
         return None
+    params: Dict[str, Any] = {}
+    if top_n is not None:
+        params["top_n"] = top_n
+    if max_markets is not None:
+        params["max_markets"] = max_markets
     try:
-        data = _get(None, base_url, f"/api/polymarket/ticker/{ticker.upper()}", timeout=90)
+        data = _get(
+            None,
+            base_url,
+            f"/api/polymarket/ticker/{ticker.upper()}",
+            params=params or None,
+            timeout=timeout,
+        )
         return data if isinstance(data, dict) else None
     except Exception:
         return None

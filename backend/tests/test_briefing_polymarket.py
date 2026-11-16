@@ -30,8 +30,10 @@ def _payload():
 def test_fetch_uses_info_service_client(monkeypatch):
     calls = []
 
-    def fake_get(ticker, base_url=None):
+    def fake_get(ticker, base_url=None, **kwargs):
         calls.append(ticker)
+        assert kwargs["top_n"] == 3
+        assert kwargs["timeout"] <= 30
         return _payload() if ticker == "NVDA" else {"error": "no markets", "top_markets": []}
 
     monkeypatch.setattr(info_service_client, "get_polymarket_sentiment", fake_get)

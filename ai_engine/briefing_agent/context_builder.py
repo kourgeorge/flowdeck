@@ -298,6 +298,11 @@ def _quote_from_market_mover(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+_POLYMARKET_TOP_N = 3
+_POLYMARKET_MAX_MARKETS = 30  # service splits this over up to 10 keyword searches
+_POLYMARKET_TIMEOUT_S = 25
+
+
 def _fetch_polymarket_markets(tickers: List[str]) -> Dict[str, Any]:
     """
     Fetch Polymarket prediction markets for each ticker (best-effort).
@@ -316,7 +321,16 @@ def _fetch_polymarket_markets(tickers: List[str]) -> Dict[str, Any]:
 
     for ticker in tickers:
         try:
-            payload = get_polymarket_sentiment(ticker)
+            # The brief shows only 3 markets per ticker (agents.py), and runs
+            # one call per priority ticker in a row, so ask for little and give
+            # up early: a slow Polymarket should cost a ticker its markets, not
+            # stall the whole brief for minutes.
+            payload = get_polymarket_sentiment(
+                ticker,
+                top_n=_POLYMARKET_TOP_N,
+                max_markets=_POLYMARKET_MAX_MARKETS,
+                timeout=_POLYMARKET_TIMEOUT_S,
+            )
             if payload and not payload.get("error"):
                 out[ticker] = payload
         except Exception as exc:
