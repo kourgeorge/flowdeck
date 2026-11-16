@@ -535,10 +535,10 @@ Response:
 ```json
 {
   "report_run_id": 42,
-  "report_date": "2026-03-04_10-30-00",
+  "report_date": "2026-03-04 10:30",
   "share_url": "https://flowdeck.biz/share/AbC123...",
   "reports": {
-    "final_trade_decision": {
+    "investment_plan": {
       "content": "Detailed analysis text...",
       "score": 75,
       "score_label": "Strong Buy",
@@ -570,6 +570,13 @@ If no reports exist:
 ```json
 {"report_run_id": null, "report_date": null, "share_url": null, "reports": {}}
 ```
+
+Errors:
+- **400** if `date` is neither `YYYY-MM-DD` nor a plain number:
+  `{"detail": "Invalid date '2026-13-45'. Use YYYY-MM-DD or a numeric analysis_run_id."}`
+- **404** if the ticker is unknown (`Ticker 'ZZZZ' not found. Check the symbol and try again.`), or if
+  no run matches `date`:
+  `{"detail": "No report found for AAPL matching '2026-01-01'. See /api/data/reports/AAPL/dates for available runs."}`
 
 ### Get reports for a specific historical run
 
@@ -606,7 +613,7 @@ Up to **50** tickers per request. Each entry has the same
 ```json
 {
   "tickers": {
-    "AAPL": {"report_run_id": 42, "report_date": "2026-03-04_10-30-00", "share_url": "...", "reports": {...}},
+    "AAPL": {"report_run_id": 42, "report_date": "2026-03-04 10:30", "share_url": "...", "reports": {...}},
     "GOOGL": {"report_run_id": null, "report_date": null, "share_url": null, "reports": {}}
   }
 }
@@ -625,11 +632,11 @@ The `reports` object is keyed by **report type**. Which analyst reports are pres
 | `technical_report` | `technical` analyst | Technical indicators and setups |
 | `sec_report` | `sec` analyst | SEC filing analysis (risk factors, MD&A) |
 | `valuation_report` | `valuation` analyst | Fair value, DCF, comps |
-| `investment_plan` | research debate | Bull/bear debate outcome |
+| `investment_plan` | research debate | Bull/bear debate outcome; **carries the headline BUY/SELL/HOLD call with score** |
 | `trader_investment_plan` | trader | Trade plan; also carries the run's `event_score` / `dominant_events` |
-| `final_trade_decision` | risk review | **Final BUY/SELL/HOLD recommendation with score** |
+| `final_trade_decision` | risk review (retired) | Only on old runs. New runs no longer produce it |
 
-For the headline call, read **`final_trade_decision`**.
+For the headline call (`recommendation`, `confidence`, `days_ago`), read **`investment_plan`**. Old runs may also have `final_trade_decision`.
 
 ### Key fields in a report
 
@@ -1002,7 +1009,7 @@ API keys do **not** work on the analysis WebSocket — its `?token=` parameter i
 | **Get market data** | `GET /api/data/quote/{ticker}`, `/company`, `/news`, `/fundamentals`, `/historical`, `/indicators/{ticker}`, `/similar-tickers/{ticker}`, … |
 | **Scan the whole market** | `GET /api/data/market-overview`, `/market-movers`, `/market-rates`, `/global-news` |
 | **Triage which tickers matter** | `GET /api/data/events/{ticker}` or `GET /api/tickers/event-summaries?tickers=...` before spending tokens |
-| **Get existing reports (free)** | `GET /api/data/reports/{ticker}` or `POST /api/data/reports/batch`; read `final_trade_decision` for the call |
+| **Get existing reports (free)** | `GET /api/data/reports/{ticker}` or `POST /api/data/reports/batch`; read `investment_plan` for the call |
 | **Get reports for a historical run** | `GET /api/tickers/{ticker}/reports/{analysis_run_id}` (from `report_run_id` or `historical_analyses[].analysis_run_id`) |
 | **List a ticker's report dates** | `GET /api/data/reports/{ticker}/dates` |
 | **Get ticker page** | `GET /api/tickers/{ticker}` (optional auth records the view and rewards the author) |
@@ -1033,8 +1040,8 @@ curl -s https://flowdeck.biz/api/me -H "Authorization: Bearer $TOKEN" | jq '.tok
 curl -s "https://flowdeck.biz/api/data/quote/AAPL" | jq '.'
 curl -s "https://flowdeck.biz/api/data/events/AAPL?lookback_days=10" | jq '{event_score, dominant_events}'
 curl -s "https://flowdeck.biz/api/data/reports/AAPL" -H "Authorization: Bearer $TOKEN" \
-  | jq '{report_run_id, days_ago: .reports.final_trade_decision.days_ago,
-         call: .reports.final_trade_decision.recommendation}'
+  | jq '{report_run_id, days_ago: .reports.investment_plan.days_ago,
+         call: .reports.investment_plan.recommendation}'
 
 # 4. Only if the existing report is stale or missing, spend 200 tokens
 RESULT=$(curl -s -X POST https://flowdeck.biz/api/analyses/start \
@@ -1055,7 +1062,7 @@ done
 
 # 6. Read the finished report
 curl -s "https://flowdeck.biz/api/data/reports/AAPL" -H "Authorization: Bearer $TOKEN" \
-  | jq '.reports.final_trade_decision | {recommendation, score, expected_return_pct, key_takeaways}'
+  | jq '.reports.investment_plan | {recommendation, score, expected_return_pct, key_takeaways}'
 ```
 
 ---
@@ -1063,9 +1070,9 @@ curl -s "https://flowdeck.biz/api/data/reports/AAPL" -H "Authorization: Bearer $
 ## Tips for agents
 
 - **Read before you spend.** `GET /api/data/reports/{ticker}` and `/api/data/events/{ticker}` are free;
-  `POST /api/analyses/start` is 200 tokens. Check `days_ago` on `final_trade_decision` and the event score
+  `POST /api/analyses/start` is 200 tokens. Check `days_ago` on `investment_plan` and the event score
   before re-running.
-- **Read `final_trade_decision`** for the headline BUY/SELL/HOLD. The `*_viewpoint` values are **fields
+- **Read `investment_plan`** for the headline BUY/SELL/HOLD (`final_trade_decision` is only on old runs). The `*_viewpoint` values are **fields
   inside** a report, not separate report keys.
 - **Budget against `platform_tokens_used`**, not `tokens_used` — the latter is raw LLM tokens and is ~10,000×
   larger.

@@ -20,7 +20,13 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 
-from api_docs import ERR_504_SECTION, data_responses
+from api_docs import (
+    ERR_400_REPORT_DATE,
+    ERR_404_REPORT_RUN,
+    ERR_404_TICKER,
+    ERR_504_SECTION,
+    data_responses,
+)
 from auth import get_current_user
 from data_layer import get_data_gateway
 from services.share_service import get_share_url
@@ -683,7 +689,29 @@ async def data_edgar_filing_content(
     "/reports/{ticker}",
     summary="Reports for a ticker",
     response_description="Latest (or a specific date's) analysis reports for a ticker.",
-    responses=data_responses("reports", auth=True),
+    responses=data_responses(
+        "reports",
+        auth=True,
+        extra={
+            400: {"content": {"application/json": {"example": ERR_400_REPORT_DATE}}},
+            404: {
+                "content": {
+                    "application/json": {
+                        "examples": {
+                            "ticker_not_found": {
+                                "summary": "Unknown ticker",
+                                "value": ERR_404_TICKER,
+                            },
+                            "no_matching_run": {
+                                "summary": "No run matches ?date=",
+                                "value": ERR_404_REPORT_RUN,
+                            },
+                        }
+                    }
+                }
+            },
+        },
+    ),
 )
 async def data_reports_ticker(
     ticker: str,

@@ -67,7 +67,7 @@ OPENAPI_TAGS: List[Dict[str, str]] = [
     {"name": "Chat", "description": "Conversational AI analyst, streaming and non-streaming."},
     {"name": "Digests", "description": "Daily/weekly narrative briefs and their schedules."},
     {"name": "Subscriptions", "description": "Watchlist of tickers for digests and event monitoring."},
-    {"name": "Prediction Markets", "description": "Polymarket-derived sentiment for tickers."},
+    {"name": "Prediction Markets", "description": "Polymarket prediction markets and their probabilities for tickers (no computed sentiment)."},
     {"name": "Share Links", "description": "Public, auth-free views of shared reports and digests."},
 ]
 
@@ -211,9 +211,10 @@ Up to 50 tickers.
 2. Do free research first: `GET /api/data/quote/{ticker}`, `/api/data/events/{ticker}`, and
    `GET /api/data/reports/{ticker}` (an existing report costs nothing to read).
 3. Only spend the 200 tokens on `POST /api/analyses/start` if the existing report is stale or
-   missing -- check `days_ago` on `final_trade_decision` and the event score first.
+   missing -- check `days_ago` on `investment_plan` and the event score first.
 4. Poll `GET /api/analyses/{analysis_run_id}/status`, or subscribe over the WebSocket above.
-5. Read the finished report's `final_trade_decision` for the headline recommendation.
+5. Read the finished report's `investment_plan` for the headline recommendation
+   (`recommendation`, `confidence`, `days_ago`). `final_trade_decision` only appears on old runs.
 
 Each analyst maps to one report key -- note in particular that `social` produces
 `sentiment_report`, **not** `news_report`.
@@ -229,6 +230,13 @@ ERR_402: Dict[str, Any] = {
 }
 ERR_404_TICKER: Dict[str, Any] = {
     "detail": "Ticker 'ZZZZ' not found. Check the symbol and try again."
+}
+ERR_400_REPORT_DATE: Dict[str, Any] = {
+    "detail": "Invalid date '2026-13-45'. Use YYYY-MM-DD or a numeric analysis_run_id."
+}
+ERR_404_REPORT_RUN: Dict[str, Any] = {
+    "detail": "No report found for AAPL matching '2026-01-01'. "
+    "See /api/data/reports/AAPL/dates for available runs."
 }
 ERR_504_SECTION: Dict[str, Any] = {
     "detail": "Market overview section request timed out after 90s. Try a different range or retry."
