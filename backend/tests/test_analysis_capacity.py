@@ -486,3 +486,82 @@ def test_durable_deduplication_across_service_instances(runtime, tmp_path):
     second = analysis_service.AnalysisService(str(tmp_path / "second"), executor=rt.executor)
     assert second.start_analysis("SHARED", "2026-10-05", rt.record("SHARED")) == (first, True)
     release.set()
+
+
+# --- POST /api/analyses/start: what gets charged (T-97) ---
+
+def _balance(rt, user_id=1):
+    with rt.sessions() as db:
+        return token_service.get_balance_from_ledger(user_id, db)
+
+
+def _usage_rows(rt):
+    with rt.sessions() as db:
+        return db.query(Usage).count()
+
+
+def _executions(rt, ticker):
+    with rt.sessions() as db:
+        return db.query(Execution).filter_by(subject_id=ticker).count()
+
+
+def test_start_unknown_ticker_is_404_and_charges_nothing(runtime, monkeypatch):
+    rt = runtime
+    rt.gateway.get_quote = lambda ticker: None if ticker == "ZZZZ" else {}
+    usage_before = _usage_rows(rt)
+    r = make_api(rt, monkeypatch).post("/api/analyses/start", json={"ticker": "ZZZZ"})
+    assert r.status_code == 404, r.text
+    assert _executions(rt, "ZZZZ") == 0
+    assert _usage_rows(rt) == usage_before
+
+
+def test_start_with_too_few_tokens_is_402_and_creates_no_run(runtime, monkeypatch):
+    rt = runtime
+    with rt.sessions() as db:
+        token_service.record_transaction(1, -(10000 - token_service.COST_PER_ANALYSIS + 1), "admin_adjustment", db)
+    assert _balance(rt) == token_service.COST_PER_ANALYSIS - 1
+    r = make_api(rt, monkeypatch).post("/api/analyses/start", json={"ticker": "AAPL"})
+    assert r.status_code == 402, r.text
+    assert _executions(rt, "AAPL") == 0
+    assert _balance(rt) == token_service.COST_PER_ANALYSIS - 1
+
+
+def test_start_while_same_run_is_going_returns_it_and_charges_once(runtime, monkeypatch):
+    rt = runtime
+    entered, release = rt.block("DUP")
+    client = make_api(rt, monkeypatch)
+    before = _balance(rt)
+    body = {"ticker": "DUP", "analysis_date": "2026-10-05"}
+    try:
+        first = client.post("/api/analyses/start", json=body)
+        assert first.status_code == 200, first.text
+        assert first.json()["existing"] is False
+        assert entered.wait(5)
+        second = client.post("/api/analyses/start", json=body)
+        assert second.status_code == 200, second.text
+        assert second.json()["existing"] is True
+        assert second.json()["analysis_run_id"] == first.json()["analysis_run_id"]
+        assert _balance(rt) == before - token_service.COST_PER_ANALYSIS
+        assert _executions(rt, "DUP") == 1
+    finally:
+        release.set()
+
+
+def test_start_that_loses_the_race_deletes_new_run_and_refunds_once(runtime, monkeypatch):
+    # get_running_analysis_run_id saw nothing, but start_analysis found a run
+    # started in between (or in another worker): the fresh charge must be undone.
+    rt = runtime
+    other_id = rt.record("OTHER")
+    monkeypatch.setattr(rt.service, "start_analysis", lambda **kw: (other_id, True))
+    before = _balance(rt)
+    r = make_api(rt, monkeypatch).post("/api/analyses/start", json={"ticker": "RACE"})
+    assert r.status_code == 200, r.text
+    assert r.json()["existing"] is True
+    assert r.json()["analysis_run_id"] == other_id
+    with rt.sessions() as db:
+        charge = db.query(Usage).filter_by(transaction_type="analysis_cost").one()
+        new_id = charge.related_entity_id
+    assert new_id != other_id
+    assert _executions(rt, "RACE") == 0
+    assert rt.refunds(new_id) == [token_service.COST_PER_ANALYSIS]
+    assert _balance(rt) == before
