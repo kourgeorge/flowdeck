@@ -130,6 +130,45 @@ def _load_insider_transactions(fetcher: Any, tickers: List[str], limit: int = 20
     return out
 
 
+def _load_ticker_evidence(
+    fetcher: Any, tickers: List[str], news_lookback: int
+) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    """Fetch per-ticker news, fundamentals and analyst recommendations; a failure yields {}."""
+    news: Dict[str, Any] = {}
+    fundamentals: Dict[str, Any] = {}
+    analyst_rec: Dict[str, Any] = {}
+    for t in tickers:
+        try:
+            news[t] = fetcher.get_news(t, lookback_days=news_lookback)
+        except Exception:
+            news[t] = {}
+        try:
+            fundamentals[t] = fetcher.get_fundamentals(t)
+        except Exception:
+            fundamentals[t] = {}
+        try:
+            analyst_rec[t] = fetcher.get_analyst_recommendations(t)
+        except Exception:
+            analyst_rec[t] = {}
+    return news, fundamentals, analyst_rec
+
+
+def _load_sector_industry(fetcher: Any, tickers: List[str]) -> Dict[str, Dict[str, str]]:
+    """Map each ticker to its sector/industry, using "N/A" when the company info is missing."""
+    try:
+        company_batch = fetcher.get_company_info_batch(tickers)
+    except Exception:
+        company_batch = {}
+    sector_industry: Dict[str, Dict[str, str]] = {}
+    for t in tickers:
+        info = (company_batch or {}).get(t) or {}
+        sector_industry[t] = {
+            "sector": (info.get("sector") or "N/A"),
+            "industry": (info.get("industry") or "N/A"),
+        }
+    return sector_industry
+
+
 def _load_rsi_maps(
     fetcher: Any,
     tickers: List[str],
@@ -432,25 +471,11 @@ def build_digest_context(
         rsi_maps = _load_rsi_maps(fetcher, priority_tickers, as_of_date=digest_date)
 
         news_lookback = min(lookback_days + 5, 31)
-        news: Dict[str, Any] = {}
-        fundamentals: Dict[str, Any] = {}
-        analyst_rec: Dict[str, Any] = {}
+        news, fundamentals, analyst_rec = _load_ticker_evidence(fetcher, priority_tickers, news_lookback)
         indicators: Dict[str, Any] = {}
         event_summaries: Dict[str, Any] = {}
         event_scores: Dict[str, float] = {}
         for t in priority_tickers:
-            try:
-                news[t] = fetcher.get_news(t, lookback_days=news_lookback)
-            except Exception:
-                news[t] = {}
-            try:
-                fundamentals[t] = fetcher.get_fundamentals(t)
-            except Exception:
-                fundamentals[t] = {}
-            try:
-                analyst_rec[t] = fetcher.get_analyst_recommendations(t)
-            except Exception:
-                analyst_rec[t] = {}
             event_summary = get_ticker_event_summary(
                 fetcher,
                 t,
@@ -473,17 +498,7 @@ def build_digest_context(
 
         platform_reports, share_urls = _load_platform_reports(platform_reports_loader, priority_tickers)
 
-        try:
-            company_batch = fetcher.get_company_info_batch(priority_tickers)
-        except Exception:
-            company_batch = {}
-        sector_industry: Dict[str, Dict[str, str]] = {}
-        for t in priority_tickers:
-            info = (company_batch or {}).get(t) or {}
-            sector_industry[t] = {
-                "sector": (info.get("sector") or "N/A"),
-                "industry": (info.get("industry") or "N/A"),
-            }
+        sector_industry = _load_sector_industry(fetcher, priority_tickers)
 
         peer_tickers = {t: [] for t in priority_tickers}
         peer_quotes: Dict[str, Any] = {}
@@ -567,56 +582,18 @@ def build_digest_context(
 
     # Per-priority evidence; news lookback matches span
     news_lookback = min(lookback_days + 5, 31)  # slightly wider for per-ticker news
-    news: Dict[str, Any] = {}
-    fundamentals: Dict[str, Any] = {}
-    analyst_rec: Dict[str, Any] = {}
+    news, fundamentals, analyst_rec = _load_ticker_evidence(fetcher, priority_tickers, news_lookback)
     indicators: Dict[str, Any] = {}  # backend has no get_indicators; agents have tool
-    priority_future_events: Dict[str, Any] = {}
-
-    for t in priority_tickers:
-        try:
-            news[t] = fetcher.get_news(t, lookback_days=news_lookback)
-        except Exception:
-            news[t] = {}
-        try:
-            fundamentals[t] = fetcher.get_fundamentals(t)
-        except Exception:
-            fundamentals[t] = {}
-        try:
-            analyst_rec[t] = fetcher.get_analyst_recommendations(t)
-        except Exception:
-            analyst_rec[t] = {}
-        priority_future_events[t] = future_events.get(t) or {}
+    priority_future_events: Dict[str, Any] = {t: future_events.get(t) or {} for t in priority_tickers}
     insider = {ticker: insider.get(ticker) or {} for ticker in priority_tickers}
 
     # Platform reports and share URLs
     platform_reports, share_urls = _load_platform_reports(platform_reports_loader, priority_tickers)
 
     # Sector/peer
-    try:
-        company_batch = fetcher.get_company_info_batch(priority_tickers)
-    except Exception:
-        company_batch = {}
-    sector_industry: Dict[str, Dict[str, str]] = {}
-    for t in priority_tickers:
-        info = (company_batch or {}).get(t) or {}
-        sector_industry[t] = {
-            "sector": (info.get("sector") or "N/A"),
-            "industry": (info.get("industry") or "N/A"),
-        }
+    sector_industry = _load_sector_industry(fetcher, priority_tickers)
 
-    # Peer set: same sector from portfolio + market movers
-    all_candidates = list(tickers)
-    try:
-        movers = (market_movers or {}).get("gainers") or []
-        movers += (market_movers or {}).get("losers") or []
-        for m in movers:
-            sym = (m.get("symbol") or m.get("ticker") or "").upper()
-            if sym and sym not in all_candidates:
-                all_candidates.append(sym)
-    except Exception:
-        pass
-
+    # Peer set: other priority tickers in the same sector (from sector_industry)
     sector_to_tickers: Dict[str, List[str]] = {}
     for t, si in sector_industry.items():
         sec = (si.get("sector") or "N/A").strip() or "N/A"
