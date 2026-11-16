@@ -8,10 +8,16 @@ from __future__ import annotations
 
 import json
 import os
-import urllib.parse
-import urllib.request
+import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# This folder is imported by bare module name, so the repo root may not be on the path yet.
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from ai_engine import serpapi_client
 from pipeline_schemas import ThemeOutput, UserIntent, WebLearning, WebResearchOutput
 
 try:
@@ -26,42 +32,8 @@ def serpapi_search(
     api_key: Optional[str] = None,
     timeout: int = 30,
 ) -> List[Dict[str, Any]]:
-    """
-    Search the web using SerpAPI (Google Search Engine Results API). Sync.
-
-    Returns:
-        List of result dicts with title, snippet, url, domain
-    """
-    key = api_key or os.getenv("SERPAPI_KEY")
-    if not key:
-        raise ValueError("SERPAPI_KEY not set in environment or .env")
-
-    params = {
-        "engine": "google",
-        "q": query,
-        "api_key": key,
-    }
-    url = "https://serpapi.com/search?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        data = json.loads(resp.read().decode())
-
-    error = data.get("error")
-    if error:
-        raise RuntimeError(f"SerpAPI error: {error}")
-
-    results = []
-    for item in data.get("organic_results", [])[:num_results]:
-        domain = item.get("displayed_link") or item.get("source") or ""
-        if isinstance(domain, str) and " › " in domain:
-            domain = domain.split(" › ")[0].strip()
-        results.append({
-            "title": item.get("title", ""),
-            "snippet": item.get("snippet", ""),
-            "url": item.get("link", ""),
-            "domain": domain,
-        })
-    return results
+    """Sync SerpAPI search; list of dicts with title, snippet, url, domain."""
+    return serpapi_client.search(query, num_results=num_results, api_key=api_key, timeout=timeout)
 
 
 def generate_search_queries(
