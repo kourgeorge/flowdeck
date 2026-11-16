@@ -13,7 +13,14 @@ WorkingDirectory=/home/george/repositories/flowdeck/backend
 Environment=PYTHONPATH=/home/george/repositories/flowdeck
 Environment=FLOWDECK_ANALYSIS_WORKERS=5
 Environment=FLOWDECK_ANALYSIS_QUEUE_SIZE=unlimited
-ExecStart=/home/george/repositories/flowdeck/.venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8002 --workers 1 --log-config /home/george/repositories/flowdeck/backend/uvicorn_logging.json
+# The /api/contact rate limit is per visitor IP. uvicorn only takes that IP from
+# X-Forwarded-For when the request comes from FORWARDED_ALLOW_IPS, so with Caddy
+# on a separate gateway replace 192.168.1.1 with the gateway's LAN IP (never "*",
+# or anyone reaching port 8002 can pick their own IP). Without it every visitor
+# shares one limit. If the proxy runs on this machine, use --host 127.0.0.1 and
+# FORWARDED_ALLOW_IPS=127.0.0.1 instead. See docs/DEPLOYMENT_UBUNTU.md.
+Environment=FORWARDED_ALLOW_IPS=192.168.1.1
+ExecStart=/home/george/repositories/flowdeck/.venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8002 --forwarded-allow-ips ${FORWARDED_ALLOW_IPS} --workers 1 --log-config /home/george/repositories/flowdeck/backend/uvicorn_logging.json
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=30
