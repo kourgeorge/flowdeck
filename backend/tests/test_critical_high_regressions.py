@@ -296,7 +296,7 @@ def test_negative_event_probability_is_not_bullish():
 
 def test_missing_etf_inputs_are_unavailable(monkeypatch):
     from ai_engine.tradingagents.agents.utils import valuation_tools as v
-    monkeypatch.setattr(v, '_get_current_risk_free_rate', lambda: 0.04)
+    monkeypatch.setattr(v, '_get_risk_free_rate_with_source', lambda: (0.04, None))
     monkeypatch.setattr(v, '_get_market_risk_premium', lambda: 0.05)
     result = v._build_index_etf_valuation(ticker='TEST', current_price=100, fundamentals={'QuoteType': 'ETF'})
     assert result['valuation_available'] is False
@@ -492,13 +492,26 @@ def test_full_chat_capacity_releases_reservation_without_provider_call(runtime, 
 def test_etf_sensitivity_uses_nullable_schema(monkeypatch):
     from ai_engine.tradingagents.agents.utils import valuation_tools as v
     from ai_engine.tradingagents.agents.analysts.valuation_analyst import ValuationSensitivity
-    monkeypatch.setattr(v, '_get_current_risk_free_rate', lambda: 0.04)
+    monkeypatch.setattr(v, '_get_risk_free_rate_with_source', lambda: (0.04, None))
     monkeypatch.setattr(v, '_get_market_risk_premium', lambda: 0.05)
     result = v._build_index_etf_valuation(ticker='TEST', current_price=100,
         fundamentals={'QuoteType': 'ETF', 'ForwardPE': 20})
-    assert result['fair_value_base'] is not None
+    # At a 4% pinned rate the P/E band anchors at 18x, so 20x forward P/E gives 100 * 18 / 20.
+    assert result['fair_value_base'] == pytest.approx(90)
     assert result['valuation_conviction'] == 'low'
     assert all(value is None for value in ValuationSensitivity(**result['valuation_sensitivity']).model_dump().values())
+
+
+def test_etf_valuation_flags_assumed_risk_free_rate(monkeypatch):
+    from ai_engine.tradingagents.agents.utils import valuation_tools as v
+    # Below 4% the P/E band moves to 20x, so a pinned 3.5% must change the fair value,
+    # and the assumption label must reach the output instead of being passed off as FRED data.
+    monkeypatch.setattr(v, '_get_risk_free_rate_with_source', lambda: (0.035, 'assumed default'))
+    monkeypatch.setattr(v, '_get_market_risk_premium', lambda: 0.05)
+    result = v._build_index_etf_valuation(ticker='TEST', current_price=100,
+        fundamentals={'QuoteType': 'ETF', 'ForwardPE': 20})
+    assert result['fair_value_base'] == pytest.approx(100)
+    assert any('3.50% is an assumed default' in line for line in result['valuation_key_assumptions'])
 
 
 def test_full_legacy_schema_upgrade_preserves_data_and_seeds_deleted_ids(tmp_path):

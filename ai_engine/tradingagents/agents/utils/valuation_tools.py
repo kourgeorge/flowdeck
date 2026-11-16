@@ -1371,11 +1371,6 @@ def _get_risk_free_rate_with_source() -> Tuple[float, Optional[str]]:
     return _ASSUMED_RISK_FREE_RATE, _ASSUMED_RISK_FREE_RATE_SOURCE
 
 
-def _get_current_risk_free_rate() -> float:
-    """Risk-free rate only; see _get_risk_free_rate_with_source for the label."""
-    return _get_risk_free_rate_with_source()[0]
-
-
 def _risk_free_warning(label: Optional[str], rate: float) -> Optional[str]:
     if label is None:
         return None
