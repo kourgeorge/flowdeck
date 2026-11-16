@@ -5,14 +5,12 @@ Standalone Stocks Discovery workflow: digest context build (shared) + determinis
 from __future__ import annotations
 
 import logging
-import os
-import sys
 from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 
-from ai_engine.briefing_agent.context_builder import build_digest_context
+from ai_engine.briefing_agent.context_builder import PlatformReportsLoader, build_digest_context
 from ai_engine.briefing_agent.state import DigestContext, DigestWorkflowState
 from ai_engine.llm_provider import get_config_from_env, get_llm, structured_output
 from ai_engine.tradingagents.agents.utils.trace_utils import make_agent_step
@@ -25,19 +23,6 @@ from .serialize import serialize_event_summaries
 from .span import SpanType, digest_lookback_days, resolve_span
 
 logger = logging.getLogger(__name__)
-
-
-def _ensure_backend_import_path() -> None:
-    try:
-        import backend  # noqa: F401
-        return
-    except Exception:
-        pass
-    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    backend_dir = os.path.join(repo_root, "backend")
-    for path in (repo_root, backend_dir):
-        if os.path.isdir(path) and path not in sys.path:
-            sys.path.insert(0, path)
 
 
 class StocksDiscoveryRunResult(BaseModel):
@@ -171,9 +156,15 @@ def run_stocks_discovery(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     config: Optional[Dict[str, Any]] = None,
+    platform_reports_loader: Optional[PlatformReportsLoader] = None,
 ) -> StocksDiscoveryRunResult:
     """
     Build digest context (algorithmic), rank discovery candidates, run LLM writer, return persist-ready payload.
+
+    fetcher is required: the backend caller passes get_info_fetcher(), because ai_engine
+    may not import backend services. platform_reports_loader works as in run_digest
+    (ticker -> (latest platform reports, share URL or None)); the backend passes
+    services.digest_service.load_platform_reports_for_ticker.
     """
     span_type, start_date, end_date, span_trading_days = resolve_span(
         digest_date, span_type, start_date, end_date
@@ -182,10 +173,8 @@ def run_stocks_discovery(
     lb = digest_lookback_days(span_trading_days)
 
     if fetcher is None:
-        _ensure_backend_import_path()
-        from services.info_fetcher import get_info_fetcher  # type: ignore[import-not-found]
-
-        fetcher = get_info_fetcher()
+        # Same rule as build_digest_context: refuse rather than run discovery on no data.
+        raise ValueError("run_stocks_discovery needs a fetcher (pass get_info_fetcher() from the backend)")
 
     state = DigestWorkflowState(
         user_id=user_id,
@@ -210,6 +199,7 @@ def run_stocks_discovery(
         start_date=start_date,
         end_date=end_date,
         span_trading_days=span_trading_days,
+        platform_reports_loader=platform_reports_loader,
     )
     state.digest_context = ctx
 

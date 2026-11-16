@@ -163,6 +163,21 @@ def load_platform_reports_for_ticker(ticker: str) -> Tuple[dict, Optional[str]]:
     return reports, get_share_url(execution_id)
 
 
+def run_stocks_discovery_for_user(user_id: int, digest_date: str, db: Session, **kwargs):
+    """ai_engine.stocks_discovery.run_stocks_discovery with the backend's data passed in.
+
+    Stocks discovery builds the same context as the brief, so it needs the same two
+    things from the backend: the info fetcher and the platform-reports loader. Without
+    the loader its context would have empty platform reports and no share links.
+    """
+    from ai_engine.stocks_discovery import run_stocks_discovery
+    from services.info_fetcher import get_info_fetcher
+
+    kwargs.setdefault("fetcher", get_info_fetcher())
+    kwargs.setdefault("platform_reports_loader", load_platform_reports_for_ticker)
+    return run_stocks_discovery(user_id, digest_date, db, **kwargs)
+
+
 def _parse_span(span_type: str) -> tuple[str, Optional[str], Optional[str]]:
     """Return (span_type, start_date, end_date) for run_digest."""
     _check_span(span_type)

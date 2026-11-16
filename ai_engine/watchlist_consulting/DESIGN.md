@@ -14,7 +14,7 @@ This document describes the current design of the **watchlist consulting** pipel
 2. **Stages 1–9** — A linear DAG run by the conductor: user intent → evidence → themes → optional web research → figure plan → data → actions → narrative → audit.
 3. **Report** — Assemble `report_json` (title, summary, narrative, figure explanations, ticker cards, actions, provenance, references) and build HTML with embedded Vega-Lite charts.
 
-**Entry point:** `python ai_engine/watchlist_consulting/build_report.py --email=...` runs the full conductor and writes HTML (and optional stage outputs under `out/pipeline_stages/`).
+**Entry point:** `cd backend && PYTHONPATH=.. python -m services.watchlist_report_service --email=...` runs the full conductor and writes HTML (and optional stage outputs under `out/pipeline_stages/`).
 
 ---
 
@@ -187,7 +187,7 @@ The conductor builds **report_dict** then wraps it as **ReportJson** (Pydantic).
 
 ### 5.4 Payload and figure data sources
 
-- **Payload:** **report_payload.build_payload** uses backend DB (User, Subscription) and **ReportService** to get latest report per ticker, plus **info_fetcher** (quotes, company info). Entries include ticker, name, recommendation, confidence, key_takeaways, bull/bear, expected_return_pct, bear/bull case, quote, report_scores.
+- **Payload:** **report_payload.build_payload** gets the user, their subscribed tickers, **ReportService** (latest report per ticker) and the **info_fetcher** (quotes, company info) passed in by `backend/services/watchlist_report_service.py`; ai_engine does not import backend modules. Entries include ticker, name, recommendation, confidence, key_takeaways, bull/bear, expected_return_pct, bear/bull case, quote, report_scores.
 - **Figure data (pipeline):** **fetch_figure_data** (historical, financial_charts) and backend company info (sector/industry); volatility derived from historical in Stage 6. Same data sources as Market/Fundamentals analysts; no tradingagents imports.
 
 ---

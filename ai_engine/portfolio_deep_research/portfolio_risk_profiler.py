@@ -10,21 +10,25 @@ import statistics
 logger = logging.getLogger(__name__)
 
 
+# Portfolio deep research runs as its own process (backend/run_portfolio_deep_research.py)
+# and already loads reports over HTTP from INFO_SERVICE_URL, so sector and beta come
+# from the same public endpoints rather than from backend services, which ai_engine
+# may not import (backend -> ai_engine only).
 def _fetch_company_info_from_service(ticker: str) -> Dict[str, Any]:
-    """Fetch company info (sector, industry) via data layer."""
+    """Fetch company info (sector, industry) from the info service."""
     try:
-        from services.info_fetcher import get_info_fetcher
-        return get_info_fetcher().get_company_info(ticker)
+        from ai_engine.tradingagents.datasources import info_service_client
+        return info_service_client.get_company_info(ticker) or {}
     except Exception as e:
         logger.warning(f"Failed to fetch company info for {ticker}: {e}")
         return {}
 
 
 def _fetch_extended_info_from_service(ticker: str) -> Dict[str, Any]:
-    """Fetch extended info (beta, market cap) via data layer."""
+    """Fetch extended info (beta, market cap) from the info service."""
     try:
-        from services.info_fetcher import get_info_fetcher
-        return get_info_fetcher().get_extended_info(ticker)
+        from ai_engine.tradingagents.datasources import info_service_client
+        return info_service_client.get_extended_info(ticker) or {}
     except Exception as e:
         logger.warning(f"Failed to fetch extended info for {ticker}: {e}")
         return {}

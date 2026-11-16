@@ -1,45 +1,42 @@
 """
 Fetch data for report figures using the same sources as Market and Fundamentals analysts.
-Uses backend services only (no tradingagents imports): historical OHLCV, fundamentals, financial-charts.
+No tradingagents imports: historical OHLCV, fundamentals, financial-charts.
+
+The data source (the backend's info fetcher) is passed in by the caller. ai_engine may
+not import backend services (backend -> ai_engine only); see
+backend/services/watchlist_report_service.py, which builds and passes it.
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, List
 
-try:
-    from services.info_fetcher import get_info_fetcher
-except ImportError:
-    get_info_fetcher = None  # type: ignore
+
+def _require(fetcher: Any) -> Any:
+    if fetcher is None:
+        raise RuntimeError("fetch_figure_data needs a fetcher (pass get_info_fetcher() from the backend)")
+    return fetcher
 
 
-def _get_fetcher():
-    if get_info_fetcher is None:
-        raise RuntimeError("fetch_figure_data requires backend on sys.path")
-    return get_info_fetcher()
-
-
-def fetch_historical(ticker: str, period: str = "6mo", interval: str = "1d") -> Dict[str, Any]:
+def fetch_historical(fetcher: Any, ticker: str, period: str = "6mo", interval: str = "1d") -> Dict[str, Any]:
     """Fetch OHLCV time series (same data as Market Analyst's get_ticker_data / backend historical)."""
-    fetcher = _get_fetcher()
-    return fetcher.get_historical(ticker.upper(), period=period, interval=interval)
+    return _require(fetcher).get_historical(ticker.upper(), period=period, interval=interval)
 
 
-def fetch_fundamentals(ticker: str) -> Dict[str, Any]:
+def fetch_fundamentals(fetcher: Any, ticker: str) -> Dict[str, Any]:
     """Fetch fundamentals (same data as Fundamentals Analyst's get_fundamentals)."""
-    fetcher = _get_fetcher()
-    return fetcher.get_fundamentals(ticker.upper())
+    return _require(fetcher).get_fundamentals(ticker.upper())
 
 
-def fetch_financial_charts(ticker: str, freq: str = "annual") -> Dict[str, Any]:
+def fetch_financial_charts(fetcher: Any, ticker: str, freq: str = "annual") -> Dict[str, Any]:
     """Fetch chart-ready fundamental series (revenue, EPS, etc.)."""
-    fetcher = _get_fetcher()
-    return fetcher.get_financial_charts(ticker.upper(), freq=freq)
+    return _require(fetcher).get_financial_charts(ticker.upper(), freq=freq)
 
 
 def fetch_figure_data_for_tickers(
     tickers: List[str],
     *,
+    fetcher: Any,
     include_historical: bool = True,
     include_fundamentals: bool = True,
     include_financial_charts: bool = True,
@@ -52,7 +49,7 @@ def fetch_figure_data_for_tickers(
     Missing or failed fetches are omitted or have an "error" key.
     """
     result: Dict[str, Dict[str, Any]] = {}
-    fetcher = _get_fetcher()
+    fetcher = _require(fetcher)
 
     for ticker in tickers:
         t = ticker.upper()

@@ -18,17 +18,16 @@ except ImportError:
     _get_llm = None
 
 
-def _get_info_fetcher():
-    from services.info_fetcher import get_info_fetcher
-    return get_info_fetcher()
+def _build_exposure_snapshot(tickers: List[str], fetcher: Optional[Any]) -> ExposureSnapshot:
+    """Sector/industry counts from company info.
 
-
-def _build_exposure_snapshot(tickers: List[str]) -> ExposureSnapshot:
-    """Sector/industry counts from company info."""
+    fetcher is the backend's info fetcher, passed in by the conductor, because ai_engine
+    may not import backend services. Without one the snapshot stays empty, as it did
+    before when the backend was not importable.
+    """
     sector_counts: Dict[str, int] = {}
     industry_counts: Dict[str, int] = {}
-    try:
-        fetcher = _get_info_fetcher()
+    if fetcher is not None:
         for t in tickers:
             try:
                 info = fetcher.get_company_info(t.upper())
@@ -38,8 +37,6 @@ def _build_exposure_snapshot(tickers: List[str]) -> ExposureSnapshot:
                 industry_counts[i] = industry_counts.get(i, 0) + 1
             except Exception:
                 sector_counts["N/A"] = sector_counts.get("N/A", 0) + 1
-    except ImportError:
-        pass
     return ExposureSnapshot(sector_counts=sector_counts, industry_counts=industry_counts)
 
 
@@ -110,12 +107,13 @@ def run_theme_miner(
     evidence_packets: List[EvidencePacket],
     watchlist_payload: Optional[Dict[str, Any]] = None,
     use_llm: bool = True,
+    fetcher: Optional[Any] = None,
 ) -> ThemeOutput:
     """
     Run theme mining: exposure snapshot from sector/industry, LLM themes/risks, divergent views.
     """
     tickers = [p.ticker for p in evidence_packets]
-    exposure = _build_exposure_snapshot(tickers)
+    exposure = _build_exposure_snapshot(tickers, fetcher)
     divergent = _divergent_views(evidence_packets)
 
     dominant_themes, common_risks = _themes_and_risks_llm(evidence_packets) if use_llm and _get_llm else ([], [])

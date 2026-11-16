@@ -34,22 +34,24 @@ When enabled, the pipeline runs a deep-research-style step after themes:
 ### CLI
 
 ```bash
-# From repo root; load backend/.env
-python ai_engine/watchlist_consulting/build_report.py --email=user@example.com
+# From backend/ (the backend passes the database, reports and market data in); loads backend/.env
+cd backend
+PYTHONPATH=.. python -m services.watchlist_report_service --email=user@example.com
 
 # Disable web research
-python ai_engine/watchlist_consulting/build_report.py --email=user@example.com --web-breadth=0
+PYTHONPATH=.. python -m services.watchlist_report_service --email=user@example.com --web-breadth=0
 
 # Fewer queries, no follow-ups (faster)
-python ai_engine/watchlist_consulting/build_report.py --email=user@example.com --web-breadth=2 --web-depth=1
+PYTHONPATH=.. python -m services.watchlist_report_service --email=user@example.com --web-breadth=2 --web-depth=1
 ```
 
 ### Programmatic
 
 ```python
-from conductor import run_pipeline
+# Inside the backend process (cd backend):
+from services.watchlist_report_service import run_watchlist_pipeline
 
-result = run_pipeline(
+result = run_watchlist_pipeline(
     email="user@example.com",
     web_breadth=3,
     web_depth=2,

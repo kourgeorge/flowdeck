@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from pipeline_schemas import (
     ActionsOutput,
@@ -17,7 +17,6 @@ from pipeline_schemas import (
     ReportJson,
     WebResearchOutput,
 )
-from report_payload import build_payload
 from stage1_user_intent import run_user_intent
 from stage2_evidence_extractor import run_evidence_extractor
 from stage3_theme_miner import run_theme_miner
@@ -111,13 +110,25 @@ def run_pipeline(
     cache_dir: Optional[Path] = None,
     write_stage_outputs: bool = True,
     stage_output_dir: Optional[Path] = None,
+    payload_loader: Optional[Callable[..., Dict[str, Any]]] = None,
+    fetcher: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
     Run the full pipeline: payload → 1 → 2 → 3 → 4 (web) → 5 → 6 → 7 → 8 → 9.
     Returns dict with: report_json, figure_specs, figure_data, provenance, audit_output, payload.
+
+    payload_loader(user_id=..., email=...) returns the watchlist payload and fetcher is the
+    market data source for stages 3 and 6. Both come from the backend
+    (backend/services/watchlist_report_service.py) because the user's subscriptions and
+    reports live in its database and ai_engine may not import backend modules.
     """
+    if payload_loader is None or fetcher is None:
+        raise ValueError(
+            "run_pipeline needs payload_loader and fetcher; run it through "
+            "backend/services/watchlist_report_service.py"
+        )
     report_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    payload = build_payload(user_id=user_id, email=email)
+    payload = payload_loader(user_id=user_id, email=email)
     if payload.get("error"):
         return {"error": payload["error"], "report_json": None, "figure_specs": [], "figure_data": {}, "provenance": []}
     user = payload.get("user")
@@ -156,7 +167,7 @@ def run_pipeline(
         from pipeline_schemas import ThemeOutput
         theme_output = ThemeOutput(**cached["theme_output"])
     else:
-        theme_output = run_theme_miner(evidence_packets, watchlist_payload=payload, use_llm=use_llm_theme)
+        theme_output = run_theme_miner(evidence_packets, watchlist_payload=payload, use_llm=use_llm_theme, fetcher=fetcher)
     _write_stage(stage_dir, "03_theme_output", theme_output)
 
     # Stage 4: Web research (optional; skipped when web_breadth=0 or SERPAPI_KEY unset)
@@ -178,7 +189,7 @@ def run_pipeline(
     })
 
     # Stage 6
-    figure_data, data_quality_notes = run_data_builder(figure_plan, data_jobs, payload)
+    figure_data, data_quality_notes = run_data_builder(figure_plan, data_jobs, payload, fetcher=fetcher)
     _write_stage(stage_dir, "06_data_builder", {"figure_data_keys": list(figure_data.keys()), "data_quality_notes": data_quality_notes, "figure_data": figure_data})
 
     # Stage 7

@@ -176,6 +176,17 @@ def get_company_info(ticker: str, base_url: Optional[str] = None) -> Optional[Di
         return None
 
 
+def get_extended_info(ticker: str, base_url: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Fetch extended metrics (beta, market cap, margins, PE) from info service."""
+    base_url = base_url or _get_info_service_base_url()
+    if not base_url:
+        return None
+    try:
+        return _get(None, base_url, f"/api/data/extended-info/{ticker.upper()}")
+    except Exception:
+        return None
+
+
 def get_analyst_recommendations(ticker: str, base_url: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Fetch analyst recommendations from info service."""
     base_url = base_url or _get_info_service_base_url()

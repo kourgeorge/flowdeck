@@ -67,13 +67,22 @@ def _get_user_context(user_id: int, db: Any) -> str:
     if _backend_dir not in sys.path:
         sys.path.insert(0, os.path.abspath(_backend_dir))
 
-    try:
-        from data_layer import get_data_gateway
-        return get_data_gateway().get_user_context(user_id, db)
-    except (ImportError, RuntimeError):
-        from services.user_profile_service import build_user_context_snapshot  # type: ignore[import]
+    return _backend_gateway().get_user_context(user_id, db)
 
-        return build_user_context_snapshot(user_id, db)
+
+def _backend_gateway() -> Any:
+    """The data gateway the backend sets up at startup (init_data_gateway in backend/main.py).
+
+    These tools run inside the backend process (ChatService, the brief), so the gateway
+    is how the backend hands them its report and profile services. There used to be a
+    fallback that imported backend services directly when the gateway was missing; it
+    was removed because ai_engine may not import backend services (backend -> ai_engine
+    only). Without the gateway get_data_gateway() raises, and the tool reports an error
+    instead of guessing.
+    """
+    from data_layer import get_data_gateway  # type: ignore[import]
+
+    return get_data_gateway()
 
 
 # ---------------------------------------------------------------------------
@@ -193,12 +202,7 @@ def _get_portfolio_overview(user_id: int, db: Any) -> str:
     from models.db_models import Subscription  # type: ignore[import]
     from ai_engine.tradingagents.agents.utils.core_stock_tools import get_ticker_quote
 
-    try:
-        from data_layer import get_data_gateway
-        report_svc = get_data_gateway()
-    except (ImportError, RuntimeError):
-        from services.report_service import ReportService  # type: ignore[import]
-        report_svc = ReportService()
+    report_svc = _backend_gateway()
 
     subs = (
         db.query(Subscription)

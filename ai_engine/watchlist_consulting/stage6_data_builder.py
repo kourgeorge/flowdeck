@@ -13,10 +13,8 @@ from pipeline_schemas import DataJob, FigurePlanItem
 
 try:
     from fetch_figure_data import fetch_figure_data_for_tickers
-    from services.info_fetcher import get_info_fetcher
 except ImportError:
     fetch_figure_data_for_tickers = None  # type: ignore
-    get_info_fetcher = None  # type: ignore
 
 
 def _volatility_from_historical(historical: Dict[str, Any]) -> Optional[float]:
@@ -40,8 +38,14 @@ def _volatility_from_historical(historical: Dict[str, Any]) -> Optional[float]:
 def _run_data_jobs(
     data_jobs: List[DataJob],
     payload: Dict[str, Any],
+    fetcher: Optional[Any] = None,
 ) -> tuple[Dict[str, Dict[str, Any]], List[str]]:
-    """Execute data_jobs and return by_ticker raw data plus quality notes."""
+    """Execute data_jobs and return by_ticker raw data plus quality notes.
+
+    fetcher is the backend's info fetcher, passed in by the conductor because ai_engine
+    may not import backend services. Without one no market data is fetched, as before
+    when the backend was not importable.
+    """
     by_ticker: Dict[str, Dict[str, Any]] = {}
     notes: List[str] = []
 
@@ -49,10 +53,11 @@ def _run_data_jobs(
     if not tickers_all:
         return by_ticker, notes
 
-    if fetch_figure_data_for_tickers:
+    if fetch_figure_data_for_tickers and fetcher is not None:
         try:
             raw = fetch_figure_data_for_tickers(
                 tickers_all,
+                fetcher=fetcher,
                 include_historical=True,
                 include_fundamentals=False,
                 include_financial_charts=True,
@@ -68,9 +73,8 @@ def _run_data_jobs(
             notes.append(f"fetch_figure_data error: {e}")
 
     # Sector/industry from company info
-    if get_info_fetcher:
+    if fetcher is not None:
         try:
-            fetcher = get_info_fetcher()
             for t in tickers_all:
                 t = t.upper()
                 if t not in by_ticker:
@@ -100,13 +104,14 @@ def run_data_builder(
     figure_plan: List[FigurePlanItem],
     data_jobs: List[DataJob],
     watchlist_payload: Dict[str, Any],
+    fetcher: Optional[Any] = None,
 ) -> tuple[Dict[str, Any], List[str]]:
     """
     Execute data_jobs, build figure_data keyed by figure_id (and by_ticker for legacy specs).
     Returns (figure_data, data_quality_notes).
     """
     entries = watchlist_payload.get("entries") or []
-    by_ticker, data_quality_notes = _run_data_jobs(data_jobs, watchlist_payload)
+    by_ticker, data_quality_notes = _run_data_jobs(data_jobs, watchlist_payload, fetcher)
 
     figure_data: Dict[str, Any] = {}
     # Legacy key for existing vega_specs.build_all_specs(payload, figure_data)
