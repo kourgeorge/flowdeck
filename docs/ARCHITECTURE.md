@@ -91,7 +91,7 @@ flowchart TB
             T4["AnalystRecommendations"]
             T5["News / GlobalNews"]
             T6["RedditSocial"]
-            T7["InsiderTransactions\nInsiderSentiment"]
+            T7["InsiderTransactions"]
             T8["Events"]
             T9["PlatformReports\nHistoricalReportDates"]
             T10["WebSearch\nExecutePython"]
@@ -219,7 +219,7 @@ The primary conversational agent that serves the `/api/chat/*` endpoints. Implem
 
 **Tools** (`ai_engine/agent/tools/`) available to the ReAct loop and skills:
 
-`StockQuote`, `StockData`, `HistoricalPrices`, `MultiHistoricalPrices`, `Indicators`, `Fundamentals`, `BalanceSheet`, `Cashflow`, `IncomeStatement`, `AnalystRecommendations`, `News`, `GlobalNews`, `RedditCompanySocial`, `InsiderTransactions`, `InsiderSentiment`, `Events`, `PlatformReports`, `HistoricalReportDates`, `WebSearch`, `ExecutePython`
+`StockQuote`, `StockData`, `HistoricalPrices`, `MultiHistoricalPrices`, `Indicators`, `Fundamentals`, `BalanceSheet`, `Cashflow`, `IncomeStatement`, `AnalystRecommendations`, `News`, `GlobalNews`, `RedditCompanySocial`, `InsiderTransactions`, `Events`, `PlatformReports`, `HistoricalReportDates`, `WebSearch`, `ExecutePython`
 
 ---
 
@@ -289,7 +289,7 @@ START → interpret_query → plan → load_existing_reports → analyze_portfol
 
 ### 5. Daily Brief / Stocks Discovery (`ai_engine/briefing_agent/` + `ai_engine/stocks_discovery/`)
 
-Non-graph sequential pipeline. Invoked by `DigestService` via `/api/digest/*`.
+Non-graph sequential pipeline. The daily brief is invoked by `DigestService` via `/api/digest/*`. Stocks Discovery exists in code, but it is not wired to any endpoint yet: nothing calls `run_stocks_discovery_for_user`.
 
 **Pipeline steps:**
 
@@ -346,5 +346,6 @@ Supports `daily` and `weekly` span types; any other value is rejected with 422.
 - **TradingAgents**: Parallel-analyst → 3-way-debate → research-manager → trader pipeline. Writes report JSON to `results/`. Invoked by `AnalysisService`.
 - **Stock Deep Research**: Supervisor-researcher multi-agent for deep per-stock research. Separate from TradingAgents.
 - **Portfolio Deep Research**: Sequential 9-step pipeline for portfolio-level deep analysis.
-- **Briefing Agent / Stocks Discovery**: Sequential LLM pipeline for daily/weekly/custom market briefs. Persists to SQLite.
+- **Briefing Agent**: Sequential LLM pipeline for daily/weekly market briefs. Persists to SQLite.
+- **Stocks Discovery**: Exists in `ai_engine/stocks_discovery/` but is not wired to any endpoint yet.
 - **Persistence**: SQLite DB (users, chat, executions, billing); `results/` FS (per-ticker report JSON); optional `stocks.json` for search.
