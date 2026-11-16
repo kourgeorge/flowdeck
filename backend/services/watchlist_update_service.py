@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from models.db_models import Subscription, User, UserSchedule, WatchlistUpdate
 from services.event_monitor_service import MIN_EVENT_SCORE
-from services.schedule_service import get_user_schedule_by_type, upsert_user_schedule
+from services.schedule_service import get_user_schedule_by_type, upsert_user_schedule, validate_timezone_name
 
 logger = logging.getLogger(__name__)
 SCHEDULE_TYPE = "watchlist_update"
@@ -51,10 +51,7 @@ def get_preferences(db: Session, user_id: int) -> dict:
 
 def set_preferences(db: Session, user_id: int, *, enabled: bool, timezone_name: Optional[str]) -> dict:
     tz_name = timezone_name or get_preferences(db, user_id)["timezone"]
-    try:
-        ZoneInfo(tz_name)
-    except (ValueError, ZoneInfoNotFoundError) as exc:
-        raise ValueError("Choose a valid IANA timezone, such as America/New_York.") from exc
+    validate_timezone_name(tz_name)
     upsert_user_schedule(db, user_id, SCHEDULE_TYPE, enabled=enabled,
                          cron_expression=f"0 {MORNING_HOUR} * * *", timezone_name=tz_name)
     return get_preferences(db, user_id)
