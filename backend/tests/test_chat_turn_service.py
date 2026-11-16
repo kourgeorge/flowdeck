@@ -228,5 +228,96 @@ def test_content_at_the_cap_is_accepted():
     assert len(req.messages) == 1
 
 
+# --- plain pytest: failed AI calls release the reservation; 402 at zero balance (T-103) ---
+
+from models.db_models import ChatReservation
+from services import token_service
+
+
+def _seed_balance(SessionLocal, *amounts) -> None:
+    # The balance is the sum of the Usage ledger; writing rows directly also stops
+    # ensure_user_balance from adding User.token_balance (500) on top.
+    db = SessionLocal()
+    try:
+        # initial_balance is one row per user (idempotent), so later rows use another type.
+        for i, amount in enumerate(amounts):
+            kind = "initial_balance" if i == 0 else "admin_adjustment"
+            assert token_service.record_transaction(1, amount, kind, db) is not None
+    finally:
+        db.close()
+
+
+class _StreamThatRaises:
+    def chat_stream(self, messages, user_id=None, db=None, context=None):
+        yield 'data: {"type":"token","content":"Partial"}\n\n'
+        raise TimeoutError("LLM timed out")
+
+
+class _StreamWithoutDone:
+    def chat_stream(self, messages, user_id=None, db=None, context=None):
+        yield 'data: {"type":"token","content":"Partial"}\n\n'
+
+
+class _StreamWithErrorEvent:
+    def chat_stream(self, messages, user_id=None, db=None, context=None):
+        yield 'data: {"type":"token","content":"Partial"}\n\n'
+        yield 'data: {"type":"error","content":"Upstream model error"}\n\n'
+
+
+@pytest.mark.parametrize(
+    "fake, expected_error",
+    [
+        (_StreamThatRaises(), "LLM timed out"),
+        (_StreamWithoutDone(), "Chat turn ended without a completion event"),
+        (_StreamWithErrorEvent(), "Upstream model error"),
+    ],
+    ids=["raises-timeout", "no-done-event", "error-event"],
+)
+def test_failed_ai_call_fails_turn_and_releases_reservation(chat_db, monkeypatch, fake, expected_error):
+    _seed_balance(chat_db, 100)
+    monkeypatch.setattr("services.chat_turn_service.get_chat_service", lambda: fake)
+    service = ChatTurnService()
+    try:
+        turn_id, session_id, messages = service.prepare_turn(
+            user_id=1,
+            body_messages=[{"role": "user", "content": "What is happening with NVDA?"}],
+            session_id=None,
+        )
+        result = service.run_turn_sync(
+            turn_id=turn_id, session_id=session_id, user_id=1, messages=messages, context=None,
+        )
+    finally:
+        service._workers.shutdown(wait=True)
+
+    db = chat_db()
+    try:
+        turn = db.get(ChatTurn, turn_id)
+        reservation = db.get(ChatReservation, turn_id)
+        roles = [m.role for m in db.query(ChatMessage).filter(ChatMessage.session_id == session_id).all()]
+        assert result["type"] == "error"
+        assert result["content"] == expected_error
+        assert turn.status == "failed"
+        assert turn.error_message == expected_error
+        assert reservation.settled is True
+        assert token_service.get_balance(1, db) == 100
+        assert roles == ["user"]
+    finally:
+        db.close()
+
+
+def test_chat_at_zero_balance_is_402_and_saves_nothing(chat_client, chat_db):
+    _seed_balance(chat_db, 5, -5)
+    r = chat_client.post("/api/chat", json={"messages": [{"role": "user", "content": "hi"}]})
+    assert r.status_code == 402
+
+    db = chat_db()
+    try:
+        assert db.query(ChatTurn).count() == 0
+        assert db.query(ChatMessage).count() == 0
+    finally:
+        db.close()
+    assert _reserve_rows(chat_db) == 0
+
+
 if __name__ == "__main__":
     unittest.main()
