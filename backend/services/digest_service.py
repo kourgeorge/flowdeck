@@ -143,6 +143,26 @@ def _build_slot(span_type: str, digest_date: str) -> str:
     return digest_date if span_type == "daily" else f"w:{digest_date}"
 
 
+def load_platform_reports_for_ticker(ticker: str) -> Tuple[dict, Optional[str]]:
+    """Latest platform reports and share URL for a ticker, for the brief's context.
+
+    Lives here, not in ai_engine/briefing_agent, because ai_engine may not import
+    backend services: the reports sit in the backend database and the share URL is
+    signed with the backend secret. The brief runs in this process, so passing this
+    function in is simpler than an HTTP round trip to ourselves.
+    """
+    from services.report_service import ReportService
+    from services.share_service import get_share_url
+
+    report_svc = ReportService()
+    latest = report_svc.get_latest_execution_for_ticker(ticker)
+    if not latest:
+        return {}, None
+    execution_id, _ = latest
+    reports = report_svc.get_reports_with_scores(execution_id, execution_type="ticker")
+    return reports, get_share_url(execution_id)
+
+
 def _parse_span(span_type: str) -> tuple[str, Optional[str], Optional[str]]:
     """Return (span_type, start_date, end_date) for run_digest."""
     _check_span(span_type)
@@ -172,6 +192,7 @@ async def run_and_store_digest(
     """
     try:
         from ai_engine.briefing_agent import run_digest  # imported lazily
+        from services.info_fetcher import get_info_fetcher
     except ImportError:
         logger.exception("Digest import failed while loading ai_engine.briefing_agent")
         raise
@@ -203,6 +224,8 @@ async def run_and_store_digest(
             span_type=parsed_span_type,
             start_date=start_date,
             end_date=end_date,
+            fetcher=get_info_fetcher(),
+            platform_reports_loader=load_platform_reports_for_ticker,
         )
     except Exception as e:  # pragma: no cover - surface to caller
         logger.exception("Digest generation failed for user_id=%s: %s", user_id, e)

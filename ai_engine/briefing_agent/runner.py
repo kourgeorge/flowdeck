@@ -16,7 +16,7 @@ from ai_engine.llm_provider import get_config_from_env, get_llm
 from ai_engine.tradingagents.agents.utils.trace_utils import json_safe, make_agent_step, preview_text
 from backend.processing import build_important_events
 
-from .context_builder import build_digest_context
+from .context_builder import PlatformReportsLoader, build_digest_context
 from .agents import (
     run_focus_selector,
     run_ticker_interpreter,
@@ -281,6 +281,7 @@ def run_digest(
     span_type: SpanType = "daily",
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    platform_reports_loader: Optional[PlatformReportsLoader] = None,
 ) -> DigestResult:
     """
     Run the full User Daily Brief pipeline and return a DigestResult.
@@ -297,7 +298,10 @@ def run_digest(
         db: Database session (for loading subscriptions and report service).
         config: Optional config overrides (llm_provider, deep_think_llm, quick_think_llm, etc.).
         max_priority_tickers: Max number of tickers to analyze in depth (default 5).
-        fetcher: Optional data fetcher (if None, backend get_info_fetcher() is used).
+        fetcher: Market data source. Required: the backend passes get_info_fetcher(),
+            because ai_engine may not import backend services.
+        platform_reports_loader: ticker -> (latest platform reports, share URL or None).
+            Supplied by the backend; without it the brief has no platform reports.
         span_type: 'daily', 'weekly', or 'custom'. Weekly = 7 days ending digest_date.
         start_date: Required for custom; for weekly computed from digest_date.
         end_date: Required for custom; for weekly equals digest_date.
@@ -378,6 +382,7 @@ def run_digest(
         start_date=start_date,
         end_date=end_date,
         span_trading_days=span_trading_days,
+        platform_reports_loader=platform_reports_loader,
     )
     state.digest_context = ctx
     context_preview = {
