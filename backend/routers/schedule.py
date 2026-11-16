@@ -32,7 +32,9 @@ router = APIRouter(prefix="/api", tags=["Digests"])
 
 class WatchlistUpdatePreference(BaseModel):
     enabled: bool = True
-    timezone: Optional[str] = Field(default=None, max_length=64)
+    # No max_length here: validate_timezone_name enforces it so every bad
+    # name gets the same 400 message rather than a 422.
+    timezone: Optional[str] = None
 
 
 class WatchlistUpdatePreferenceOut(WatchlistUpdatePreference):
@@ -112,7 +114,8 @@ class DigestScheduleUpdateRequest(BaseModel):
     )
     timezone: Optional[str] = Field(
         default=None,
-        max_length=64,
+        # Length is enforced by validate_timezone_name so an over-long name
+        # gets the same 400 message as any other invalid name.
         description="IANA timezone identifier, e.g. 'Europe/Athens'. When null, backend default is used.",
     )
     metadata: Optional[DigestScheduleMetadata] = None
