@@ -220,11 +220,15 @@ class DataGateway:
     ) -> Optional[tuple[int, str]]:
         return self._reports.get_analysis_run_for_date(ticker, date_str)
 
-    def get_reports_with_scores(self, execution_id: int) -> Dict[str, Dict[str, Any]]:
-        return self._reports.get_reports_with_scores(execution_id)
+    def get_reports_with_scores(
+        self, execution_id: int, *, execution_type: str
+    ) -> Dict[str, Dict[str, Any]]:
+        return self._reports.get_reports_with_scores(execution_id, execution_type=execution_type)
 
-    def get_reports_for_run(self, execution_id: int) -> Dict[str, Optional[str]]:
-        return self._reports.get_reports_for_run(execution_id)
+    def get_reports_for_run(
+        self, execution_id: int, *, execution_type: str
+    ) -> Dict[str, Optional[str]]:
+        return self._reports.get_reports_for_run(execution_id, execution_type=execution_type)
 
     def get_historical_analyses(self, ticker: str) -> List[Dict[str, Any]]:
         return self._reports.get_historical_analyses(ticker)

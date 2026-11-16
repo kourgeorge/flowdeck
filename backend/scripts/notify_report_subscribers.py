@@ -35,7 +35,7 @@ def main() -> None:
         print(f"No report found for {ticker}. Run an analysis first.")
         sys.exit(1)
     execution_id, latest_date = latest
-    scores = report_service.get_reports_with_scores(execution_id)
+    scores = report_service.get_reports_with_scores(execution_id, execution_type="ticker")
     # Prefer investment_plan (Research Manager), then final_trade_decision (historical),
     # then trader_investment_plan for recommendation/confidence.
     final_meta = scores.get("investment_plan") or {}

@@ -387,8 +387,8 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
     report_days_ago = None
 
     if latest_analysis_run_id is not None:
-        latest_reports = gw.get_reports_for_run(latest_analysis_run_id)
-        latest_reports_with_scores_raw = gw.get_reports_with_scores(latest_analysis_run_id)
+        latest_reports = gw.get_reports_for_run(latest_analysis_run_id, execution_type="ticker")
+        latest_reports_with_scores_raw = gw.get_reports_with_scores(latest_analysis_run_id, execution_type="ticker")
         latest_reports_with_scores = {
             k: ReportData(
                 content=v.get('content'),
@@ -440,7 +440,7 @@ def _get_ticker_page_sync(ticker: str) -> TickerPageData:
     historical = gw.get_historical_analyses(ticker)
     historical_analyses = []
     for h in historical:
-        reports_with_scores = gw.get_reports_with_scores(h["analysis_run_id"])
+        reports_with_scores = gw.get_reports_with_scores(h["analysis_run_id"], execution_type="ticker")
         rec = None
         if (reports_with_scores.get("investment_plan") or {}).get("recommendation"):
             rec = reports_with_scores["investment_plan"]["recommendation"]
@@ -555,7 +555,7 @@ async def get_ticker_reports_for_run(
         # subject is this ticker; anything else is treated as "not found".
         if not gw.get_analysis_run_for_date(ticker, str(analysis_run_id)):
             return None
-        scores_raw = gw.get_reports_with_scores(analysis_run_id)
+        scores_raw = gw.get_reports_with_scores(analysis_run_id, execution_type="ticker")
         if not scores_raw:
             return None
         return {

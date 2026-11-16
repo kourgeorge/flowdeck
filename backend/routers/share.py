@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/share", tags=["Share Links"])
 def _resolve_ticker(db: Session, ex: Execution) -> Dict[str, Any]:
     """Build shared response for execution_type=ticker (stock analysis run)."""
     gw = get_data_gateway()
-    reports = gw.get_reports_with_scores(ex.id)
+    reports = gw.get_reports_with_scores(ex.id, execution_type="ticker")
     if not reports:
         raise HTTPException(status_code=404, detail="Report not found")
     ticker = (ex.subject_id or "").upper()

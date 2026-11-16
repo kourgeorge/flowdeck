@@ -745,7 +745,7 @@ def notify_subscribers_new_report(
     report_service = ReportService()
     scores = None
     try:
-        scores = report_service.get_reports_with_scores(execution_id)
+        scores = report_service.get_reports_with_scores(execution_id, execution_type="ticker")
     except Exception:
         pass  # Continue without scores if fetch fails
     

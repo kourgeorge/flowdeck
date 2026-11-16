@@ -54,7 +54,7 @@ def client(tmp_path, monkeypatch):
         get_quote=lambda t: {"symbol": t},
         get_analysis_run_for_date=svc.get_analysis_run_for_date,
         get_latest_execution_for_ticker=svc.get_latest_execution_for_ticker,
-        get_reports_with_scores=lambda ex_id: {"market_report": {"content": f"run {ex_id}"}},
+        get_reports_with_scores=lambda ex_id, execution_type: {"market_report": {"content": f"run {ex_id}"}},
     )
     monkeypatch.setattr(data_api, "get_data_gateway", lambda: gateway)
 

@@ -226,7 +226,7 @@ def _get_portfolio_overview(user_id: int, db: Any) -> str:
             latest = report_svc.get_latest_execution_for_ticker(ticker)
             if latest:
                 ar_id, latest_date = latest
-                reports = report_svc.get_reports_with_scores(ar_id)
+                reports = report_svc.get_reports_with_scores(ar_id, execution_type="ticker")
                 inv = reports.get("investment_plan") or {}
                 tip = reports.get("trader_investment_plan") or {}
                 ftd = reports.get("final_trade_decision") or {}

@@ -219,7 +219,7 @@ def test_report_and_completion_callback_survive_state_cleanup(runtime):
     run_id = rt.start("REPORT", callback=callback)
     rt.executor.shutdown(wait=True)
     assert rt.execution(run_id)[0] == "completed"
-    assert report_service.ReportService().get_reports_for_run(run_id)["market_report"] == "Persisted analysis result"
+    assert report_service.ReportService().get_reports_for_run(run_id, execution_type="ticker")["market_report"] == "Persisted analysis result"
     assert completed == ["Persisted analysis result"]
     assert rt.service.running_analyses == {}
 

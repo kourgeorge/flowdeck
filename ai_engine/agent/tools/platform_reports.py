@@ -191,7 +191,7 @@ def _fetch_platform_reports(
                     f"Reports are generated when a full analysis is run for this ticker."
                 )
             analysis_run_id, date_display = latest
-        reports_with_scores = gw.get_reports_with_scores(analysis_run_id)
+        reports_with_scores = gw.get_reports_with_scores(analysis_run_id, execution_type="ticker")
     except (ImportError, RuntimeError):
         # Backend not available; use HTTP (requires INFO_SERVICE_URL and Bearer auth for reports)
         if not is_configured():

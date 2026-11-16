@@ -505,13 +505,20 @@ class ReportService:
             db.close()
 
     def get_reports_for_execution(
-        self, execution_id: int
+        self, execution_id: int, *, execution_type: str
     ) -> Dict[str, Dict[str, Any]]:
-        """Return all reports for an execution as {report_type: report_dict}."""
+        """Return all reports for an execution as {report_type: report_dict}.
+
+        ``execution_type`` is required and must match the execution's own type,
+        otherwise nothing is returned. Execution ids are plain integers shared
+        by every kind of run, so a route that ever passed a user-supplied id
+        here would otherwise hand out a user's private daily_digest (or any
+        other non-ticker) reports. Public callers pass "ticker".
+        """
         db = SessionLocal()
         try:
             execution = db.query(Execution).filter(Execution.id == execution_id).first()
-            if not execution:
+            if not execution or not execution_type or execution.execution_type != execution_type:
                 return {}
             
             date_display = execution.created_at.strftime("%Y-%m-%d") if execution.created_at else ""
@@ -558,13 +565,25 @@ class ReportService:
         finally:
             db.close()
 
-    def get_reports_for_run(self, execution_id: int) -> Dict[str, Optional[str]]:
-        """Return all reports for an execution as {report_type: content_string}."""
+    def get_reports_for_run(
+        self, execution_id: int, *, execution_type: str
+    ) -> Dict[str, Optional[str]]:
+        """Return all reports for an execution as {report_type: content_string}.
+
+        Same guard as get_reports_for_execution: the execution must be of the
+        named type, so a stray id cannot read another kind of run's reports.
+        """
+        if not execution_type:
+            return {}
         db = SessionLocal()
         try:
             reports = (
                 db.query(Report)
-                .filter(Report.execution_id == execution_id)
+                .join(Execution, Execution.id == Report.execution_id)
+                .filter(
+                    Report.execution_id == execution_id,
+                    Execution.execution_type == execution_type,
+                )
                 .all()
             )
             
@@ -576,9 +595,11 @@ class ReportService:
         finally:
             db.close()
 
-    def get_reports_with_scores(self, execution_id: int) -> Dict[str, Dict[str, Any]]:
+    def get_reports_with_scores(
+        self, execution_id: int, *, execution_type: str
+    ) -> Dict[str, Dict[str, Any]]:
         """Return all reports for an execution with full metadata (alias for get_reports_for_execution)."""
-        return self.get_reports_for_execution(execution_id)
+        return self.get_reports_for_execution(execution_id, execution_type=execution_type)
 
     def get_analysis_run_for_date(
         self, ticker: str, date_str: str

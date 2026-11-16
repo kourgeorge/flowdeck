@@ -741,7 +741,7 @@ class AnalysisService:
                     )
                     if prior:
                         prev_id, prev_date = prior
-                        prev_reports = _rs.get_reports_for_run(prev_id) or {}
+                        prev_reports = _rs.get_reports_for_run(prev_id, execution_type="ticker") or {}
                         # Keep only non-empty report content
                         prev_reports = {
                             k: v for k, v in prev_reports.items() if (v or "").strip()

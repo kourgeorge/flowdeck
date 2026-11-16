@@ -448,7 +448,7 @@ def build_digest_context(
                 latest = report_svc.get_latest_execution_for_ticker(t)
                 if latest:
                     ar_id, _ = latest
-                    platform_reports[t] = report_svc.get_reports_with_scores(ar_id)
+                    platform_reports[t] = report_svc.get_reports_with_scores(ar_id, execution_type="ticker")
                     url = get_share_url(ar_id)
                     if url:
                         share_urls[t] = url
@@ -584,7 +584,7 @@ def build_digest_context(
             latest = report_svc.get_latest_execution_for_ticker(t)
             if latest:
                 ar_id, _ = latest
-                platform_reports[t] = report_svc.get_reports_with_scores(ar_id)
+                platform_reports[t] = report_svc.get_reports_with_scores(ar_id, execution_type="ticker")
                 url = get_share_url(ar_id)
                 if url:
                     share_urls[t] = url

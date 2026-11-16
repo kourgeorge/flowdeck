@@ -68,7 +68,7 @@ def _reports_for_ticker(gw, ticker):
     if not latest:
         return {"report_run_id": None, "report_date": None, "reports": {}, "share_url": None}
     ar_id, date_display = latest
-    reports = gw.get_reports_with_scores(ar_id)
+    reports = gw.get_reports_with_scores(ar_id, execution_type="ticker")
     share_url = get_share_url(ar_id)
     return {"report_run_id": ar_id, "report_date": date_display, "reports": reports, "share_url": share_url}
 
