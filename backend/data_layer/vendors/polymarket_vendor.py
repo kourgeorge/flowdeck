@@ -543,7 +543,7 @@ def health_check() -> bool:
 
 # Utility functions for data processing
 
-def extract_probability(market: Dict, outcome_index: int = 0) -> float:
+def extract_probability(market: Dict, outcome_index: int = 0) -> Optional[float]:
     """
     Extract implied probability from market data.
     
@@ -552,7 +552,8 @@ def extract_probability(market: Dict, outcome_index: int = 0) -> float:
         outcome_index: Index of outcome to get probability for (default: 0 for "Yes")
         
     Returns:
-        Probability as float between 0 and 1
+        Probability as float between 0 and 1, or None when the market carries
+        no usable price (we refuse to show such a market as 50% odds).
     """
     market_id = market.get('id', 'unknown')
     question = market.get('question', market.get('event_title', 'N/A'))[:50]
@@ -617,7 +618,7 @@ def extract_probability(market: Dict, outcome_index: int = 0) -> float:
         
         # Handle case where outcome is a dict
         if isinstance(outcome, dict):
-            price = outcome.get('price', 0.5)
+            price = outcome.get('price')
             try:
                 price = float(price)
                 if price > 1:
@@ -638,31 +639,27 @@ def extract_probability(market: Dict, outcome_index: int = 0) -> float:
         f"outcomes={len(outcomes)} items"
     )
     
-    # Fallback to neutral
-    return 0.5
+    # A 0.5 fallback here used to show price-less markets as coin flips.
+    return None
 
 
-def calculate_24h_change(market: Dict) -> float:
+def calculate_24h_change(market: Dict) -> Optional[float]:
     """
-    Calculate 24-hour probability change.
-    
-    Args:
-        market: Market dictionary with price history
-        
-    Returns:
-        Change in probability (e.g., 0.03 for +3%)
+    Return the 24-hour probability change (e.g. 0.03 for +3pp), or None.
+
+    The Gamma API sends this as ``oneDayPriceChange``; ``change_24h`` is kept
+    only for already-normalised dicts. Returning 0.0 when neither exists hid
+    every real move, so a missing value stays None.
     """
-    try:
-        # Try to get from market data if available
-        if 'change_24h' in market:
-            return market['change_24h']
-        
-        # Otherwise would need to fetch history
-        # For now, return 0 as placeholder
-        return 0.0
-        
-    except Exception:
-        return 0.0
+    for key in ('oneDayPriceChange', 'change_24h'):
+        value = market.get(key)
+        if value is None or value == '':
+            continue
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            logger.warning(f"Market {market.get('id', 'unknown')}: Invalid {key}: {value!r}")
+    return None
 
 
 def format_market_for_display(market: Dict) -> Dict:
