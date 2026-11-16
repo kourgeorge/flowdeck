@@ -586,7 +586,8 @@ def _build_sensitivity_analysis(
     beta: float = 1.0,
     growth_samples: Optional[list] = None,
     method_weights: Optional[Dict[str, float]] = None,
-) -> Dict[str, Dict[str, Any]]:
+    ev_multiple_defaulted: bool = False,
+) -> Dict[str, Optional[Dict[str, Any]]]:
     """
     Build sensitivity analysis with dynamic deltas based on actual uncertainty.
     
@@ -667,13 +668,16 @@ def _build_sensitivity_analysis(
         net_debt=net_debt,
         shares_outstanding=shares_outstanding,
     )
-    if ebitda is not None and ev_ebitda_base is not None:
+    # No real EBITDA means EV/EBITDA is out of the blend (weight 0%), so the
+    # exit multiple cannot move fair value. Reporting a row anyway showed the
+    # default 14x with a flat "$50.11 to $50.11" range, which the analyst was
+    # told to quote verbatim; leave the row out instead.
+    exit_multiple_included = ebitda is not None and ebitda > 0 and ev_ebitda_base is not None
+    if exit_multiple_included:
         exit_low_ev = max((((ebitda * (base_ev_multiple - exit_multiple_delta)) - net_debt) / shares_outstanding), 0.01)
         exit_high_ev = max((((ebitda * (base_ev_multiple + exit_multiple_delta)) - net_debt) / shares_outstanding), 0.01)
-    else:
-        # No real EBITDA means EV/EBITDA is out of the blend, so the exit
-        # multiple cannot move fair value.
-        exit_low_ev = exit_high_ev = None
+        exit_fv_low = _weighted_base_value(dcf_base, pe_comps_base, exit_low_ev, method_weights)
+        exit_fv_high = _weighted_base_value(dcf_base, pe_comps_base, exit_high_ev, method_weights)
 
     # Calculate fair value ranges
     fcf_fv_low = min(weighted_from_dcf(fcf_low), weighted_from_dcf(fcf_high))
@@ -682,9 +686,7 @@ def _build_sensitivity_analysis(
     wacc_fv_high = max(weighted_from_dcf(wacc_high), weighted_from_dcf(wacc_low))
     tg_fv_low = min(weighted_from_dcf(tg_low), weighted_from_dcf(tg_high))
     tg_fv_high = max(weighted_from_dcf(tg_low), weighted_from_dcf(tg_high))
-    exit_fv_low = _weighted_base_value(dcf_base, pe_comps_base, exit_low_ev, method_weights)
-    exit_fv_high = _weighted_base_value(dcf_base, pe_comps_base, exit_high_ev, method_weights)
-    
+
     # Calculate base fair value for percentage calculations
     base_fv = _weighted_base_value(dcf_base, pe_comps_base, ev_ebitda_base, method_weights)
     
@@ -723,7 +725,13 @@ def _build_sensitivity_analysis(
             "fair_value_range_pct": round(((tg_fv_high - tg_fv_low) / base_fv * 100) if base_fv > 0 else 0, 2),
         },
         "exit_multiple": {
-            "parameter_name": "Exit EV/EBITDA Multiple",
+            # Same flag as the key assumption: no EVToEBITDA / EnterpriseValue
+            # was reported, so the base is our 14x guess, not a market value.
+            "parameter_name": (
+                "Exit EV/EBITDA Multiple (default 14.0x assumption)"
+                if ev_multiple_defaulted
+                else "Exit EV/EBITDA Multiple"
+            ),
             "base_value": round(base_ev_multiple, 2),
             "delta_absolute": round(exit_multiple_delta, 2),
             "delta_percent": round((exit_multiple_delta / base_ev_multiple * 100) if base_ev_multiple != 0 else 0, 2),
@@ -732,7 +740,7 @@ def _build_sensitivity_analysis(
             "fair_value_low": round(exit_fv_low, 2),
             "fair_value_high": round(exit_fv_high, 2),
             "fair_value_range_pct": round(((exit_fv_high - exit_fv_low) / base_fv * 100) if base_fv > 0 else 0, 2),
-        },
+        } if exit_multiple_included else None,
     }
 
 
@@ -2032,19 +2040,20 @@ def calculate_multi_method_valuation_data(
         beta=beta,
         growth_samples=growth_samples,
         method_weights=method_weights,
+        ev_multiple_defaulted=ev_multiple_defaulted,
     )
     
     # Calculate sensitivity range for score components
     try:
+        # exit_multiple is None when EV/EBITDA is excluded; skip it rather
+        # than fall back to the 15% default range.
+        sensitivity_keys = ["fcf_growth_rate", "wacc", "terminal_growth"]
+        if valuation_sensitivity["exit_multiple"] is not None:
+            sensitivity_keys.append("exit_multiple")
         sensitivity_values = [
-            valuation_sensitivity["fcf_growth_rate"]["fair_value_low"],
-            valuation_sensitivity["fcf_growth_rate"]["fair_value_high"],
-            valuation_sensitivity["wacc"]["fair_value_low"],
-            valuation_sensitivity["wacc"]["fair_value_high"],
-            valuation_sensitivity["terminal_growth"]["fair_value_low"],
-            valuation_sensitivity["terminal_growth"]["fair_value_high"],
-            valuation_sensitivity["exit_multiple"]["fair_value_low"],
-            valuation_sensitivity["exit_multiple"]["fair_value_high"],
+            valuation_sensitivity[key][bound]
+            for key in sensitivity_keys
+            for bound in ("fair_value_low", "fair_value_high")
         ]
         sensitivity_range_pct = ((max(sensitivity_values) - min(sensitivity_values)) / fair_value_base * 100) if fair_value_base > 0 else 0
     except (KeyError, TypeError, ValueError) as e:

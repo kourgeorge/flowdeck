@@ -129,3 +129,66 @@ def test_quote_down_refuses_instead_of_using_analyst_target(monkeypatch):
     assert out["error"] == "Unable to determine current price for valuation"
     assert out.get("current_price") != 55.0
     assert "fair_value_base" not in out
+
+
+def test_missing_ebitda_leaves_out_exit_multiple_sensitivity():
+    # T-61: EV/EBITDA had 0% weight but the sensitivity table still showed the
+    # default 14x exit multiple with a flat "$50.11 to $50.11" range.
+    result = vt.calculate_multi_method_valuation_data(
+        ticker="NOEB",
+        current_price=40.0,
+        fundamentals={
+            "SharesOutstanding": 100_000_000,
+            "EPS": 2.0,
+            "TrailingPE": 20.0,
+            "RevenueTTM": 10_000_000_000,
+        },
+        statements_payload=_statements(fcf=-50_000_000, operating_cf=100_000_000, capex=-150_000_000),
+    )
+
+    sensitivity = result["valuation_sensitivity"]
+    assert sensitivity["exit_multiple"] is None
+    for key in ("fcf_growth_rate", "wacc", "terminal_growth"):
+        assert sensitivity[key] is not None
+
+
+def test_real_ebitda_and_ev_multiple_keep_exit_multiple_row():
+    result = vt.calculate_multi_method_valuation_data(
+        ticker="REALEB",
+        current_price=40.0,
+        fundamentals={
+            "SharesOutstanding": 100_000_000,
+            "EPS": 2.0,
+            "TrailingPE": 20.0,
+            "RevenueTTM": 10_000_000_000,
+            "EBITDA": 1_500_000_000,
+            "EVToEBITDA": 10.0,
+        },
+        statements_payload=_statements(fcf=500_000_000),
+    )
+
+    row = result["valuation_sensitivity"]["exit_multiple"]
+    assert row is not None
+    assert row["parameter_name"] == "Exit EV/EBITDA Multiple"
+    assert row["base_value"] != 14.0
+    assert row["fair_value_high"] > row["fair_value_low"]
+
+
+def test_default_ev_multiple_is_labelled_in_exit_multiple_row():
+    result = vt.calculate_multi_method_valuation_data(
+        ticker="DEFMUL",
+        current_price=40.0,
+        fundamentals={
+            "SharesOutstanding": 100_000_000,
+            "EPS": 2.0,
+            "TrailingPE": 20.0,
+            "RevenueTTM": 10_000_000_000,
+            "EBITDA": 1_500_000_000,
+        },
+        statements_payload=_statements(fcf=500_000_000),
+    )
+
+    assert result["inputs"]["ev_ebitda_multiple_defaulted"] is True
+    row = result["valuation_sensitivity"]["exit_multiple"]
+    assert row is not None
+    assert "default 14.0x assumption" in row["parameter_name"]
