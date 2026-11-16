@@ -15,7 +15,7 @@ import sys
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from backend.processing import get_ticker_event_summary, parse_rsi_indicator_data
+from ai_engine.processing import get_ticker_event_summary, parse_rsi_indicator_data
 
 from .state import DigestContext
 

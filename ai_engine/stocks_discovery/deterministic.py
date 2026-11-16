@@ -11,7 +11,7 @@ from collections import Counter
 from typing import Any, Dict, List, Tuple
 
 from ai_engine.tradingagents.agents.utils.trace_utils import make_agent_step
-from backend.processing import get_ticker_event_summary
+from ai_engine.processing import get_ticker_event_summary
 
 from ai_engine.briefing_agent.context_builder import (
     _load_future_events,

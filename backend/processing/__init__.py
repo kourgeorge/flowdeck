@@ -1,36 +1,10 @@
-"""Processing layer above raw data access and below delivery layers."""
+"""Backend name for the event layer, which now lives in ai_engine.processing.
 
-from .event import (
-    DetectedEvent,
-    EventDomain,
-    EventStrength,
-    TickerEventSummary,
-    extract_fundamental_events,
-    extract_insider_events,
-    parse_rsi_indicator_data,
-    extract_price_technical_events,
-    extract_ticker_events,
-)
-from .digest_projection import ImportantEvent, build_important_events
-from .service import (
-    get_cached_ticker_event_summary,
-    get_ticker_event_summary,
-    warm_ticker_event_summary_async,
-)
+Importing this package also plugs the backend cache into the event summaries (see
+service.py), so backend callers keep using `processing` / `backend.processing`.
+"""
 
-__all__ = [
-    "DetectedEvent",
-    "EventDomain",
-    "EventStrength",
-    "ImportantEvent",
-    "TickerEventSummary",
-    "build_important_events",
-    "extract_fundamental_events",
-    "extract_insider_events",
-    "parse_rsi_indicator_data",
-    "extract_price_technical_events",
-    "extract_ticker_events",
-    "get_cached_ticker_event_summary",
-    "get_ticker_event_summary",
-    "warm_ticker_event_summary_async",
-]
+from ai_engine.processing import *  # noqa: F401,F403
+from ai_engine.processing import __all__  # noqa: F401
+
+from . import service as _service  # noqa: F401  (registers the backend cache)

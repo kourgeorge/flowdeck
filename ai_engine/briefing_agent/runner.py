@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from ai_engine.llm_provider import get_config_from_env, get_llm
 from ai_engine.tradingagents.agents.utils.trace_utils import json_safe, make_agent_step, preview_text
-from backend.processing import build_important_events
+from ai_engine.processing import build_important_events
 
 from .context_builder import PlatformReportsLoader, build_digest_context
 from .agents import (
@@ -36,12 +36,6 @@ def _parse_date(s: str) -> datetime:
 
 
 def _ensure_backend_import_path() -> None:
-    try:
-        import backend  # noqa: F401
-        return
-    except Exception:
-        pass
-
     import os
     import sys
 
@@ -74,14 +68,10 @@ def _load_recent_digest_briefs(
 
     try:
         _ensure_backend_import_path()
-        # The backend app imports its models as models.db_models (backend/ on sys.path).
-        # Importing them under backend.models.db_models too loads the file a second
-        # time, and SQLAlchemy then fails with "Table 'entity_sequences' is already
-        # defined". So use the app's name first and only fall back when it is missing.
-        try:
-            from models.db_models import Execution, Report  # type: ignore[import-not-found]
-        except ImportError:
-            from backend.models.db_models import Execution, Report
+        # Only the app's name (models.db_models, backend/ on sys.path). Importing the
+        # file as backend.models.db_models too loads it a second time and SQLAlchemy
+        # fails with "Table 'entity_sequences' is already defined".
+        from models.db_models import Execution, Report  # type: ignore[import-not-found]
 
         rows = (
             db.query(Execution, Report)

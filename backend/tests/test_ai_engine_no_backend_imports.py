@@ -3,6 +3,8 @@
 T-52 removed the brief's services imports; T-63 removed the rest (stocks_discovery,
 chat user_context, watchlist_consulting, portfolio_deep_research). The data now comes
 in from the backend caller or, for the separately-run portfolio research, over HTTP.
+T-74 moved the event layer to ai_engine.processing and dropped the brief's
+backend.models import, so there are no exceptions left.
 """
 
 from __future__ import annotations
@@ -19,18 +21,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 REPO_ROOT = Path(__file__).resolve().parents[2]
 AI_ENGINE = REPO_ROOT / "ai_engine"
 WATCHLIST_DIR = AI_ENGINE / "watchlist_consulting"
-
-# backend.processing (the event layer) is still imported by the brief and stocks
-# discovery, and the brief's history loader still reads backend.models. Moving them
-# needs files outside ai_engine/backend/services, so they are listed here until then.
-_PENDING = {
-    "ai_engine/briefing_agent/agents.py": {"backend.processing"},
-    "ai_engine/briefing_agent/context_builder.py": {"backend.processing"},
-    "ai_engine/briefing_agent/state.py": {"backend.processing"},
-    "ai_engine/briefing_agent/runner.py": {"backend", "backend.processing", "backend.models.db_models"},
-    "ai_engine/stocks_discovery/runner.py": {"backend.processing"},
-    "ai_engine/stocks_discovery/deterministic.py": {"backend.processing"},
-}
 
 
 def _imported_modules(tree: ast.AST):
@@ -51,9 +41,8 @@ def test_ai_engine_has_no_services_or_backend_import():
     offenders = []
     for path in AI_ENGINE.rglob("*.py"):
         rel = str(path.relative_to(REPO_ROOT))
-        allowed = _PENDING.get(rel, set())
         for module in _imported_modules(ast.parse(path.read_text())):
-            if _is_backend(module) and module not in allowed:
+            if _is_backend(module):
                 offenders.append(f"{rel}: {module}")
     assert offenders == []
 
@@ -255,3 +244,19 @@ def test_backend_watchlist_entry_injects_dependencies(monkeypatch, watchlist_pat
     assert seen["payload_loader"](user_id=None, email="a@b.c") == {
         "loaded": {"user_id": None, "email": "a@b.c", "fetcher": sentinel}
     }
+
+
+# --- event layer: moved to ai_engine.processing, backend name still works ---
+
+
+def test_backend_processing_is_the_moved_event_layer_with_backend_cache():
+    import ai_engine.processing as moved
+    import processing
+    from ai_engine.processing import service as moved_service
+    from processing.event import TickerEventSummary
+    from services import platform_cache
+
+    assert processing.get_ticker_event_summary is moved.get_ticker_event_summary
+    assert TickerEventSummary is moved.TickerEventSummary
+    # Importing the backend package plugs in its cache, so summaries stay cached.
+    assert moved_service._cache["get_or_set"] is platform_cache.get_or_set

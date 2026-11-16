@@ -16,7 +16,7 @@ from langchain_core.messages import HumanMessage
 
 from ai_engine.llm_provider import structured_output
 from ai_engine.tradingagents.agents.utils.trace_utils import make_agent_step
-from backend.processing import build_important_events
+from ai_engine.processing import build_important_events
 
 from .state import DigestContext, DigestWorkflowState, MarketInterpretation, TickerInterpretation, FocusSelection, ReferenceItem
 from . import prompts

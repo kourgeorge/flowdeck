@@ -50,6 +50,14 @@ def main() -> None:
 
     from database import init_db, SessionLocal
     init_db()
+    # Only backend/main.py sets up the data gateway on import. Without it the brief's
+    # user context lookup raises, so a user with no tickers got no profile snapshot.
+    # Same call as backend/main.py (main itself cannot be imported here: it builds the app).
+    from data_layer import init_data_gateway
+    from data_layer.market import MarketDataLayer
+    from services.edgar_service import get_edgar_service
+    from services.report_service import ReportService
+    init_data_gateway(market=MarketDataLayer(), reports=ReportService(), edgar=get_edgar_service())
     db = SessionLocal()
     try:
         from ai_engine.briefing_agent import run_digest

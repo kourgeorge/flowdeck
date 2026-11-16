@@ -14,7 +14,7 @@ from ai_engine.briefing_agent.context_builder import PlatformReportsLoader, buil
 from ai_engine.briefing_agent.state import DigestContext, DigestWorkflowState
 from ai_engine.llm_provider import get_config_from_env, get_llm, structured_output
 from ai_engine.tradingagents.agents.utils.trace_utils import make_agent_step
-from backend.processing import build_important_events
+from ai_engine.processing import build_important_events
 
 from .deterministic import run_deterministic_discovery
 from .markdown import stocks_discovery_payload_to_markdown
