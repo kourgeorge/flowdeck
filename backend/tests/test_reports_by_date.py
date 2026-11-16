@@ -102,3 +102,22 @@ def test_no_date_returns_latest(client):
 def test_garbage_date_is_400(client, bad):
     r = client.get("/api/data/reports/AAPL", params={"date": bad})
     assert r.status_code == 400
+
+
+@pytest.fixture
+def lenient_client(client):
+    # Return a 500 response instead of re-raising, so a crash fails the
+    # status assertion rather than surfacing as a test error.
+    return TestClient(client.app, raise_server_exceptions=False)
+
+
+@pytest.mark.parametrize("bad", ["²", "1²", "١٢"])
+def test_non_ascii_digits_are_400(lenient_client, bad):
+    r = lenient_client.get("/api/data/reports/AAPL", params={"date": bad})
+    assert r.status_code == 400
+
+
+@pytest.mark.parametrize("huge", ["99999999999999999999", str(2**63)])
+def test_run_id_too_big_for_db_is_404(lenient_client, huge):
+    r = lenient_client.get("/api/data/reports/AAPL", params={"date": huge})
+    assert r.status_code == 404
