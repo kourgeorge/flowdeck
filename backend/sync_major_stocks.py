@@ -8,8 +8,7 @@ from sqlalchemy.orm import Session
 
 from ai_engine.llm_provider import configured_provider
 
-from config import MAJOR_TICKERS, RESULTS_DIR
-from database import SessionLocal
+from config import ALL_ANALYSTS, MAJOR_TICKERS
 from services.report_service import ReportService
 from services.analysis_service import AnalysisService
 from services import token_service
@@ -54,7 +53,7 @@ def run_analyses_for_tickers(
     Records each new run in analysis_runs (using creator_id or system user).
     """
     if analysts is None:
-        analysts = ["market", "social", "fundamentals", "technical", "sec", "valuation"]
+        analysts = list(ALL_ANALYSTS)
     if creator_id is None:
         creator_id = token_service.get_system_user_id(db)
     if llm_provider is None:
@@ -79,54 +78,6 @@ def run_analyses_for_tickers(
                 poll_interval_seconds=poll_interval_seconds,
                 timeout_seconds=completion_timeout_seconds,
             )
-
-
-def run_sync(
-    analysis_date: str = None,
-    analysts: List[str] = None,
-    research_depth: int = 5,
-    llm_provider: Optional[str] = None,
-    wait_for_completion: bool = True,
-    poll_interval_seconds: float = 10.0,
-    completion_timeout_seconds: float = 3600.0,
-) -> dict:
-    """
-    For each major stock, if no report exists for the given date, trigger an analysis.
-    Runs analyses sequentially (waits for each to complete before starting the next).
-
-    Returns:
-        dict with keys: date, triggered (list of tickers started), skipped (list already had report).
-    """
-    if analysis_date is None:
-        analysis_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    triggered, skipped = get_missing_and_skipped(analysis_date)
-    if not triggered:
-        return {"date": analysis_date, "triggered": [], "skipped": skipped}
-    analysis_service = AnalysisService(results_dir=RESULTS_DIR)
-    if analysts is None:
-        analysts = ["market", "social", "fundamentals", "technical", "sec", "valuation"]
-    db = SessionLocal()
-    try:
-        run_analyses_for_tickers(
-            tickers=triggered,
-            analysis_date=analysis_date,
-            analysis_service=analysis_service,
-            db=db,
-            creator_id=None,
-            analysts=analysts,
-            research_depth=research_depth,
-            llm_provider=llm_provider,
-            wait_for_completion=wait_for_completion,
-            poll_interval_seconds=poll_interval_seconds,
-            completion_timeout_seconds=completion_timeout_seconds,
-        )
-    finally:
-        db.close()
-    return {
-        "date": analysis_date,
-        "triggered": triggered,
-        "skipped": skipped,
-    }
 
 
 def _wait_for_analysis(

@@ -415,7 +415,7 @@ init_data_gateway(
 )
 
 # Shared services for routers that need them (tickers, analyses)
-app_services.set_services(report_service, analysis_service)
+app_services.set_services(analysis_service)
 
 # Routers
 app.include_router(data_router)

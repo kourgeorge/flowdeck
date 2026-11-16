@@ -13,6 +13,10 @@ MAJOR_TICKERS = [
     "TSLA",  # Tesla
 ]
 
+# Every analyst the engine supports; the default when a caller doesn't pick a subset.
+# A tuple so no caller can mutate the shared default — copy with list() to change it.
+ALL_ANALYSTS = ("market", "social", "fundamentals", "technical", "sec", "valuation")
+
 # Results directory path (in repo root; relative to backend or absolute)
 RESULTS_DIR = os.environ.get("RESULTS_DIR", "results")
 

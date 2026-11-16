@@ -36,6 +36,7 @@ from ai_engine.tradingagents.default_config import DEFAULT_CONFIG
 # Backend services for report saving, and email notifications
 from services.report_service import save_report
 from services.email_service import notify_subscribers_new_report
+from config import ALL_ANALYSTS
 from database import init_db
 from services import analysis_report_helpers as report_helpers
 
@@ -96,7 +97,7 @@ def main() -> None:
     analysis_date = args.analysis_date.strip()
     analysts = [a.strip() for a in args.analysts.split(",") if a.strip()]
     if not analysts:
-        analysts = ["market", "social", "fundamentals", "technical", "sec", "valuation"]
+        analysts = list(ALL_ANALYSTS)
 
     os.environ["INFO_SERVICE_URL"] = args.info_service_url.strip().rstrip("/")
 

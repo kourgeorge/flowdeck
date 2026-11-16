@@ -59,12 +59,6 @@ def get_stats(db: Session) -> dict:
     }
 
 
-def delete_user(db: Session, user_id: int, actor_id: int) -> bool:
-    from services.admin_actions import delete_user as guarded_delete
-    guarded_delete(db, user_id, actor_id)
-    return True
-
-
 def list_users(
     db: Session, limit: int, offset: int, search: str = ""
 ) -> tuple[list[dict], int]:

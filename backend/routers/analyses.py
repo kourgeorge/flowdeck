@@ -19,9 +19,8 @@ from services.analysis_executor import AnalysisQueueFull
 from services import token_service
 from data_layer import get_data_gateway
 from ai_engine.llm_provider import configured_provider
+from config import ALL_ANALYSTS
 from sync_major_stocks import get_missing_and_skipped, run_analyses_for_tickers
-
-ANALYSTS = ["market", "social", "fundamentals", "technical", "sec", "valuation"]
 
 # The endpoint validates JSON explicitly, preserving 400 for a missing ticker
 # and using 422 for invalid values or attempts to override server AI policy.
@@ -42,7 +41,7 @@ START_ANALYSIS_REQUEST_BODY = {
                     },
                     "analysts": {
                         "type": "array",
-                        "items": {"type": "string", "enum": ANALYSTS},
+                        "items": {"type": "string", "enum": list(ALL_ANALYSTS)},
                         "description": (
                             "Analysts to run. Defaults to all six. Each maps to one report "
                             "key -- note `social` produces `sentiment_report`, not `news_report`."
@@ -68,7 +67,7 @@ START_ANALYSIS_REQUEST_BODY = {
                     "value": {
                         "ticker": "AAPL",
                         "analysis_date": "2026-08-28",
-                        "analysts": ANALYSTS,
+                        "analysts": list(ALL_ANALYSTS),
                         "research_depth": 2,
                     },
                 },
@@ -254,7 +253,7 @@ def run_sync_major_tickers_background(analysis_date: str, analysis_service: Anal
             analysis_service=analysis_service,
             db=db,
             creator_id=None,
-            analysts=["market", "social", "fundamentals", "technical", "sec", "valuation"],
+            analysts=list(ALL_ANALYSTS),
             research_depth=5,
             llm_provider=configured_provider(),
             wait_for_completion=True,
@@ -312,11 +311,11 @@ async def start_analysis(
                 raise ValueError
         except ValueError as exc:
             raise HTTPException(422, "analysis_date must be YYYY-MM-DD") from exc
-        analysts = body.get("analysts", ["market", "social", "fundamentals", "technical", "sec", "valuation"])
+        analysts = body.get("analysts", list(ALL_ANALYSTS))
         research_depth = body.get("research_depth", 2)
         if type(research_depth) is not int or not 1 <= research_depth <= 5:
             raise HTTPException(422, "research_depth must be an integer between 1 and 5")
-        if not isinstance(analysts, list) or not analysts or any(a not in ANALYSTS for a in analysts):
+        if not isinstance(analysts, list) or not analysts or any(a not in ALL_ANALYSTS for a in analysts):
             raise HTTPException(422, "Select at least one supported analyst")
         analysts = list(dict.fromkeys(analysts))
         llm_provider = configured_provider()

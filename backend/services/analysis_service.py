@@ -537,7 +537,8 @@ class AnalysisService:
 
             # Default analysts if not provided (social = sentiment/social media analyst)
             if analysts is None:
-                analysts = ["market", "social", "fundamentals", "technical", "sec", "valuation"]
+                from config import ALL_ANALYSTS
+                analysts = list(ALL_ANALYSTS)
             # Exclude SEC analyst when no SEC EDGAR data exists for this ticker
             if "sec" in analysts and not _has_sec_data(ticker):
                 analysts = [a for a in analysts if a != "sec"]

@@ -28,6 +28,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ai_engine.llm_provider import configured_provider
+from config import ALL_ANALYSTS
 from models.db_models import Execution, Report, Subscription
 from services import token_service
 
@@ -53,7 +54,6 @@ MIN_SCORE_DELTA = 4.0  # "changed a lot" since the last analysis
 MAX_TICKERS_PER_RUN = 25
 COOLDOWN_HOURS = 72
 
-RERUN_ANALYSTS = ["market", "social", "fundamentals", "technical", "sec", "valuation"]
 RERUN_RESEARCH_DEPTH = 5
 
 
@@ -171,7 +171,7 @@ def _start_rerun(
     _returned_run_id, existing = analysis_service.start_analysis(
         ticker=ticker,
         analysis_date=analysis_date,
-        analysts=RERUN_ANALYSTS,
+        analysts=list(ALL_ANALYSTS),
         research_depth=RERUN_RESEARCH_DEPTH,
         llm_provider=configured_provider(),
         progress_callback=None,

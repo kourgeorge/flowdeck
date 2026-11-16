@@ -14,6 +14,7 @@ from ai_engine.llm_provider import configured_provider
 from auth import get_current_admin_user
 from database import get_db
 import app_services
+from config import ALL_ANALYSTS
 from models.db_models import User
 from services import admin_actions, admin_service, analytics_service, token_service
 from services.data_cache import delete_analysis_status, list_running_analyses, set_stop_requested
@@ -655,7 +656,7 @@ def run_mission_control(
             returned_run_id, existing = app_services.get_analysis_service().start_analysis(
                 ticker=ticker,
                 analysis_date=date_str,
-                analysts=["market", "social", "fundamentals", "technical", "sec", "valuation"],
+                analysts=list(ALL_ANALYSTS),
                 research_depth=5,
                 llm_provider=llm_provider,
                 progress_callback=None,
