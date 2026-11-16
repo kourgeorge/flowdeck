@@ -38,11 +38,8 @@ def main() -> None:
     scores = report_service.get_reports_with_scores(execution_id, execution_type="ticker")
     # Prefer investment_plan (Research Manager), then final_trade_decision (historical),
     # then trader_investment_plan for recommendation/confidence.
-    final_meta = scores.get("investment_plan") or {}
-    if not final_meta.get("recommendation"):
-        final_meta = scores.get("final_trade_decision") or {}
-    if not final_meta.get("recommendation"):
-        final_meta = scores.get("trader_investment_plan") or {}
+    from ai_engine.report_meta import pick_recommendation_meta
+    _rec_key, final_meta = pick_recommendation_meta(scores)
     recommendation = final_meta.get("recommendation")
     confidence = final_meta.get("confidence")
     if confidence is not None and not isinstance(confidence, (int, float)):

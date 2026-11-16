@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from ai_engine.report_meta import pick_recommendation_meta
+
 
 def build_payload(
     user: Optional[Dict[str, Any]],
@@ -64,6 +66,7 @@ def build_payload(
             "bull_case_return_pct": None,
             "bull_viewpoint": None,
             "bear_viewpoint": None,
+            "neutral_viewpoint": None,
             "quote": None,
             "report_scores": {},
         }
@@ -99,14 +102,13 @@ def build_payload(
                     for k, v in scores_raw.items():
                         if v.get("score") is not None or v.get("score_label"):
                             entry["report_scores"][k] = {"score": v.get("score"), "score_label": v.get("score_label")}
-                    ftd = scores_raw.get("final_trade_decision") or {}
-                    tip = scores_raw.get("trader_investment_plan") or {}
-                    if ftd.get("recommendation"):
-                        entry["recommendation"] = ftd["recommendation"]
-                        entry["confidence"] = ftd.get("confidence")
-                    elif tip.get("recommendation"):
-                        entry["recommendation"] = tip["recommendation"]
-                        entry["confidence"] = tip.get("confidence")
+                    # The Research Manager's investment_plan is the only report that carries
+                    # the call, confidence and views since the Research/Risk merge; reading
+                    # final_trade_decision/trader first left them empty or showed the Trader's call.
+                    _rec_key, rec_meta = pick_recommendation_meta(scores_raw)
+                    if rec_meta:
+                        entry["recommendation"] = rec_meta.get("recommendation")
+                        entry["confidence"] = rec_meta.get("confidence")
 
                     # Key takeaways from first report that has them
                     for v in scores_raw.values():
@@ -115,10 +117,10 @@ def build_payload(
                             entry["key_takeaways"] = kt
                             break
 
-                    # Score from final_trade_decision or first available
-                    if ftd.get("score") is not None:
-                        entry["score"] = ftd.get("score")
-                        entry["score_label"] = ftd.get("score_label")
+                    # Score from the report that made the call, else the first one with a score
+                    if rec_meta.get("score") is not None:
+                        entry["score"] = rec_meta.get("score")
+                        entry["score_label"] = rec_meta.get("score_label")
                     else:
                         for v in scores_raw.values():
                             if v.get("score") is not None:
@@ -131,14 +133,9 @@ def build_payload(
                     entry["bear_case_return_pct"] = inv_plan.get("bear_case_return_pct")
                     entry["bull_case_return_pct"] = inv_plan.get("bull_case_return_pct")
 
-                    if ftd.get("bull_viewpoint") is not None:
-                        entry["bull_viewpoint"] = ftd["bull_viewpoint"]
-                    if ftd.get("bear_viewpoint") is not None:
-                        entry["bear_viewpoint"] = ftd["bear_viewpoint"]
-                    if not entry["bull_viewpoint"] and tip.get("bull_viewpoint") is not None:
-                        entry["bull_viewpoint"] = tip["bull_viewpoint"]
-                    if not entry["bear_viewpoint"] and tip.get("bear_viewpoint") is not None:
-                        entry["bear_viewpoint"] = tip["bear_viewpoint"]
+                    for view in ("bull_viewpoint", "bear_viewpoint", "neutral_viewpoint"):
+                        if rec_meta.get(view) is not None:
+                            entry[view] = rec_meta[view]
         except Exception as e:
             entry["report_error"] = str(e)
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import sys
 
+from ai_engine.report_meta import pick_recommendation_meta
 from ai_engine.agent.tool import BaseTool, ExecutionContext, ToolResult, ToolSpec
 
 
@@ -236,8 +237,7 @@ def _fetch_platform_reports(
     # source of the BUY/SELL/HOLD recommendation; final_trade_decision is kept as a fallback
     # for historical runs produced before the Research/Risk report merge.
     inv = reports.get("investment_plan") or {}
-    ftd = reports.get("final_trade_decision") or {}
-    rec_source = inv if inv.get("recommendation") else ftd
+    _rec_key, rec_source = pick_recommendation_meta(reports)
     if rec_source:
         rec = rec_source.get("recommendation", "N/A")
         conf = rec_source.get("confidence")

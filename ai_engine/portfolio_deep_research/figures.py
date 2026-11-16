@@ -12,6 +12,8 @@ import urllib.request
 import urllib.parse
 import json
 
+from ai_engine.report_meta import pick_recommendation_meta
+
 
 def _fetch_via_http(base_url: str, path: str, params: Optional[Dict[str, str]] = None) -> Any:
     url = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
@@ -94,10 +96,9 @@ def build_figure_data_and_payload(
         if isinstance(reports, dict):
             ftd = reports.get("final_trade_decision") or {}
             tip = reports.get("investment_plan") or {}
-            if ftd.get("recommendation"):
-                entry["recommendation"] = ftd.get("recommendation", "—")
-            elif tip.get("recommendation"):
-                entry["recommendation"] = tip.get("recommendation", "—")
+            _rec_key, rec_meta = pick_recommendation_meta(reports)
+            if rec_meta:
+                entry["recommendation"] = rec_meta["recommendation"]
             entry["expected_return_pct"] = ftd.get("expected_return_pct") or tip.get("expected_return_pct")
             entry["bear_case_return_pct"] = ftd.get("bear_case_return_pct") or tip.get("bear_case_return_pct")
             entry["bull_case_return_pct"] = ftd.get("bull_case_return_pct") or tip.get("bull_case_return_pct")
