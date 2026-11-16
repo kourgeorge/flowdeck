@@ -177,7 +177,7 @@ All under `/api/data/`. Most endpoints are public; auth-required endpoints are m
 | GET | `/api/data/news/batch/stream?tickers=AAPL,MSFT` | Same, as an NDJSON progressive stream |
 | GET | `/api/data/global-news?curr_date=2026-08-19&lookback_days=7&limit=10` | Macro / world news (**`curr_date` required**, `YYYY-MM-DD`; optional `query`) |
 | GET | `/api/data/insider-transactions/{ticker}?limit=50` | Latest insider transactions |
-| GET | `/api/data/insider-sentiment/{ticker}?curr_date=YYYY-MM-DD` | Finnhub insider sentiment series |
+| GET | `/api/data/insider-sentiment/{ticker}?curr_date=YYYY-MM-DD` | Unavailable: always returns 503 (no data source configured). Use `insider-transactions` instead |
 | GET | `/api/data/reddit-company-social/{ticker}?search_terms=Apple,AAPL&start_date=2026-08-01&end_date=2026-08-19` | Reddit chatter (**`search_terms`, `start_date`, `end_date` required**; dates are `YYYY-MM-DD`) |
 | GET | `/api/data/fundamentals/{ticker}` | Fundamental data |
 | GET | `/api/data/fund-info/{ticker}` | ETF/fund data (AUM, expense ratio, holdings, sector weightings) |
@@ -961,7 +961,7 @@ API keys do **not** work on the analysis WebSocket — its `?token=` parameter i
 | GET | `/api/data/market-movers` | No | Top gainers and losers |
 | GET | `/api/data/market-overview`, `/market-overview/section` | No | Indices, sectors, regions, commodities |
 | GET | `/api/data/news`, `/news/batch`, `/news/batch/stream`, `/global-news` | No | News (single, batch, NDJSON stream, macro) |
-| GET | `/api/data/insider-transactions/{ticker}`, `/insider-sentiment/{ticker}` | No | Insider activity |
+| GET | `/api/data/insider-transactions/{ticker}`, `/insider-sentiment/{ticker}` | No | Insider activity (`insider-sentiment` is unavailable and returns 503) |
 | GET | `/api/data/reddit-company-social/{ticker}` | No | Reddit chatter (`search_terms` required) |
 | GET | `/api/data/financial-statements|financial-charts/{ticker}` | No | Statements and time series |
 | GET | `/api/data/historical/{ticker}`, `/ticker-data/{ticker}` | No | OHLCV (JSON, CSV-like text) |

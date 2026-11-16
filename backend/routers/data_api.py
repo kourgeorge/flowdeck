@@ -507,20 +507,31 @@ async def data_global_news(
     return {"data": data}
 
 
+INSIDER_SENTIMENT_UNAVAILABLE = "Insider sentiment is not available (no data source configured)"
+
+
 @event_signals_router.get(
     "/insider-sentiment/{ticker}",
-    summary="Insider sentiment",
-    response_description="Insider sentiment for a ticker (Finnhub).",
-    responses=data_responses("insider_sentiment"),
+    summary="Insider sentiment (unavailable)",
+    response_description="Always 503: no insider-sentiment data source is configured.",
+    responses=data_responses(
+        "insider_sentiment",
+        ticker_404=False,
+        extra={503: {"content": {"application/json": {"example": {"detail": INSIDER_SENTIMENT_UNAVAILABLE}}}}},
+    ),
 )
 async def data_insider_sentiment(
     ticker: str,
     curr_date: str = Query(..., description="Current date YYYY-MM-DD"),
 ):
-    """Get insider sentiment for a ticker (Finnhub)."""
-    await _ensure_ticker_exists(ticker)
-    data = await asyncio.to_thread(_gateway().get_insider_sentiment, ticker.upper(), curr_date)
-    return {"ticker": ticker.upper(), "data": data}
+    """Insider sentiment is not available: no data source is configured, so this always returns 503.
+
+    Use `/insider-transactions/{ticker}` for raw insider buys and sells instead.
+    """
+    # The vendor map has no source for get_insider_sentiment (the Finnhub source the
+    # docs once promised was never written), so routing would only fail with a 500.
+    # Refuse up front with an honest 503 rather than invent a sentiment score.
+    raise HTTPException(status_code=503, detail=INSIDER_SENTIMENT_UNAVAILABLE)
 
 
 @news_router.get(

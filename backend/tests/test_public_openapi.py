@@ -193,7 +193,7 @@ def test_captured_examples_match_declared_keys():
     orphaned = set(EXAMPLES) - declared
     assert orphaned == set(), f"captured examples with no matching route: {orphaned}"
 
-    # insider_sentiment (no Finnhub key) and reports_dates (pre-existing SQLAlchemy
+    # insider_sentiment (unavailable: no data source, the endpoint always 503s) and reports_dates (pre-existing SQLAlchemy
     # bug in report_service.list_report_dates) are declared but not captured --
     # data_responses() tolerates this by omitting their 200 example.
     missing = declared - set(EXAMPLES)
