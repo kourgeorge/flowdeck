@@ -168,10 +168,13 @@ def activate_api_key(
     """Reactivate a deactivated API key."""
     try:
         api_key = api_key_service.set_active(db, key_id, current_user.id, True)
-    except api_key_service.ApiKeyNotFoundError:
+    except api_key_service.ApiKeyNotFoundError as exc:
+        # Pass the service's message through: a legacy key (no user_subject)
+        # can never be turned back on, and a bare "not found" left the user
+        # retrying instead of creating a new key.
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="API key not found"
+            detail=str(exc)
         )
     return _api_key_to_response(api_key)
 
