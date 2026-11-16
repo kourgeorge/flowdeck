@@ -136,3 +136,79 @@ def test_run_and_store_digest_injects_dependencies(monkeypatch):
     assert seen["platform_reports_loader"] is digest_service.load_platform_reports_for_ticker
     assert seen["portfolio_tickers_loader"] is digest_service.load_portfolio_tickers
     assert seen["recent_digests_loader"] is digest_service.load_recent_digest_rows
+
+
+def _full_result():
+    # Every optional field set, so a missing metadata key in either path shows up.
+    return SimpleNamespace(
+        narrative="n",
+        what_to_watch="w",
+        digest_date="2026-11-16",
+        span_type="daily",
+        span_label="Daily",
+        priority_tickers=["AAA"],
+        important_events=[{"title": "e"}],
+        focus_snapshot={"AAA": {"price": 1.0}},
+        references=[{"url": "u"}],
+        resources=["r"],
+        agent_steps=[{"step": 1}],
+        input_tokens=1,
+        output_tokens=2,
+        total_tokens=3,
+        cost_usd=0.01,
+        models_used=["m"],
+    )
+
+
+def _patch_persistence(monkeypatch, saved, statuses):
+    from services import report_service
+
+    monkeypatch.setattr(
+        report_service, "save_report", lambda eid, rtype, content="", metadata=None: saved.append((eid, metadata))
+    )
+    monkeypatch.setattr(
+        report_service, "update_execution_status", lambda eid, status, **k: statuses.append((eid, status))
+    )
+
+
+def test_standalone_script_marks_completed_with_same_metadata(monkeypatch):
+    import asyncio
+    import importlib
+
+    import ai_engine.briefing_agent as briefing_agent
+    import data_layer
+    import database
+    import dotenv
+    from data_layer import market
+    from services import digest_service, edgar_service, info_fetcher, report_service, token_service
+
+    # Keep backend/.env and real services out of the test process.
+    monkeypatch.setattr(dotenv, "load_dotenv", lambda *a, **k: None)
+    monkeypatch.setattr(database, "init_db", lambda: None)
+    monkeypatch.setattr(database, "SessionLocal", lambda: SimpleNamespace(close=lambda: None))
+    monkeypatch.setattr(data_layer, "init_data_gateway", lambda **k: None)
+    monkeypatch.setattr(market, "MarketDataLayer", lambda: None)
+    monkeypatch.setattr(edgar_service, "get_edgar_service", lambda: None)
+    monkeypatch.setattr(report_service, "ReportService", lambda: None)
+    monkeypatch.setattr(info_fetcher, "get_info_fetcher", lambda: object())
+    monkeypatch.setattr(briefing_agent, "run_digest", lambda **k: _full_result())
+    monkeypatch.setattr(token_service, "record_execution", lambda **k: 41)
+    monkeypatch.setattr(token_service, "deduct_for_digest", lambda *a: (True, 42))
+    monkeypatch.setattr(token_service, "update_usage_with_llm_data", lambda **k: None)
+
+    saved: list = []
+    statuses: list = []
+    _patch_persistence(monkeypatch, saved, statuses)
+
+    script = importlib.import_module("run_briefing_standalone")
+    monkeypatch.setattr(sys, "argv", ["run_briefing_standalone.py", "--user-id", "7", "--date", "2026-11-16"])
+    script.main()
+
+    asyncio.run(digest_service.run_and_store_digest(None, 7, digest_date="2026-11-16", span_type="daily"))
+
+    assert statuses == [(41, "completed"), (42, "completed")]
+    (script_eid, script_meta), (api_eid, api_meta) = saved
+    assert (script_eid, api_eid) == (41, 42)
+    assert script_meta == api_meta
+    for key in ("important_events", "span_type", "span_label", "focus_snapshot", "total_tokens"):
+        assert key in script_meta

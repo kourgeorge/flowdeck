@@ -217,6 +217,92 @@ def run_stocks_discovery_for_user(user_id: int, digest_date: str, db: Session, *
     return run_stocks_discovery(user_id, digest_date, db, **kwargs)
 
 
+def run_digest_for_user(user_id: int, digest_date: str, db: Session, **kwargs):
+    """ai_engine.briefing_agent.run_digest with the backend's data passed in.
+
+    The API, the scheduler and run_briefing_standalone.py all need the same fetcher
+    and loaders; the standalone script used to wire them up by hand. Imports stay lazy
+    so tests can patch briefing_agent.run_digest and info_fetcher.get_info_fetcher.
+    """
+    from ai_engine.briefing_agent import run_digest
+    from services.info_fetcher import get_info_fetcher
+
+    kwargs.setdefault("fetcher", get_info_fetcher())
+    kwargs.setdefault("platform_reports_loader", load_platform_reports_for_ticker)
+    kwargs.setdefault("portfolio_tickers_loader", load_portfolio_tickers)
+    kwargs.setdefault("recent_digests_loader", load_recent_digest_rows)
+    return run_digest(user_id=user_id, digest_date=digest_date, db=db, **kwargs)
+
+
+def build_digest_metadata(
+    result,
+    *,
+    digest_date: str,
+    span_type: str,
+    user_note: Optional[str] = None,
+    narrative_style: Optional[str] = None,
+    user_focus_tickers: Optional[list[str]] = None,
+) -> dict:
+    """Report metadata for a brief, in the shape BriefPage and the history reader expect.
+
+    Shared so the standalone script cannot drift again: its own copy lacked
+    important_events, span_type/span_label, focus_snapshot and the token-usage keys.
+    """
+    metadata: dict = {
+        "digest_date": getattr(result, "digest_date", digest_date),
+        "span_type": getattr(result, "span_type", span_type),
+        "span_label": getattr(result, "span_label", "Daily"),
+        "priority_tickers": getattr(result, "priority_tickers", []),
+        "important_events": [
+            event.model_dump() if hasattr(event, "model_dump") else event
+            for event in (getattr(result, "important_events", None) or [])
+        ],
+        "what_to_watch": getattr(result, "what_to_watch", ""),
+    }
+    # Optional per-ticker snapshot for UI: price + span-aware percent change.
+    focus_snapshot = getattr(result, "focus_snapshot", None)
+    if isinstance(focus_snapshot, dict) and focus_snapshot:
+        metadata["focus_snapshot"] = focus_snapshot
+    if user_note:
+        metadata["user_note"] = user_note
+    if narrative_style:
+        metadata["narrative_style"] = narrative_style
+    if user_focus_tickers:
+        metadata["user_focus_tickers"] = user_focus_tickers
+    if getattr(result, "references", None):
+        metadata["references"] = [
+            r.model_dump() if hasattr(r, "model_dump") else r
+            for r in (result.references or [])
+        ]
+    if getattr(result, "resources", None):
+        metadata["resources"] = list(result.resources or [])
+    if getattr(result, "agent_steps", None):
+        metadata["agent_steps"] = list(result.agent_steps or [])
+    # Optional LLM usage metadata
+    for key in ("input_tokens", "output_tokens", "total_tokens", "cost_usd", "models_used"):
+        value = getattr(result, key, None)
+        if value is not None:
+            metadata[key] = value
+    return metadata
+
+
+def persist_digest(execution_id: int, result, metadata: dict) -> None:
+    """Save the brief's Report and mark its Execution completed.
+
+    Both steps are required: _completed_brief_filters only shows "completed" runs,
+    so a saved report on a run left "running" never appears in BriefPage history.
+    """
+    from services.report_service import save_report, update_execution_status
+
+    save_report(
+        execution_id,
+        "daily_digest",
+        content=getattr(result, "narrative", ""),
+        metadata=metadata,
+    )
+    update_execution_status(execution_id, "completed")
+
+
 def _parse_span(span_type: str) -> tuple[str, Optional[str], Optional[str]]:
     """Return (span_type, start_date, end_date) for run_digest."""
     _check_span(span_type)
@@ -274,9 +360,10 @@ async def run_and_store_digest(
     - Sends email notification to user if user_email is provided.
     - Returns (result, metadata, execution_id, slot).
     """
+    # Import before charging: a broken ai_engine should fail without taking tokens.
     try:
-        from ai_engine.briefing_agent import run_digest  # imported lazily
-        from services.info_fetcher import get_info_fetcher
+        from ai_engine.briefing_agent import run_digest  # noqa: F401  imported lazily
+        from services.info_fetcher import get_info_fetcher  # noqa: F401
     except ImportError:
         logger.exception("Digest import failed while loading ai_engine.briefing_agent")
         raise
@@ -298,10 +385,9 @@ async def run_and_store_digest(
     # manual cleanup script ran. CancelledError is listed on its own because a
     # client disconnect arrives as asyncio.CancelledError, which `except
     # Exception` skips; it is re-raised after cleanup. The refund is idempotent, so one call here is safe.
-    from services.report_service import save_report, update_execution_status
     try:
         result = await asyncio.to_thread(
-            run_digest,
+            run_digest_for_user,
             user_id=user_id,
             digest_date=digest_date,
             db=db,
@@ -313,55 +399,16 @@ async def run_and_store_digest(
             span_type=parsed_span_type,
             start_date=start_date,
             end_date=end_date,
-            fetcher=get_info_fetcher(),
-            platform_reports_loader=load_platform_reports_for_ticker,
-            portfolio_tickers_loader=load_portfolio_tickers,
-            recent_digests_loader=load_recent_digest_rows,
         )
-
-        metadata: dict = {
-            "digest_date": getattr(result, "digest_date", digest_date),
-            "span_type": getattr(result, "span_type", parsed_span_type),
-            "span_label": getattr(result, "span_label", "Daily"),
-            "priority_tickers": getattr(result, "priority_tickers", []),
-            "important_events": [
-                event.model_dump() if hasattr(event, "model_dump") else event
-                for event in (getattr(result, "important_events", None) or [])
-            ],
-            "what_to_watch": getattr(result, "what_to_watch", ""),
-        }
-        # Optional per-ticker snapshot for UI: price + span-aware percent change.
-        focus_snapshot = getattr(result, "focus_snapshot", None)
-        if isinstance(focus_snapshot, dict) and focus_snapshot:
-            metadata["focus_snapshot"] = focus_snapshot
-        if user_note:
-            metadata["user_note"] = user_note
-        if narrative_style:
-            metadata["narrative_style"] = narrative_style
-        if user_focus_tickers:
-            metadata["user_focus_tickers"] = user_focus_tickers
-        if getattr(result, "references", None):
-            metadata["references"] = [
-                r.model_dump() if hasattr(r, "model_dump") else r
-                for r in (result.references or [])
-            ]
-        if getattr(result, "resources", None):
-            metadata["resources"] = list(result.resources or [])
-        if getattr(result, "agent_steps", None):
-            metadata["agent_steps"] = list(result.agent_steps or [])
-        # Optional LLM usage metadata
-        for key in ("input_tokens", "output_tokens", "total_tokens", "cost_usd", "models_used"):
-            value = getattr(result, key, None)
-            if value is not None:
-                metadata[key] = value
-
-        save_report(
-            execution_id,
-            "daily_digest",
-            content=getattr(result, "narrative", ""),
-            metadata=metadata,
+        metadata = build_digest_metadata(
+            result,
+            digest_date=digest_date,
+            span_type=parsed_span_type,
+            user_note=user_note,
+            narrative_style=narrative_style,
+            user_focus_tickers=user_focus_tickers,
         )
-        update_execution_status(execution_id, "completed")
+        persist_digest(execution_id, result, metadata)
     except (Exception, asyncio.CancelledError) as e:
         _fail_and_refund(execution_id, user_id, db, e)
         raise

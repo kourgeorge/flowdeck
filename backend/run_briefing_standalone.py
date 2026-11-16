@@ -3,7 +3,7 @@
 Standalone User Daily Brief runner for cron or CLI.
 
 Usage:
-  python backend/run_digest_standalone.py --user-id 1 [--date 2025-03-13] [--max-priority 5]
+  python backend/run_briefing_standalone.py --user-id 1 [--date 2025-03-13] [--max-priority 5]
 
 Prints the brief narrative and what_to_watch to stdout (JSON or text).
 Requires backend and repo root on PYTHONPATH; uses DB and get_info_fetcher from backend.
@@ -60,31 +60,28 @@ def main() -> None:
     init_data_gateway(market=MarketDataLayer(), reports=ReportService(), edgar=get_edgar_service())
     db = SessionLocal()
     try:
-        from ai_engine.briefing_agent import run_digest
         from services import token_service
         from services.digest_service import (
-            load_platform_reports_for_ticker,
-            load_portfolio_tickers,
-            load_recent_digest_rows,
+            _build_slot,
+            build_digest_metadata,
+            persist_digest,
+            run_digest_for_user,
         )
-        from services.info_fetcher import get_info_fetcher
-        from services.report_service import save_report
 
-        result = run_digest(
+        result = run_digest_for_user(
             user_id=args.user_id,
             digest_date=digest_date,
             db=db,
             config=None,
             max_priority_tickers=args.max_priority,
-            fetcher=get_info_fetcher(),
-            platform_reports_loader=load_platform_reports_for_ticker,
-            portfolio_tickers_loader=load_portfolio_tickers,
-            recent_digests_loader=load_recent_digest_rows,
         )
 
-        # Persist digest as Execution + Report (creator = user, subject = user_id:date)
+        # Persist digest as Execution + Report (creator = user, subject = user_id:date).
+        # Uses the same metadata and save-and-complete helpers as run_and_store_digest:
+        # this script's own copy left the run "running", so its briefs never showed in
+        # BriefPage history, and its metadata lacked keys BriefPage reads.
         try:
-            subject_id = f"{args.user_id}:{digest_date}"
+            subject_id = f"{args.user_id}:{_build_slot('daily', digest_date)}"
             execution_id = token_service.record_execution(
                 creator_id=args.user_id,
                 execution_type="daily_digest",
@@ -92,23 +89,8 @@ def main() -> None:
                 subject_id=subject_id,
                 db=db,
             )
-            metadata = {
-                "digest_date": result.digest_date,
-                "priority_tickers": result.priority_tickers,
-                "what_to_watch": result.what_to_watch,
-                "references": [
-                    r.model_dump() if hasattr(r, "model_dump") else r
-                    for r in (result.references or [])
-                ],
-                "resources": list(result.resources or []),
-                "agent_steps": list(result.agent_steps or []),
-            }
-            save_report(
-                execution_id,
-                "daily_digest",
-                content=result.narrative,
-                metadata=metadata,
-            )
+            metadata = build_digest_metadata(result, digest_date=digest_date, span_type="daily")
+            persist_digest(execution_id, result, metadata)
             logger.info(
                 "Persisted standalone daily digest execution_id=%s user_id=%s date=%s",
                 execution_id,
