@@ -480,13 +480,18 @@ Then, until the stream ends:
 | Event | Payload |
 |-------|---------|
 | `thinking` | `{"type":"thinking","content":"..."}` — status narration |
-| `tool_call` | `{"type":"tool_call","name":"get_quote","input":"...","output":"..."}` |
+| `tool_call` | `{"type":"tool_call","name":"get_quote","input":"...","output":"..."}` — output is cut to 2000 characters |
+| `chart` | `{"type":"chart","spec":{...}}` — a chart definition to draw |
+| `skill_start` | `{"type":"skill_start","name":"..."}` — a saved multi-step workflow began |
+| `skill_step` | `{"type":"skill_step","skill":"...","tool":"...","input":"...","output":"...","ok":true}` |
+| `skill_done` | `{"type":"skill_done","name":"...","steps":N}` |
 | `token` | `{"type":"token","content":"..."}` — response text delta |
-| `done` | `{"type":"done","tokens_used":N,"tools_called":M,"follow_up_questions":[...]}` |
-| `error` | `{"type":"error","content":"..."}` |
+| `done` | `{"type":"done","turn_id":N,"session_id":N,"tokens_used":N,"platform_tokens_used":N,"balance":N,"tools_called":M,"follow_up_questions":[...],"llm_usage":{...},"content":"..."}` |
+| `error` | `{"type":"error","turn_id":N,"content":"..."}` |
 
-Charts arrive inside the text content as a `CHART_JSON:{...}` marker line — strip or parse those rather than
-rendering them literally.
+Charts arrive as `chart` events. For `execute_python`, the `CHART_JSON` marker is removed from the
+`tool_call` output, so those charts come only as `chart` events. A `CHART_JSON:{...}` line can still
+appear inside `token` text; if you see one, parse it as a chart rather than rendering it literally.
 
 ### Sessions and turns
 
