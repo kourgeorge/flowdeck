@@ -194,3 +194,109 @@ def test_execute_endpoint_returns_500_when_not_captured(runtime, monkeypatch):
 
     assert response.status_code == 500
     assert _purchase_count(runtime) == 0
+
+
+# Tamper checks: _order_from_payment must reject a payment that does not belong
+# to the caller or does not match a real package, before anything is credited.
+
+def _add_other_user(runtime):
+    with runtime.sessions() as db:
+        db.add(User(id=2, email='other@example.invalid'))
+        db.commit()
+
+
+def _tampered(runtime, monkeypatch, custom=None, total='5.00'):
+    payment = _fake_payment(runtime.subject)
+    transaction = payment.transactions[0]
+    if custom is not None:
+        transaction.custom = custom
+    transaction.amount = SimpleNamespace(total=total, currency='USD')
+    payment.execute = Mock(side_effect=AssertionError('tampered payment must not be executed'))
+    monkeypatch.setattr(service.paypalrestsdk.Payment, 'find', lambda _id: payment)
+    return payment
+
+
+def _assert_not_credited(runtime, order_expected):
+    assert _purchase_count(runtime) == 0
+    with runtime.sessions() as db:
+        order = db.get(PaymentOrder, 'PAY-test')
+        if order_expected:
+            assert order.status == 'created'
+        else:
+            assert order is None
+
+
+def test_execute_rejects_other_users_payment(runtime, monkeypatch):
+    _add_other_user(runtime)
+    _add_order(runtime)
+    _tampered(runtime, monkeypatch)
+
+    with runtime.sessions() as db:
+        with pytest.raises(ValueError):
+            service.execute_payment('PAY-test', 'payer', db, user_id=2)
+
+    _assert_not_credited(runtime, order_expected=True)
+    with runtime.sessions() as db:
+        assert db.query(Usage).filter_by(user_id=2, transaction_type='purchase').count() == 0
+
+
+def test_execute_rejects_custom_field_with_inflated_tokens(runtime, monkeypatch):
+    _add_order(runtime)
+    _tampered(runtime, monkeypatch, custom=f'{runtime.subject}:starter:2500')
+
+    with runtime.sessions() as db:
+        with pytest.raises(ValueError):
+            service.execute_payment('PAY-test', 'payer', db, user_id=1)
+
+    _assert_not_credited(runtime, order_expected=True)
+
+
+def test_execute_rejects_best_value_paid_at_starter_price(runtime, monkeypatch):
+    _tampered(runtime, monkeypatch, custom=f'{runtime.subject}:best_value:2500', total='5.00')
+
+    with runtime.sessions() as db:
+        with pytest.raises(ValueError):
+            service.execute_payment('PAY-test', 'payer', db, user_id=1)
+
+    _assert_not_credited(runtime, order_expected=False)
+
+
+def test_execute_rejects_garbage_custom_field(runtime, monkeypatch):
+    _add_order(runtime)
+    _tampered(runtime, monkeypatch, custom='garbage')
+
+    with runtime.sessions() as db:
+        with pytest.raises(ValueError):
+            service.execute_payment('PAY-test', 'payer', db, user_id=1)
+
+    _assert_not_credited(runtime, order_expected=True)
+
+
+@pytest.mark.parametrize('user_id, custom, total, order_expected', [
+    (2, None, '5.00', True),
+    (1, 'SUBJECT:starter:2500', '5.00', True),
+    (1, 'SUBJECT:best_value:2500', '5.00', False),
+    (1, 'garbage', '5.00', True),
+], ids=['other_user', 'inflated_tokens', 'best_value_underpaid', 'garbage_custom'])
+def test_execute_endpoint_returns_400_for_tampered_payment(runtime, monkeypatch, user_id, custom, total, order_expected):
+    from auth import get_current_user
+    from routers import payments
+    _add_other_user(runtime)
+    if order_expected:
+        _add_order(runtime)
+    if custom is not None:
+        custom = custom.replace('SUBJECT', runtime.subject)
+    _tampered(runtime, monkeypatch, custom=custom, total=total)
+    app = FastAPI()
+    app.include_router(payments.router)
+
+    def get_db():
+        with runtime.sessions() as db:
+            yield db
+    app.dependency_overrides[database.get_db] = get_db
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
+
+    response = TestClient(app).post('/api/payments/execute', params={'payment_id': 'PAY-test', 'PayerID': 'payer'})
+
+    assert response.status_code == 400, response.text
+    _assert_not_credited(runtime, order_expected)
