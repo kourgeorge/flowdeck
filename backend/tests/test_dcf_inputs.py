@@ -54,8 +54,7 @@ def _install_fake_service(monkeypatch, shares, cashflow_years, revenues, balance
 
 
 def _install_rates(monkeypatch, rf=(0.04, None), mrp=(0.05, "derived_from_vix")):
-    monkeypatch.setattr(vt, "_get_risk_free_rate_with_source", lambda: rf)
-    monkeypatch.setattr(vt, "_get_market_risk_premium_with_source", lambda: mrp)
+    monkeypatch.setattr(vt, "_get_market_rates_with_sources", lambda: (*rf, *mrp))
 
 
 def _run(ticker="TEST"):
