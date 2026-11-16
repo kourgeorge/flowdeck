@@ -16,7 +16,7 @@ from ai_engine.tradingagents.agents.utils.events_tools import _format_events_pay
 
 
 def _ensure_backend_importable() -> None:
-    """Add the backend directory to sys.path if it isn't already there."""
+    """Add the backend directory to sys.path so `data_layer` can be imported."""
     backend_dir = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "..", "..", "backend")
     )
@@ -69,8 +69,11 @@ def _fetch_events(ticker: str) -> str:
 
     _ensure_backend_importable()
     try:
+        # data_layer imports backend.processing, which plugs the backend cache into
+        # ai_engine.processing (configure_event_cache), so summaries here stay cached.
         from data_layer import get_data_gateway
-        from processing import get_ticker_event_summary
+
+        from ai_engine.processing import get_ticker_event_summary
 
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         summary = get_ticker_event_summary(

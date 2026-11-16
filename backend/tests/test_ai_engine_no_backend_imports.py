@@ -8,6 +8,8 @@ backend.models import. T-87 removed the models.db_models imports (the brief's re
 briefs and subscriptions, the chat's subscription/memory tools): the backend now passes
 those lookups in. The guard used to check only "services" and "backend", which missed
 "models" because backend/ is on sys.path; it now checks every backend top-level package.
+T-91 pointed the chat events tool at ai_engine.processing instead of backend's
+`processing` re-export, and added "processing" to the guard.
 """
 
 from __future__ import annotations
@@ -37,7 +39,7 @@ def _imported_modules(tree: ast.AST):
 
 # backend/'s top-level packages. backend/ is on sys.path in the app and the tests, so
 # "models.db_models" is backend code even though it does not say "backend".
-_BACKEND_PACKAGES = ("services", "backend", "models", "database", "routers", "config", "auth", "data_layer")
+_BACKEND_PACKAGES = ("services", "backend", "models", "database", "routers", "config", "auth", "data_layer", "processing")
 
 # The only allowed exceptions: chat tools that read the data gateway the backend sets up
 # at startup (init_data_gateway in backend/main.py). Each one catches ImportError and
@@ -75,6 +77,11 @@ def test_allowlist_has_no_stale_entries():
 def test_guard_flags_models_db_models():
     tree = ast.parse("from models.db_models import Subscription\nimport database\nimport config.x")
     assert [m for m in _imported_modules(tree) if _is_backend(m)] == ["models.db_models", "database", "config.x"]
+
+
+def test_guard_flags_backend_processing_but_not_ai_engine_processing():
+    tree = ast.parse("from processing import get_ticker_event_summary\nimport ai_engine.processing")
+    assert [m for m in _imported_modules(tree) if _is_backend(m)] == ["processing"]
 
 
 def test_no_file_imports_services_at_all():
@@ -202,7 +209,7 @@ def test_platform_report_dates_read_the_gateway(monkeypatch):
 
 def test_events_tool_reads_the_gateway(monkeypatch):
     import data_layer
-    import processing
+    from ai_engine import processing
     from ai_engine.agent.tools import events
 
     gw = object()
@@ -216,6 +223,16 @@ def test_events_tool_reads_the_gateway(monkeypatch):
     monkeypatch.setattr(processing, "get_ticker_event_summary", fake_summary)
     assert "AAA" in events._fetch_events("aaa")
     assert seen == {"gateway": gw, "ticker": "AAA"}
+
+
+def test_events_tool_path_keeps_the_backend_cache():
+    from ai_engine.agent.tools import events  # noqa: F401
+    from ai_engine.processing import service as moved_service
+    from services import platform_cache
+
+    import data_layer  # noqa: F401  (what _fetch_events imports before the event layer)
+
+    assert moved_service._cache["get_or_set"] is platform_cache.get_or_set
 
 
 class _Sub(SimpleNamespace):
