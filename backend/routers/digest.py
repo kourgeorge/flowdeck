@@ -137,6 +137,18 @@ async def get_digest(
     evidence and platform reports, then runs interpretation agents to produce a
     narrative brief and a "what to watch" section. Use span=daily (default) or span=weekly.
     """
+    if date is not None:
+        # Check before run_and_store_digest charges tokens. The agent used to be
+        # the first to reject e.g. 2026-13-45 or 11/16/2026, after the charge,
+        # leaving a failed run under an impossible slot and a 500 with the raw
+        # parse error.
+        # The round-trip also refuses '2026-1-5', which strptime accepts but
+        # would be stored under a slot that history lookups never match.
+        try:
+            if datetime.strptime(date, "%Y-%m-%d").strftime("%Y-%m-%d") != date:
+                raise ValueError(date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date, expected a real date as YYYY-MM-DD")
     digest_date = date or _today_for_timezone(timezone_name)
     span_type = span
     logger.info(

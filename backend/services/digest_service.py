@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
 from ai_engine.tradingagents.agents.utils.trace_utils import sort_agent_steps
@@ -311,6 +312,27 @@ async def run_and_store_digest(
     return result, metadata, execution_id, slot
 
 
+def _completed_brief_filters(user_id: int) -> tuple:
+    """Filters for a daily_digest run that finished and has a saved brief.
+
+    History dates and the per-day list must use the same rule. The dates
+    endpoint used to count every run, including failed and still-running ones
+    with no report, so BriefPage could auto-open a newest day that had no
+    brief and show counts higher than the briefs it could load.
+    """
+    has_report = exists().where(
+        Report.execution_id == Execution.id,
+        Report.report_type == "daily_digest",
+    )
+    return (
+        Execution.execution_type == "daily_digest",
+        Execution.subject_type == "user_date",
+        Execution.creator_id == user_id,
+        Execution.status == "completed",
+        has_report,
+    )
+
+
 def get_digest_dates(
     db: Session, user_id: int, days: int, timezone_name: Optional[str] = None
 ) -> tuple[List[str], dict[str, int]]:
@@ -324,9 +346,7 @@ def get_digest_dates(
     rows = (
         db.query(Execution.subject_id, Execution.created_at)
         .filter(
-            Execution.execution_type == "daily_digest",
-            Execution.subject_type == "user_date",
-            Execution.creator_id == user_id,
+            *_completed_brief_filters(user_id),
             Execution.created_at >= since,
         )
         .all()
@@ -418,11 +438,7 @@ def get_digests_for_date(
     """
     query = (
         db.query(Execution)
-        .filter(
-            Execution.execution_type == "daily_digest",
-            Execution.subject_type == "user_date",
-            Execution.creator_id == user_id,
-        )
+        .filter(*_completed_brief_filters(user_id))
         .order_by(Execution.created_at.desc())
     )
 

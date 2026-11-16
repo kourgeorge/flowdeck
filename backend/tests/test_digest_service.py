@@ -67,6 +67,7 @@ class TestDigestService(unittest.TestCase):
                 subject_id=subject_id,
                 creator_id=1,
                 created_at=created_at,
+                status="completed",
             )
         )
         self.db.add(
