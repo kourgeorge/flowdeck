@@ -16,6 +16,16 @@ from services import token_service
 logger = logging.getLogger(__name__)
 
 
+class InsufficientDigestBalance(RuntimeError):
+    """The user cannot pay for the brief, so nothing was charged or run.
+
+    The router used to map every RuntimeError to 402 "Purchase Tokens", so an
+    unrelated crash inside the digest told users to buy tokens. This type lets
+    the router send 402 only when the balance check really failed. It still
+    subclasses RuntimeError so older callers that catch RuntimeError keep working.
+    """
+
+
 class DigestBriefItem:
     """One brief item (mirrors router DigestBriefItem shape)."""
 
@@ -170,7 +180,9 @@ async def run_and_store_digest(
 
     deduct_ok, execution_id = token_service.deduct_for_digest(user_id, subject_id, db)
     if not deduct_ok or execution_id is None:
-        raise RuntimeError("Insufficient token balance for User Daily Brief. Please Purchase Tokens.")
+        raise InsufficientDigestBalance(
+            "Insufficient token balance for User Daily Brief. Please Purchase Tokens."
+        )
 
     parsed_span_type, start_date, end_date = _parse_span(span_type)
 
