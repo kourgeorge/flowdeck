@@ -144,7 +144,7 @@ Comprehensive tests in `backend/tests/test_token_refund.py` verify:
 
 ## Future Enhancements
 
-- `refund_for_failed_chat()` function added for future chat refund support
+- Chat refunds are not needed: chat tokens are only charged after a successful reply
 - Can extend to other execution types (digests, etc.)
 - Admin dashboard can show refund statistics
 

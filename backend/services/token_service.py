@@ -440,21 +440,29 @@ def refund_for_execution(user_id: int, execution_id: int, db: Session) -> None:
         db.commit()
 
 
-def refund_for_failed_execution(execution_id: int, db: Session) -> bool:
+def _refund_failed_execution(
+    execution_id: int,
+    db: Session,
+    *,
+    cost_type: str,
+    reason: str,
+    meta_key: str,
+    label: str,
+) -> bool:
     """
-    Refund the original analysis charge for a failed execution via transaction ledger.
-    Does NOT delete the execution (keeps it for audit trail with status='failed').
-    Returns True if refund was successful, False otherwise.
+    Refund the original ``cost_type`` charge for a failed execution via the
+    transaction ledger. Does NOT delete the execution (keeps it for audit
+    trail with status='failed'). Returns True if a refund was recorded.
+
+    Idempotent: returns False if a refund for this execution already exists.
     """
     ex = db.query(Execution).filter(Execution.id == execution_id).first()
     if not ex:
         return False
-    
-    # Only refund if execution is marked as failed
+
     if ex.status != "failed":
         return False
-    
-    # Check if already refunded (look for existing refund transaction)
+
     from models.db_models import Usage
     existing_refund = (
         db.query(Usage)
@@ -466,15 +474,14 @@ def refund_for_failed_execution(execution_id: int, db: Session) -> bool:
         .first()
     )
     if existing_refund:
-        return False  # Already refunded
-    
-    # Get the original deduction transaction to extract metadata
+        return False
+
     original_tx = (
         db.query(Usage)
         .filter(
             Usage.related_entity_type == "execution",
             Usage.related_entity_id == execution_id,
-            Usage.transaction_type == "analysis_cost",
+            Usage.transaction_type == cost_type,
         )
         .first()
     )
@@ -483,20 +490,18 @@ def refund_for_failed_execution(execution_id: int, db: Session) -> bool:
     # cancelling one must not create free tokens in its creator's account.
     if original_tx is None or original_tx.amount >= 0:
         return False
-    
-    # Build refund metadata
+
     import json
-    metadata = {"execution_id": execution_id, "reason": "analysis_failed"}
-    if original_tx and original_tx.metadata_json:
+    metadata = {"execution_id": execution_id, "reason": reason}
+    if original_tx.metadata_json:
         try:
             original_meta = json.loads(original_tx.metadata_json)
-            if "ticker" in original_meta:
-                metadata["ticker"] = original_meta["ticker"]
+            if meta_key in original_meta:
+                metadata[meta_key] = original_meta[meta_key]
         except Exception:
             pass
-    
-    # Record refund transaction
-    ticker_info = f" for {metadata.get('ticker', 'unknown')}" if "ticker" in metadata else ""
+
+    target_info = f" for {metadata[meta_key]}" if meta_key in metadata else ""
     tx = record_transaction(
         user_id=ex.creator_id,
         amount=-original_tx.amount,  # Refund the amount actually charged.
@@ -504,145 +509,36 @@ def refund_for_failed_execution(execution_id: int, db: Session) -> bool:
         related_entity_type="execution",
         related_entity_id=execution_id,
         metadata=metadata,
-        description=f"Refund for failed analysis{ticker_info}",
+        description=f"Refund for failed {label}{target_info}",
         db=db,
         commit=True,
     )
-    
+
     return tx is not None
 
 
-def refund_for_failed_chat(chat_message_id: int, db: Session) -> bool:
-    """
-    Refund tokens for a failed chat message via transaction ledger.
-    Returns True if refund was successful, False otherwise.
-    
-    Note: Currently chat tokens are only deducted on successful completion,
-    so this function is mainly for future use or manual corrections.
-    """
-    from models.db_models import Usage
-
-    # Check if already refunded
-    existing_refund = (
-        db.query(Usage)
-        .filter(
-            Usage.related_entity_type == "chat_message",
-            Usage.related_entity_id == chat_message_id,
-            Usage.transaction_type == "refund",
-        )
-        .first()
+def refund_for_failed_execution(execution_id: int, db: Session) -> bool:
+    """Refund the analysis charge for a failed analysis execution."""
+    return _refund_failed_execution(
+        execution_id,
+        db,
+        cost_type="analysis_cost",
+        reason="analysis_failed",
+        meta_key="ticker",
+        label="analysis",
     )
-    if existing_refund:
-        return False  # Already refunded
-    
-    # Get the original deduction transaction
-    original_tx = (
-        db.query(Usage)
-        .filter(
-            Usage.related_entity_type == "chat_message",
-            Usage.related_entity_id == chat_message_id,
-            Usage.transaction_type == "chat_cost",
-        )
-        .first()
-    )
-    
-    if not original_tx:
-        return False  # No original transaction found
-    
-    # Build refund metadata
-    import json
-    metadata = {"chat_message_id": chat_message_id, "reason": "chat_failed"}
-    if original_tx.metadata_json:
-        try:
-            original_meta = json.loads(original_tx.metadata_json)
-            metadata["original_metadata"] = original_meta
-        except Exception:
-            pass
-    
-    # Record refund transaction (refund the platform tokens that were deducted)
-    tx = record_transaction(
-        user_id=original_tx.user_id,
-        amount=abs(original_tx.amount),  # Positive amount = credit (original was negative)
-        llm_tokens=original_tx.llm_tokens,  # Keep track of LLM tokens for reference
-        transaction_type="refund",
-        related_entity_type="chat_message",
-        related_entity_id=chat_message_id,
-        metadata=metadata,
-        description=f"Refund for failed chat message",
-        db=db,
-        commit=True,
-    )
-    
-    return tx is not None
 
 
 def refund_for_failed_digest(execution_id: int, db: Session) -> bool:
-    """
-    Refund COST_PER_DIGEST for a failed digest execution via transaction ledger.
-    Does NOT delete the execution (keeps it for audit trail with status='failed').
-    Returns True if refund was successful, False otherwise.
-    """
-    ex = db.query(Execution).filter(Execution.id == execution_id).first()
-    if not ex:
-        return False
-    
-    # Only refund if execution is marked as failed
-    if ex.status != "failed":
-        return False
-    
-    # Check if already refunded (look for existing refund transaction)
-    from models.db_models import Usage
-    existing_refund = (
-        db.query(Usage)
-        .filter(
-            Usage.related_entity_type == "execution",
-            Usage.related_entity_id == execution_id,
-            Usage.transaction_type == "refund",
-        )
-        .first()
+    """Refund the digest charge for a failed digest execution."""
+    return _refund_failed_execution(
+        execution_id,
+        db,
+        cost_type="digest_cost",
+        reason="digest_failed",
+        meta_key="subject_id",
+        label="digest",
     )
-    if existing_refund:
-        return False  # Already refunded
-    
-    # Get the original deduction transaction to extract metadata
-    original_tx = (
-        db.query(Usage)
-        .filter(
-            Usage.related_entity_type == "execution",
-            Usage.related_entity_id == execution_id,
-            Usage.transaction_type == "digest_cost",
-        )
-        .first()
-    )
-    if original_tx is None or original_tx.amount >= 0:
-        return False
-    
-    # Build refund metadata
-    import json
-    metadata = {"execution_id": execution_id, "reason": "digest_failed"}
-    if original_tx and original_tx.metadata_json:
-        try:
-            original_meta = json.loads(original_tx.metadata_json)
-            if "subject_id" in original_meta:
-                metadata["subject_id"] = original_meta["subject_id"]
-        except Exception:
-            pass
-    
-    # Record refund transaction
-    subject_info = f" for {metadata.get('subject_id', 'unknown')}" if "subject_id" in metadata else ""
-    tx = record_transaction(
-        user_id=ex.creator_id,
-        amount=-original_tx.amount,
-        transaction_type="refund",
-        related_entity_type="execution",
-        related_entity_id=execution_id,
-        metadata=metadata,
-        description=f"Refund for failed digest{subject_info}",
-        db=db,
-        commit=True,
-    )
-    
-    return tx is not None
 
 
 def llm_tokens_to_platform_tokens(llm_tokens: int) -> int:
