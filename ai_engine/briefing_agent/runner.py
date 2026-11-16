@@ -74,10 +74,14 @@ def _load_recent_digest_briefs(
 
     try:
         _ensure_backend_import_path()
+        # The backend app imports its models as models.db_models (backend/ on sys.path).
+        # Importing them under backend.models.db_models too loads the file a second
+        # time, and SQLAlchemy then fails with "Table 'entity_sequences' is already
+        # defined". So use the app's name first and only fall back when it is missing.
         try:
-            from backend.models.db_models import Execution, Report
-        except Exception:
             from models.db_models import Execution, Report  # type: ignore[import-not-found]
+        except ImportError:
+            from backend.models.db_models import Execution, Report
 
         rows = (
             db.query(Execution, Report)
