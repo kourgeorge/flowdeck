@@ -70,7 +70,6 @@ START_ANALYSIS_REQUEST_BODY = {
                         "analysis_date": "2026-08-28",
                         "analysts": ANALYSTS,
                         "research_depth": 2,
-                        "llm_provider": "azure",
                     },
                 },
             },

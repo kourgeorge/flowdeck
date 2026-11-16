@@ -376,10 +376,18 @@ async def chat_stream(
     Each SSE event is a JSON object, in the order they can appear:
       - ``{"type":"started","turn_id":N,"session_id":N,"status":"running"}``  — emitted first
       - ``{"type":"thinking","content":"..."}``                              — reasoning trace
-      - ``{"type":"tool_call","name":"...","args":{...}}``                   — a tool the analyst invoked
+      - ``{"type":"tool_call","name":"...","input":"...","output":"..."}``  — a tool the analyst ran (input and output are text; output is cut to 2000 characters)
+      - ``{"type":"chart","spec":{...}}``                                    — a chart to draw; ``spec`` is the chart definition
+      - ``{"type":"skill_start","name":"..."}``                              — a saved multi-step workflow (skill) began
+      - ``{"type":"skill_step","skill":"...","tool":"...","input":"...","output":"...","ok":true}`` — one step of that skill finished
+      - ``{"type":"skill_done","name":"...","steps":N}``                     — the skill finished after N steps
       - ``{"type":"token","content":"..."}``                                 — incremental text chunk
-      - ``{"type":"done","tokens_used":N}``                                  — stream finished; tokens deducted
-      - ``{"type":"error","content":"..."}``                                 — error occurred
+      - ``{"type":"done","turn_id":N,"session_id":N,"tokens_used":N,"platform_tokens_used":N,"balance":N,"tools_called":N,"follow_up_questions":[...],"llm_usage":{...}|null,"content":"..."}`` — stream finished; tokens deducted
+      - ``{"type":"error","turn_id":N,"content":"..."}``                     — error occurred
+
+    Charts: the server turns chart data into ``chart`` events. For the ``execute_python`` tool the
+    ``CHART_JSON`` marker is removed from the ``tool_call`` output, so those charts arrive only as
+    ``chart`` events. If a ``CHART_JSON:{...}`` line still shows up inside ``token`` text, treat it as a chart too.
 
     - Requires authentication (Bearer token).
     - Returns 402 if the user has insufficient token balance.

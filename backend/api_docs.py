@@ -195,9 +195,23 @@ header, and there's no separate API-key check on this path). The connection clos
 ### SSE: chat stream
 
 `POST /api/chat/stream` responds `text/event-stream`, one `data: {json}\\n\\n` per event. Event
-`type` values, in the order they can appear: `started` (emitted immediately, carries
-`turn_id`/`session_id`), `thinking`, `tool_call`, `token` (incremental text), `done` (stream
-finished, tokens deducted), `error`.
+`type` values, in the order they can appear:
+
+- `started` -- first event: `turn_id`, `session_id`, `status`.
+- `thinking` -- `content`: a short status note.
+- `tool_call` -- `name`, `input`, `output` (text; output is cut to 2000 characters).
+- `chart` -- `spec`: a chart definition to draw.
+- `skill_start` -- `name`: a saved multi-step workflow (skill) began.
+- `skill_step` -- `skill`, `tool`, `input`, `output`, `ok`: one step of the skill finished.
+- `skill_done` -- `name`, `steps`: the skill finished.
+- `token` -- `content`: incremental text.
+- `done` -- stream finished, tokens deducted: `turn_id`, `session_id`, `tokens_used`,
+  `platform_tokens_used`, `balance`, `tools_called`, `follow_up_questions`, `llm_usage`, `content`.
+- `error` -- `turn_id`, `content`.
+
+Charts arrive as `chart` events. For `execute_python`, the `CHART_JSON` marker is removed from the
+`tool_call` output, so those charts come only as `chart` events. If a `CHART_JSON:{...}` line still
+appears in `token` text, treat it as a chart too.
 
 ### NDJSON: batch news stream
 
