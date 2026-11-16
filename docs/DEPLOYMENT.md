@@ -56,7 +56,6 @@ Optional `backend/.env` for app settings:
 ```env
 CORS_ORIGINS=https://your-domain.com
 BACKEND_URL=https://api.your-domain.com
-PORT=8002
 ENABLE_DAILY_SYNC=true
 SYNC_SCHEDULE_TIME=06:00
 ```
@@ -95,7 +94,6 @@ WorkingDirectory=/opt/flowdeck/backend
 
 EnvironmentFile=/opt/flowdeck/.env
 Environment=PYTHONPATH=/opt/flowdeck
-Environment=PORT=8002
 
 Environment=FLOWDECK_ANALYSIS_WORKERS=5
 Environment=FLOWDECK_ANALYSIS_QUEUE_SIZE=unlimited
@@ -239,7 +237,7 @@ Certbot will adjust the Nginx config for HTTPS and renewal.
 | `CORS_ORIGINS` | Backend `.env` | Allowed frontend origins (comma-separated) |
 | `BACKEND_URL` | Backend `.env` | Public API URL (for analysis callbacks) |
 | `VITE_API_URL` | Build-time | API base URL for frontend (set before `npm run build`) |
-| `PORT` | Backend | Backend port (default 8002) |
+| (port) | uvicorn command | The backend port comes from `--port` in the uvicorn or systemd command (we use 8002). There is no `PORT` variable. |
 | `ENABLE_DAILY_SYNC` | Backend `.env` | `true` to run in-process daily sync |
 | `SYNC_SCHEDULE_TIME` | Backend `.env` | e.g. `06:00` |
 

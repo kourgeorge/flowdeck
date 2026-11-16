@@ -40,7 +40,7 @@ So: **clarify (optional) → research brief → supervisor (delegate) → resear
 | `STOCK_FINAL_REPORT_MODEL` | Model for final report (default: `openai:gpt-4o`). |
 | `STOCK_SEARCH_API` | `duckduckgo` (default) or `tavily`. |
 | `TAVILY_API_KEY` | Required if `STOCK_SEARCH_API=tavily`. |
-| `INFO_SERVICE_URL` | Flowdeck backend URL for SEC EDGAR (e.g. `http://localhost:8000`). |
+| `INFO_SERVICE_URL` | Flowdeck backend URL for SEC EDGAR (e.g. `http://localhost:8002`). |
 | `STOCK_MAX_ITERATIONS` | Max supervisor loops (default: 15). |
 | `STOCK_MAX_CONCURRENT` | Max parallel researcher subgraphs (default: 3). |
 
@@ -60,7 +60,7 @@ python scripts/run_stock_deep_research.py "Full report on Microsoft, focus on cl
 With SEC EDGAR (Flowdeck backend must be running):
 
 ```bash
-export INFO_SERVICE_URL=http://localhost:8000
+export INFO_SERVICE_URL=http://localhost:8002
 python scripts/run_stock_deep_research.py "Competitive analysis of Apple"
 ```
 
@@ -76,7 +76,7 @@ config = {
     "configurable": {
         "research_model": "openai:gpt-4o",
         "search_api": "duckduckgo",
-        "info_service_url": "http://localhost:8000",
+        "info_service_url": "http://localhost:8002",
     }
 }
 result = await stock_researcher_graph.ainvoke(
